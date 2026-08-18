@@ -1,0 +1,203 @@
+"use client";
+
+import { useQuery, useMutation } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+
+export default function ShiftNotesPage() {
+  const router = useRouter();
+  const routers = useQuery(api.routers.listRouters);
+  const [selectedRouter, setSelectedRouter] = useState<string | null>(null);
+  const shiftNotes = useQuery(
+    api.shiftNotes.listShiftNotes,
+    selectedRouter ? { routerId: selectedRouter as any } : "skip"
+  );
+  const addShiftNote = useMutation(api.shiftNotes.addShiftNote);
+  const deleteShiftNote = useMutation(api.shiftNotes.deleteShiftNote);
+
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [noteText, setNoteText] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleAddNote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedRouter) return;
+
+    setLoading(true);
+
+    try {
+      await addShiftNote({
+        routerId: selectedRouter as any,
+        note: noteText,
+      });
+
+      setShowAddModal(false);
+      setNoteText("");
+    } catch (err) {
+      console.error("Failed to add shift note:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (noteId: string) => {
+    if (!confirm("Are you sure you want to delete this note?")) return;
+
+    try {
+      await deleteShiftNote({ noteId: noteId as any });
+    } catch (err) {
+      console.error("Failed to delete note:", err);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <header className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Shift Notes</h1>
+              <p className="text-sm text-gray-600">Operator notes and handover information</p>
+            </div>
+            <button
+              onClick={() => router.push("/dashboard")}
+              className="text-gray-600 hover:text-gray-900"
+            >
+              Back to Dashboard
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Router Selection */}
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Select Router
+          </label>
+          <select
+            value={selectedRouter || ""}
+            onChange={(e) => setSelectedRouter(e.target.value || null)}
+            className="w-full max-w-md px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+          >
+            <option value="">Select a router</option>
+            {routers?.map((router) => (
+              <option key={router._id} value={router._id}>
+                {router.name} ({router.location})
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Warning */}
+        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-md mb-6">
+          <p className="text-sm">
+            <strong>Important:</strong> Shift notes must never contain customer personal information,
+            passwords, or payment details. This is for operational notes only.
+          </p>
+        </div>
+
+        {/* Add Note Button */}
+        {selectedRouter && (
+          <div className="mb-6">
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="bg-orange-600 text-white px-4 py-2 rounded-md hover:bg-orange-700"
+            >
+              Add Shift Note
+            </button>
+          </div>
+        )}
+
+        {/* Notes List */}
+        {selectedRouter && shiftNotes && (
+          <div className="space-y-4">
+            {shiftNotes.length === 0 ? (
+              <div className="bg-white rounded-lg shadow p-6 text-center text-gray-600">
+                No shift notes for this router
+              </div>
+            ) : (
+              shiftNotes.map((note) => (
+                <div key={note._id} className="bg-white rounded-lg shadow p-6 border-l-4 border-orange-500">
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-sm text-gray-600">
+                          {new Date(note.timestamp).toLocaleString()}
+                        </span>
+                        <span className="text-sm text-gray-600">
+                          by {note.authorId}
+                        </span>
+                      </div>
+                      <p className="text-gray-900 whitespace-pre-wrap">{note.note}</p>
+                    </div>
+                    <button
+                      onClick={() => handleDelete(note._id)}
+                      className="text-red-600 hover:text-red-900 ml-4"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {!selectedRouter && (
+          <div className="bg-white rounded-lg shadow p-6 text-center text-gray-600">
+            Select a router to view shift notes
+          </div>
+        )}
+      </main>
+
+      {/* Add Note Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Add Shift Note</h2>
+
+            <form onSubmit={handleAddNote} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Note
+                </label>
+                <textarea
+                  value={noteText}
+                  onChange={(e) => setNoteText(e.target.value)}
+                  required
+                  rows={5}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  placeholder="Enter your operational note..."
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Do not include customer PII, passwords, or payment information
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:opacity-50"
+                >
+                  {loading ? "Adding..." : "Add Note"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
