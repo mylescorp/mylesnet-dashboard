@@ -2,11 +2,9 @@
 
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 export default function IncidentsPage() {
-  const router = useRouter();
   const incidents = useQuery(api.incidents.listIncidents, {});
   const acknowledgeIncident = useMutation(api.incidents.acknowledgeIncident);
   const resolveIncident = useMutation(api.incidents.resolveIncident);
@@ -62,34 +60,19 @@ export default function IncidentsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Incidents</h1>
-              <p className="text-sm text-gray-600">Track and resolve network incidents</p>
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="bg-orange-600 text-white px-4 py-2 rounded-md hover:bg-orange-700"
-              >
-                Create Incident
-              </button>
-              <button
-                onClick={() => router.push("/dashboard")}
-                className="text-gray-600 hover:text-gray-900"
-              >
-                Back to Dashboard
-              </button>
-            </div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Incidents</h1>
+            <p className="text-sm text-gray-600">Track and resolve network incidents</p>
           </div>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="bg-orange-600 text-white px-4 py-2 rounded-md hover:bg-orange-700"
+          >
+            Create Incident
+          </button>
         </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Open Incidents */}
         <div className="mb-8">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">
@@ -176,7 +159,7 @@ export default function IncidentsPage() {
             )}
           </div>
         </div>
-      </main>
+      </div>
 
       {/* Create Incident Modal */}
       {showCreateModal && (

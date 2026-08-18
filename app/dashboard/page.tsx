@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery, useMutation } from "convex/react";
+import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -33,7 +33,7 @@ export default function DashboardPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex justify-between items-center">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">MylesNet Dashboard</h1>
+              <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
               <p className="text-sm text-gray-600">Network Operations Center</p>
             </div>
             <div className="flex items-center gap-4">
@@ -46,7 +46,7 @@ export default function DashboardPage() {
                 onClick={() => router.push("/routers")}
                 className="bg-orange-600 text-white px-4 py-2 rounded-md hover:bg-orange-700"
               >
-                Manage Routers
+                Add Router
               </button>
             </div>
           </div>
@@ -118,21 +118,21 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <button
             onClick={() => router.push("/incidents")}
-            className="bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+            className="bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow text-left"
           >
             <h3 className="text-lg font-semibold text-gray-900">Incidents</h3>
             <p className="text-sm text-gray-600 mt-2">View and manage incidents</p>
           </button>
           <button
             onClick={() => router.push("/shift-notes")}
-            className="bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+            className="bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow text-left"
           >
             <h3 className="text-lg font-semibold text-gray-900">Shift Notes</h3>
             <p className="text-sm text-gray-600 mt-2">View operator notes</p>
           </button>
           <button
             onClick={() => router.push("/usage")}
-            className="bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+            className="bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow text-left"
           >
             <h3 className="text-lg font-semibold text-gray-900">Usage Reports</h3>
             <p className="text-sm text-gray-600 mt-2">View usage statistics</p>

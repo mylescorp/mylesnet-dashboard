@@ -2,11 +2,9 @@
 
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 export default function ShiftNotesPage() {
-  const router = useRouter();
   const routers = useQuery(api.routers.listRouters);
   const [selectedRouter, setSelectedRouter] = useState<string | null>(null);
   const shiftNotes = useQuery(
@@ -53,26 +51,14 @@ export default function ShiftNotesPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Shift Notes</h1>
-              <p className="text-sm text-gray-600">Operator notes and handover information</p>
-            </div>
-            <button
-              onClick={() => router.push("/dashboard")}
-              className="text-gray-600 hover:text-gray-900"
-            >
-              Back to Dashboard
-            </button>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Shift Notes</h1>
+            <p className="text-sm text-gray-600">Operator notes and handover information</p>
           </div>
         </div>
-      </header>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Router Selection */}
         <div className="mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -152,7 +138,7 @@ export default function ShiftNotesPage() {
             Select a router to view shift notes
           </div>
         )}
-      </main>
+      </div>
 
       {/* Add Note Modal */}
       {showAddModal && (

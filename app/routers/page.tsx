@@ -3,10 +3,8 @@
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
 export default function RoutersPage() {
-  const router = useRouter();
   const routers = useQuery(api.routers.listRouters);
   const addRouter = useMutation(api.routers.addRouter);
   const deleteRouter = useMutation(api.routers.deleteRouter);
@@ -64,27 +62,12 @@ export default function RoutersPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Router Management</h1>
-              <p className="text-sm text-gray-600">Add and manage your MikroTik routers</p>
-            </div>
-            <button
-              onClick={() => router.push("/dashboard")}
-              className="text-gray-600 hover:text-gray-900"
-            >
-              Back to Dashboard
-            </button>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Routers</h1>
+            <p className="text-sm text-gray-600">Manage your MikroTik routers</p>
           </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-6">
           <button
             onClick={() => setShowAddModal(true)}
             className="bg-orange-600 text-white px-4 py-2 rounded-md hover:bg-orange-700"
@@ -153,7 +136,7 @@ export default function RoutersPage() {
             </div>
           )}
         </div>
-      </main>
+      </div>
 
       {/* Add Router Modal */}
       {showAddModal && (
