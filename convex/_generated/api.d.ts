@@ -17,6 +17,7 @@ import type * as incidents from "../incidents.js";
 import type * as routeros from "../routeros.js";
 import type * as routers from "../routers.js";
 import type * as shiftNotes from "../shiftNotes.js";
+import type * as thresholds from "../thresholds.js";
 import type * as usage from "../usage.js";
 
 import type {
@@ -35,6 +36,7 @@ declare const fullApi: ApiFromModules<{
   routeros: typeof routeros;
   routers: typeof routers;
   shiftNotes: typeof shiftNotes;
+  thresholds: typeof thresholds;
   usage: typeof usage;
 }>;
 

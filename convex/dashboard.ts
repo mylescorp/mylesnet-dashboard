@@ -62,6 +62,8 @@ export const getRouterDashboard = query({
           router,
           health: healthSample,
           accessPoints: accessPointHealth,
+          cpuWarningThreshold: router.cpuWarningThreshold || 75,
+          cpuCriticalThreshold: router.cpuCriticalThreshold || 90,
         });
       }
 
@@ -105,6 +107,8 @@ export const getRouterDashboard = query({
         router,
         health: healthSample,
         accessPoints: accessPointHealth,
+        cpuWarningThreshold: router.cpuWarningThreshold || 75,
+        cpuCriticalThreshold: router.cpuCriticalThreshold || 90,
       },
     ];
   },

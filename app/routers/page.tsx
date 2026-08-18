@@ -21,6 +21,8 @@ export default function RoutersPage() {
     location: "",
     username: "",
     password: "",
+    cpuWarningThreshold: 75,
+    cpuCriticalThreshold: 90,
   });
   const [apFormData, setApFormData] = useState({
     name: "",
@@ -43,6 +45,8 @@ export default function RoutersPage() {
         location: routerFormData.location,
         username: routerFormData.username,
         password: routerFormData.password,
+        cpuWarningThreshold: routerFormData.cpuWarningThreshold,
+        cpuCriticalThreshold: routerFormData.cpuCriticalThreshold,
       });
 
       setShowAddRouterModal(false);
@@ -52,6 +56,8 @@ export default function RoutersPage() {
         location: "",
         username: "",
         password: "",
+        cpuWarningThreshold: 75,
+        cpuCriticalThreshold: 90,
       });
     } catch (err) {
       setError("Failed to add router. Please check your inputs.");
@@ -149,6 +155,11 @@ export default function RoutersPage() {
                       <h3 className="text-lg font-semibold text-gray-900">{router.name}</h3>
                       <p className="text-sm text-gray-600">{router.location}</p>
                       <p className="text-xs text-gray-500 mt-1">{router.restBaseUrl}</p>
+                      {(router as any).cpuWarningThreshold && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          CPU Thresholds: Warning {(router as any).cpuWarningThreshold}%, Critical {(router as any).cpuCriticalThreshold}%
+                        </p>
+                      )}
                     </div>
                     <div className="flex items-center gap-4">
                       <span className={`text-sm ${router.hasCredentials ? "text-green-600" : "text-red-600"}`}>
@@ -297,6 +308,42 @@ export default function RoutersPage() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
                   placeholder="Read-only account password"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  CPU Warning Threshold (%)
+                </label>
+                <input
+                  type="number"
+                  value={routerFormData.cpuWarningThreshold}
+                  onChange={(e) => setRouterFormData({ ...routerFormData, cpuWarningThreshold: Number(e.target.value) })}
+                  min="0"
+                  max="100"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  placeholder="75"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  CPU percentage to trigger warning alerts
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  CPU Critical Threshold (%)
+                </label>
+                <input
+                  type="number"
+                  value={routerFormData.cpuCriticalThreshold}
+                  onChange={(e) => setRouterFormData({ ...routerFormData, cpuCriticalThreshold: Number(e.target.value) })}
+                  min="0"
+                  max="100"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  placeholder="90"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  CPU percentage to trigger critical alerts
+                </p>
               </div>
 
               <div className="flex justify-end gap-3 pt-4">

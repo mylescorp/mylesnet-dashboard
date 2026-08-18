@@ -18,6 +18,8 @@ export default defineSchema({
     location: v.string(), // e.g., "Tayari", "Mundindi"
     createdAt: v.number(),
     updatedAt: v.number(),
+    cpuWarningThreshold: v.optional(v.number()), // CPU % for warning threshold
+    cpuCriticalThreshold: v.optional(v.number()), // CPU % for critical threshold
   }).index("by_location", ["location"]),
 
   // Router credentials - NEVER exposed to client, only read in Convex actions

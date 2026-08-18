@@ -132,7 +132,13 @@ export default function DashboardPage() {
                     <div className="space-y-2">
                       <div className="flex justify-between">
                         <span className="text-sm text-gray-600">CPU</span>
-                        <span className="text-sm font-medium">{data.health.cpuPercent}%</span>
+                        <span className={`text-sm font-medium ${
+                          (data as any).cpuCriticalThreshold && data.health.cpuPercent >= (data as any).cpuCriticalThreshold ? "text-red-600" :
+                          (data as any).cpuWarningThreshold && data.health.cpuPercent >= (data as any).cpuWarningThreshold ? "text-yellow-600" :
+                          "text-green-600"
+                        }`}>
+                          {data.health.cpuPercent}%
+                        </span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-sm text-gray-600">Memory</span>
@@ -146,6 +152,11 @@ export default function DashboardPage() {
                           {data.health.linkState ? "Online" : "Offline"}
                         </span>
                       </div>
+                      {(data as any).cpuWarningThreshold && (
+                        <div className="text-xs text-gray-500 mt-2">
+                          Thresholds: W:{(data as any).cpuWarningThreshold}% C:{(data as any).cpuCriticalThreshold}%
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <p className="text-sm text-gray-500">No health data available</p>

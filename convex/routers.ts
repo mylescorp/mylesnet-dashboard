@@ -53,6 +53,8 @@ export const addRouter = mutation({
     location: v.string(),
     username: v.string(),
     password: v.string(),
+    cpuWarningThreshold: v.optional(v.number()),
+    cpuCriticalThreshold: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const routerId = await ctx.db.insert("routers", {
@@ -61,6 +63,8 @@ export const addRouter = mutation({
       location: args.location,
       createdAt: Date.now(),
       updatedAt: Date.now(),
+      cpuWarningThreshold: args.cpuWarningThreshold || 75,
+      cpuCriticalThreshold: args.cpuCriticalThreshold || 90,
     });
 
     // Store credentials separately - NEVER exposed to client
@@ -82,6 +86,8 @@ export const updateRouter = mutation({
     name: v.optional(v.string()),
     restBaseUrl: v.optional(v.string()),
     location: v.optional(v.string()),
+    cpuWarningThreshold: v.optional(v.number()),
+    cpuCriticalThreshold: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const { routerId, ...updates } = args;
