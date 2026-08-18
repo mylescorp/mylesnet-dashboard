@@ -7,8 +7,8 @@ export const addAccessPoint = mutation({
     routerId: v.id("routers"),
     name: v.string(),
     port: v.string(),
-    deviceType: v.string(),
-    sharesPortWith: v.optional(v.id("accessPoints")),
+    deviceType: v.union(v.literal("cpe220"), v.literal("indoor_ap"), v.literal("builtin_radio"), v.literal("other")),
+    sharesPortWith: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     return await ctx.db.insert("accessPoints", {
@@ -25,11 +25,15 @@ export const addAccessPoint = mutation({
 
 // List access points for a router
 export const listAccessPoints = query({
-  args: { routerId: v.id("routers") },
+  args: { routerId: v.optional(v.id("routers")) },
   handler: async (ctx, args) => {
+    if (!args.routerId) {
+      return await ctx.db.query("accessPoints").collect();
+    }
+    const routerId = args.routerId;
     return await ctx.db
       .query("accessPoints")
-      .withIndex("by_router", (q) => q.eq("routerId", args.routerId))
+      .withIndex("by_router", (q) => q.eq("routerId", routerId))
       .collect();
   },
 });
@@ -40,8 +44,8 @@ export const updateAccessPoint = mutation({
     accessPointId: v.id("accessPoints"),
     name: v.optional(v.string()),
     port: v.optional(v.string()),
-    deviceType: v.optional(v.string()),
-    sharesPortWith: v.optional(v.id("accessPoints")),
+    deviceType: v.optional(v.union(v.literal("cpe220"), v.literal("indoor_ap"), v.literal("builtin_radio"), v.literal("other"))),
+    sharesPortWith: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { accessPointId, ...updates } = args;

@@ -33,8 +33,8 @@ export default defineSchema({
     routerId: v.id("routers"),
     name: v.string(),
     port: v.string(), // e.g., "ether2", "ether3", "ether4", "wlan1"
-    deviceType: v.string(), // "cpe220" | "indoor_ap" | "builtin_radio" | "other"
-    sharesPortWith: v.optional(v.id("accessPoints")), // for daisy-chained devices
+    deviceType: v.union(v.literal("cpe220"), v.literal("indoor_ap"), v.literal("builtin_radio"), v.literal("other")),
+    sharesPortWith: v.optional(v.string()), // AP name if shares port with another AP
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_router", ["routerId"]),
