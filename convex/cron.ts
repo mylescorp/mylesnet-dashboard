@@ -1,17 +1,17 @@
 import { v } from "convex/values";
-import { action } from "./_generated/server";
+import { action, mutation, query } from "./_generated/server";
 
-// Cron jobs temporarily disabled - need proper Convex action pattern refactoring
+// Simple cron jobs - will be enabled after RouterOS integration is tested
 export const collectHealthData = action({
   args: {},
   handler: async (ctx) => {
-    console.log("Health data collection - temporarily disabled");
+    console.log("Health data collection scheduled - waiting for RouterOS integration");
   },
 });
 
 export const collectUsageData = action({
   args: {},
   handler: async (ctx) => {
-    console.log("Usage data collection - temporarily disabled");
+    console.log("Usage data collection scheduled - waiting for RouterOS integration");
   },
 });

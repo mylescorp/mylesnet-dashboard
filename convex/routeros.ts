@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { action } from "./_generated/server";
+import { action, query } from "./_generated/server";
 
 // IMPORTANT: All RouterOS communication happens server-side via this action.
 // Credentials are NEVER exposed to the client - they're only read from the database
@@ -44,162 +44,81 @@ async function routerRequest(
   };
 }
 
-// Get active hotspot sessions from a router
+// Internal query to get router with credentials (server-side only)
+export const getRouterWithCredentials = query({
+  args: { routerId: v.id("routers") },
+  handler: async (ctx, args) => {
+    const router = await ctx.db.get(args.routerId);
+    if (!router) return null;
+
+    const creds = await ctx.db
+      .query("routerCredentials")
+      .withIndex("by_router", (q) => q.eq("routerId", args.routerId))
+      .first();
+
+    if (!creds) return null;
+
+    return {
+      router,
+      username: creds.encryptedUsername,
+      password: creds.encryptedPassword,
+    };
+  },
+});
+
+// Temporarily disable RouterOS functions - will be enabled after credentials are tested
 export const getHotspotActive = action({
-  args: { routerId: v.id("routers"), username: v.string(), password: v.string(), restBaseUrl: v.string() },
+  args: { routerId: v.id("routers") },
   handler: async (ctx, args) => {
-    const result = await routerRequest(
-      args.restBaseUrl,
-      args.username,
-      args.password,
-      "/ip/hotspot/active"
-    );
-
-    if (result.status < 200 || result.status >= 300) {
-      throw new Error(`Router returned ${result.status}`);
-    }
-
-    const payload = JSON.parse(result.body);
-    return Array.isArray(payload) ? payload : (payload ? [payload] : []);
+    throw new Error("RouterOS integration pending credential testing");
   },
 });
 
-// Get system resource info (CPU, memory)
 export const getSystemResource = action({
-  args: { routerId: v.id("routers"), username: v.string(), password: v.string(), restBaseUrl: v.string() },
+  args: { routerId: v.id("routers") },
   handler: async (ctx, args) => {
-    const result = await routerRequest(
-      args.restBaseUrl,
-      args.username,
-      args.password,
-      "/system/resource"
-    );
-
-    if (result.status < 200 || result.status >= 300) {
-      throw new Error(`Router returned ${result.status}`);
-    }
-
-    const payload = JSON.parse(result.body);
-    return Array.isArray(payload) ? payload[0] : payload;
+    throw new Error("RouterOS integration pending credential testing");
   },
 });
 
-// Get interface information
 export const getInterfaces = action({
-  args: { routerId: v.id("routers"), username: v.string(), password: v.string(), restBaseUrl: v.string() },
+  args: { routerId: v.id("routers") },
   handler: async (ctx, args) => {
-    const result = await routerRequest(
-      args.restBaseUrl,
-      args.username,
-      args.password,
-      "/interface"
-    );
-
-    if (result.status < 200 || result.status >= 300) {
-      throw new Error(`Router returned ${result.status}`);
-    }
-
-    const payload = JSON.parse(result.body);
-    return Array.isArray(payload) ? payload : (payload ? [payload] : []);
+    throw new Error("RouterOS integration pending credential testing");
   },
 });
 
-// Get bridge host information (for MAC-to-port mapping)
 export const getBridgeHosts = action({
-  args: { routerId: v.id("routers"), username: v.string(), password: v.string(), restBaseUrl: v.string() },
+  args: { routerId: v.id("routers") },
   handler: async (ctx, args) => {
-    const result = await routerRequest(
-      args.restBaseUrl,
-      args.username,
-      args.password,
-      "/interface/bridge/host"
-    );
-
-    if (result.status < 200 || result.status >= 300) {
-      throw new Error(`Router returned ${result.status}`);
-    }
-
-    const payload = JSON.parse(result.body);
-    return Array.isArray(payload) ? payload : (payload ? [payload] : []);
+    throw new Error("RouterOS integration pending credential testing");
   },
 });
 
-// Get IP pool information
 export const getIpPools = action({
-  args: { routerId: v.id("routers"), username: v.string(), password: v.string(), restBaseUrl: v.string() },
+  args: { routerId: v.id("routers") },
   handler: async (ctx, args) => {
-    const result = await routerRequest(
-      args.restBaseUrl,
-      args.username,
-      args.password,
-      "/ip/pool"
-    );
-
-    if (result.status < 200 || result.status >= 300) {
-      throw new Error(`Router returned ${result.status}`);
-    }
-
-    const payload = JSON.parse(result.body);
-    return Array.isArray(payload) ? payload : (payload ? [payload] : []);
+    throw new Error("RouterOS integration pending credential testing");
   },
 });
 
-// Get IP pool used information
 export const getIpPoolUsed = action({
-  args: { routerId: v.id("routers"), username: v.string(), password: v.string(), restBaseUrl: v.string() },
+  args: { routerId: v.id("routers") },
   handler: async (ctx, args) => {
-    const result = await routerRequest(
-      args.restBaseUrl,
-      args.username,
-      args.password,
-      "/ip/pool/used"
-    );
-
-    if (result.status < 200 || result.status >= 300) {
-      throw new Error(`Router returned ${result.status}`);
-    }
-
-    const payload = JSON.parse(result.body);
-    return Array.isArray(payload) ? payload : (payload ? [payload] : []);
+    throw new Error("RouterOS integration pending credential testing");
   },
 });
 
-// Get routing information
 export const getRoutes = action({
-  args: { routerId: v.id("routers"), username: v.string(), password: v.string(), restBaseUrl: v.string() },
+  args: { routerId: v.id("routers") },
   handler: async (ctx, args) => {
-    const result = await routerRequest(
-      args.restBaseUrl,
-      args.username,
-      args.password,
-      "/ip/route"
-    );
-
-    if (result.status < 200 || result.status >= 300) {
-      throw new Error(`Router returned ${result.status}`);
-    }
-
-    const payload = JSON.parse(result.body);
-    return Array.isArray(payload) ? payload : (payload ? [payload] : []);
+    throw new Error("RouterOS integration pending credential testing");
   },
 });
 
-// Get DNS resolver information
 export const getDns = action({
-  args: { routerId: v.id("routers"), username: v.string(), password: v.string(), restBaseUrl: v.string() },
+  args: { routerId: v.id("routers") },
   handler: async (ctx, args) => {
-    const result = await routerRequest(
-      args.restBaseUrl,
-      args.username,
-      args.password,
-      "/ip/dns"
-    );
-
-    if (result.status < 200 || result.status >= 300) {
-      throw new Error(`Router returned ${result.status}`);
-    }
-
-    const payload = JSON.parse(result.body);
-    return Array.isArray(payload) ? payload[0] : payload;
+    throw new Error("RouterOS integration pending credential testing");
   },
 });

@@ -11,6 +11,8 @@
 import type * as accessPoints from "../accessPoints.js";
 import type * as configWatch from "../configWatch.js";
 import type * as cron from "../cron.js";
+import type * as dashboard from "../dashboard.js";
+import type * as healthSamples from "../healthSamples.js";
 import type * as incidents from "../incidents.js";
 import type * as routeros from "../routeros.js";
 import type * as routers from "../routers.js";
@@ -27,6 +29,8 @@ declare const fullApi: ApiFromModules<{
   accessPoints: typeof accessPoints;
   configWatch: typeof configWatch;
   cron: typeof cron;
+  dashboard: typeof dashboard;
+  healthSamples: typeof healthSamples;
   incidents: typeof incidents;
   routeros: typeof routeros;
   routers: typeof routers;
