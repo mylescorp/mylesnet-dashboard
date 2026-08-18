@@ -13,7 +13,7 @@ export const getHealthTrends = query({
     const samples = await ctx.db
       .query("healthSamples")
       .filter((q) => q.eq(q.field("routerId"), args.routerId))
-      .filter((q) => q.gte("timestamp", startTime))
+      .filter((q) => q.gte(q.field("timestamp"), startTime))
       .collect();
 
     // Group by hour for trend data

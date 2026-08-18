@@ -1,6 +1,5 @@
 import { v } from "convex/values";
-import { action, query } from "./_generated/server";
-import { getRouterCredentials } from "./routers";
+import { action } from "./_generated/server";
 
 // IMPORTANT: All RouterOS communication happens server-side via this action.
 // Credentials are NEVER exposed to the client - they're only read from the database
@@ -32,15 +31,10 @@ async function routerRequest(
     headers["Content-Length"] = Buffer.byteLength(JSON.stringify(body)).toString();
   }
 
-  // For self-signed certificates, we need to use a custom agent
-  // In a Node.js environment, we'd use https.Agent with rejectUnauthorized: false
-  // For now, we'll use fetch with the appropriate options
   const response = await fetch(url.toString(), {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
-    // @ts-ignore - Node.js fetch doesn't have standard types for these options
-    // In production, you should use proper certificate validation
   });
 
   const responseBody = await response.text();
@@ -52,18 +46,12 @@ async function routerRequest(
 
 // Get active hotspot sessions from a router
 export const getHotspotActive = action({
-  args: { routerId: v.id("routers") },
+  args: { routerId: v.id("routers"), username: v.string(), password: v.string(), restBaseUrl: v.string() },
   handler: async (ctx, args) => {
-    const router = await ctx.runQuery(internalQueries.getRouter, { id: args.routerId });
-    if (!router) throw new Error("Router not found");
-
-    const creds = await ctx.runQuery(getRouterCredentials, { routerId: args.routerId });
-    if (!creds) throw new Error("Router credentials not found");
-
     const result = await routerRequest(
-      router.restBaseUrl,
-      creds.username,
-      creds.password,
+      args.restBaseUrl,
+      args.username,
+      args.password,
       "/ip/hotspot/active"
     );
 
@@ -78,18 +66,12 @@ export const getHotspotActive = action({
 
 // Get system resource info (CPU, memory)
 export const getSystemResource = action({
-  args: { routerId: v.id("routers") },
+  args: { routerId: v.id("routers"), username: v.string(), password: v.string(), restBaseUrl: v.string() },
   handler: async (ctx, args) => {
-    const router = await ctx.runQuery(internalQueries.getRouter, { id: args.routerId });
-    if (!router) throw new Error("Router not found");
-
-    const creds = await ctx.runQuery(getRouterCredentials, { routerId: args.routerId });
-    if (!creds) throw new Error("Router credentials not found");
-
     const result = await routerRequest(
-      router.restBaseUrl,
-      creds.username,
-      creds.password,
+      args.restBaseUrl,
+      args.username,
+      args.password,
       "/system/resource"
     );
 
@@ -104,18 +86,12 @@ export const getSystemResource = action({
 
 // Get interface information
 export const getInterfaces = action({
-  args: { routerId: v.id("routers") },
+  args: { routerId: v.id("routers"), username: v.string(), password: v.string(), restBaseUrl: v.string() },
   handler: async (ctx, args) => {
-    const router = await ctx.runQuery(internalQueries.getRouter, { id: args.routerId });
-    if (!router) throw new Error("Router not found");
-
-    const creds = await ctx.runQuery(getRouterCredentials, { routerId: args.routerId });
-    if (!creds) throw new Error("Router credentials not found");
-
     const result = await routerRequest(
-      router.restBaseUrl,
-      creds.username,
-      creds.password,
+      args.restBaseUrl,
+      args.username,
+      args.password,
       "/interface"
     );
 
@@ -130,18 +106,12 @@ export const getInterfaces = action({
 
 // Get bridge host information (for MAC-to-port mapping)
 export const getBridgeHosts = action({
-  args: { routerId: v.id("routers") },
+  args: { routerId: v.id("routers"), username: v.string(), password: v.string(), restBaseUrl: v.string() },
   handler: async (ctx, args) => {
-    const router = await ctx.runQuery(internalQueries.getRouter, { id: args.routerId });
-    if (!router) throw new Error("Router not found");
-
-    const creds = await ctx.runQuery(getRouterCredentials, { routerId: args.routerId });
-    if (!creds) throw new Error("Router credentials not found");
-
     const result = await routerRequest(
-      router.restBaseUrl,
-      creds.username,
-      creds.password,
+      args.restBaseUrl,
+      args.username,
+      args.password,
       "/interface/bridge/host"
     );
 
@@ -156,18 +126,12 @@ export const getBridgeHosts = action({
 
 // Get IP pool information
 export const getIpPools = action({
-  args: { routerId: v.id("routers") },
+  args: { routerId: v.id("routers"), username: v.string(), password: v.string(), restBaseUrl: v.string() },
   handler: async (ctx, args) => {
-    const router = await ctx.runQuery(internalQueries.getRouter, { id: args.routerId });
-    if (!router) throw new Error("Router not found");
-
-    const creds = await ctx.runQuery(getRouterCredentials, { routerId: args.routerId });
-    if (!creds) throw new Error("Router credentials not found");
-
     const result = await routerRequest(
-      router.restBaseUrl,
-      creds.username,
-      creds.password,
+      args.restBaseUrl,
+      args.username,
+      args.password,
       "/ip/pool"
     );
 
@@ -182,18 +146,12 @@ export const getIpPools = action({
 
 // Get IP pool used information
 export const getIpPoolUsed = action({
-  args: { routerId: v.id("routers") },
+  args: { routerId: v.id("routers"), username: v.string(), password: v.string(), restBaseUrl: v.string() },
   handler: async (ctx, args) => {
-    const router = await ctx.runQuery(internalQueries.getRouter, { id: args.routerId });
-    if (!router) throw new Error("Router not found");
-
-    const creds = await ctx.runQuery(getRouterCredentials, { routerId: args.routerId });
-    if (!creds) throw new Error("Router credentials not found");
-
     const result = await routerRequest(
-      router.restBaseUrl,
-      creds.username,
-      creds.password,
+      args.restBaseUrl,
+      args.username,
+      args.password,
       "/ip/pool/used"
     );
 
@@ -208,18 +166,12 @@ export const getIpPoolUsed = action({
 
 // Get routing information
 export const getRoutes = action({
-  args: { routerId: v.id("routers") },
+  args: { routerId: v.id("routers"), username: v.string(), password: v.string(), restBaseUrl: v.string() },
   handler: async (ctx, args) => {
-    const router = await ctx.runQuery(internalQueries.getRouter, { id: args.routerId });
-    if (!router) throw new Error("Router not found");
-
-    const creds = await ctx.runQuery(getRouterCredentials, { routerId: args.routerId });
-    if (!creds) throw new Error("Router credentials not found");
-
     const result = await routerRequest(
-      router.restBaseUrl,
-      creds.username,
-      creds.password,
+      args.restBaseUrl,
+      args.username,
+      args.password,
       "/ip/route"
     );
 
@@ -234,18 +186,12 @@ export const getRoutes = action({
 
 // Get DNS resolver information
 export const getDns = action({
-  args: { routerId: v.id("routers") },
+  args: { routerId: v.id("routers"), username: v.string(), password: v.string(), restBaseUrl: v.string() },
   handler: async (ctx, args) => {
-    const router = await ctx.runQuery(internalQueries.getRouter, { id: args.routerId });
-    if (!router) throw new Error("Router not found");
-
-    const creds = await ctx.runQuery(getRouterCredentials, { routerId: args.routerId });
-    if (!creds) throw new Error("Router credentials not found");
-
     const result = await routerRequest(
-      router.restBaseUrl,
-      creds.username,
-      creds.password,
+      args.restBaseUrl,
+      args.username,
+      args.password,
       "/ip/dns"
     );
 
@@ -257,13 +203,3 @@ export const getDns = action({
     return Array.isArray(payload) ? payload[0] : payload;
   },
 });
-
-// Internal queries (not exposed to client)
-const internalQueries = {
-  getRouter: query({
-    args: { id: v.id("routers") },
-    handler: async (ctx, args) => {
-      return await ctx.db.get(args.id);
-    },
-  }),
-};
