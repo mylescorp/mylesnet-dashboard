@@ -1,6 +1,14 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 
+// Get open incidents (unresolved)
+export const getOpenIncidents = query({
+  handler: async (ctx) => {
+    const all = await ctx.db.query("incidents").collect();
+    return all.filter((i) => !i.resolvedAt);
+  },
+});
+
 // List all incidents
 export const listIncidents = query({
   args: { routerId: v.optional(v.id("routers")) },
@@ -12,14 +20,6 @@ export const listIncidents = query({
     }
     
     return all;
-  },
-});
-
-// Get open incidents (unresolved)
-export const getOpenIncidents = query({
-  handler: async (ctx) => {
-    const all = await ctx.db.query("incidents").collect();
-    return all.filter((i) => !i.resolvedAt);
   },
 });
 

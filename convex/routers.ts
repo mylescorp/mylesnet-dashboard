@@ -1,36 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 
-// Add a new router with credentials (server-side only)
-export const addRouter = mutation({
-  args: {
-    name: v.string(),
-    restBaseUrl: v.string(),
-    location: v.string(),
-    username: v.string(),
-    password: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const routerId = await ctx.db.insert("routers", {
-      name: args.name,
-      restBaseUrl: args.restBaseUrl,
-      location: args.location,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    });
-
-    // Store credentials separately - NEVER exposed to client
-    await ctx.db.insert("routerCredentials", {
-      routerId,
-      encryptedUsername: args.username, // In production, this should be encrypted
-      encryptedPassword: args.password, // In production, this should be encrypted
-      updatedAt: Date.now(),
-    });
-
-    return routerId;
-  },
-});
-
 // List routers WITHOUT credentials (safe for client queries)
 export const listRouters = query({
   handler: async (ctx) => {
@@ -72,6 +42,36 @@ export const getRouterCredentials = query({
       username: creds.encryptedUsername,
       password: creds.encryptedPassword,
     };
+  },
+});
+
+// Add a new router with credentials (server-side only)
+export const addRouter = mutation({
+  args: {
+    name: v.string(),
+    restBaseUrl: v.string(),
+    location: v.string(),
+    username: v.string(),
+    password: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const routerId = await ctx.db.insert("routers", {
+      name: args.name,
+      restBaseUrl: args.restBaseUrl,
+      location: args.location,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    // Store credentials separately - NEVER exposed to client
+    await ctx.db.insert("routerCredentials", {
+      routerId,
+      encryptedUsername: args.username, // In production, this should be encrypted
+      encryptedPassword: args.password, // In production, this should be encrypted
+      updatedAt: Date.now(),
+    });
+
+    return routerId;
   },
 });
 
