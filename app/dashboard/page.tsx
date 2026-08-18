@@ -76,6 +76,16 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {/* Note about health metrics */}
+        {selectedRouter && (
+          <div className="mb-8 bg-yellow-50 border border-yellow-200 rounded-md p-4">
+            <p className="text-sm text-yellow-800">
+              <strong>Note:</strong> Health metrics collection is currently disabled pending RouterOS integration testing. 
+              You can manually test RouterOS functions through the Convex dashboard.
+            </p>
+          </div>
+        )}
+
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-white rounded-lg shadow p-6">
