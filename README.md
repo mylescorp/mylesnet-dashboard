@@ -1,15 +1,30 @@
 # MylesNet Network Operations Dashboard
 
-A cloud-based network operations dashboard for monitoring multiple MikroTik routers from any device. This tool provides read-only monitoring of WiFi hotspot operations, router health, access point status, and usage statistics.
+A network operations dashboard for monitoring multiple MikroTik routers. This tool provides read-only monitoring of WiFi hotspot operations, router health, access point status, and usage statistics.
 
 ## Security Architecture
 
-**CRITICAL SECURITY DESIGN**: RouterOS credentials are NEVER exposed to the browser or client-side code. All router communication happens server-side through Convex actions that read credentials from the database and make authenticated requests to RouterOS REST APIs.
+**CRITICAL SECURITY DESIGN**: RouterOS credentials are never exposed to the browser. A local collector running within the router network makes the RouterOS REST reads and sends normalised telemetry to the backend over HTTPS.
 
-- Credentials are stored server-side only in the Convex `routerCredentials` table
+- Router credentials remain server-side and are released only to a verified collector over HTTPS
 - The browser never receives router credentials in any query result
-- All RouterOS REST API calls happen via Convex scheduled actions running server-side
+- The hosted backend never directly reaches a private router address
 - The Next.js frontend talks ONLY to Convex (queries/mutations/subscriptions)
+
+## Local Router Collector
+
+Run the collector on a device in the same private network as the router.
+
+1. Copy `collector/.env.example` to `collector/.env.local` on the collector device. The start command loads this uncommitted file automatically.
+2. Set `MYLESNET_COLLECTOR_INGEST_URL` to the deployed Convex Site endpoint ending in `/collector/ingest`.
+3. Set the same strong `MYLESNET_COLLECTOR_SHARED_SECRET` in the collector environment and the Convex deployment environment.
+4. Set `MYLESNET_COLLECTOR_ROUTER_ID` to the router identifier shown in the dashboard. The collector securely obtains that router's saved read-only connection on each collection cycle.
+5. Run `npm run collector:check` once. It exits successfully only after the router read and dashboard delivery both succeed.
+6. Start continuous collection with `npm run collector:start`.
+
+For this local operations workstation, use `npm run collector:local:check` and then `npm run collector:local`. These commands obtain the signing secret from the protected production configuration at runtime rather than storing it in `collector/.env.local`.
+
+The collector reads `/system/resource`, `/interface`, `/ip/hotspot/active`, `/ip/pool`, `/ip/dns`, and `/ip/route`. It does not issue RouterOS write requests or external traffic tests.
 
 ## Features
 
@@ -21,6 +36,9 @@ A cloud-based network operations dashboard for monitoring multiple MikroTik rout
 - **Usage Reporting**: Per-user and per-access-point usage statistics with CSV export
 - **Configuration Watch**: Baseline configuration tracking to detect unexpected changes
 - **Read-Only Operations**: Zero RouterOS write actions - monitoring only, no configuration changes
+- **Centipid Integration**: Real-time business event tracking (subscribers, payments, vouchers, tickets) via webhooks
+- **Business Activity Feed**: Live feed of billing events from Centipid with filtering capabilities
+- **Connected User Count**: Real-time hotspot session tracking from RouterOS
 
 ## Tech Stack
 
@@ -39,7 +57,7 @@ On your MikroTik router, enable the REST API service:
 2. Navigate to `IP` → `Services`
 3. Find `www-ssl` and enable it
 4. Set the port to `8443` (or your preferred HTTPS port)
-5. Ensure the service is accessible from the internet/network where your Convex deployment runs
+5. Ensure the service is accessible from the local collector device. Do not expose the router REST service to the public internet.
 
 ### Step 2: Create Dedicated Read-Only Account
 
@@ -61,23 +79,12 @@ On your MikroTik router, enable the REST API service:
 
 ### Step 3: Configure TLS Certificate
 
-The dashboard supports both self-signed and proper TLS certificates:
-
-**For Self-Signed Certificates (Current Setup)**:
-- The system will handle self-signed certificates by default
-- This is acceptable for internal monitoring tools
-- Document this trade-off in your security policies
-
-**For Production Certificates (Recommended)**:
-- Generate a proper TLS certificate for your router
-- Import the certificate into RouterOS
-- Use the certificate for the www-ssl service
-- This provides better security and prevents man-in-the-middle attacks
+Use a certificate trusted by the collector device for the RouterOS `www-ssl` service. The collector intentionally rejects untrusted certificates rather than weakening TLS validation. Import the issuing CA into the collector device trust store, or use a certificate issued by a trusted authority.
 
 ### Step 4: Add Router to Dashboard
 
 1. Sign in to the MylesNet Dashboard
-2. Navigate to "Manage Routers"
+2. Navigate to "Routers"
 3. Click "Add Router"
 4. Fill in the required information:
    - **Router Name**: e.g., "Tayari Router"
@@ -85,6 +92,8 @@ The dashboard supports both self-signed and proper TLS certificates:
    - **REST Base URL**: e.g., `https://192.168.1.1:8443` (include port)
    - **RouterOS Username**: The dedicated monitoring account username
    - **RouterOS Password**: The dedicated monitoring account password
+   - **CPU Warning Threshold**: CPU % for warning alerts (default: 75%)
+   - **CPU Critical Threshold**: CPU % for critical alerts (default: 90%)
 
 5. Click "Add Router"
 
@@ -108,10 +117,97 @@ After setup:
 1. Navigate to the main dashboard
 2. Select your router from the dropdown
 3. Verify that:
-   - Router health data is being collected (CPU, memory)
+   - Router health data is being collected (CPU, memory, connected users)
    - Access points show correct link status
-   - Active hotspot sessions are being counted
    - Health samples are being written every 30 seconds
+   - Connected user count is being tracked from hotspot sessions
+
+## Centipid Integration Guide
+
+### Step 1: Generate Centipid API Token
+
+1. Log in to your Centipid Billing account at [docs.centipidbilling.com](https://docs.centipidbilling.com)
+2. Navigate to Developer Settings → API Tokens
+3. Create a new token named "MylesNet Dashboard"
+4. Copy the token - you'll need it for the dashboard
+5. Ensure the token has read-only access to the resources you need (subscribers, payments, vouchers, tickets)
+
+### Step 2: Configure Webhook in Centipid
+
+1. In Centipid, navigate to Developer Settings → Webhooks
+2. Add a new webhook with URL: `[YOUR_CONVEX_HTTP_ACTION_URL]`
+   - The webhook URL will be displayed in the dashboard's Centipid Settings page
+   - It will look like: `https://your-deployment.convex.cloud/http/receiveCentipidWebhook`
+3. Generate a signing secret and copy it
+4. Enable these events:
+   - `subscriber.created` - When a new subscriber is created
+   - `subscriber.paused` - When a subscriber is paused
+   - `subscriber.resumed` - When a subscriber is resumed
+   - `payment.received` - When a payment is received
+   - `payment.refunded` - When a payment is refunded
+   - `voucher.generated` - When a voucher is generated
+   - `voucher.redeemed` - When a voucher is redeemed
+   - `ticket.opened` - When a support ticket is opened
+   - `ticket.resolved` - When a support ticket is resolved
+
+### Step 3: Connect Dashboard to Centipid
+
+1. Sign in to MylesNet Dashboard
+2. Navigate to "Centipid Settings" (in the sidebar)
+3. Paste your API token from Step 1
+4. Paste your webhook signing secret from Step 2
+5. Click "Save Credentials"
+6. The webhook URL will be displayed - verify it matches what you configured in Centipid
+
+### Step 4: Configure Environment Variables
+
+Add the following environment variables to your deployment:
+
+**For local development (`.env.local`):**
+```env
+CENTIPID_API_TOKEN=your_actual_api_token
+CENTIPID_WEBHOOK_SECRET=your_actual_webhook_secret
+```
+
+**For Vercel production:**
+1. Go to Vercel dashboard → your project → Settings → Environment Variables
+2. Add `CENTIPID_API_TOKEN` with your actual API token
+3. Add `CENTIPID_WEBHOOK_SECRET` with your actual webhook signing secret
+4. Click Save and redeploy
+
+**For Convex production:**
+1. Go to Convex dashboard → your project → Settings → Environment Variables
+2. Add `CENTIPID_API_TOKEN` with your actual API token
+3. Add `CENTIPID_WEBHOOK_SECRET` with your actual webhook signing secret
+4. Click Save
+
+### Step 5: Perform Historical Backfill (Optional)
+
+When first connecting a router or after webhook delivery issues:
+
+1. Navigate to "Centipid Settings"
+2. Click "Fetch Historical Data"
+3. This will fetch the last 7 days of subscriber, payment, and voucher data from Centipid API
+4. The data will populate the business activity feed
+
+### Step 6: Verify Integration
+
+1. Check the connection status on the Centipid Settings page
+2. Verify "Credentials Configured" shows "Yes"
+3. Trigger a test event in Centipid (e.g., create a test subscriber or generate a test voucher)
+4. Navigate to "Business Activity" in the sidebar
+5. Verify the event appears in the feed within a few seconds
+6. Check the "Recent Webhook Deliveries" section on the Centipid Settings page for any errors
+
+### Security Notes for Centipid Integration
+
+- The Centipid API token is stored server-side only in the Convex database
+- The webhook signing secret is never exposed to the client
+- All webhook payloads are HMAC-verified before processing
+- Duplicate webhook deliveries are rejected (idempotent processing)
+- The dashboard is read-only - it never writes back to Centipid
+- No customer PII or payment details are stored in shift notes
+- Webhook delivery logs are pruned after 30 days to avoid PII accumulation
 
 ## RouterOS REST API Paths Used
 
@@ -142,6 +238,10 @@ CONVEX_DEPLOY_KEY=your_convex_deploy_key
 # Convex Auth
 AUTH_SECRET=your_auth_secret
 CONVEX_SITE_URL=your_site_url
+
+# Centipid Integration
+CENTIPID_API_TOKEN=your_centipid_api_token
+CENTIPID_WEBHOOK_SECRET=your_webhook_signing_secret
 ```
 
 ### Deploy to Vercel
@@ -171,6 +271,7 @@ CONVEX_SITE_URL=your_site_url
 
 The Convex schema includes:
 
+**Network Operations:**
 - `users` - Managed by Convex Auth
 - `routers` - Router configuration
 - `routerCredentials` - Encrypted credentials (server-side only)
@@ -181,6 +282,14 @@ The Convex schema includes:
 - `shiftNotes` - Operator notes
 - `configWatchBaselines` - Configuration baselines
 
+**Centipid Integration:**
+- `centipidCredentials` - API token and webhook signing secret (server-side only)
+- `subscriberEvents` - Subscriber lifecycle events
+- `paymentEvents` - Payment events
+- `voucherEvents` - Voucher events
+- `ticketEvents` - Support ticket events
+- `webhookDeliveryLog` - Webhook delivery tracking (30-day retention)
+
 ## Security Notes
 
 - RouterOS credentials are stored server-side and never exposed to clients
@@ -189,6 +298,10 @@ The Convex schema includes:
 - Authentication is required for all dashboard access
 - Shift notes must not contain customer PII or payment information
 - Usage data is retained for 180 days only
+- Centipid API token and webhook secret are stored server-side only
+- All webhook payloads are HMAC-verified before processing
+- Webhook delivery logs are pruned after 30 days to avoid PII accumulation
+- The dashboard never writes back to Centipid - one-way integration only
 
 ## Troubleshooting
 
@@ -211,10 +324,27 @@ If health data isn't being collected:
 
 ### Certificate Validation Errors
 
-If you see certificate validation errors:
-1. For self-signed certificates, this is expected and handled
-2. For production, use proper TLS certificates on routers
-3. Verify the certificate chain is valid
+If collection fails during TLS validation:
+1. Confirm the router certificate is valid for the configured REST hostname or address.
+2. Install the issuing CA certificate in the collector device trust store.
+3. Run `npm run collector:check` again before starting continuous collection.
+
+### Centipid Webhook Not Receiving Events
+
+If webhooks aren't being received:
+1. Verify the webhook URL in Centipid matches the URL shown in the dashboard
+2. Check the webhook signing secret matches between Centipid and the dashboard
+3. Verify CENTIPID_WEBHOOK_SECRET environment variable is set in Convex
+4. Check the "Recent Webhook Deliveries" section in Centipid Settings for errors
+5. Ensure the webhook is enabled for the correct event types in Centipid
+
+### Centipid Historical Data Fails
+
+If historical data backfill fails:
+1. Verify CENTIPID_API_TOKEN environment variable is set in Convex
+2. Check the API token has the necessary permissions
+3. Review Convex function logs for API errors
+4. Verify the Centipid API is accessible from Convex deployment
 
 ## Support
 

@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { requireAuthenticatedUser } from "./lib/auth";
 
 // Update CPU thresholds for a router
 export const updateCpuThresholds = mutation({
@@ -9,6 +10,7 @@ export const updateCpuThresholds = mutation({
     cpuCriticalThreshold: v.number(),
   },
   handler: async (ctx, args) => {
+    await requireAuthenticatedUser(ctx);
     await ctx.db.patch(args.routerId, {
       cpuWarningThreshold: args.cpuWarningThreshold,
       cpuCriticalThreshold: args.cpuCriticalThreshold,
@@ -21,6 +23,7 @@ export const updateCpuThresholds = mutation({
 export const getCpuThresholds = query({
   args: { routerId: v.id("routers") },
   handler: async (ctx, args) => {
+    await requireAuthenticatedUser(ctx);
     const router = await ctx.db.get(args.routerId);
     if (!router) return null;
 

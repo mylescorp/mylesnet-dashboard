@@ -1,20 +1,39 @@
 "use client";
 
-import { useQuery, useMutation } from "convex/react";
+import { useAction, useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useState } from "react";
+import type { Id } from "../../convex/_generated/dataModel";
+
+type ConfigDriftResult = {
+  success: boolean;
+  hasDrift: boolean;
+  message: string;
+  differences: string[];
+  baselineCapturedAt: number | null;
+};
 
 export default function RoutersPage() {
+  const [showAddRouterModal, setShowAddRouterModal] = useState(false);
+  const [showAddAPModal, setShowAddAPModal] = useState(false);
+  const [showConfigWatchModal, setShowConfigWatchModal] = useState(false);
+  const [selectedRouterForAP, setSelectedRouterForAP] = useState<Id<"routers"> | null>(null);
+  const [selectedRouterForBaseline, setSelectedRouterForBaseline] = useState<Id<"routers"> | null>(null);
+  const [configDriftResult, setConfigDriftResult] = useState<ConfigDriftResult | null>(null);
+
   const routers = useQuery(api.routers.listRouters);
   const accessPoints = useQuery(api.accessPoints.listAccessPoints, {});
   const addRouter = useMutation(api.routers.addRouter);
   const deleteRouter = useMutation(api.routers.deleteRouter);
   const addAccessPoint = useMutation(api.accessPoints.addAccessPoint);
   const deleteAccessPoint = useMutation(api.accessPoints.deleteAccessPoint);
-
-  const [showAddRouterModal, setShowAddRouterModal] = useState(false);
-  const [showAddAPModal, setShowAddAPModal] = useState(false);
-  const [selectedRouterForAP, setSelectedRouterForAP] = useState<string | null>(null);
+  const captureBaseline = useAction(api.configWatch.captureBaseline);
+  const checkConfigDrift = useAction(api.configWatch.checkConfigDrift);
+  const deleteBaseline = useMutation(api.configWatch.deleteBaseline);
+  const baselines = useQuery(
+    api.configWatch.getBaselines,
+    selectedRouterForBaseline ? { routerId: selectedRouterForBaseline } : "skip"
+  );
   const [routerFormData, setRouterFormData] = useState({
     name: "",
     restBaseUrl: "",
@@ -29,9 +48,21 @@ export default function RoutersPage() {
     port: "",
     deviceType: "other" as "cpe220" | "indoor_ap" | "builtin_radio" | "other",
     sharesPortWith: "",
+    capacity: "",
+    rateLimitReference: "",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [feedback, setFeedback] = useState("");
+
+  const copyCollectorRouterId = async (routerId: Id<"routers">) => {
+    try {
+      await navigator.clipboard.writeText(routerId);
+      setFeedback("Collector router identifier copied. Add it to the local collector configuration before running the connection check.");
+    } catch {
+      setFeedback("We could not copy the collector router identifier. Select and copy it manually.");
+    }
+  };
 
   const handleRouterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,9 +90,8 @@ export default function RoutersPage() {
         cpuWarningThreshold: 75,
         cpuCriticalThreshold: 90,
       });
-    } catch (err) {
+    } catch {
       setError("Failed to add router. Please check your inputs.");
-      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -75,8 +105,16 @@ export default function RoutersPage() {
     setError("");
 
     try {
-      const apData: any = {
-        routerId: selectedRouterForAP as any,
+      const apData: {
+        routerId: Id<"routers">;
+        name: string;
+        port: string;
+        deviceType: "cpe220" | "indoor_ap" | "builtin_radio" | "other";
+        sharesPortWith?: string;
+        capacity?: number;
+        rateLimitReference?: string;
+      } = {
+        routerId: selectedRouterForAP,
         name: apFormData.name,
         port: apFormData.port,
         deviceType: apFormData.deviceType,
@@ -85,6 +123,9 @@ export default function RoutersPage() {
       if (apFormData.sharesPortWith) {
         apData.sharesPortWith = apFormData.sharesPortWith;
       }
+      const capacity = Number(apFormData.capacity);
+      if (Number.isInteger(capacity) && capacity > 0) apData.capacity = capacity;
+      if (apFormData.rateLimitReference.trim()) apData.rateLimitReference = apFormData.rateLimitReference.trim();
       
       await addAccessPoint(apData);
 
@@ -94,37 +135,68 @@ export default function RoutersPage() {
         port: "",
         deviceType: "other",
         sharesPortWith: "",
+        capacity: "",
+        rateLimitReference: "",
       });
       setSelectedRouterForAP(null);
-    } catch (err) {
+    } catch {
       setError("Failed to add access point. Please check your inputs.");
-      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDeleteRouter = async (routerId: string) => {
+  const handleDeleteRouter = async (routerId: Id<"routers">) => {
     if (!confirm("Are you sure you want to delete this router?")) return;
 
     try {
-      await deleteRouter({ routerId: routerId as any });
-    } catch (err) {
-      console.error("Failed to delete router:", err);
+      await deleteRouter({ routerId });
+    } catch {
+      setFeedback("We could not remove this router. Please try again.");
     }
   };
 
-  const handleDeleteAP = async (apId: string) => {
+  const handleDeleteAP = async (apId: Id<"accessPoints">) => {
     if (!confirm("Are you sure you want to delete this access point?")) return;
 
     try {
-      await deleteAccessPoint({ accessPointId: apId as any });
-    } catch (err) {
-      console.error("Failed to delete access point:", err);
+      await deleteAccessPoint({ accessPointId: apId });
+    } catch {
+      setFeedback("We could not remove this access point. Please try again.");
     }
   };
 
-  const getAccessPointsForRouter = (routerId: string) => {
+  const handleCaptureBaseline = async (routerId: Id<"routers">) => {
+    try {
+      const result = await captureBaseline({ routerId });
+      setFeedback(result.message);
+    } catch {
+      setFeedback("We could not capture the router configuration. Check the router connection and try again.");
+    }
+  };
+
+  const handleCheckConfigDrift = async (routerId: Id<"routers">) => {
+    try {
+      const result = await checkConfigDrift({ routerId });
+      setConfigDriftResult(result);
+      setShowConfigWatchModal(true);
+      setSelectedRouterForBaseline(routerId);
+    } catch {
+      setFeedback("We could not check the router configuration. Check the router connection and try again.");
+    }
+  };
+
+  const handleDeleteBaseline = async (baselineId: Id<"configWatchBaselines">) => {
+    if (!confirm("Are you sure you want to delete this baseline?")) return;
+
+    try {
+      await deleteBaseline({ baselineId });
+    } catch {
+      setFeedback("We could not remove this baseline. Please try again.");
+    }
+  };
+
+  const getAccessPointsForRouter = (routerId: Id<"routers">) => {
     return accessPoints?.filter((ap) => ap.routerId === routerId) || [];
   };
 
@@ -144,6 +216,12 @@ export default function RoutersPage() {
           </button>
         </div>
 
+        {feedback ? (
+          <p className="mb-6 rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+            {feedback}
+          </p>
+        ) : null}
+
         {/* Router List */}
         <div className="space-y-6">
           {routers && routers.length > 0 ? (
@@ -155,9 +233,20 @@ export default function RoutersPage() {
                       <h3 className="text-lg font-semibold text-gray-900">{router.name}</h3>
                       <p className="text-sm text-gray-600">{router.location}</p>
                       <p className="text-xs text-gray-500 mt-1">{router.restBaseUrl}</p>
-                      {(router as any).cpuWarningThreshold && (
+                      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-600">
+                        <span>Collector router identifier</span>
+                        <code className="rounded border border-gray-200 bg-gray-50 px-2 py-1 text-gray-800">{router._id}</code>
+                        <button
+                          type="button"
+                          onClick={() => void copyCollectorRouterId(router._id)}
+                          className="font-medium text-orange-700 hover:text-orange-900"
+                        >
+                          Copy identifier
+                        </button>
+                      </div>
+                      {router.cpuWarningThreshold && (
                         <p className="text-xs text-gray-500 mt-1">
-                          CPU Thresholds: Warning {(router as any).cpuWarningThreshold}%, Critical {(router as any).cpuCriticalThreshold}%
+                          CPU Thresholds: Warning {router.cpuWarningThreshold}%, Critical {router.cpuCriticalThreshold}%
                         </p>
                       )}
                     </div>
@@ -165,6 +254,18 @@ export default function RoutersPage() {
                       <span className={`text-sm ${router.hasCredentials ? "text-green-600" : "text-red-600"}`}>
                         {router.hasCredentials ? "✓ Configured" : "✗ Not configured"}
                       </span>
+                      <button
+                        onClick={() => handleCaptureBaseline(router._id)}
+                        className="text-sm text-blue-600 hover:text-blue-900"
+                      >
+                        Capture Baseline
+                      </button>
+                      <button
+                        onClick={() => handleCheckConfigDrift(router._id)}
+                        className="text-sm text-purple-600 hover:text-purple-900"
+                      >
+                        Check Drift
+                      </button>
                       <button
                         onClick={() => handleDeleteRouter(router._id)}
                         className="text-red-600 hover:text-red-900 text-sm"
@@ -417,7 +518,7 @@ export default function RoutersPage() {
                 </label>
                 <select
                   value={apFormData.deviceType}
-                  onChange={(e) => setApFormData({ ...apFormData, deviceType: e.target.value as any })}
+                  onChange={(e) => setApFormData({ ...apFormData, deviceType: e.target.value as typeof apFormData.deviceType })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
                 >
                   <option value="cpe220">CPE220</option>
@@ -443,6 +544,16 @@ export default function RoutersPage() {
                 </p>
               </div>
 
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Safe user capacity (Optional)</label>
+                <input type="number" min="1" value={apFormData.capacity} onChange={(e) => setApFormData({ ...apFormData, capacity: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Maximum users for this access point" />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Rate-limit reference (Optional)</label>
+                <input type="text" value={apFormData.rateLimitReference} onChange={(e) => setApFormData({ ...apFormData, rateLimitReference: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Configured service rate reference" />
+              </div>
+
               <div className="flex justify-end gap-3 pt-4">
                 <button
                   type="button"
@@ -463,6 +574,84 @@ export default function RoutersPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Config Watch Modal */}
+      {showConfigWatchModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full p-6 max-h-[80vh] overflow-y-auto">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Configuration Watch</h2>
+
+            {configDriftResult && (
+              <div className="space-y-4">
+                <div className={`p-4 rounded-md ${
+                  configDriftResult.hasDrift ? "bg-yellow-50 border border-yellow-200" : "bg-green-50 border border-green-200"
+                }`}>
+                  <p className={`font-medium ${
+                    configDriftResult.hasDrift ? "text-yellow-900" : "text-green-900"
+                  }`}>
+                    {configDriftResult.message}
+                  </p>
+                  {configDriftResult.baselineCapturedAt && (
+                    <p className="text-sm text-gray-600 mt-1">
+                      Baseline captured: {new Date(configDriftResult.baselineCapturedAt).toLocaleString()}
+                    </p>
+                  )}
+                </div>
+
+                {configDriftResult.differences && configDriftResult.differences.length > 0 && (
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-2">Configuration Differences:</h3>
+                    <ul className="list-disc list-inside space-y-1">
+                      {configDriftResult.differences.map((diff: string, idx: number) => (
+                        <li key={idx} className="text-sm text-gray-700">{diff}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {baselines && baselines.length > 0 && (
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-2">Configuration Baselines:</h3>
+                    <div className="space-y-2">
+                      {baselines.map((baseline) => (
+                        <div key={baseline._id} className="border border-gray-200 rounded-md p-3 flex justify-between items-center">
+                          <div>
+                            <p className="text-sm text-gray-900">
+                              Captured: {new Date(baseline.capturedAt).toLocaleString()}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {new Date(baseline.capturedAt).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteBaseline(baseline._id)}
+                            className="text-red-600 hover:text-red-900 text-sm"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex justify-end pt-4">
+              <button
+                onClick={() => {
+                  setShowConfigWatchModal(false);
+                  setConfigDriftResult(null);
+                  setSelectedRouterForBaseline(null);
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

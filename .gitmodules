@@ -1,0 +1,3 @@
+[submodule "vendor/davidondrej-skills"]
+	path = vendor/davidondrej-skills
+	url = https://github.com/davidondrej/skills.git

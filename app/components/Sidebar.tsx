@@ -1,70 +1,242 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
+import { useAuth } from "@workos-inc/authkit-nextjs/components";
+import {
+  AlertTriangle,
+  BarChart3,
+  Boxes,
+  ChevronLeft,
+  ChevronRight,
+  CircleDollarSign,
+  ClipboardList,
+  History,
+  LayoutDashboard,
+  LogOut,
+  Map,
+  MapPinned,
+  Megaphone,
+  RadioTower,
+  Settings2,
+  ShieldPlus,
+  Ticket,
+  Trash2,
+  TriangleAlert,
+  Trophy,
+  Users,
+  X,
+} from "lucide-react";
+import { useSidebarState } from "./useSidebarState";
 
-export default function Sidebar() {
+const opsSections = [
+  {
+    title: "Operations",
+    items: [
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/routers", label: "Router estate", icon: RadioTower },
+      { href: "/incidents", label: "Incident desk", icon: TriangleAlert },
+    ],
+  },
+  {
+    title: "Shift & Analytics",
+    items: [
+      { href: "/shift-notes", label: "Shift handover", icon: ClipboardList },
+      { href: "/usage", label: "Usage reports", icon: BarChart3 },
+      { href: "/business-activity", label: "Business activity", icon: CircleDollarSign },
+    ],
+  },
+  {
+    title: "System",
+    items: [
+      { href: "/centipid", label: "Billing integration", icon: Settings2 },
+    ],
+  },
+];
+
+const platformSections = [
+  {
+    title: "Overview",
+    items: [
+      { href: "/platform", label: "Dashboard", icon: LayoutDashboard, exact: true },
+      { href: "/platform/leaderboard", label: "Leaderboard", icon: Trophy },
+    ],
+  },
+  {
+    title: "Field Operations",
+    items: [
+      { href: "/platform/markets", label: "Markets", icon: Map },
+      { href: "/platform/prospects", label: "Prospects", icon: MapPinned },
+      { href: "/platform/devices", label: "Devices", icon: Boxes },
+      { href: "/platform/agents", label: "Agents", icon: Users },
+    ],
+  },
+  {
+    title: "Revenue & Billing",
+    items: [
+      { href: "/platform/vouchers", label: "Vouchers", icon: Ticket },
+      { href: "/platform/commissions", label: "Commissions", icon: CircleDollarSign },
+    ],
+  },
+  {
+    title: "Support & Audit",
+    items: [
+      { href: "/platform/alerts", label: "Alerts", icon: AlertTriangle },
+      { href: "/platform/tickets", label: "Tickets", icon: ClipboardList },
+      { href: "/platform/comms", label: "Comms", icon: Megaphone },
+      { href: "/platform/trash", label: "Trash", icon: Trash2 },
+      { href: "/platform/audit-log", label: "Audit Log", icon: History },
+    ],
+  },
+];
+
+interface SidebarProps {
+  isMobile?: boolean;
+  onCloseMobile?: () => void;
+}
+
+export default function Sidebar({ isMobile = false, onCloseMobile }: SidebarProps) {
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = useState(false);
+  const router = useRouter();
+  const { signOut } = useAuth();
+  const { collapsed, toggleCollapsed } = useSidebarState();
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
-  const navItems = [
-    { href: "/dashboard", label: "Dashboard", icon: "📊" },
-    { href: "/routers", label: "Routers", icon: "📡" },
-    { href: "/incidents", label: "Incidents", icon: "⚠️" },
-    { href: "/shift-notes", label: "Shift Notes", icon: "📝" },
-    { href: "/usage", label: "Usage Reports", icon: "📈" },
-  ];
+  const isPlatformMode = pathname.startsWith("/platform");
+  const effectiveCollapsed = isMobile ? false : collapsed;
+  const currentSections = isPlatformMode ? platformSections : opsSections;
+
+  const handleSignOut = async () => {
+    setIsSigningOut(true);
+    try {
+      await signOut();
+      router.replace("/signin");
+      router.refresh();
+    } finally {
+      setIsSigningOut(false);
+    }
+  };
+
+  const isItemActive = (item: { href: string; exact?: boolean }) => {
+    if (item.exact) return pathname === item.href;
+    return pathname === item.href || pathname.startsWith(item.href + "/");
+  };
 
   return (
-    <aside className={`bg-gray-900 text-white transition-all duration-300 ${collapsed ? "w-16" : "w-64"} flex flex-col`}>
-      {/* Header */}
-      <div className="p-4 border-b border-gray-700">
-        <div className="flex items-center justify-between">
-          {!collapsed && (
-            <div>
-              <h1 className="text-lg font-bold">MylesNet</h1>
-              <p className="text-xs text-gray-400">Network Operations</p>
-            </div>
-          )}
-          <button
-            onClick={() => setCollapsed(!collapsed)}
-            className="p-2 hover:bg-gray-700 rounded-md transition-colors"
-          >
-            {collapsed ? "→" : "←"}
-          </button>
+    <aside
+      className={`sidebar ${effectiveCollapsed ? "sidebar-collapsed" : ""} ${
+        isMobile ? "sidebar-mobile" : ""
+      }`}
+    >
+      {/* Permanent Brand Header (Constant MylesNet Logo) */}
+      <div className="sidebar-brand">
+        <div className="sidebar-brand-inner">
+          <Image
+            src="/brand/mylesnet-logo.png"
+            alt="MylesNet Logo"
+            width={640}
+            height={427}
+            unoptimized
+            priority
+            className="sidebar-logo"
+          />
         </div>
+
+        {isMobile ? (
+          <button
+            type="button"
+            onClick={onCloseMobile}
+            className="sidebar-close-mobile"
+            aria-label="Close navigation menu"
+          >
+            <X size={18} />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            className="sidebar-collapse"
+            aria-label={effectiveCollapsed ? "Expand navigation" : "Collapse navigation"}
+            title={effectiveCollapsed ? "Expand navigation" : "Collapse navigation"}
+          >
+            {effectiveCollapsed ? <ChevronRight size={17} /> : <ChevronLeft size={17} />}
+          </button>
+        )}
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-2">
-        {navItems.map((item) => {
-          const isActive = pathname === item.href;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex items-center space-x-3 px-3 py-2 rounded-md transition-colors ${
-                isActive
-                  ? "bg-orange-600 text-white"
-                  : "text-gray-300 hover:bg-gray-700"
-              }`}
-            >
-              <span className="text-xl">{item.icon}</span>
-              {!collapsed && <span>{item.label}</span>}
-            </Link>
-          );
-        })}
+      {/* Two Constant Top Workspace Buttons */}
+      {!effectiveCollapsed && (
+        <div className="sidebar-workspace-switcher" role="tablist" aria-label="Workspace switcher">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={!isPlatformMode}
+            onClick={() => {
+              if (isMobile && onCloseMobile) onCloseMobile();
+              router.push("/dashboard");
+            }}
+            className={`switcher-tab ${!isPlatformMode ? "switcher-tab-active" : ""}`}
+          >
+            <RadioTower size={14} />
+            <span>Network Ops</span>
+          </button>
+
+          <button
+            type="button"
+            role="tab"
+            aria-selected={isPlatformMode}
+            onClick={() => {
+              if (isMobile && onCloseMobile) onCloseMobile();
+              router.push("/platform");
+            }}
+            className={`switcher-tab ${isPlatformMode ? "switcher-tab-active" : ""}`}
+          >
+            <ShieldPlus size={14} />
+            <span>Control Panel</span>
+          </button>
+        </div>
+      )}
+
+      {/* Navigation Sections */}
+      <nav className="sidebar-nav" aria-label="Sidebar navigation">
+        {currentSections.map((section) => (
+          <div key={section.title} className="sidebar-section">
+            <p className="sidebar-section-label">{section.title}</p>
+            {section.items.map((item) => {
+              const Icon = item.icon;
+              const active = isItemActive(item);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={isMobile ? onCloseMobile : undefined}
+                  className={`sidebar-link ${active ? "sidebar-link-active" : ""}`}
+                  aria-current={active ? "page" : undefined}
+                  title={effectiveCollapsed ? item.label : undefined}
+                >
+                  <Icon aria-hidden="true" size={19} strokeWidth={1.8} />
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
-      {/* Footer */}
-      <div className="p-4 border-t border-gray-700">
-        {!collapsed && (
-          <div className="text-xs text-gray-400">
-            <p>MylesCorp Technologies Ltd</p>
-            <p>v1.0.0</p>
-          </div>
-        )}
+      {/* Minimal Footer (Sign Out Only) */}
+      <div className="sidebar-footer">
+        <button
+          type="button"
+          onClick={handleSignOut}
+          disabled={isSigningOut}
+          className="sidebar-signout"
+          title={effectiveCollapsed ? "Sign out" : undefined}
+        >
+          <LogOut aria-hidden="true" size={18} />
+          <span>{isSigningOut ? "Signing out…" : "Sign out"}</span>
+        </button>
       </div>
     </aside>
   );

@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { requireAuthenticatedUser } from "./lib/auth";
 
 // Add an access point to a router
 export const addAccessPoint = mutation({
@@ -9,8 +10,11 @@ export const addAccessPoint = mutation({
     port: v.string(),
     deviceType: v.union(v.literal("cpe220"), v.literal("indoor_ap"), v.literal("builtin_radio"), v.literal("other")),
     sharesPortWith: v.optional(v.string()),
+    capacity: v.optional(v.number()),
+    rateLimitReference: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await requireAuthenticatedUser(ctx);
     return await ctx.db.insert("accessPoints", {
       routerId: args.routerId,
       name: args.name,
@@ -27,6 +31,7 @@ export const addAccessPoint = mutation({
 export const listAccessPoints = query({
   args: { routerId: v.optional(v.id("routers")) },
   handler: async (ctx, args) => {
+    await requireAuthenticatedUser(ctx);
     if (!args.routerId) {
       return await ctx.db.query("accessPoints").collect();
     }
@@ -46,8 +51,11 @@ export const updateAccessPoint = mutation({
     port: v.optional(v.string()),
     deviceType: v.optional(v.union(v.literal("cpe220"), v.literal("indoor_ap"), v.literal("builtin_radio"), v.literal("other"))),
     sharesPortWith: v.optional(v.string()),
+    capacity: v.optional(v.number()),
+    rateLimitReference: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await requireAuthenticatedUser(ctx);
     const { accessPointId, ...updates } = args;
     await ctx.db.patch(accessPointId, {
       ...updates,
@@ -60,6 +68,7 @@ export const updateAccessPoint = mutation({
 export const deleteAccessPoint = mutation({
   args: { accessPointId: v.id("accessPoints") },
   handler: async (ctx, args) => {
+    await requireAuthenticatedUser(ctx);
     await ctx.db.delete(args.accessPointId);
   },
 });

@@ -7,12 +7,13 @@ import { useState } from "react";
 export default function UsagePage() {
   const routers = useQuery(api.routers.listRouters);
   const [selectedRouter, setSelectedRouter] = useState<string | null>(null);
+  const selectedRouterRecord = routers?.find((router) => router._id === selectedRouter);
   const [period, setPeriod] = useState<"day" | "week" | "month">("day");
 
   const usageReport = useQuery(
     api.usage.getUsageReport,
-    selectedRouter
-      ? { routerId: selectedRouter as any, period }
+    selectedRouterRecord
+      ? { routerId: selectedRouterRecord._id, period }
       : "skip"
   );
 

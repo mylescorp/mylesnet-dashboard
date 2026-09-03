@@ -1,9 +1,11 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { requireAuthenticatedUser } from "./lib/auth";
 
 // List routers WITHOUT credentials (safe for client queries)
 export const listRouters = query({
   handler: async (ctx) => {
+    await requireAuthenticatedUser(ctx);
     const routers = await ctx.db.query("routers").order("desc").collect();
     
     // Check which routers have credentials set (without exposing them)
@@ -26,7 +28,7 @@ export const listRouters = query({
 
 // Get router credentials - SERVER-SIDE ONLY, never exposed to client
 // This should only be called from other Convex actions, not from the frontend
-export const getRouterCredentials = query({
+export const getRouterCredentials = internalQuery({
   args: { routerId: v.id("routers") },
   handler: async (ctx, args) => {
     const creds = await ctx.db
@@ -45,6 +47,79 @@ export const getRouterCredentials = query({
   },
 });
 
+export const getRouterWithCredentials = internalQuery({
+  args: { routerId: v.id("routers") },
+  handler: async (ctx, args) => {
+    const router = await ctx.db.get(args.routerId);
+    if (!router) return null;
+
+    const credentials = await ctx.db
+      .query("routerCredentials")
+      .withIndex("by_router", (q) => q.eq("routerId", args.routerId))
+      .first();
+    if (!credentials) return null;
+
+    return {
+      router: { restBaseUrl: router.restBaseUrl },
+      username: credentials.encryptedUsername,
+      password: credentials.encryptedPassword,
+    };
+  },
+});
+
+export const getCollectorConnection = internalQuery({
+  args: { routerId: v.string() },
+  handler: async (ctx, args) => {
+    const routerId = await ctx.db.normalizeId("routers", args.routerId);
+    if (!routerId) return null;
+
+    const router = await ctx.db.get(routerId);
+    if (!router) return null;
+
+    const credentials = await ctx.db
+      .query("routerCredentials")
+      .withIndex("by_router", (q) => q.eq("routerId", routerId))
+      .first();
+    if (!credentials) return null;
+
+    return {
+      restBaseUrl: router.restBaseUrl,
+      username: credentials.encryptedUsername,
+      password: credentials.encryptedPassword,
+    };
+  },
+});
+
+export const getLatestConfigurationBaseline = internalQuery({
+  args: { routerId: v.id("routers") },
+  handler: async (ctx, args) =>
+    ctx.db
+      .query("configWatchBaselines")
+      .withIndex("by_router", (q) => q.eq("routerId", args.routerId))
+      .order("desc")
+      .first(),
+});
+
+export const getLatestRouterConfigurationSnapshot = internalQuery({
+  args: { routerId: v.id("routers") },
+  handler: async (ctx, args) =>
+    ctx.db
+      .query("routerConfigurationSnapshots")
+      .withIndex("by_router_timestamp", (q) => q.eq("routerId", args.routerId))
+      .order("desc")
+      .first(),
+});
+
+export const saveConfigurationBaseline = internalMutation({
+  args: { routerId: v.id("routers"), snapshotJson: v.string() },
+  handler: async (ctx, args) =>
+    ctx.db.insert("configWatchBaselines", {
+      routerId: args.routerId,
+      snapshotJson: args.snapshotJson,
+      capturedAt: Date.now(),
+    }),
+});
+
 // Add a new router with credentials (server-side only)
 export const addRouter = mutation({
   args: {
@@ -57,6 +132,7 @@ export const addRouter = mutation({
     cpuCriticalThreshold: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    await requireAuthenticatedUser(ctx);
     const routerId = await ctx.db.insert("routers", {
       name: args.name,
       restBaseUrl: args.restBaseUrl,
@@ -90,6 +166,7 @@ export const updateRouter = mutation({
     cpuCriticalThreshold: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    await requireAuthenticatedUser(ctx);
     const { routerId, ...updates } = args;
     await ctx.db.patch(routerId, {
       ...updates,
@@ -106,6 +183,7 @@ export const updateRouterCredentials = mutation({
     password: v.string(),
   },
   handler: async (ctx, args) => {
+    await requireAuthenticatedUser(ctx);
     const existing = await ctx.db
       .query("routerCredentials")
       .withIndex("by_router", (q) => q.eq("routerId", args.routerId))
@@ -132,6 +210,7 @@ export const updateRouterCredentials = mutation({
 export const deleteRouter = mutation({
   args: { routerId: v.id("routers") },
   handler: async (ctx, args) => {
+    await requireAuthenticatedUser(ctx);
     // Delete router
     await ctx.db.delete(args.routerId);
 

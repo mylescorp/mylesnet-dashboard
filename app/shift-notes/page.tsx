@@ -3,13 +3,15 @@
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useState } from "react";
+import type { Id } from "../../convex/_generated/dataModel";
 
 export default function ShiftNotesPage() {
   const routers = useQuery(api.routers.listRouters);
   const [selectedRouter, setSelectedRouter] = useState<string | null>(null);
+  const selectedRouterRecord = routers?.find((router) => router._id === selectedRouter);
   const shiftNotes = useQuery(
     api.shiftNotes.listShiftNotes,
-    selectedRouter ? { routerId: selectedRouter as any } : "skip"
+    selectedRouterRecord ? { routerId: selectedRouterRecord._id } : "skip"
   );
   const addShiftNote = useMutation(api.shiftNotes.addShiftNote);
   const deleteShiftNote = useMutation(api.shiftNotes.deleteShiftNote);
@@ -20,13 +22,13 @@ export default function ShiftNotesPage() {
 
   const handleAddNote = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedRouter) return;
+    if (!selectedRouterRecord) return;
 
     setLoading(true);
 
     try {
       await addShiftNote({
-        routerId: selectedRouter as any,
+        routerId: selectedRouterRecord._id,
         note: noteText,
       });
 
@@ -39,11 +41,11 @@ export default function ShiftNotesPage() {
     }
   };
 
-  const handleDelete = async (noteId: string) => {
+  const handleDelete = async (noteId: Id<"shiftNotes">) => {
     if (!confirm("Are you sure you want to delete this note?")) return;
 
     try {
-      await deleteShiftNote({ noteId: noteId as any });
+      await deleteShiftNote({ noteId });
     } catch (err) {
       console.error("Failed to delete note:", err);
     }
@@ -88,12 +90,20 @@ export default function ShiftNotesPage() {
 
         {/* Add Note Button */}
         {selectedRouter && (
-          <div className="mb-6">
+          <div className="mb-6 flex gap-3">
             <button
               onClick={() => setShowAddModal(true)}
               className="bg-orange-600 text-white px-4 py-2 rounded-md hover:bg-orange-700"
             >
               Add Shift Note
+            </button>
+            <button
+              type="button"
+              onClick={() => window.print()}
+              disabled={!shiftNotes || shiftNotes.length === 0}
+              className="rounded-md border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 print:hidden"
+            >
+              Print handover
             </button>
           </div>
         )}

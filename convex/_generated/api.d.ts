@@ -9,16 +9,42 @@
  */
 
 import type * as accessPoints from "../accessPoints.js";
+import type * as agentInvitations from "../agentInvitations.js";
+import type * as agents from "../agents.js";
+import type * as alerts from "../alerts.js";
+import type * as auth from "../auth.js";
+import type * as bootstrap from "../bootstrap.js";
+import type * as broadcasts from "../broadcasts.js";
+import type * as centipid from "../centipid.js";
+import type * as collector from "../collector.js";
+import type * as commissions from "../commissions.js";
 import type * as configWatch from "../configWatch.js";
 import type * as cron from "../cron.js";
+import type * as crons from "../crons.js";
 import type * as dashboard from "../dashboard.js";
+import type * as debug from "../debug.js";
+import type * as devices from "../devices.js";
 import type * as healthSamples from "../healthSamples.js";
+import type * as http from "../http.js";
 import type * as incidents from "../incidents.js";
+import type * as leaderboard from "../leaderboard.js";
+import type * as lib_auditLog from "../lib/auditLog.js";
+import type * as lib_auth from "../lib/auth.js";
+import type * as marketProspects from "../marketProspects.js";
+import type * as markets from "../markets.js";
+import type * as operations from "../operations.js";
+import type * as platform from "../platform.js";
+import type * as platformUsers from "../platformUsers.js";
+import type * as renewalCredits from "../renewalCredits.js";
 import type * as routeros from "../routeros.js";
 import type * as routers from "../routers.js";
 import type * as shiftNotes from "../shiftNotes.js";
+import type * as supportTickets from "../supportTickets.js";
 import type * as thresholds from "../thresholds.js";
+import type * as trash from "../trash.js";
 import type * as usage from "../usage.js";
+import type * as vouchers from "../vouchers.js";
+import type * as workos from "../workos.js";
 
 import type {
   ApiFromModules,
@@ -28,16 +54,42 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   accessPoints: typeof accessPoints;
+  agentInvitations: typeof agentInvitations;
+  agents: typeof agents;
+  alerts: typeof alerts;
+  auth: typeof auth;
+  bootstrap: typeof bootstrap;
+  broadcasts: typeof broadcasts;
+  centipid: typeof centipid;
+  collector: typeof collector;
+  commissions: typeof commissions;
   configWatch: typeof configWatch;
   cron: typeof cron;
+  crons: typeof crons;
   dashboard: typeof dashboard;
+  debug: typeof debug;
+  devices: typeof devices;
   healthSamples: typeof healthSamples;
+  http: typeof http;
   incidents: typeof incidents;
+  leaderboard: typeof leaderboard;
+  "lib/auditLog": typeof lib_auditLog;
+  "lib/auth": typeof lib_auth;
+  marketProspects: typeof marketProspects;
+  markets: typeof markets;
+  operations: typeof operations;
+  platform: typeof platform;
+  platformUsers: typeof platformUsers;
+  renewalCredits: typeof renewalCredits;
   routeros: typeof routeros;
   routers: typeof routers;
   shiftNotes: typeof shiftNotes;
+  supportTickets: typeof supportTickets;
   thresholds: typeof thresholds;
+  trash: typeof trash;
   usage: typeof usage;
+  vouchers: typeof vouchers;
+  workos: typeof workos;
 }>;
 
 /**

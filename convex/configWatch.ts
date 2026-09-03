@@ -1,26 +1,52 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
-import { getInterfaces, getIpPools, getRoutes } from "./routeros";
+import { internal } from "./_generated/api";
+import { action, mutation, query } from "./_generated/server";
+import { requireAuthenticatedUser } from "./lib/auth";
 
-// Capture a configuration baseline
-export const captureBaseline = mutation({
+type ConfigurationBaseline = {
+  snapshotJson: string;
+  capturedAt: number;
+} | null;
+
+export const captureBaseline = action({
   args: { routerId: v.id("routers") },
-  handler: async (ctx, args) => {
-    // This would typically be called from an action that can make RouterOS requests
-    // For now, we'll store a placeholder
-    return await ctx.db.insert("configWatchBaselines", {
+  handler: async (ctx, args): Promise<{ success: boolean; message: string }> => {
+    await requireAuthenticatedUser(ctx);
+    const snapshot = await ctx.runQuery(
+      internal.routers.getLatestRouterConfigurationSnapshot,
+      args,
+    );
+    if (!snapshot) {
+      return {
+        success: false,
+        message: "A current collector configuration snapshot is needed before a baseline can be captured.",
+      };
+    }
+    await ctx.runMutation(internal.routers.saveConfigurationBaseline, {
       routerId: args.routerId,
-      snapshotJson: JSON.stringify({ capturedAt: Date.now() }),
-      capturedAt: Date.now(),
+      snapshotJson: snapshot.snapshotJson,
     });
+    return { success: true, message: "Configuration baseline captured successfully." };
   },
 });
 
-// Get the latest baseline for a router
+export const getBaselines = query({
+  args: { routerId: v.id("routers") },
+  handler: async (ctx, args) => {
+    await requireAuthenticatedUser(ctx);
+    return ctx.db
+      .query("configWatchBaselines")
+      .withIndex("by_router", (q) => q.eq("routerId", args.routerId))
+      .order("desc")
+      .collect();
+  },
+});
+
 export const getLatestBaseline = query({
   args: { routerId: v.id("routers") },
   handler: async (ctx, args) => {
-    return await ctx.db
+    await requireAuthenticatedUser(ctx);
+    return ctx.db
       .query("configWatchBaselines")
       .withIndex("by_router", (q) => q.eq("routerId", args.routerId))
       .order("desc")
@@ -28,23 +54,64 @@ export const getLatestBaseline = query({
   },
 });
 
-// Check for configuration drift (action that compares current config with baseline)
-export const checkConfigDrift = mutation({
+export const checkConfigDrift = action({
   args: { routerId: v.id("routers") },
-  handler: async (ctx, args) => {
-    const baseline = await ctx.db
-      .query("configWatchBaselines")
-      .withIndex("by_router", (q) => q.eq("routerId", args.routerId))
-      .order("desc")
-      .first();
-
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    success: boolean;
+    hasDrift: boolean;
+    message: string;
+    differences: string[];
+    baselineCapturedAt: number | null;
+  }> => {
+    await requireAuthenticatedUser(ctx);
+    const baseline: ConfigurationBaseline = await ctx.runQuery(
+      internal.routers.getLatestConfigurationBaseline,
+      args,
+    );
     if (!baseline) {
-      return { hasDrift: false, message: "No baseline exists" };
+      return {
+        success: false,
+        hasDrift: false,
+        message: "Capture a configuration baseline before checking for monitored changes.",
+        differences: [],
+        baselineCapturedAt: null,
+      };
     }
 
-    const baselineConfig = JSON.parse(baseline.snapshotJson);
-    // Compare current config with baseline
-    // This would need to be expanded to actually fetch current config and compare
-    return { hasDrift: false, message: "Drift check not implemented" };
+    const snapshot = await ctx.runQuery(
+      internal.routers.getLatestRouterConfigurationSnapshot,
+      args,
+    );
+    if (!snapshot) {
+      return {
+        success: false,
+        hasDrift: false,
+        message: "A current collector configuration snapshot is needed before changes can be checked.",
+        differences: [],
+        baselineCapturedAt: baseline.capturedAt,
+      };
+    }
+    const hasDrift = snapshot.snapshotJson !== baseline.snapshotJson;
+
+    return {
+      success: true,
+      hasDrift,
+      message: hasDrift
+        ? "A monitored configuration change was detected."
+        : "No monitored configuration changes were detected.",
+      differences: hasDrift ? ["Router configuration differs from the saved baseline."] : [],
+      baselineCapturedAt: baseline.capturedAt,
+    };
+  },
+});
+
+export const deleteBaseline = mutation({
+  args: { baselineId: v.id("configWatchBaselines") },
+  handler: async (ctx, args) => {
+    await requireAuthenticatedUser(ctx);
+    await ctx.db.delete(args.baselineId);
   },
 });

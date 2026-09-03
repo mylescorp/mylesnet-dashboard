@@ -1,18 +1,15 @@
-import { NextResponse } from "next/server";
-import { NextRequest } from "next/server";
+import { authkitMiddleware } from "@workos-inc/authkit-nextjs";
 
-const protectedRoutes = ["/dashboard", "/routers", "/incidents", "/shift-notes", "/usage"];
-
-export function middleware(req: NextRequest) {
-  const isProtectedRoute = protectedRoutes.some((route) =>
-    req.nextUrl.pathname.startsWith(route)
-  );
-
-  // For now, skip auth check since we're having auth library issues
-  // In production, you'd check for auth token here
-  return NextResponse.next();
-}
+export default authkitMiddleware({
+  middlewareAuth: {
+    enabled: true,
+    unauthenticatedPaths: ["/signin"],
+  },
+});
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+  matcher: [
+    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
+    "/(api|trpc)(.*)",
+  ],
 };

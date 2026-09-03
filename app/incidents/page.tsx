@@ -3,6 +3,7 @@
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useState } from "react";
+import type { Id } from "../../convex/_generated/dataModel";
 
 export default function IncidentsPage() {
   const incidents = useQuery(api.incidents.listIncidents, {});
@@ -19,17 +20,17 @@ export default function IncidentsPage() {
   });
   const [loading, setLoading] = useState(false);
 
-  const handleAcknowledge = async (incidentId: string) => {
+  const handleAcknowledge = async (incidentId: Id<"incidents">) => {
     try {
-      await acknowledgeIncident({ incidentId: incidentId as any });
+      await acknowledgeIncident({ incidentId });
     } catch (err) {
       console.error("Failed to acknowledge incident:", err);
     }
   };
 
-  const handleResolve = async (incidentId: string) => {
+  const handleResolve = async (incidentId: Id<"incidents">) => {
     try {
-      await resolveIncident({ incidentId: incidentId as any });
+      await resolveIncident({ incidentId });
     } catch (err) {
       console.error("Failed to resolve incident:", err);
     }
@@ -38,10 +39,15 @@ export default function IncidentsPage() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    const selectedRouter = routers?.find((router) => router._id === formData.routerId);
+    if (!selectedRouter) {
+      setLoading(false);
+      return;
+    }
 
     try {
       await createIncident({
-        routerId: formData.routerId as any,
+        routerId: selectedRouter._id,
         note: formData.note,
         severity: formData.severity,
       });

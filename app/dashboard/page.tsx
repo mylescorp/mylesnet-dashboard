@@ -1,250 +1,81 @@
 "use client";
 
 import { useQuery } from "convex/react";
-import { api } from "../../convex/_generated/api";
+import { Activity, ArrowUpRight, BarChart3, Gauge, RadioTower, SlidersHorizontal, Users, Wifi } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
+import { HealthTrendChart } from "../components/HealthTrendChart";
+
+const bytes = (value: number) => value < 1024 ? `${Math.round(value)} B` : value < 1024 ** 2 ? `${(value / 1024).toFixed(1)} KB` : value < 1024 ** 3 ? `${(value / 1024 ** 2).toFixed(1)} MB` : `${(value / 1024 ** 3).toFixed(2)} GB`;
+const rate = (value: number) => `${bytes(value)}/s`;
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [selectedRouter, setSelectedRouter] = useState<string | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const overview = useQuery(api.operations.getOverview);
+  const [selectedRouterId, setSelectedRouterId] = useState<Id<"routers"> | null>(null);
+  const [selectedAccessPointId, setSelectedAccessPointId] = useState<Id<"accessPoints"> | null>(null);
+  const [showComparison, setShowComparison] = useState(false);
+  const [compact, setCompact] = useState(false);
+  const accessPointUsers = useQuery(api.operations.getAccessPointUsers, selectedAccessPointId ? { accessPointId: selectedAccessPointId } : "skip");
 
-  useEffect(() => {
-    // Simplified auth check for now
-    setIsAuthenticated(true);
-  }, []);
+  const selectedRouter = overview?.routers.find((entry) => entry.router._id === selectedRouterId) ?? null;
+  const visibleRouters = selectedRouter ? [selectedRouter] : overview?.routers ?? [];
+  const visibleAccessPoints = visibleRouters.flatMap((entry) => entry.accessPoints.map((accessPoint) => ({ ...accessPoint, router: entry.router })));
+  const selectedAccessPoint = visibleAccessPoints.find((item) => item.accessPoint._id === selectedAccessPointId) ?? null;
 
-  const dashboardSummary = useQuery(api.dashboard.getDashboardSummary);
-  const routerDashboard = useQuery(api.dashboard.getRouterDashboard, {
-    routerId: selectedRouter as any,
-  });
-  const recentIncidents = useQuery(api.dashboard.getRecentIncidents, { limit: 5 });
+  if (!overview) return <div className="workspace-page"><div className="loading-panel workspace-card"><Activity aria-hidden="true" size={22} />Loading the operational overview…</div></div>;
 
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-lg">Loading...</div>
-      </div>
-    );
-  }
+  const { metrics } = overview;
+  const healthStatus = metrics.healthScore === null ? "Awaiting telemetry" : metrics.healthScore === 100 ? "Healthy" : "Needs attention";
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-            <p className="text-sm text-gray-600">Network Operations Center</p>
-          </div>
-          <div className="flex items-center gap-4">
-            {recentIncidents && recentIncidents.length > 0 && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-md">
-                {recentIncidents.length} Open Incident{recentIncidents.length !== 1 ? "s" : ""}
-              </div>
-            )}
-            <button
-              onClick={() => router.push("/routers")}
-              className="bg-orange-600 text-white px-4 py-2 rounded-md hover:bg-orange-700"
-            >
-              Add Router
-            </button>
-          </div>
-        </div>
+  return <div className={`workspace-page dashboard-page ${compact ? "dashboard-compact" : ""}`}>
+    <header className="page-heading">
+      <div><p className="eyebrow">MylesNet operations centre</p><h1 className="page-title">Network overview</h1><p className="page-subtitle">Live collector-backed access point, user, capacity, and service-assurance telemetry.</p></div>
+      <div className="page-action-group"><button type="button" className="secondary-button" onClick={() => setCompact((value) => !value)}><SlidersHorizontal aria-hidden="true" size={17} />{compact ? "Comfortable view" : "Compact view"}</button><button type="button" onClick={() => router.push("/routers")} className="primary-button"><RadioTower aria-hidden="true" size={18} />Router settings</button></div>
+    </header>
 
-        {/* Alert Banner for Open Incidents */}
-        {recentIncidents && recentIncidents.length > 0 && (
-          <div className="mb-6 bg-red-50 border border-red-200 rounded-md p-4">
-            <h3 className="font-semibold text-red-900 mb-2">Active Incidents</h3>
-            <div className="space-y-2">
-              {recentIncidents.map((incident: any) => (
-                <div key={incident._id} className="text-sm text-red-800">
-                  <span className="font-medium">{incident.note}</span>
-                  <span className="ml-2">({new Date(incident.openedAt).toLocaleString()})</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+    <section className="operations-kpi-strip" aria-label="Live operations status">
+      <Kpi label="Collector status" value={metrics.collectorConnected ? "Connected" : "Awaiting data"} detail={metrics.lastObservedAt ? `Last observation ${new Date(metrics.lastObservedAt).toLocaleTimeString()}` : "No collector observation received"} icon={<Activity size={17} />} />
+      <Kpi label="Network health" value={healthStatus} detail={metrics.healthScore === null ? "No access point telemetry" : `${metrics.healthScore}% of access points online`} icon={<Gauge size={17} />} />
+      <Kpi label="Live users" value={metrics.totalUsers} detail="Current hotspot sessions" icon={<Users size={17} />} />
+      <Kpi label="Access points" value={`${metrics.activeAccessPoints}/${metrics.totalAccessPoints}`} detail="Links currently online" icon={<Wifi size={17} />} />
+      <Kpi label="Data used" value={bytes(metrics.totalDailyBytes)} detail="Observed in the last 24 hours" icon={<BarChart3 size={17} />} />
+      <Kpi label="Router load" value={metrics.averageCpu === null ? "—" : `${Math.round(metrics.averageCpu)}% CPU`} detail="Average reported CPU load" icon={<Gauge size={17} />} />
+    </section>
 
-        {/* Router Selection */}
-        {dashboardSummary && dashboardSummary.totalRouters > 0 && (
-          <div className="mb-8">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Select Router
-            </label>
-            <select
-              value={selectedRouter || ""}
-              onChange={(e) => setSelectedRouter(e.target.value || null)}
-              className="w-full max-w-md px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
-            >
-              <option value="">All Routers</option>
-              {routerDashboard && routerDashboard.map((data: any) => (
-                <option key={data.router._id} value={data.router._id}>
-                  {data.router.name} ({data.router.location})
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
+    <section className="dashboard-toolbar workspace-card">
+      <div><span className="toolbar-label">Operational scope</span><strong>Filter the operational view to a single router, or review the complete estate.</strong></div>
+      <label className="router-select-label">Router<select value={selectedRouterId ?? ""} onChange={(event) => { const selected = overview.routers.find((entry) => entry.router._id === event.target.value); setSelectedRouterId(selected?.router._id ?? null); }}><option value="">All routers</option>{overview.routers.map((entry) => <option key={entry.router._id} value={entry.router._id}>{entry.router.name} · {entry.router.location}</option>)}</select></label>
+    </section>
 
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-sm font-medium text-gray-600">Total Routers</h3>
-            <p className="text-3xl font-bold text-gray-900 mt-2">
-              {dashboardSummary?.totalRouters || 0}
-            </p>
-          </div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-sm font-medium text-gray-600">Open Incidents</h3>
-            <p className="text-3xl font-bold text-red-600 mt-2">
-              {dashboardSummary?.openIncidents || 0}
-            </p>
-          </div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-sm font-medium text-gray-600">System Status</h3>
-            <p className={`text-3xl font-bold mt-2 ${
-              dashboardSummary?.systemStatus === "healthy" ? "text-green-600" : "text-yellow-600"
-            }`}>
-              {dashboardSummary?.systemStatus === "healthy" ? "Healthy" : "Warning"}
-            </p>
-          </div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-sm font-medium text-gray-600">Configured Routers</h3>
-            <p className="text-3xl font-bold text-blue-600 mt-2">
-              {dashboardSummary?.configuredRouters || 0}
-            </p>
-          </div>
-        </div>
+    <section className="section-block"><div className="section-heading"><div><p className="eyebrow">Access point activity</p><h2>Live capacity and traffic</h2></div><button type="button" className="secondary-button" onClick={() => setShowComparison(true)} disabled={visibleAccessPoints.length < 2}>Compare access points <ArrowUpRight aria-hidden="true" size={16} /></button></div>
+      {visibleAccessPoints.length ? <div className="access-point-grid access-point-grid-rich">{visibleAccessPoints.map(({ accessPoint, health, activeUserCount, dailyBytes, trafficTrend, router: apRouter }) => {
+        const capacity = accessPoint.capacity;
+        const capacityPercent = capacity && capacity > 0 ? Math.min(100, (activeUserCount / capacity) * 100) : null;
+        return <article key={accessPoint._id} className="access-point-card workspace-card"><div className="access-point-head"><div><h3>{accessPoint.name}</h3><p>{accessPoint.port} · {apRouter.name}</p></div><span className={`status-pill ${health?.linkState ? "status-pill-success" : "status-pill-warning"}`}>{health?.linkState ? "Running" : "Awaiting telemetry"}</span></div>
+          <div className="ap-user-row"><span><Users aria-hidden="true" size={15} />Users</span><strong>{activeUserCount}</strong></div>
+          <div className="ap-traffic"><span>Current speed</span><strong>↓ {rate(health?.rxBytesPerSec ?? 0)} · ↑ {rate(health?.txBytesPerSec ?? 0)}</strong><Sparkline points={trafficTrend.map((point) => point.bytesPerSecond)} /></div>
+          <dl className="access-point-stats"><div><dt>Health</dt><dd>{health?.linkState ? "Good" : "Pending"}</dd></div><div><dt>Rate limit</dt><dd>{accessPoint.rateLimitReference ?? "Not configured"}</dd></div><div><dt>Data used</dt><dd>{bytes(dailyBytes)}</dd></div><div><dt>Errors / drops</dt><dd>{(health?.errorCount ?? 0) + (health?.queueDrops ?? 0)}</dd></div></dl>
+          <div className="ap-capacity"><div><span>Capacity</span><strong>{capacity ? `${activeUserCount} / ${capacity} users` : "Not configured"}</strong></div>{capacityPercent !== null ? <i><b style={{ width: `${capacityPercent}%` }} /></i> : null}</div>
+          <div className="access-point-actions"><button type="button" className="secondary-button" onClick={() => setSelectedAccessPointId(accessPoint._id)}>View users</button><button type="button" className="primary-button" onClick={() => { setSelectedRouterId(apRouter._id); document.getElementById("router-health")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>Details</button></div>
+        </article>;
+      })}</div> : <Empty title="No access points are registered" detail="Add access point records from Router settings before they can appear in the live operation view." action={() => router.push("/routers")} label="Manage routers" />}
+    </section>
 
-        {/* Router Health Data */}
-        {routerDashboard && routerDashboard.length > 0 && (
-          <div className="mb-8">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Router Health</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {routerDashboard.map((data: any) => (
-                <div key={data.router._id} className="bg-white rounded-lg shadow p-6">
-                  <h3 className="font-semibold text-gray-900 mb-2">
-                    {data.router.name} ({data.router.location})
-                  </h3>
-                  {data.health ? (
-                    <div className="space-y-2">
-                      <div className="flex justify-between">
-                        <span className="text-sm text-gray-600">CPU</span>
-                        <span className={`text-sm font-medium ${
-                          (data as any).cpuCriticalThreshold && data.health.cpuPercent >= (data as any).cpuCriticalThreshold ? "text-red-600" :
-                          (data as any).cpuWarningThreshold && data.health.cpuPercent >= (data as any).cpuWarningThreshold ? "text-yellow-600" :
-                          "text-green-600"
-                        }`}>
-                          {data.health.cpuPercent}%
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-sm text-gray-600">Memory</span>
-                        <span className="text-sm font-medium">{data.health.memoryPercent}%</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-sm text-gray-600">Status</span>
-                        <span className={`text-sm font-medium ${
-                          data.health.linkState ? "text-green-600" : "text-red-600"
-                        }`}>
-                          {data.health.linkState ? "Online" : "Offline"}
-                        </span>
-                      </div>
-                      {(data as any).cpuWarningThreshold && (
-                        <div className="text-xs text-gray-500 mt-2">
-                          Thresholds: W:{(data as any).cpuWarningThreshold}% C:{(data as any).cpuCriticalThreshold}%
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-500">No health data available</p>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+    <section id="router-health" className="section-block dashboard-bottom-grid"><div className="workspace-card upstream-card"><p className="eyebrow">Upstream health</p><h2>Route observation</h2><div className="upstream-list">{visibleRouters.map((entry) => <div key={entry.router._id}><span className={`status-dot ${entry.upstream.configured ? "status-dot-online" : "status-dot-warning"}`} /><p><strong>{entry.router.name}</strong><small>{entry.upstream.configured ? "A default route is present in the most recent collector snapshot." : "No current default-route observation has been received."}</small></p></div>)}</div></div>
+      <div className="workspace-card quick-actions"><p className="eyebrow">Service assurance</p><h2>Operator work areas</h2><p>Review incidents, retain an operational handover, or open the complete usage report.</p><div><button type="button" className="secondary-button" onClick={() => router.push("/incidents")}>Incident desk</button><button type="button" className="secondary-button" onClick={() => router.push("/shift-notes")}>Shift handover</button><button type="button" className="secondary-button" onClick={() => router.push("/usage")}>Usage reports</button></div></div>
+    </section>
 
-        {/* Access Point Health */}
-        {routerDashboard && routerDashboard.length > 0 && routerDashboard.some((data: any) => data.accessPoints.length > 0) && (
-          <div className="mb-8">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Access Points</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {routerDashboard.map((data: any) =>
-                data.accessPoints.map((apData: any) => (
-                  <div key={apData.accessPoint._id} className="bg-white rounded-lg shadow p-4">
-                    <h4 className="font-medium text-gray-900 mb-2">{apData.accessPoint.name}</h4>
-                    <p className="text-xs text-gray-600 mb-2">{apData.accessPoint.port}</p>
-                    {apData.health ? (
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-xs">
-                          <span className="text-gray-600">Status</span>
-                          <span className={`font-medium ${
-                            apData.health.linkState ? "text-green-600" : "text-red-600"
-                          }`}>
-                            {apData.health.linkState ? "Online" : "Offline"}
-                          </span>
-                        </div>
-                        <div className="flex justify-between text-xs">
-                          <span className="text-gray-600">Errors</span>
-                          <span className="font-medium">{apData.health.errorCount}</span>
-                        </div>
-                        <div className="flex justify-between text-xs">
-                          <span className="text-gray-600">Drops</span>
-                          <span className="font-medium">{apData.health.queueDrops}</span>
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="text-xs text-gray-500">No data</p>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Quick Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <button
-            onClick={() => router.push("/incidents")}
-            className="bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow text-left"
-          >
-            <h3 className="text-lg font-semibold text-gray-900">Incidents</h3>
-            <p className="text-sm text-gray-600 mt-2">View and manage incidents</p>
-          </button>
-          <button
-            onClick={() => router.push("/shift-notes")}
-            className="bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow text-left"
-          >
-            <h3 className="text-lg font-semibold text-gray-900">Shift Notes</h3>
-            <p className="text-sm text-gray-600 mt-2">View operator notes</p>
-          </button>
-          <button
-            onClick={() => router.push("/usage")}
-            className="bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow text-left"
-          >
-            <h3 className="text-lg font-semibold text-gray-900">Usage Reports</h3>
-            <p className="text-sm text-gray-600 mt-2">View usage statistics</p>
-          </button>
-        </div>
-
-        {/* No Routers State */}
-        {dashboardSummary && dashboardSummary.totalRouters === 0 && (
-          <div className="text-center py-12">
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No routers configured</h3>
-            <p className="text-gray-600 mb-4">Add your first router to get started</p>
-            <button
-              onClick={() => router.push("/routers")}
-              className="bg-orange-600 text-white px-6 py-2 rounded-md hover:bg-orange-700"
-            >
-              Add Router
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+    {selectedRouter ? <section className="section-block" id="health-trends"><HealthTrendChart routerId={selectedRouter.router._id} /></section> : null}
+    {selectedAccessPointId ? <AccessPointUsersDialog title={selectedAccessPoint?.accessPoint.name ?? "Access point"} users={accessPointUsers} onClose={() => setSelectedAccessPointId(null)} /> : null}
+    {showComparison ? <ComparisonDialog accessPoints={visibleAccessPoints} onClose={() => setShowComparison(false)} /> : null}
+  </div>;
 }
+
+function Kpi({ label, value, detail, icon }: { label: string; value: string | number; detail: string; icon: React.ReactNode }) { return <article className="operations-kpi"><span>{icon}</span><p>{label}</p><strong>{value}</strong><small>{detail}</small></article>; }
+function Sparkline({ points }: { points: number[] }) { const max = Math.max(...points, 1); const coordinates = points.length < 2 ? "0,34 100,34" : points.map((point, index) => `${(index / (points.length - 1)) * 100},${34 - (point / max) * 28}`).join(" "); return <svg viewBox="0 0 100 36" preserveAspectRatio="none" aria-label="Recent traffic trend" role="img"><polyline points={coordinates} /></svg>; }
+function Empty({ title, detail, action, label }: { title: string; detail: string; action: () => void; label: string }) { return <div className="empty-state workspace-card"><h3>{title}</h3><p>{detail}</p><button type="button" className="primary-button" onClick={action}>{label}</button></div>; }
+function AccessPointUsersDialog({ title, users, onClose }: { title: string; users: { _id: Id<"activeHotspotSessions">; subscriberIdentifier: string; observedAt: number; observedBytes: number }[] | undefined; onClose: () => void }) { return <div className="operations-modal" role="dialog" aria-modal="true" aria-label={`${title} users`}><div className="operations-dialog workspace-card"><div className="section-heading"><div><p className="eyebrow">Live hotspot users</p><h2>{title}</h2></div><button type="button" className="secondary-button" onClick={onClose}>Close</button></div>{users === undefined ? <p className="dialog-message">Loading current hotspot sessions…</p> : users.length === 0 ? <p className="dialog-message">No active hotspot sessions are currently mapped to this access point.</p> : <div className="session-list">{users.map((user) => <div key={user._id}><strong>{user.subscriberIdentifier}</strong><span>Observed {new Date(user.observedAt).toLocaleTimeString()} · {bytes(user.observedBytes)}</span></div>)}</div>}</div></div>; }
+function ComparisonDialog({ accessPoints, onClose }: { accessPoints: { accessPoint: { _id: Id<"accessPoints">; name: string; capacity?: number }; activeUserCount: number; dailyBytes: number; health: { linkState: boolean } | null }[]; onClose: () => void }) { return <div className="operations-modal" role="dialog" aria-modal="true" aria-label="Compare access points"><div className="operations-dialog workspace-card"><div className="section-heading"><div><p className="eyebrow">Capacity and activity</p><h2>Access point comparison</h2></div><button type="button" className="secondary-button" onClick={onClose}>Close</button></div><div className="comparison-table"><div className="comparison-row comparison-head"><span>Access point</span><span>Status</span><span>Users</span><span>Capacity</span><span>Data today</span></div>{accessPoints.map((item) => <div key={item.accessPoint._id} className="comparison-row"><strong>{item.accessPoint.name}</strong><span>{item.health?.linkState ? "Online" : "Pending"}</span><span>{item.activeUserCount}</span><span>{item.accessPoint.capacity ? `${item.activeUserCount}/${item.accessPoint.capacity}` : "Not configured"}</span><span>{bytes(item.dailyBytes)}</span></div>)}</div></div></div>; }

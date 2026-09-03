@@ -1,124 +1,157 @@
-import { v } from "convex/values";
-import { action, query } from "./_generated/server";
+import { ConvexError, v } from "convex/values";
+import { internal } from "./_generated/api";
+import { action, internalAction } from "./_generated/server";
+import { requireAuthenticatedUser } from "./lib/auth";
 
-// IMPORTANT: All RouterOS communication happens server-side via this action.
-// Credentials are NEVER exposed to the client - they're only read from the database
-// inside this server-side action and used to make authenticated requests to the router.
+type RouterCredentials = {
+  router: {
+    restBaseUrl: string;
+  };
+  username: string;
+  password: string;
+};
 
-interface RouterOSResponse {
-  status: number;
-  body: string;
+type RouterOSRecord = Record<string, unknown>;
+
+function encodeBasicCredentials(username: string, password: string): string {
+  const credentials = new TextEncoder().encode(`${username}:${password}`);
+  return btoa(String.fromCodePoint(...credentials));
 }
 
-async function routerRequest(
-  baseUrl: string,
-  username: string,
-  password: string,
-  path: string,
-  method: string = "GET",
-  body?: any
-): Promise<RouterOSResponse> {
-  const url = new URL(`/rest${path}`, baseUrl);
-  const auth = Buffer.from(`${username}:${password}`).toString("base64");
+function parseRecords(body: string): RouterOSRecord[] {
+  const parsed: unknown = JSON.parse(body);
 
-  const headers: Record<string, string> = {
-    Accept: "application/json",
-    Authorization: `Basic ${auth}`,
-  };
-
-  if (body) {
-    headers["Content-Type"] = "application/json";
-    headers["Content-Length"] = Buffer.byteLength(JSON.stringify(body)).toString();
+  if (Array.isArray(parsed)) {
+    return parsed.filter(
+      (item): item is RouterOSRecord =>
+        typeof item === "object" && item !== null && !Array.isArray(item),
+    );
   }
 
-  const response = await fetch(url.toString(), {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-
-  const responseBody = await response.text();
-  return {
-    status: response.status,
-    body: responseBody,
-  };
+  return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+    ? [parsed as RouterOSRecord]
+    : [];
 }
 
-// Internal query to get router with credentials (server-side only)
-export const getRouterWithCredentials = query({
+async function readRouterResource(
+  credentials: RouterCredentials,
+  path: string,
+): Promise<RouterOSRecord[]> {
+  const url = new URL(`/rest${path}`, credentials.router.restBaseUrl);
+  const authorization = encodeBasicCredentials(
+    credentials.username,
+    credentials.password,
+  );
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Basic ${authorization}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new ConvexError("We could not read the router right now.");
+  }
+
+  return parseRecords(await response.text());
+}
+
+export const readMonitoringSnapshot = internalAction({
   args: { routerId: v.id("routers") },
-  handler: async (ctx, args) => {
-    const router = await ctx.db.get(args.routerId);
-    if (!router) return null;
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    resource: RouterOSRecord | null;
+    interfaces: RouterOSRecord[];
+    connectedUserCount: number;
+  }> => {
+    const credentials: RouterCredentials | null = await ctx.runQuery(
+      internal.routers.getRouterWithCredentials,
+      args,
+    );
 
-    const creds = await ctx.db
-      .query("routerCredentials")
-      .withIndex("by_router", (q) => q.eq("routerId", args.routerId))
-      .first();
+    if (!credentials) {
+      throw new ConvexError("This router is not ready for monitoring.");
+    }
 
-    if (!creds) return null;
+    const [resources, interfaces, hotspotSessions] = await Promise.all([
+      readRouterResource(credentials, "/system/resource"),
+      readRouterResource(credentials, "/interface"),
+      readRouterResource(credentials, "/ip/hotspot/active"),
+    ]);
 
     return {
-      router,
-      username: creds.encryptedUsername,
-      password: creds.encryptedPassword,
+      resource: resources[0] ?? null,
+      interfaces,
+      connectedUserCount: hotspotSessions.length,
     };
   },
 });
 
-// Temporarily disable RouterOS functions - will be enabled after credentials are tested
-export const getHotspotActive = action({
+export const readConfigurationSnapshot = internalAction({
   args: { routerId: v.id("routers") },
-  handler: async (ctx, args) => {
-    throw new Error("RouterOS integration pending credential testing");
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    interfaces: RouterOSRecord[];
+    pools: RouterOSRecord[];
+    dns: RouterOSRecord[];
+    routes: RouterOSRecord[];
+  }> => {
+    const credentials: RouterCredentials | null = await ctx.runQuery(
+      internal.routers.getRouterWithCredentials,
+      args,
+    );
+    if (!credentials) {
+      throw new ConvexError("This router is not ready for monitoring.");
+    }
+
+    const [interfaces, pools, dns, routes]: [
+      RouterOSRecord[],
+      RouterOSRecord[],
+      RouterOSRecord[],
+      RouterOSRecord[],
+    ] = await Promise.all([
+      readRouterResource(credentials, "/interface"),
+      readRouterResource(credentials, "/ip/pool"),
+      readRouterResource(credentials, "/ip/dns"),
+      readRouterResource(credentials, "/ip/route"),
+    ]);
+
+    return { interfaces, pools, dns, routes };
   },
 });
 
-export const getSystemResource = action({
-  args: { routerId: v.id("routers") },
-  handler: async (ctx, args) => {
-    throw new Error("RouterOS integration pending credential testing");
-  },
-});
+function routerRead(path: string, singleRecord = false) {
+  return action({
+    args: { routerId: v.id("routers") },
+    handler: async (ctx, args) => {
+      await requireAuthenticatedUser(ctx);
+      const credentials = await ctx.runQuery(
+        internal.routers.getRouterWithCredentials,
+        args,
+      );
 
-export const getInterfaces = action({
-  args: { routerId: v.id("routers") },
-  handler: async (ctx, args) => {
-    throw new Error("RouterOS integration pending credential testing");
-  },
-});
+      if (!credentials) {
+        throw new ConvexError("This router is not ready for monitoring.");
+      }
 
-export const getBridgeHosts = action({
-  args: { routerId: v.id("routers") },
-  handler: async (ctx, args) => {
-    throw new Error("RouterOS integration pending credential testing");
-  },
-});
+      const records = await readRouterResource(credentials, path);
+      return singleRecord ? (records[0] ?? null) : records;
+    },
+  });
+}
 
-export const getIpPools = action({
-  args: { routerId: v.id("routers") },
-  handler: async (ctx, args) => {
-    throw new Error("RouterOS integration pending credential testing");
-  },
-});
-
-export const getIpPoolUsed = action({
-  args: { routerId: v.id("routers") },
-  handler: async (ctx, args) => {
-    throw new Error("RouterOS integration pending credential testing");
-  },
-});
-
-export const getRoutes = action({
-  args: { routerId: v.id("routers") },
-  handler: async (ctx, args) => {
-    throw new Error("RouterOS integration pending credential testing");
-  },
-});
-
-export const getDns = action({
-  args: { routerId: v.id("routers") },
-  handler: async (ctx, args) => {
-    throw new Error("RouterOS integration pending credential testing");
-  },
-});
+// The dashboard uses GET-only RouterOS REST reads. No RouterOS write path exists.
+export const getHotspotActive = routerRead("/ip/hotspot/active");
+export const getSystemResource = routerRead("/system/resource", true);
+export const getInterfaces = routerRead("/interface");
+export const getBridgeHosts = routerRead("/interface/bridge/host");
+export const getIpPools = routerRead("/ip/pool");
+export const getIpPoolUsed = routerRead("/ip/pool/used");
+export const getRoutes = routerRead("/ip/route");
+export const getDns = routerRead("/ip/dns", true);
