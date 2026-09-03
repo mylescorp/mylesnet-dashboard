@@ -1,5 +1,6 @@
-import { action, ActionCtx } from "./_generated/server";
+import { action, query, ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { requirePlatformOwner } from "./lib/auth";
 
 function platformOrganizationId(): string {
   const organizationId = process.env.MYLESNET_PLATFORM_ORG_ID;
@@ -15,12 +16,43 @@ type WorkosRoleName =
   | "platform_support"
   | "agent";
 
+export type { WorkosRoleName };
+
 function workosAuth() {
   const apiKey = process.env.WORKOS_API_KEY;
   if (!apiKey) {
     throw new Error("WORKOS_API_KEY is not configured");
   }
   return { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" };
+}
+
+type WorkosMembership = {
+  id: string;
+  organization_id: string;
+  status: string;
+};
+
+async function getActivePlatformMembership(workosUserId: string): Promise<WorkosMembership | null> {
+  const response = await fetch(
+    `https://api.workos.com/user_management/users/${encodeURIComponent(workosUserId)}/organization_memberships`,
+    { headers: workosAuth() },
+  );
+  if (!response.ok) throw new Error("Identity membership lookup failed");
+  const payload = await response.json() as { data?: WorkosMembership[] };
+  return payload.data?.find((membership) =>
+    membership.status === "active" && membership.organization_id === platformOrganizationId(),
+  ) ?? null;
+}
+
+/** Update an invited user's WorkOS role within the configured platform organization. */
+export async function setWorkosUserRole(workosUserId: string, role: WorkosRoleName): Promise<void> {
+  const membership = await getActivePlatformMembership(workosUserId);
+  if (!membership) throw new Error("Target account is not assigned to this workspace");
+  const response = await fetch(
+    `https://api.workos.com/user_management/organization_memberships/${encodeURIComponent(membership.id)}`,
+    { method: "PUT", headers: workosAuth(), body: JSON.stringify({ role_slug: role }) },
+  );
+  if (!response.ok) throw new Error("Identity role update failed");
 }
 
 /**
@@ -37,19 +69,7 @@ async function getOwnMembership(ctx: ActionCtx): Promise<{
   const apiKey = process.env.WORKOS_API_KEY;
   if (!apiKey) throw new Error("WORKOS_API_KEY is not configured");
 
-  const res = await fetch(
-    `https://api.workos.com/user_management/users/${identity.subject}/organization_memberships`,
-    { headers: workosAuth() },
-  );
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Failed to fetch memberships: ${res.status} ${body}`);
-  }
-
-  const data = (await res.json()) as {
-    data?: Array<{ id: string; organization_id: string; status: string }>;
-  };
-  const active = data.data?.find((m) => m.status === "active");
+  const active = await getActivePlatformMembership(identity.subject);
   if (!active) {
     throw new Error("Not a member of any organization");
   }
@@ -58,22 +78,13 @@ async function getOwnMembership(ctx: ActionCtx): Promise<{
 
 /** Set the caller's WorkOS organization membership role. */
 export async function setOwnWorkosRole(ctx: ActionCtx, role: WorkosRoleName): Promise<void> {
-  const { membershipId, organizationId } = await getOwnMembership(ctx);
+  const { organizationId } = await getOwnMembership(ctx);
   if (organizationId !== platformOrganizationId()) {
     throw new Error("Unauthorized organization membership");
   }
-  const res = await fetch(
-    `https://api.workos.com/user_management/organization_memberships/${membershipId}`,
-    {
-      method: "PUT",
-      headers: workosAuth(),
-      body: JSON.stringify({ role_slug: role }),
-    },
-  );
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Failed to update WorkOS role: ${res.status} ${body}`);
-  }
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) throw new Error("Unauthenticated");
+  await setWorkosUserRole(identity.subject, role);
 }
 
 /**
@@ -97,7 +108,7 @@ export const ensureOrgMembership = action({
       // A dashboard must never grant itself a privileged membership. WorkOS is
       // authoritative: accounts are invited by an owner outside this action.
       const orgId = identity["organization_id"];
-      if (orgId) {
+      if (orgId && orgId === platformOrganizationId()) {
         await ctx.runMutation(internal.platformUsers.syncWorkosIdentity, {
           workosUserId: identity.subject,
           email: identity.email,
@@ -110,5 +121,17 @@ export const ensureOrgMembership = action({
     } catch {
       return { status: "error" as const, reason: "Identity synchronization could not be completed" };
     }
+  },
+});
+
+/** Owner-only readiness information. No organization ID or secret is returned. */
+export const getIntegrationReadiness = query({
+  args: {},
+  handler: async (ctx) => {
+    await requirePlatformOwner(ctx);
+    return {
+      platformOrganizationConfigured: Boolean(process.env.MYLESNET_PLATFORM_ORG_ID),
+      bootstrapAllowlistConfigured: Boolean(process.env.MYLESNET_BOOTSTRAP_OWNER_EMAILS),
+    };
   },
 });

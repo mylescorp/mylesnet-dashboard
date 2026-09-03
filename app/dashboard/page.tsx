@@ -13,7 +13,7 @@ const rate = (value: number) => `${bytes(value)}/s`;
 
 export default function DashboardPage() {
   const router = useRouter();
-  const overview = useQuery(api.operations.getOverview);
+  const overview = useQuery(api.operations.getOverview, {});
   const [selectedRouterId, setSelectedRouterId] = useState<Id<"routers"> | null>(null);
   const [selectedAccessPointId, setSelectedAccessPointId] = useState<Id<"accessPoints"> | null>(null);
   const [showComparison, setShowComparison] = useState(false);

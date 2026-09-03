@@ -63,7 +63,7 @@ function UnifiedShellContent({ children }: { children: ReactNode }) {
   const isPlatformRoute = pathname.startsWith("/platform");
 
   const { user } = useUserProfile();
-  const claimStatus = useQuery(api.bootstrap.ownerClaimStatus);
+  const claimStatus = useQuery(api.bootstrap.ownerClaimStatus, {});
   const [delayed, setDelayed] = useState(false);
 
   useEffect(() => {

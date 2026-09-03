@@ -8,7 +8,7 @@ import { useState } from "react";
 
 export default function PlatformDashboardPage() {
   const metrics = useQuery(api.platform.getPlatformDashboardMetrics, {});
-  const claimStatus = useQuery(api.bootstrap.ownerClaimStatus);
+  const claimStatus = useQuery(api.bootstrap.ownerClaimStatus, {});
   const claimOwner = useAction(api.bootstrap.claimPlatformOwner);
   const [claiming, setClaiming] = useState(false);
   const [claimMessage, setClaimMessage] = useState<string | null>(null);

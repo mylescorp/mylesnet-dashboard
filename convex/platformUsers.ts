@@ -1,7 +1,9 @@
 import { v } from "convex/values";
 import { z } from "zod";
-import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
-import { requirePlatformOwner, requirePlatformUser, resolveUserByIdentity } from "./lib/auth";
+import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
+import { requirePlatformUser, resolveUserByIdentity } from "./lib/auth";
+import { setWorkosUserRole, type WorkosRoleName } from "./workos";
 
 const platformRoleValidator = v.union(
   v.literal("platform_owner"),
@@ -19,7 +21,6 @@ const marketMembershipRoleValidator = v.union(
 const profileSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
   phone: z.string().trim().regex(/^\+[1-9]\d{7,14}$/).optional(),
-  image: z.string().trim().url().refine((value) => new URL(value).protocol === "https").max(2048).optional(),
   jobTitle: z.string().trim().max(100).optional(),
 });
 
@@ -31,7 +32,6 @@ export const updateUserProfile = mutation({
   args: {
     name: v.optional(v.string()),
     phone: v.optional(v.string()),
-    image: v.optional(v.string()),
     jobTitle: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -41,17 +41,15 @@ export const updateUserProfile = mutation({
     const normalizedInput = {
       ...args,
       phone: args.phone?.replace(/[\s()-]/g, ""),
-      image: args.image?.trim() || undefined,
       jobTitle: args.jobTitle?.trim() || undefined,
       name: args.name?.trim() || undefined,
     };
     const validated = profileSchema.safeParse(normalizedInput);
     if (!validated.success) throw new Error("Invalid profile details");
 
-    const patchData: { name?: string; phone?: string; image?: string; jobTitle?: string; profileCompletedAt?: number } = {};
+    const patchData: { name?: string; phone?: string; jobTitle?: string; profileCompletedAt?: number } = {};
     if (validated.data.name !== undefined) patchData.name = validated.data.name;
     if (validated.data.phone !== undefined) patchData.phone = validated.data.phone;
-    if (validated.data.image !== undefined) patchData.image = validated.data.image;
     if (validated.data.jobTitle !== undefined) patchData.jobTitle = validated.data.jobTitle;
     if (patchData.name && patchData.phone) patchData.profileCompletedAt = Date.now();
 
@@ -97,16 +95,43 @@ export const listUsers = query({
 });
 
 /** Platform owners assign least-privilege local access; WorkOS sync is performed by the paired action. */
-export const setUserAccess = mutation({
-  args: {
-    userId: v.id("users"),
-    platformRole: v.optional(platformRoleValidator),
-    isActive: v.boolean(),
-    marketId: v.optional(v.id("markets")),
-    marketRole: v.optional(marketMembershipRoleValidator),
-  },
+const accessArgs = {
+  userId: v.id("users"),
+  platformRole: v.optional(platformRoleValidator),
+  isActive: v.boolean(),
+  marketId: v.optional(v.id("markets")),
+  marketRole: v.optional(marketMembershipRoleValidator),
+};
+
+export const setUserAccess = action({
+  args: accessArgs,
   handler: async (ctx, args) => {
-    const actor = await requirePlatformOwner(ctx);
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+    const target = await ctx.runQuery(internal.platformUsers.getUserForAccessUpdate, { userId: args.userId });
+    if (!target) throw new Error("User not found");
+    if (!target.workosUserId) throw new Error("Target identity has not been synchronized");
+
+    await setWorkosUserRole(target.workosUserId, (args.platformRole ?? "agent") as WorkosRoleName);
+    await ctx.runMutation(internal.platformUsers.applyUserAccess, { actorWorkosUserId: identity.subject, ...args });
+  },
+});
+
+export const getUserForAccessUpdate = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => ctx.db.get(args.userId),
+});
+
+export const applyUserAccess = internalMutation({
+  args: { actorWorkosUserId: v.string(), ...accessArgs },
+  handler: async (ctx, args) => {
+    const actor = await ctx.db
+      .query("users")
+      .withIndex("by_workosUserId", (q) => q.eq("workosUserId", args.actorWorkosUserId))
+      .first();
+    if (!actor || actor.platformRole !== "platform_owner" || actor.isActive === false || actor.deactivatedAt !== undefined) {
+      throw new Error("Unauthorized");
+    }
     const target = await ctx.db.get(args.userId);
     if (!target) throw new Error("User not found");
     if (target._id === actor._id && !args.isActive) throw new Error("You cannot deactivate your own account");

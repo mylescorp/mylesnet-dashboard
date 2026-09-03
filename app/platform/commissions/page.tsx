@@ -26,8 +26,8 @@ export default function CommissionsPage() {
     api.commissions.listCommissionsByStatus,
     status === "all" ? {} : { payoutStatus: status as any }
   );
-  const agents = useQuery(api.agents.listAgents);
-  const markets = useQuery(api.markets.listMarkets);
+  const agents = useQuery(api.agents.listAgents, {});
+  const markets = useQuery(api.markets.listMarkets, {});
 
   const requestPayout = useMutation(api.commissions.requestCommissionPayout);
   const approve = useMutation(api.commissions.approveCommissionPayout);

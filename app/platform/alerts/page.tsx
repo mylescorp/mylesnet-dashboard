@@ -11,8 +11,8 @@ const tone: Record<string, "success" | "warning" | "danger" | "neutral"> = {
 
 export default function AlertsPage() {
   const [filter, setFilter] = useState<"open" | "all">("open");
-  const alerts = useQuery(api.alerts.listAlerts);
-  const markets = useQuery(api.markets.listMarkets);
+  const alerts = useQuery(api.alerts.listAlerts, {});
+  const markets = useQuery(api.markets.listMarkets, {});
   const devices = useQuery(api.devices.listDevices, {});
   const acknowledge = useMutation(api.alerts.acknowledgeAlert);
   const resolve = useMutation(api.alerts.resolveAlert);

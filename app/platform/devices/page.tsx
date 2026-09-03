@@ -22,7 +22,7 @@ const lifecycleTone = (s: string) =>
 export default function DevicesPage() {
   const [marketId, setMarketId] = useState<string>("");
   const devices = useQuery(api.devices.listDevices, marketId ? { marketId: marketId as any } : {});
-  const markets = useQuery(api.markets.listMarkets);
+  const markets = useQuery(api.markets.listMarkets, {});
   const createDevice = useMutation(api.devices.createDevice);
   const setMaintenance = useMutation(api.devices.setDeviceMaintenance);
   const softDelete = useMutation(api.devices.softDeleteDevice);

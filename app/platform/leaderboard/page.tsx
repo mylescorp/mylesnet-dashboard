@@ -8,9 +8,9 @@ import { Trophy, Medal, Award, CircleSlash2 } from "lucide-react";
 
 export default function LeaderboardPage() {
   const snapshots = useQuery(api.leaderboard.getLeaderboard, {});
-  const latestDate = useQuery(api.leaderboard.getLatestSnapshotDate);
+  const latestDate = useQuery(api.leaderboard.getLatestSnapshotDate, {});
   const compute = useMutation(api.leaderboard.computeLeaderboard);
-  const agents = useQuery(api.agents.listAgents);
+  const agents = useQuery(api.agents.listAgents, {});
 
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);

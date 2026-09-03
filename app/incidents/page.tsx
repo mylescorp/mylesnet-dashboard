@@ -10,7 +10,7 @@ export default function IncidentsPage() {
   const acknowledgeIncident = useMutation(api.incidents.acknowledgeIncident);
   const resolveIncident = useMutation(api.incidents.resolveIncident);
   const createIncident = useMutation(api.incidents.createIncident);
-  const routers = useQuery(api.routers.listRouters);
+  const routers = useQuery(api.routers.listRouters, {});
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [formData, setFormData] = useState({

@@ -22,7 +22,7 @@ const PLAN_LABEL: Record<string, string> = {
 };
 
 export default function MarketsPage() {
-  const markets = useQuery(api.markets.listMarkets);
+  const markets = useQuery(api.markets.listMarkets, {});
   const currentYearMonth = new Date().toISOString().slice(0, 7);
   const missing = useQuery(api.markets.listMarketsMissingCostEntry, { yearMonth: currentYearMonth });
   const createMarket = useMutation(api.markets.createMarket);

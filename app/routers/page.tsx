@@ -21,7 +21,7 @@ export default function RoutersPage() {
   const [selectedRouterForBaseline, setSelectedRouterForBaseline] = useState<Id<"routers"> | null>(null);
   const [configDriftResult, setConfigDriftResult] = useState<ConfigDriftResult | null>(null);
 
-  const routers = useQuery(api.routers.listRouters);
+  const routers = useQuery(api.routers.listRouters, {});
   const accessPoints = useQuery(api.accessPoints.listAccessPoints, {});
   const addRouter = useMutation(api.routers.addRouter);
   const deleteRouter = useMutation(api.routers.deleteRouter);
@@ -376,7 +376,7 @@ export default function RoutersPage() {
                   onChange={(e) => setRouterFormData({ ...routerFormData, restBaseUrl: e.target.value })}
                   required
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  placeholder="https://192.168.1.1:8443"
+                  placeholder="Enter the approved HTTPS RouterOS endpoint"
                 />
                 <p className="text-xs text-gray-500 mt-1">
                   Include port (usually 8443 for HTTPS)

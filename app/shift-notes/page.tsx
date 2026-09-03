@@ -6,7 +6,7 @@ import { useState } from "react";
 import type { Id } from "../../convex/_generated/dataModel";
 
 export default function ShiftNotesPage() {
-  const routers = useQuery(api.routers.listRouters);
+  const routers = useQuery(api.routers.listRouters, {});
   const [selectedRouter, setSelectedRouter] = useState<string | null>(null);
   const selectedRouterRecord = routers?.find((router) => router._id === selectedRouter);
   const shiftNotes = useQuery(

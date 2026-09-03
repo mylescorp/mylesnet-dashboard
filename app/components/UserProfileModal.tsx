@@ -14,7 +14,6 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
 
   const [name, setName] = useState(user?.name || "");
   const [phone, setPhone] = useState(user?.phone || "");
-  const [image, setImage] = useState(user?.image || "");
   const [jobTitle, setJobTitle] = useState(user?.jobTitle || "");
   const [saving, setSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -34,11 +33,7 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
         setStatusMessage({ type: "error", text: "Enter your full name and phone number before saving." });
         return;
       }
-      if (image && !URL.canParse(image)) {
-        setStatusMessage({ type: "error", text: "Enter a valid profile image URL or leave the field blank." });
-        return;
-      }
-      await updateProfile({ name, phone, image, jobTitle });
+      await updateProfile({ name, phone, jobTitle });
       setStatusMessage({ type: "success", text: "Your profile has been saved." });
       setTimeout(() => {
         setStatusMessage(null);
@@ -93,9 +88,9 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
           {/* Avatar & Role Card Lockup */}
           <div className="profile-badge-card">
             <div className="profile-badge-avatar">
-              {image ? (
+              {user.image ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={image} alt={name || "User Avatar"} className="avatar-img" />
+                <img src={user.image} alt={name || "User Avatar"} className="avatar-img" />
               ) : (
                 <span>{initials}</span>
               )}
@@ -181,19 +176,6 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
               <span className="pf-hint">WorkOS single sign-on identity. Contact owner to change email.</span>
             </div>
 
-            <div className="pf-field">
-              <label htmlFor="user-image-input" className="pf-label">
-                Profile Avatar Picture URL (Optional)
-              </label>
-              <input
-                id="user-image-input"
-                type="url"
-                value={image}
-                onChange={(e) => setImage(e.target.value)}
-                placeholder="https://example.com/avatar.jpg"
-                className="pf-input"
-              />
-            </div>
           </div>
 
           {/* Actions */}

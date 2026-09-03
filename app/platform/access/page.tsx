@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Image from "next/image";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { Check, Search, ShieldCheck, UserRound, UsersRound } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -19,7 +19,7 @@ function displayRole(role: string | null | undefined) {
 }
 
 function AccessCard({ user, markets, onSaved }: { user: UserRow; markets: Market[]; onSaved: (value: string) => void }) {
-  const saveAccess = useMutation(api.platformUsers.setUserAccess);
+  const saveAccess = useAction(api.platformUsers.setUserAccess);
   const membership = user.marketMemberships.find((item) => item.revokedAt === undefined);
   const [role, setRole] = useState<PlatformRole>(user.platformRole && platformRoles.includes(user.platformRole as PlatformRole) ? user.platformRole as PlatformRole : "agent");
   const [active, setActive] = useState(user.isActive);
@@ -60,6 +60,7 @@ export default function AccessManagementPage() {
   const users = useQuery(api.platformUsers.listUsers, isOwner ? {} : "skip");
   const markets = useQuery(api.markets.listMarkets, isOwner ? {} : "skip");
   const credentialStatus = useQuery(api.routers.getRouterCredentialProtectionStatus, isOwner ? {} : "skip");
+  const workosReadiness = useQuery(api.workos.getIntegrationReadiness, isOwner ? {} : "skip");
   const migrateCredentials = useMutation(api.routers.migrateLegacyRouterCredentials);
   const [message, setMessage] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -83,6 +84,7 @@ export default function AccessManagementPage() {
     <header className="page-heading"><div><p className="eyebrow">System administration</p><h1 className="page-title">Access management</h1><p className="page-subtitle">Set each team member&apos;s platform role, account status, and market scope from one authoritative control surface.</p></div><div className="access-summary"><UsersRound size={18} aria-hidden="true" /><strong>{users.length}</strong><span>managed accounts</span></div></header>
     {message ? <p className="platform-claim-message ok" role="status">{message}</p> : null}
     <section className="access-toolbar workspace-card" aria-label="Directory controls"><div className="access-toolbar-copy"><ShieldCheck size={20} aria-hidden="true" /><div><strong>Role directory</strong><span>Changes take effect for the user&apos;s next protected action.</span></div></div><label className="access-search"><Search size={17} aria-hidden="true" /><span className="sr-only">Search accounts</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name or email" /></label></section>
+    {workosReadiness && !workosReadiness.platformOrganizationConfigured ? <section className="access-migration workspace-card"><div><ShieldCheck size={19} aria-hidden="true" /><p><strong>Identity role sync is not configured</strong><span>Set the platform organization in the managed environment before changing account roles.</span></p></div></section> : null}
     {credentialStatus && credentialStatus.legacy > 0 ? <section className="access-migration workspace-card"><div><ShieldCheck size={19} aria-hidden="true" /><p><strong>Router credentials need protection</strong><span>{credentialStatus.legacy} of {credentialStatus.total} record{credentialStatus.total === 1 ? "" : "s"} still use the legacy format.</span></p></div><button type="button" className="secondary-button" disabled={migratingCredentials} onClick={() => void migrateRouterCredentials()}>{migratingCredentials ? "Protecting…" : "Protect credentials"}</button></section> : null}
     {matchingUsers.length === 0 ? <section className="access-empty workspace-card"><UserRound size={24} aria-hidden="true" /><h2>No matching accounts</h2><p>Try a different name or email address.</p></section> : <section className="access-card-grid" aria-label="Managed accounts">{matchingUsers.map((user) => <AccessCard key={user._id} user={user} markets={markets} onSaved={setMessage} />)}</section>}
   </div>;

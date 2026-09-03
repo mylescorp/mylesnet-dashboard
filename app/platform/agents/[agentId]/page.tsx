@@ -32,7 +32,7 @@ export default function AgentDetailPage() {
   const agent = useQuery(api.agents.getAgent, { agentId: agentId as any });
   const history = useQuery(api.agents.getAgentAssignmentHistory, { agentId: agentId as any });
   const commissions = useQuery(api.commissions.listCommissionsForAgent, { agentId: agentId as any });
-  const markets = useQuery(api.markets.listMarkets);
+  const markets = useQuery(api.markets.listMarkets, {});
 
   const assignAgent = useMutation(api.agents.assignAgentToMarket);
   const step1 = useMutation(api.agents.offboardAgentStep1CloseAssignments);

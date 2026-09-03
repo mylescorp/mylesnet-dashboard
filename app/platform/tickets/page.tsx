@@ -22,8 +22,8 @@ const priorityTone: Record<string, "neutral" | "warning" | "danger"> = {
 
 export default function TicketsPage() {
   const tickets = useQuery(api.supportTickets.listSupportTickets, {});
-  const markets = useQuery(api.markets.listMarkets);
-  const agents = useQuery(api.agents.listAgents);
+  const markets = useQuery(api.markets.listMarkets, {});
+  const agents = useQuery(api.agents.listAgents, {});
   const create = useMutation(api.supportTickets.createSupportTicket);
   const update = useMutation(api.supportTickets.updateSupportTicket);
 

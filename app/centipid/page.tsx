@@ -4,7 +4,7 @@ import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 
 export default function CentipidSettingsPage() {
-  const integration = useQuery(api.centipid.getCentipidIntegrationStatus);
+  const integration = useQuery(api.centipid.getCentipidIntegrationStatus, {});
   const deliveryLogs = useQuery(api.centipid.getWebhookDeliveryLogs, { limit: 20 });
 
   return (

@@ -16,8 +16,8 @@ const voucherTone = (s: string) =>
 export default function VouchersPage() {
   const [marketId, setMarketId] = useState("");
   const batches = useQuery(api.vouchers.listBatches, marketId ? { marketId: marketId as Id<"markets"> } : {});
-  const markets = useQuery(api.markets.listMarkets);
-  const agents = useQuery(api.agents.listAgents);
+  const markets = useQuery(api.markets.listMarkets, {});
+  const agents = useQuery(api.agents.listAgents, {});
   const generateBatch = useMutation(api.vouchers.generateVoucherBatch);
 
   const [genMarketId, setGenMarketId] = useState("");

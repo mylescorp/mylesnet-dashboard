@@ -11,8 +11,8 @@ const lifecycleTone = (s: string) =>
   s === "active" ? "success" : s === "suspended" ? "warning" : "danger";
 
 export default function AgentsPage() {
-  const agents = useQuery(api.agents.listAgents);
-  const markets = useQuery(api.markets.listMarkets);
+  const agents = useQuery(api.agents.listAgents, {});
+  const markets = useQuery(api.markets.listMarkets, {});
   const createAgent = useMutation(api.agents.createAgent);
   const suspendAgent = useMutation(api.agents.suspendAgent);
   const reactivateAgent = useMutation(api.agents.reactivateAgent);

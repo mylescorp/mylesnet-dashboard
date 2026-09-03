@@ -21,7 +21,7 @@ export default function AuditLogPage() {
     api.platform.listAuditLog,
     entityTable ? { entityTable, limit } : { limit }
   );
-  const currentUser = useQuery(api.platform.getCurrentPlatformUser);
+  const currentUser = useQuery(api.platform.getCurrentPlatformUser, {});
 
   if (entries === undefined || currentUser === undefined) return <Loading />;
 

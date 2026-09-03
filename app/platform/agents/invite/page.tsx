@@ -7,8 +7,8 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { Field, Select, TextInput, StatusPill, EmptyState, Loading, ErrorNote, formatDateTime } from "../../components/ui";
 
 export default function AgentInvitePage() {
-  const invitations = useQuery(api.agentInvitations.listInvitations);
-  const markets = useQuery(api.markets.listMarkets);
+  const invitations = useQuery(api.agentInvitations.listInvitations, {});
+  const markets = useQuery(api.markets.listMarkets, {});
   const createInvitation = useMutation(api.agentInvitations.createInvitation);
   const revokeInvitation = useMutation(api.agentInvitations.revokeInvitation);
 

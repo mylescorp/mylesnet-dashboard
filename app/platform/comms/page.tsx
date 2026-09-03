@@ -6,9 +6,9 @@ import { api } from "@/convex/_generated/api";
 import { Field, Select, TextInput, TextArea, StatusPill, EmptyState, Loading, ErrorNote, formatDateTime } from "../components/ui";
 
 export default function CommsPage() {
-  const broadcasts = useQuery(api.broadcasts.listBroadcasts);
-  const markets = useQuery(api.markets.listMarkets);
-  const agents = useQuery(api.agents.listAgents);
+  const broadcasts = useQuery(api.broadcasts.listBroadcasts, {});
+  const markets = useQuery(api.markets.listMarkets, {});
+  const agents = useQuery(api.agents.listAgents, {});
   const createBroadcast = useMutation(api.broadcasts.createBroadcast);
 
   const [error, setError] = useState<string | null>(null);
