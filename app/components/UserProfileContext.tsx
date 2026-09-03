@@ -8,7 +8,7 @@ import type { PlatformUser } from "./UserProfileDropdown";
 interface UserProfileContextType {
   user: PlatformUser | null | undefined;
   isLoading: boolean;
-  updateProfile: (data: { name?: string; phone?: string; image?: string }) => Promise<void>;
+  updateProfile: (data: { name?: string; phone?: string; image?: string; jobTitle?: string }) => Promise<void>;
 }
 
 const UserProfileContext = createContext<UserProfileContextType>({
@@ -21,7 +21,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
   const user = useQuery(api.platform.getCurrentPlatformUser) as PlatformUser | null | undefined;
   const updateProfileMutation = useMutation(api.platformUsers.updateUserProfile);
 
-  const updateProfile = async (data: { name?: string; phone?: string; image?: string }) => {
+  const updateProfile = async (data: { name?: string; phone?: string; image?: string; jobTitle?: string }) => {
     await updateProfileMutation(data);
   };
 

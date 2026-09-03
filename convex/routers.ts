@@ -1,11 +1,11 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
-import { requireAuthenticatedUser } from "./lib/auth";
+import { requireNetworkOperator } from "./lib/auth";
 
 // List routers WITHOUT credentials (safe for client queries)
 export const listRouters = query({
   handler: async (ctx) => {
-    await requireAuthenticatedUser(ctx);
+    await requireNetworkOperator(ctx);
     const routers = await ctx.db.query("routers").order("desc").collect();
     
     // Check which routers have credentials set (without exposing them)
@@ -132,7 +132,7 @@ export const addRouter = mutation({
     cpuCriticalThreshold: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await requireAuthenticatedUser(ctx);
+    await requireNetworkOperator(ctx);
     const routerId = await ctx.db.insert("routers", {
       name: args.name,
       restBaseUrl: args.restBaseUrl,
@@ -166,7 +166,7 @@ export const updateRouter = mutation({
     cpuCriticalThreshold: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await requireAuthenticatedUser(ctx);
+    await requireNetworkOperator(ctx);
     const { routerId, ...updates } = args;
     await ctx.db.patch(routerId, {
       ...updates,
@@ -183,7 +183,7 @@ export const updateRouterCredentials = mutation({
     password: v.string(),
   },
   handler: async (ctx, args) => {
-    await requireAuthenticatedUser(ctx);
+    await requireNetworkOperator(ctx);
     const existing = await ctx.db
       .query("routerCredentials")
       .withIndex("by_router", (q) => q.eq("routerId", args.routerId))
@@ -210,7 +210,7 @@ export const updateRouterCredentials = mutation({
 export const deleteRouter = mutation({
   args: { routerId: v.id("routers") },
   handler: async (ctx, args) => {
-    await requireAuthenticatedUser(ctx);
+    await requireNetworkOperator(ctx);
     // Delete router
     await ctx.db.delete(args.routerId);
 

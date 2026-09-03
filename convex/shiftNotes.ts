@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { requireAuthenticatedUser } from "./lib/auth";
+import { requireNetworkOperator } from "./lib/auth";
 
 // Add a shift note
 export const addShiftNote = mutation({
@@ -9,7 +9,7 @@ export const addShiftNote = mutation({
     note: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await requireAuthenticatedUser(ctx);
+    const userId = (await requireNetworkOperator(ctx))._id;
     return await ctx.db.insert("shiftNotes", {
       routerId: args.routerId,
       authorId: userId,
@@ -23,7 +23,7 @@ export const addShiftNote = mutation({
 export const listShiftNotes = query({
   args: { routerId: v.id("routers") },
   handler: async (ctx, args) => {
-    await requireAuthenticatedUser(ctx);
+    await requireNetworkOperator(ctx);
     return await ctx.db
       .query("shiftNotes")
       .withIndex("by_router_timestamp", (q) => q.eq("routerId", args.routerId))
@@ -36,7 +36,7 @@ export const listShiftNotes = query({
 export const deleteShiftNote = mutation({
   args: { noteId: v.id("shiftNotes") },
   handler: async (ctx, args) => {
-    await requireAuthenticatedUser(ctx);
+    await requireNetworkOperator(ctx);
     await ctx.db.delete(args.noteId);
   },
 });

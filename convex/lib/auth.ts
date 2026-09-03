@@ -28,14 +28,18 @@ export async function resolveUserByIdentity(
   ctx: QueryCtx | MutationCtx
 ): Promise<Doc<"users"> | null> {
   const identity = await ctx.auth.getUserIdentity();
-  if (!identity?.email) return null;
+  if (!identity) return null;
+  const byWorkosId = await ctx.db
+    .query("users")
+    .withIndex("by_workosUserId", (q) => q.eq("workosUserId", identity.subject))
+    .first();
+  if (byWorkosId) return byWorkosId;
+  if (!identity.email) return null;
   const email = identity.email.toLowerCase();
-  return (
-    (await ctx.db
+  return (await ctx.db
       .query("users")
       .withIndex("email", (q) => q.eq("email", email))
-      .first()) ?? null
-  );
+      .first()) ?? null;
 }
 
 async function getCurrentUserRecord(ctx: QueryCtx | MutationCtx) {
@@ -46,9 +50,14 @@ async function getCurrentUserRecord(ctx: QueryCtx | MutationCtx) {
   return user;
 }
 
+function isActiveUser(user: Doc<"users">): boolean {
+  return user.isActive !== false && user.deactivatedAt === undefined;
+}
+
 /** Require any authenticated platform user (owner/admin/support). */
 export async function requirePlatformUser(ctx: QueryCtx | MutationCtx) {
   const user = await getCurrentUserRecord(ctx);
+  if (!isActiveUser(user)) throw new Error("Unauthorized: account is inactive");
   if (
     user.platformRole !== "platform_owner" &&
     user.platformRole !== "platform_admin" &&
@@ -62,6 +71,7 @@ export async function requirePlatformUser(ctx: QueryCtx | MutationCtx) {
 /** Require platform_owner or platform_admin */
 export async function requirePlatformAdmin(ctx: QueryCtx | MutationCtx) {
   const user = await getCurrentUserRecord(ctx);
+  if (!isActiveUser(user)) throw new Error("Unauthorized: account is inactive");
   if (user.platformRole !== "platform_owner" && user.platformRole !== "platform_admin") {
     throw new Error("Unauthorized: admin role required");
   }
@@ -71,6 +81,7 @@ export async function requirePlatformAdmin(ctx: QueryCtx | MutationCtx) {
 /** Require platform_owner */
 export async function requirePlatformOwner(ctx: QueryCtx | MutationCtx) {
   const user = await getCurrentUserRecord(ctx);
+  if (!isActiveUser(user)) throw new Error("Unauthorized: account is inactive");
   if (user.platformRole !== "platform_owner") {
     throw new Error("Unauthorized: owner role required");
   }
@@ -91,8 +102,32 @@ export async function requireAuthenticatedUser(
   }
 
   const user = await resolveUserByIdentity(ctx);
-  if (!user) throw new Error("Unauthenticated");
+  if (!user || !isActiveUser(user)) throw new Error("Unauthenticated");
   return user._id;
+}
+
+/** Network Operations is a module inside the platform, not a second auth realm. */
+export async function requireNetworkOperator(ctx: QueryCtx | MutationCtx) {
+  return requirePlatformUser(ctx);
+}
+
+export async function requireMarketAccess(
+  ctx: QueryCtx | MutationCtx,
+  marketId: Id<"markets">,
+  minimumRole: "manager" | "operator" | "viewer" = "viewer",
+) {
+  const user = await getCurrentUserRecord(ctx);
+  if (!isActiveUser(user)) throw new Error("Unauthorized: account is inactive");
+  if (user.platformRole === "platform_owner" || user.platformRole === "platform_admin") return user;
+  const membership = await ctx.db
+    .query("userMarketMemberships")
+    .withIndex("by_user_and_market", (q) => q.eq("userId", user._id).eq("marketId", marketId))
+    .first();
+  const rank = { viewer: 1, operator: 2, manager: 3 } as const;
+  if (!membership || membership.revokedAt !== undefined || rank[membership.role] < rank[minimumRole]) {
+    throw new Error("Unauthorized: market access required");
+  }
+  return user;
 }
 
 /** Commission payout self-approval guard */

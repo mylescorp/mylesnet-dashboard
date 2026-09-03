@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { requirePlatformAdmin, requirePlatformUser } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 
@@ -242,7 +242,7 @@ export const redeemVoucher = mutation({
  * Expiry sweep — run on a schedule (cron). Unsold vouchers revert to the
  * owning agent's pool as "expired", never vanish silently.
  */
-export const sweepExpiredVouchers = mutation({
+export const sweepExpiredVouchers = internalMutation({
   args: {},
   handler: async (ctx) => {
     const now = Date.now();

@@ -22,6 +22,7 @@ export type PlatformUser = {
   email?: string;
   phone?: string;
   image?: string;
+  jobTitle?: string;
   platformRole: string | null;
   isPlatform: boolean;
 };
@@ -140,8 +141,8 @@ export function UserProfileDropdown({ user: propUser }: UserProfileDropdownProps
               >
                 <ShieldCheck size={16} />
                 <div className="profile-item-text">
-                  <span>Manage Profile & RBAC</span>
-                  <small>Edit name, phone, photo & view role</small>
+                  <span>Manage Profile</span>
+                  <small>Edit your contact details and view access</small>
                 </div>
               </button>
             </div>

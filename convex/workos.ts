@@ -1,6 +1,11 @@
 import { action, ActionCtx } from "./_generated/server";
+import { internal } from "./_generated/api";
 
-const MYLESNET_PLATFORM_ORG_ID = "org_01KWQ9Q1T5WKX4KEDWPVJ395Y4";
+function platformOrganizationId(): string {
+  const organizationId = process.env.MYLESNET_PLATFORM_ORG_ID;
+  if (!organizationId) throw new Error("Platform organization is not configured");
+  return organizationId;
+}
 
 // WorkOS role slugs in the MylesNet environment. These are emitted verbatim
 // as the JWT `role` claim and must match the codebase `PlatformRole` values.
@@ -53,7 +58,10 @@ async function getOwnMembership(ctx: ActionCtx): Promise<{
 
 /** Set the caller's WorkOS organization membership role. */
 export async function setOwnWorkosRole(ctx: ActionCtx, role: WorkosRoleName): Promise<void> {
-  const { membershipId } = await getOwnMembership(ctx);
+  const { membershipId, organizationId } = await getOwnMembership(ctx);
+  if (organizationId !== platformOrganizationId()) {
+    throw new Error("Unauthorized organization membership");
+  }
   const res = await fetch(
     `https://api.workos.com/user_management/organization_memberships/${membershipId}`,
     {
@@ -86,73 +94,21 @@ export const ensureOrgMembership = action({
         return { status: "unauthenticated" as const };
       }
 
-      // If the JWT already has organization_id, the user is already a member
+      // A dashboard must never grant itself a privileged membership. WorkOS is
+      // authoritative: accounts are invited by an owner outside this action.
       const orgId = identity["organization_id"];
       if (orgId) {
+        await ctx.runMutation(internal.platformUsers.syncWorkosIdentity, {
+          workosUserId: identity.subject,
+          email: identity.email,
+          name: typeof identity.name === "string" ? identity.name : undefined,
+          image: typeof identity.picture === "string" ? identity.picture : undefined,
+        });
         return { status: "already_member" as const, organizationId: orgId as string };
       }
-
-      // Check for WORKOS_API_KEY BEFORE attempting WorkOS API calls
-      const apiKey = process.env.WORKOS_API_KEY;
-      if (!apiKey) {
-        console.warn("WORKOS_API_KEY is not configured in Convex environment variables.");
-        return { status: "skipped" as const, reason: "WORKOS_API_KEY is not configured" };
-      }
-
-      const workosUserId = identity.subject;
-      if (!workosUserId || !workosUserId.startsWith("user_")) {
-        console.warn(`identity.subject "${workosUserId}" is not a valid WorkOS user ID`);
-        return { status: "skipped" as const, reason: "Non-WorkOS identity subject" };
-      }
-
-      const membershipsRes = await fetch(
-        `https://api.workos.com/user_management/users/${workosUserId}/organization_memberships`,
-        { headers: workosAuth() },
-      );
-
-      if (membershipsRes.ok) {
-        const membershipsData = (await membershipsRes.json()) as {
-          data?: Array<{ organization_id: string; status: string }>;
-        };
-        const existingMembership = membershipsData.data?.find(
-          (m) => m.organization_id === MYLESNET_PLATFORM_ORG_ID || m.status === "active" || !!m.organization_id
-        );
-        if (existingMembership) {
-          return { status: "already_member" as const, organizationId: existingMembership.organization_id };
-        }
-      } else {
-        const errText = await membershipsRes.text();
-        console.warn(`WorkOS list memberships returned status ${membershipsRes.status}: ${errText}`);
-      }
-
-      const addRes = await fetch("https://api.workos.com/user_management/organization_memberships", {
-        method: "POST",
-        headers: workosAuth(),
-        body: JSON.stringify({
-          user_id: workosUserId,
-          organization_id: MYLESNET_PLATFORM_ORG_ID,
-          role_slug: "platform_admin",
-        }),
-      });
-
-      if (!addRes.ok) {
-        const body = await addRes.text();
-        if (
-          addRes.status === 400 ||
-          addRes.status === 409 ||
-          body.includes("already_exists") ||
-          body.includes("already a member")
-        ) {
-          return { status: "already_member" as const, organizationId: MYLESNET_PLATFORM_ORG_ID };
-        }
-        console.warn(`WorkOS add membership status ${addRes.status}: ${body}`);
-        return { status: "error" as const, reason: `Failed to add user to organization: ${addRes.status} ${body}` };
-      }
-
-      return { status: "added" as const, organizationId: MYLESNET_PLATFORM_ORG_ID };
-    } catch (err: any) {
-      console.warn("Handled exception in ensureOrgMembership action:", err);
-      return { status: "error" as const, reason: err?.message || String(err) };
+      return { status: "not_member" as const };
+    } catch {
+      return { status: "error" as const, reason: "Identity synchronization could not be completed" };
     }
   },
 });

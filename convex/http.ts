@@ -1,7 +1,6 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
 
 const http = httpRouter();
 
@@ -93,146 +92,15 @@ http.route({
   }),
 });
 
-/**
- * Centipid webhook handler. Verifies the HMAC-SHA256 signature against
- * the stored signing secret, then routes the event to the appropriate
- * Convex mutation based on the event type.
- */
+/** The provider contract is unverified, so this endpoint deliberately fails closed. */
 http.route({
   path: "/receiveCentipidWebhook",
   method: "POST",
-  handler: httpAction(async (ctx, request) => {
-    const body = await request.text();
-    const signature = request.headers.get("x-centipid-signature");
-
-    const credentials = await ctx.runQuery(internal.centipid.getCentipidCredentials);
-    if (!credentials) {
-      return Response.json(
-        { success: false, message: "Centipid integration not configured." },
-        { status: 503 },
-      );
-    }
-
-    if (signature) {
-      const valid = await secretMatches(signature, credentials.webhookSigningSecret);
-      if (!valid) {
-        await ctx.runMutation(internal.centipid.logWebhookDelivery, {
-          eventType: "unknown",
-          signatureValid: false,
-          processed: false,
-          errorMessage: "Invalid signature",
-        });
-        return Response.json(
-          { success: false, message: "Invalid signature." },
-          { status: 401 },
-        );
-      }
-    }
-
-    let payload: Record<string, unknown>;
-    try {
-      payload = JSON.parse(body);
-    } catch {
-      return Response.json(
-        { success: false, message: "Invalid JSON payload." },
-        { status: 400 },
-      );
-    }
-
-    const eventType = (payload.event_type ?? payload.eventType ?? "unknown") as string;
-
-    try {
-      if (eventType.startsWith("subscriber.")) {
-        await ctx.runMutation(internal.centipid.handleSubscriberEvent, { payload });
-      } else if (eventType.startsWith("payment.")) {
-        await ctx.runMutation(internal.centipid.handlePaymentEvent, { payload });
-      } else if (eventType.startsWith("voucher.")) {
-        await ctx.runMutation(internal.centipid.handleVoucherEvent, { payload });
-      } else if (eventType.startsWith("ticket.")) {
-        await ctx.runMutation(internal.centipid.handleTicketEvent, { payload });
-      } else {
-        await ctx.runMutation(internal.centipid.logWebhookDelivery, {
-          eventType,
-          signatureValid: true,
-          processed: false,
-          errorMessage: `Unknown event type: ${eventType}`,
-        });
-        return Response.json(
-          { success: false, message: `Unknown event type: ${eventType}` },
-          { status: 400 },
-        );
-      }
-
-      await ctx.runMutation(internal.centipid.logWebhookDelivery, {
-        eventType,
-        signatureValid: true,
-        processed: true,
-      });
-
-      return Response.json({ success: true });
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Processing failed";
-      await ctx.runMutation(internal.centipid.logWebhookDelivery, {
-        eventType,
-        signatureValid: true,
-        processed: false,
-        errorMessage,
-      });
-      return Response.json(
-        { success: false, message: "Webhook processing failed." },
-        { status: 500 },
-      );
-    }
-  }),
-});
-
-/**
- * Revoke an agent's WorkOS session and clear all __mylesnet_* cookies.
- * Called from the offboarding wizard after the Convex mutation completes.
- */
-http.route({
-  path: "/api/revokeAgentSession",
-  method: "POST",
-  handler: httpAction(async (ctx, request) => {
-    const body = await request.json() as { agentId?: string };
-    if (!body.agentId) {
-      return Response.json(
-        { success: false, message: "Missing agentId." },
-        { status: 400 },
-      );
-    }
-
-    try {
-      const agent = await ctx.runQuery(internal.agents.getAgentInternal, {
-        agentId: body.agentId as Id<"agents">,
-      });
-      if (!agent) {
-        return Response.json(
-          { success: false, message: "Agent not found." },
-          { status: 404 },
-        );
-      }
-
-      const headers = new Headers();
-      headers.set("Content-Type", "application/json");
-      const cookieNames = ["__mylesnet_session", "__mylesnet_tenant", "__mylesnet_csrf"];
-      for (const name of cookieNames) {
-        headers.append(
-          "Set-Cookie",
-          `${name}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`
-        );
-      }
-
-      return new Response(
-        JSON.stringify({ success: true, message: "Session revoked and cookies cleared." }),
-        { status: 200, headers }
-      );
-    } catch {
-      return Response.json(
-        { success: false, message: "Session revocation failed." },
-        { status: 500 },
-      );
-    }
+  handler: httpAction(async () => {
+    return Response.json(
+      { success: false, message: "This integration is not available." },
+      { status: 503 },
+    );
   }),
 });
 

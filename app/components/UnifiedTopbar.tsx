@@ -31,6 +31,7 @@ const platformPageLabels: Record<string, string> = {
   "/platform/leaderboard": "Leaderboard",
   "/platform/trash": "Trash",
   "/platform/audit-log": "Audit Log",
+  "/platform/access": "Access Management",
 };
 
 function getBreadcrumbData(pathname: string): { section: string; page: string; isPlatform: boolean } {

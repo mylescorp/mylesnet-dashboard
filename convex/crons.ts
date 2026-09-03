@@ -1,5 +1,5 @@
 import { cronJobs } from "convex/server";
-import { internal, api } from "./_generated/api";
+import { internal } from "./_generated/api";
 
 const crons = cronJobs();
 
@@ -15,7 +15,7 @@ crons.daily(
 crons.daily(
   "sweep expired vouchers",
   { hourUTC: 2, minuteUTC: 0 },
-  api.vouchers.sweepExpiredVouchers,
+  internal.vouchers.sweepExpiredVouchers,
 );
 
 // Weekly Centipid CSV reconciliation — matches customerPhoneAtRedemption
@@ -24,7 +24,7 @@ crons.daily(
 crons.weekly(
   "Centipid CSV reconciliation",
   { dayOfWeek: "sunday", hourUTC: 2, minuteUTC: 30 },
-  api.operations.centipidCsvReconcile,
+  internal.operations.centipidCsvReconcile,
   {},
 );
 
@@ -32,7 +32,7 @@ crons.weekly(
 crons.daily(
   "leaderboard snapshot",
   { hourUTC: 3, minuteUTC: 0 },
-  api.operations.computeLeaderboardDaily,
+  internal.operations.computeLeaderboardDaily,
 );
 
 // Monthly operating cost reminder — flags any active market missing a cost
@@ -40,7 +40,7 @@ crons.daily(
 crons.monthly(
   "operating cost reminder",
   { day: 1, hourUTC: 6, minuteUTC: 0 },
-  api.operations.runMonthlyCostReminder,
+  internal.operations.runMonthlyCostReminder,
 );
 
 // Support ticket SLA check — flags tickets stuck in "open" beyond the SLA
@@ -48,7 +48,7 @@ crons.monthly(
 crons.daily(
   "support ticket SLA check",
   { hourUTC: 4, minuteUTC: 0 },
-  api.operations.checkTicketSla,
+  internal.operations.checkTicketSla,
 );
 
 // PII auto-purge — clears customerPhoneAtRedemption after the defined
@@ -56,7 +56,7 @@ crons.daily(
 crons.daily(
   "PII retention purge",
   { hourUTC: 5, minuteUTC: 0 },
-  api.operations.purgeExpiredPii,
+  internal.operations.purgeExpiredPii,
 );
 
 export default crons;

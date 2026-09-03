@@ -23,6 +23,13 @@ export const claimPlatformOwner = action({
   handler: async (ctx): Promise<{ claimedBy: Id<"users"> }> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthenticated");
+    const allowlistedEmails = (process.env.MYLESNET_BOOTSTRAP_OWNER_EMAILS ?? "")
+      .split(",")
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean);
+    if (!identity.email || !allowlistedEmails.includes(identity.email.toLowerCase())) {
+      throw new Error("Unauthorized bootstrap request");
+    }
 
     // Pre-check so we never promote a second user to WorkOS owner before the
     // atomically-guarded Convex write rejects it.

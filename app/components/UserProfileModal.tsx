@@ -15,6 +15,7 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
   const [name, setName] = useState(user?.name || "");
   const [phone, setPhone] = useState(user?.phone || "");
   const [image, setImage] = useState(user?.image || "");
+  const [jobTitle, setJobTitle] = useState(user?.jobTitle || "");
   const [saving, setSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -29,8 +30,16 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
     setStatusMessage(null);
 
     try {
-      await updateProfile({ name, phone, image });
-      setStatusMessage({ type: "success", text: "Profile saved directly to backend DB!" });
+      if (!name.trim() || !phone.trim()) {
+        setStatusMessage({ type: "error", text: "Enter your full name and phone number before saving." });
+        return;
+      }
+      if (image && !URL.canParse(image)) {
+        setStatusMessage({ type: "error", text: "Enter a valid profile image URL or leave the field blank." });
+        return;
+      }
+      await updateProfile({ name, phone, image, jobTitle });
+      setStatusMessage({ type: "success", text: "Your profile has been saved." });
       setTimeout(() => {
         setStatusMessage(null);
         onClose();
@@ -38,7 +47,7 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
     } catch (err) {
       setStatusMessage({
         type: "error",
-        text: err instanceof Error ? err.message : "Failed to update profile",
+        text: "We could not save your profile. Please try again.",
       });
     } finally {
       setSaving(false);
@@ -126,6 +135,20 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Enter your full name"
+                className="pf-input"
+              />
+            </div>
+
+            <div className="pf-field">
+              <label htmlFor="user-title-input" className="pf-label">
+                Job Title
+              </label>
+              <input
+                id="user-title-input"
+                type="text"
+                value={jobTitle}
+                onChange={(e) => setJobTitle(e.target.value)}
+                maxLength={100}
                 className="pf-input"
               />
             </div>

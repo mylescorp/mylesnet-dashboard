@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action, mutation, query } from "./_generated/server";
-import { requireAuthenticatedUser } from "./lib/auth";
+import { requireNetworkOperator } from "./lib/auth";
 
 type ConfigurationBaseline = {
   snapshotJson: string;
@@ -11,7 +11,7 @@ type ConfigurationBaseline = {
 export const captureBaseline = action({
   args: { routerId: v.id("routers") },
   handler: async (ctx, args): Promise<{ success: boolean; message: string }> => {
-    await requireAuthenticatedUser(ctx);
+    await ctx.runQuery(internal.platformUsers.assertNetworkOperator, {});
     const snapshot = await ctx.runQuery(
       internal.routers.getLatestRouterConfigurationSnapshot,
       args,
@@ -33,7 +33,7 @@ export const captureBaseline = action({
 export const getBaselines = query({
   args: { routerId: v.id("routers") },
   handler: async (ctx, args) => {
-    await requireAuthenticatedUser(ctx);
+    await ctx.runQuery(internal.platformUsers.assertNetworkOperator, {});
     return ctx.db
       .query("configWatchBaselines")
       .withIndex("by_router", (q) => q.eq("routerId", args.routerId))
@@ -45,7 +45,7 @@ export const getBaselines = query({
 export const getLatestBaseline = query({
   args: { routerId: v.id("routers") },
   handler: async (ctx, args) => {
-    await requireAuthenticatedUser(ctx);
+    await ctx.runQuery(internal.platformUsers.assertNetworkOperator, {});
     return ctx.db
       .query("configWatchBaselines")
       .withIndex("by_router", (q) => q.eq("routerId", args.routerId))
@@ -66,7 +66,7 @@ export const checkConfigDrift = action({
     differences: string[];
     baselineCapturedAt: number | null;
   }> => {
-    await requireAuthenticatedUser(ctx);
+    await ctx.runQuery(internal.platformUsers.assertNetworkOperator, {});
     const baseline: ConfigurationBaseline = await ctx.runQuery(
       internal.routers.getLatestConfigurationBaseline,
       args,
@@ -111,7 +111,7 @@ export const checkConfigDrift = action({
 export const deleteBaseline = mutation({
   args: { baselineId: v.id("configWatchBaselines") },
   handler: async (ctx, args) => {
-    await requireAuthenticatedUser(ctx);
+    await requireNetworkOperator(ctx);
     await ctx.db.delete(args.baselineId);
   },
 });

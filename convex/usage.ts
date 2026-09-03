@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
-import { requireAuthenticatedUser } from "./lib/auth";
+import { requireNetworkOperator } from "./lib/auth";
 
 // Get health samples for trend analysis
 export const getHealthTrends = query({
@@ -9,7 +9,7 @@ export const getHealthTrends = query({
     hours: v.number(), // Number of hours to look back
   },
   handler: async (ctx, args) => {
-    await requireAuthenticatedUser(ctx);
+    await requireNetworkOperator(ctx);
     const startTime = Date.now() - args.hours * 60 * 60 * 1000;
 
     const samples = await ctx.db
@@ -52,7 +52,7 @@ export const getHealthTrends = query({
 export const getLatestHealth = query({
   args: { routerId: v.id("routers") },
   handler: async (ctx, args) => {
-    await requireAuthenticatedUser(ctx);
+    await requireNetworkOperator(ctx);
     const samples = await ctx.db
       .query("healthSamples")
       .filter((q) => q.eq(q.field("routerId"), args.routerId))
@@ -67,7 +67,7 @@ export const getLatestHealth = query({
 export const getAccessPointHealth = query({
   args: { routerId: v.id("routers") },
   handler: async (ctx, args) => {
-    await requireAuthenticatedUser(ctx);
+    await requireNetworkOperator(ctx);
     const accessPoints = await ctx.db
       .query("accessPoints")
       .withIndex("by_router", (q) => q.eq("routerId", args.routerId))
@@ -95,7 +95,7 @@ export const getUsageReport = query({
     period: v.string(), // "day", "week", "month"
   },
   handler: async (ctx, args) => {
-    await requireAuthenticatedUser(ctx);
+    await requireNetworkOperator(ctx);
     const now = Date.now();
     let startTime: number;
 

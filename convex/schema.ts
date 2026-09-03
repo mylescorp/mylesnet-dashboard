@@ -6,6 +6,9 @@ export default defineSchema({
   ...authTables,
 
   users: defineTable({
+    // Immutable identity from WorkOS. Optional while legacy Auth records are
+    // migrated, then used as the sole authorization lookup key.
+    workosUserId: v.optional(v.string()),
     name: v.optional(v.string()),
     image: v.optional(v.string()),
     email: v.optional(v.string()),
@@ -13,6 +16,10 @@ export default defineSchema({
     phone: v.optional(v.string()),
     phoneVerificationTime: v.optional(v.number()),
     isAnonymous: v.optional(v.boolean()),
+    jobTitle: v.optional(v.string()),
+    profileCompletedAt: v.optional(v.number()),
+    isActive: v.optional(v.boolean()),
+    deactivatedAt: v.optional(v.number()),
     platformRole: v.optional(
       v.union(
         v.literal("platform_owner"),
@@ -23,8 +30,21 @@ export default defineSchema({
     ),
   })
     .index("email", ["email"])
+    .index("by_workosUserId", ["workosUserId"])
     .index("phone", ["phone"])
     .index("by_platformRole", ["platformRole"]),
+
+  userMarketMemberships: defineTable({
+    userId: v.id("users"),
+    marketId: v.id("markets"),
+    role: v.union(v.literal("manager"), v.literal("operator"), v.literal("viewer")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    revokedAt: v.optional(v.number()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_and_market", ["userId", "marketId"])
+    .index("by_market", ["marketId"]),
 
   // ==========================================================================
   // NETWORK MONITORING

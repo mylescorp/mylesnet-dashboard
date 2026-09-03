@@ -83,6 +83,7 @@ const platformSections = [
   {
     title: "Support & Audit",
     items: [
+      { href: "/platform/access", label: "Access management", icon: ShieldPlus },
       { href: "/platform/alerts", label: "Alerts", icon: AlertTriangle },
       { href: "/platform/tickets", label: "Tickets", icon: ClipboardList },
       { href: "/platform/comms", label: "Comms", icon: Megaphone },

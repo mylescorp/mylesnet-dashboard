@@ -1,11 +1,11 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { requireAuthenticatedUser } from "./lib/auth";
+import { requireNetworkOperator } from "./lib/auth";
 
 // Get open incidents (unresolved)
 export const getOpenIncidents = query({
   handler: async (ctx) => {
-    await requireAuthenticatedUser(ctx);
+    await requireNetworkOperator(ctx);
     const all = await ctx.db.query("incidents").collect();
     return all.filter((i) => !i.resolvedAt);
   },
@@ -15,7 +15,7 @@ export const getOpenIncidents = query({
 export const listIncidents = query({
   args: { routerId: v.optional(v.id("routers")) },
   handler: async (ctx, args) => {
-    await requireAuthenticatedUser(ctx);
+    await requireNetworkOperator(ctx);
     const all = await ctx.db.query("incidents").order("desc").collect();
     
     if (args.routerId) {
@@ -30,7 +30,7 @@ export const listIncidents = query({
 export const acknowledgeIncident = mutation({
   args: { incidentId: v.id("incidents") },
   handler: async (ctx, args) => {
-    const userId = await requireAuthenticatedUser(ctx);
+    const userId = (await requireNetworkOperator(ctx))._id;
     await ctx.db.patch(args.incidentId, {
       acknowledgedBy: userId,
     });
@@ -41,7 +41,7 @@ export const acknowledgeIncident = mutation({
 export const resolveIncident = mutation({
   args: { incidentId: v.id("incidents") },
   handler: async (ctx, args) => {
-    await requireAuthenticatedUser(ctx);
+    await requireNetworkOperator(ctx);
     await ctx.db.patch(args.incidentId, {
       resolvedAt: Date.now(),
     });
@@ -57,7 +57,7 @@ export const createIncident = mutation({
     severity: v.string(),
   },
   handler: async (ctx, args) => {
-    await requireAuthenticatedUser(ctx);
+    await requireNetworkOperator(ctx);
     await ctx.db.insert("incidents", {
       routerId: args.routerId,
       accessPointId: args.accessPointId,

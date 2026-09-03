@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { query, mutation } from "./_generated/server";
+import { internalMutation, query, mutation } from "./_generated/server";
 import { requireAuthenticatedUser } from "./lib/auth";
 import type { Id } from "./_generated/dataModel";
 
@@ -160,7 +160,7 @@ export const getAccessPointUsers = query({
  * that calls this mutation with the parsed export. This mutation accepts a
  * batch of parsed rows and writes them.
  */
-export const centipidCsvReconcile = mutation({
+export const centipidCsvReconcile = internalMutation({
   args: {
     csvRows: v.optional(
       v.array(
@@ -237,7 +237,7 @@ export const centipidCsvReconcile = mutation({
   },
 });
 
-export const computeLeaderboardDaily = mutation({
+export const computeLeaderboardDaily = internalMutation({
   args: {},
   handler: async (ctx) => {
     const snapshotDate = new Date().toISOString().slice(0, 10);
@@ -336,7 +336,7 @@ export const computeLeaderboardDaily = mutation({
  * active market that has no cost entry for the current month. The dashboard
  * surfaces these as action items; this job ensures the data is recomputed.
  */
-export const runMonthlyCostReminder = mutation({
+export const runMonthlyCostReminder = internalMutation({
   args: {},
   handler: async (ctx) => {
     const now = new Date();
@@ -374,7 +374,7 @@ export const runMonthlyCostReminder = mutation({
  * beyond the SLA window (48 hours) or "in_progress" beyond 5 business days.
  * Returns counts; the dashboard/tickets page can surface these.
  */
-export const checkTicketSla = mutation({
+export const checkTicketSla = internalMutation({
   args: {},
   handler: async (ctx) => {
     const now = Date.now();
@@ -410,7 +410,7 @@ export const checkTicketSla = mutation({
  * purpose-limitation + retention-limits principle. Financial/audit records
  * are preserved.
  */
-export const purgeExpiredPii = mutation({
+export const purgeExpiredPii = internalMutation({
   args: {},
   handler: async (ctx) => {
     const now = Date.now();

@@ -23,12 +23,8 @@ export function OrgGuard() {
 
     ensureOrg()
       .then((result) => {
-        if (result.status === "added") {
-          const RELOAD_KEY = "org_guard_reloaded";
-          if (!sessionStorage.getItem(RELOAD_KEY)) {
-            sessionStorage.setItem(RELOAD_KEY, "true");
-            window.location.reload();
-          }
+        if (result.status === "not_member") {
+          console.error("The signed-in account is not assigned to this workspace.");
         }
       })
       .catch((err) => {
@@ -38,4 +34,3 @@ export function OrgGuard() {
 
   return null;
 }
-
