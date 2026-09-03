@@ -56,7 +56,10 @@ export const updateUserProfile = mutation({
 export const listUsers = query({
   args: {},
   handler: async (ctx) => {
-    await requirePlatformOwner(ctx);
+    const actor = await resolveUserByIdentity(ctx);
+    if (actor?.platformRole !== "platform_owner" || actor.isActive === false || actor.deactivatedAt !== undefined) {
+      return [];
+    }
     const users = await ctx.db.query("users").take(500);
     return Promise.all(users.map(async (user) => ({
       _id: user._id,
