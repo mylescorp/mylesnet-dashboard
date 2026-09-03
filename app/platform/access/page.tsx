@@ -40,9 +40,13 @@ function AccessRow({ user, markets, onSaved }: { user: UserRow; markets: Market[
 }
 
 export default function AccessManagementPage() {
-  const users = useQuery(api.platformUsers.listUsers, {});
-  const markets = useQuery(api.markets.listMarkets, {});
+  const currentUser = useQuery(api.platform.getCurrentPlatformUser, {});
+  const isOwner = currentUser?.platformRole === "platform_owner";
+  const users = useQuery(api.platformUsers.listUsers, isOwner ? {} : "skip");
+  const markets = useQuery(api.markets.listMarkets, isOwner ? {} : "skip");
   const [message, setMessage] = useState<string | null>(null);
+  if (currentUser === undefined) return <div className="platform-page"><p className="page-subtitle">Loading access controls…</p></div>;
+  if (!isOwner) return <div className="platform-page"><div className="pf-panel"><h1 className="page-title">Access restricted</h1><p className="page-subtitle">Only the platform owner can manage user roles and market access.</p></div></div>;
   if (users === undefined || markets === undefined) return <div className="platform-page"><p className="page-subtitle">Loading access controls…</p></div>;
   return <div className="platform-page">
     <div className="platform-page-header"><div><p className="eyebrow">System administration</p><h1 className="page-title">Access management</h1><p className="page-subtitle">Assign platform roles, account status, and market scopes from one authoritative control surface.</p></div></div>
