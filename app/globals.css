@@ -367,6 +367,17 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .pf-badge a:hover { text-decoration: underline; }
 .pf-stack { display: grid; gap: 18px; }
 
+/* Access management */
+.access-management-page { max-width: 1380px; }
+.access-summary { display: inline-grid; grid-template-columns: auto auto; align-items: center; gap: 2px 8px; min-width: 154px; border: 1px solid color-mix(in srgb, var(--primary) 32%, var(--line)); border-radius: 12px; background: var(--surface-strong); padding: 12px 14px; color: var(--primary); }
+.access-summary strong { font-size: 18px; }.access-summary span { grid-column: 2; color: var(--muted); font-size: 11px; font-weight: 700; }
+.access-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; padding: 14px 16px; }
+.access-toolbar-copy { display: flex; align-items: center; gap: 10px; color: var(--primary); }.access-toolbar-copy div { display: grid; gap: 2px; color: var(--text); }.access-toolbar-copy strong { font-size: 13px; }.access-toolbar-copy span { color: var(--muted); font-size: 12px; }
+.access-search { display: flex; align-items: center; gap: 8px; min-width: 270px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-muted); padding: 0 10px; color: var(--muted); }.access-search input { width: 100%; min-height: 38px; border: 0; outline: 0; background: transparent; color: var(--text); font-size: 13px; }
+.access-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }.access-card { display: flex; flex-direction: column; gap: 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); padding: 18px; box-shadow: var(--shadow-sm); }.access-card:hover { border-color: var(--line-strong); box-shadow: var(--shadow-md); }
+.access-card-header { display: flex; align-items: center; gap: 11px; }.access-avatar { display: grid; height: 42px; width: 42px; flex: none; place-items: center; overflow: hidden; border-radius: 12px; background: var(--surface-strong); color: var(--primary); font-weight: 800; }.access-avatar img { height: 100%; width: 100%; object-fit: cover; }.access-identity { min-width: 0; flex: 1; }.access-identity h2 { margin: 0; overflow: hidden; color: var(--text); font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }.access-identity p { margin: 3px 0 0; overflow: hidden; color: var(--muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.access-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }.access-fields > :last-child { grid-column: 1 / -1; }.access-card-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); padding-top: 14px; }.access-status-toggle { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 700; }.access-status-toggle input { accent-color: var(--primary); }.access-empty { display: grid; justify-items: center; gap: 6px; padding: 46px 20px; text-align: center; color: var(--muted); }.access-empty h2, .access-empty p { margin: 0; }.access-empty h2 { color: var(--text); font-size: 17px; }.access-empty p { font-size: 13px; }
+
 /* Form field */
 .pf-field { display: grid; gap: 6px; margin: 0; }
 .pf-label { color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
@@ -405,6 +416,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .pf-page-toolbar { align-items: stretch; flex-direction: column; }
   .pf-tools { flex-direction: column; align-items: stretch; }
   .pf-tools .pf-field { min-width: 0; }
+  .access-toolbar { align-items: stretch; flex-direction: column; }.access-search { min-width: 0; }
 }
 
 @media (max-width: 540px) {
@@ -416,6 +428,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .page-action-group > button { flex: 1; }
   .comparison-row { grid-template-columns: 1.2fr .8fr .7fr; }
   .comparison-row > :nth-child(4), .comparison-row > :nth-child(5) { display: none; }
+  .access-summary { width: 100%; }.access-fields { grid-template-columns: 1fr; }.access-fields > :last-child { grid-column: auto; }.access-card-footer { align-items: stretch; flex-direction: column; }.access-card-footer .primary-button { width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {

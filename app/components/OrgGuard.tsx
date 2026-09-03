@@ -6,11 +6,9 @@ import { api } from "@/convex/_generated/api";
 import { useEffect, useRef } from "react";
 
 /**
- * Runs once after login to ensure the WorkOS user is a member of the
- * MylesNet Platform organization. After adding the membership, it triggers
- * a single page reload so the JWT picks up organization_id and role claims.
- *
- * Safe and protected against infinite page reload loops.
+ * Runs once after login to synchronize an already-authorized identity with
+ * the local profile record. Workspace invitations remain owner-controlled;
+ * an account without an invitation is an expected state, not a client error.
  */
 export function OrgGuard() {
   const { isAuthenticated, isLoading } = useConvexAuth();
@@ -22,13 +20,9 @@ export function OrgGuard() {
     ran.current = true;
 
     ensureOrg()
-      .then((result) => {
-        if (result.status === "not_member") {
-          console.error("The signed-in account is not assigned to this workspace.");
-        }
-      })
-      .catch((err) => {
-        console.error("Failed to ensure org membership:", err);
+      .catch(() => {
+        // Authentication and authorization are enforced by protected server
+        // functions. Avoid exposing operational details in the browser.
       });
   }, [isAuthenticated, isLoading, ensureOrg]);
 
