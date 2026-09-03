@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import { Field, Select, TextInput, TextArea, StatusPill, EmptyState, Loading, ErrorNote, formatDateTime } from "../components/ui";
 
 const statusTone: Record<string, "neutral" | "warning" | "success" | "danger"> = {
@@ -57,8 +58,8 @@ export default function TicketsPage() {
         subject,
         description,
         priority,
-        marketId: marketId ? (marketId as any) : undefined,
-        agentId: agentId ? (agentId as any) : undefined,
+        marketId: marketId ? (marketId as Id<"markets">) : undefined,
+        agentId: agentId ? (agentId as Id<"agents">) : undefined,
       });
       setMessage("Ticket created.");
       setShowForm(false);
@@ -70,7 +71,7 @@ export default function TicketsPage() {
 
   const handleStatusChange = async (ticketId: string, newStatus: string) => {
     try {
-      await update({ ticketId: ticketId as any, ticketStatus: newStatus as any });
+      await update({ ticketId: ticketId as Id<"supportTickets">, ticketStatus: newStatus as "open" | "in_progress" | "waiting_on_customer" | "resolved" | "closed" });
       setMessage(`Ticket updated to ${newStatus}.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update ticket");

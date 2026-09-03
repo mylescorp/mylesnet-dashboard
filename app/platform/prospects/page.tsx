@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import { Field, Select, TextInput, TextArea, StatusPill, EmptyState, Loading, ErrorNote, formatDate } from "../components/ui";
 
 const pipelineTone: Record<string, "neutral" | "warning" | "danger" | "success"> = {
@@ -11,6 +12,7 @@ const pipelineTone: Record<string, "neutral" | "warning" | "danger" | "success">
   provisioning: "danger",
   live: "success",
 };
+type PipelineStatus = "prospect" | "negotiating" | "provisioning" | "live";
 
 export default function ProspectsPage() {
   const prospects = useQuery(api.marketProspects.listMarketProspects, {});
@@ -55,10 +57,10 @@ export default function ProspectsPage() {
     const next = current === "prospect" ? "negotiating" : current === "negotiating" ? "provisioning" : "live";
     try {
       if (next === "live") {
-        const result = await convert({ prospectId: prospectId as any });
+        const result = await convert({ prospectId: prospectId as Id<"marketProspects"> });
         setMessage(`Converted to market ${String(result.marketId).slice(-6)}.`);
       } else {
-        await update({ prospectId: prospectId as any, pipelineStatus: next as any });
+        await update({ prospectId: prospectId as Id<"marketProspects">, pipelineStatus: next as PipelineStatus });
         setMessage(`Advanced to ${next}.`);
       }
     } catch (err) {

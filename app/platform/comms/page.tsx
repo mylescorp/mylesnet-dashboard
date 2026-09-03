@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { Field, Select, TextInput, TextArea, StatusPill, EmptyState, Loading, ErrorNote, formatDateTime } from "../components/ui";
+import type { Id } from "@/convex/_generated/dataModel";
+import { Field, Select, TextArea, StatusPill, EmptyState, Loading, ErrorNote, formatDateTime } from "../components/ui";
 
 export default function CommsPage() {
   const broadcasts = useQuery(api.broadcasts.listBroadcasts, {});
@@ -21,7 +22,7 @@ export default function CommsPage() {
 
   const deliveryLogs = useQuery(
     api.broadcasts.getBroadcastDeliveryLogs,
-    expandedBroadcast ? { broadcastId: expandedBroadcast as any } : "skip"
+    expandedBroadcast ? { broadcastId: expandedBroadcast as Id<"broadcasts"> } : "skip"
   );
 
   if (broadcasts === undefined || markets === undefined || agents === undefined) return <Loading />;
@@ -45,8 +46,8 @@ export default function CommsPage() {
       const result = await createBroadcast({
         message: messageText,
         targetScope: scope,
-        targetMarketId: targetMarket ? (targetMarket as any) : undefined,
-        targetAgentIds: scope === "specific_agents" ? (targetAgents as any) : undefined,
+        targetMarketId: targetMarket ? (targetMarket as Id<"markets">) : undefined,
+        targetAgentIds: scope === "specific_agents" ? targetAgents.map((id) => id as Id<"agents">) : undefined,
       });
       setMessage(`Broadcast queued for ${result.recipientCount} recipient(s).`);
       setMessageText("");

@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { Plus, RefreshCw } from "lucide-react";
+import type { Id } from "@/convex/_generated/dataModel";
+import { Plus } from "lucide-react";
 import { Field, Select, TextInput, StatusPill, EmptyState, Loading, ErrorNote } from "../components/ui";
 
 const LIFECYCLE = ["planned", "active", "paused", "decommissioned"] as const;
@@ -13,21 +14,12 @@ type Lifecycle = (typeof LIFECYCLE)[number];
 const lifecycleTone = (s: Lifecycle) =>
   s === "active" ? "success" : s === "paused" ? "warning" : s === "decommissioned" ? "danger" : "neutral";
 
-const PLAN_LABEL: Record<string, string> = {
-  half_day: "Half-day",
-  day: "Day",
-  week: "Week",
-  month: "Month",
-  specialty: "Specialty",
-};
-
 export default function MarketsPage() {
   const markets = useQuery(api.markets.listMarkets, {});
   const currentYearMonth = new Date().toISOString().slice(0, 7);
   const missing = useQuery(api.markets.listMarketsMissingCostEntry, { yearMonth: currentYearMonth });
   const createMarket = useMutation(api.markets.createMarket);
   const updateStatus = useMutation(api.markets.updateMarketLifecycleStatus);
-  const [refreshTick, setRefreshTick] = useState(0);
 
   const [name, setName] = useState("");
   const [country, setCountry] = useState("");
@@ -57,7 +49,7 @@ export default function MarketsPage() {
   const handleStatus = async (marketId: string, lifecycleStatus: Lifecycle) => {
     setError(null);
     try {
-      await updateStatus({ marketId: marketId as any, lifecycleStatus });
+      await updateStatus({ marketId: marketId as Id<"markets">, lifecycleStatus });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update status");
     }
@@ -72,11 +64,6 @@ export default function MarketsPage() {
           <p className="eyebrow">Platform</p>
           <h1 className="page-title">Markets</h1>
           <p className="page-subtitle">Service areas, lifecycle status and monthly operating costs.</p>
-        </div>
-        <div className="page-action-group">
-          <button type="button" className="secondary-button" onClick={() => setRefreshTick((t) => t + 1)}>
-            <RefreshCw aria-hidden="true" size={15} /> Refresh
-          </button>
         </div>
       </div>
 

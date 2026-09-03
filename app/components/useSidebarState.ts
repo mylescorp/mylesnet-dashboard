@@ -13,15 +13,14 @@ export function useSidebarState() {
   const pathname = usePathname();
 
   useEffect(() => {
-    setMounted(true);
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored === "true") {
-        setCollapsed(true);
+    const initialize = window.setTimeout(() => {
+      setMounted(true);
+      try {
+        setCollapsed(localStorage.getItem(STORAGE_KEY) === "true");
+      } catch {
+        // Storage can be unavailable in restricted browser contexts.
       }
-    } catch {
-      // Ignore localStorage read errors
-    }
+    }, 0);
 
     const handleCustomEvent = (e: Event) => {
       const customEvent = e as CustomEvent<{ collapsed: boolean }>;
@@ -42,6 +41,7 @@ export function useSidebarState() {
     window.addEventListener("storage", handleStorage);
 
     return () => {
+      window.clearTimeout(initialize);
       window.removeEventListener(TOGGLE_EVENT, handleCustomEvent);
       window.removeEventListener("storage", handleStorage);
     };
@@ -49,7 +49,8 @@ export function useSidebarState() {
 
   // Auto-close mobile drawer on route change
   useEffect(() => {
-    setMobileOpen(false);
+    const closeDrawer = window.setTimeout(() => setMobileOpen(false), 0);
+    return () => window.clearTimeout(closeDrawer);
   }, [pathname]);
 
   const toggleCollapsed = () => {

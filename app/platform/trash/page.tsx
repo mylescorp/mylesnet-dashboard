@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import { RotateCcw } from "lucide-react";
 import { StatusPill, EmptyState, Loading, ErrorNote, formatDateTime } from "../components/ui";
 
@@ -12,7 +13,7 @@ export default function TrashPage() {
   const [type, setType] = useState<EntityType | "all">("all");
   const entities = useQuery(
     api.trash.listDeletedEntities,
-    type === "all" ? {} : { entityType: type as any }
+    type === "all" ? {} : { entityType: type }
   );
   const restoreMarket = useMutation(api.markets.restoreMarket);
   const restoreDevice = useMutation(api.devices.restoreDevice);
@@ -84,17 +85,17 @@ export default function TrashPage() {
                     <td className="pf-hide-sm">{formatDateTime(e.deletedAt)}</td>
                     <td className="pf-actions">
                       {e.entityType === "market" && (
-                        <button type="button" className="secondary-button" onClick={() => run(() => restoreMarket({ marketId: e.id as any }), "Market restored.")}>
+                        <button type="button" className="secondary-button" onClick={() => run(() => restoreMarket({ marketId: e.id as Id<"markets"> }), "Market restored.")}>
                           <RotateCcw aria-hidden="true" size={14} /> Restore
                         </button>
                       )}
                       {e.entityType === "device" && (
-                        <button type="button" className="secondary-button" onClick={() => run(() => restoreDevice({ deviceId: e.id as any }), "Device restored.")}>
+                        <button type="button" className="secondary-button" onClick={() => run(() => restoreDevice({ deviceId: e.id as Id<"devices"> }), "Device restored.")}>
                           <RotateCcw aria-hidden="true" size={14} /> Restore
                         </button>
                       )}
                       {e.entityType === "agent" && (
-                        <button type="button" className="secondary-button" onClick={() => run(() => restoreAgent({ agentId: e.id as any }), "Agent restored.")}>
+                        <button type="button" className="secondary-button" onClick={() => run(() => restoreAgent({ agentId: e.id as Id<"agents"> }), "Agent restored.")}>
                           <RotateCcw aria-hidden="true" size={14} /> Restore
                         </button>
                       )}

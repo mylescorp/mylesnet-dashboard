@@ -14,6 +14,8 @@ const STATUS_LABEL: Record<string, string> = {
   paid: "Paid", disputed: "Disputed", all: "All",
 };
 const METHODS = ["mpesa", "airtel_money", "bank_transfer"] as const;
+type PayoutStatus = Exclude<(typeof STATUSES)[number], "all">;
+type PayoutMethod = (typeof METHODS)[number];
 
 const tone: Record<string, "success" | "warning" | "danger" | "neutral"> = {
   accrued: "neutral", held: "neutral", requested: "warning",
@@ -24,7 +26,7 @@ export default function CommissionsPage() {
   const [status, setStatus] = useState<(typeof STATUSES)[number]>("requested");
   const commissions = useQuery(
     api.commissions.listCommissionsByStatus,
-    status === "all" ? {} : { payoutStatus: status as any }
+    status === "all" ? {} : { payoutStatus: status as PayoutStatus }
   );
   const agents = useQuery(api.agents.listAgents, {});
   const markets = useQuery(api.markets.listMarkets, {});
@@ -132,7 +134,7 @@ export default function CommissionsPage() {
                             onClick={() => {
                               const method = payoutMethod[c._id];
                               if (!method) { setError("Pick a payout method."); return; }
-                              run(() => requestPayout({ commissionId: c._id, payoutMethod: method as any }), "Payout requested.");
+                              run(() => requestPayout({ commissionId: c._id, payoutMethod: method as PayoutMethod }), "Payout requested.");
                             }}
                           >
                             Request payout

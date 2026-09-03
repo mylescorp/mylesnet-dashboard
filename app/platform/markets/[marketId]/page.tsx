@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import { Trash2 } from "lucide-react";
 import { Field, Select, TextInput, StatusPill, EmptyState, Loading, ErrorNote, formatMoney } from "../../components/ui";
 
@@ -14,9 +15,9 @@ type Lifecycle = (typeof LIFECYCLE)[number];
 export default function MarketDetailPage() {
   const params = useParams<{ marketId: string }>();
   const marketId = params.marketId;
-  const market = useQuery(api.markets.getMarket, { marketId: marketId as any });
-  const costs = useQuery(api.markets.listOperatingCosts, { marketId: marketId as any });
-  const staffing = useQuery(api.markets.getMarketStaffingStatus, { marketId: marketId as any });
+  const market = useQuery(api.markets.getMarket, { marketId: marketId as Id<"markets"> });
+  const costs = useQuery(api.markets.listOperatingCosts, { marketId: marketId as Id<"markets"> });
+  const staffing = useQuery(api.markets.getMarketStaffingStatus, { marketId: marketId as Id<"markets"> });
   const reportCost = useMutation(api.markets.reportOperatingCost);
   const updateStatus = useMutation(api.markets.updateMarketLifecycleStatus);
   const softDelete = useMutation(api.markets.softDeleteMarket);

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Plus, Trash2 } from "lucide-react";
+import type { Id } from "@/convex/_generated/dataModel";
 import { Field, Select, TextInput, StatusPill, EmptyState, Loading, ErrorNote } from "../components/ui";
 
 const KINDS = ["mikrotik_gateway", "cpe220", "cpe710", "indoor_ap", "other"] as const;
@@ -21,7 +22,7 @@ const lifecycleTone = (s: string) =>
 
 export default function DevicesPage() {
   const [marketId, setMarketId] = useState<string>("");
-  const devices = useQuery(api.devices.listDevices, marketId ? { marketId: marketId as any } : {});
+  const devices = useQuery(api.devices.listDevices, marketId ? { marketId: marketId as Id<"markets"> } : {});
   const markets = useQuery(api.markets.listMarkets, {});
   const createDevice = useMutation(api.devices.createDevice);
   const setMaintenance = useMutation(api.devices.setDeviceMaintenance);
@@ -49,8 +50,8 @@ export default function DevicesPage() {
     }
     try {
       await createDevice({
-        marketId: createMarketId as any,
-        parentDeviceId: parentDeviceId ? (parentDeviceId as any) : undefined,
+        marketId: createMarketId as Id<"markets">,
+        parentDeviceId: parentDeviceId ? (parentDeviceId as Id<"devices">) : undefined,
         name,
         deviceKind,
         serialOrMac: serialOrMac || undefined,
@@ -72,7 +73,7 @@ export default function DevicesPage() {
       return;
     }
     try {
-      await softDelete({ deviceId: deviceId as any, deleteReason: reason });
+      await softDelete({ deviceId: deviceId as Id<"devices">, deleteReason: reason });
       setMessage(`Device "${deviceName}" soft-deleted.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not delete device");
@@ -81,7 +82,7 @@ export default function DevicesPage() {
 
   if (devices === undefined || markets === undefined) return <Loading />;
 
-  const visible = marketId ? devices.filter((d) => d.marketId === (marketId as any)) : devices;
+  const visible = marketId ? devices.filter((d) => d.marketId === (marketId as Id<"markets">)) : devices;
 
   return (
     <div className="workspace-page">

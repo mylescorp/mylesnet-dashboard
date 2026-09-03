@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Plus } from "lucide-react";
+import type { Id } from "@/convex/_generated/dataModel";
 import { Field, Select, TextInput, StatusPill, EmptyState, Loading, ErrorNote } from "../components/ui";
 
 const lifecycleTone = (s: string) =>
@@ -51,7 +52,7 @@ export default function AgentsPage() {
       return;
     }
     try {
-      await suspendAgent({ agentId: agentId as any, reason });
+      await suspendAgent({ agentId: agentId as Id<"agents">, reason });
       setMessage(`Agent "${agentName}" suspended.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not suspend agent");
@@ -66,7 +67,7 @@ export default function AgentsPage() {
       return;
     }
     try {
-      await assignAgent({ agentId: assignAgentId as any, marketId: assignMarketId as any, compensationType: assignCompType, commissionRate: Number(assignRate) });
+      await assignAgent({ agentId: assignAgentId as Id<"agents">, marketId: assignMarketId as Id<"markets">, compensationType: assignCompType, commissionRate: Number(assignRate) });
       setMessage("Agent assigned to market.");
       setAssignAgentId("");
       setAssignMarketId("");

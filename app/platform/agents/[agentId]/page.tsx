@@ -5,33 +5,16 @@ import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import { Field, Select, TextInput, StatusPill, EmptyState, Loading, ErrorNote, formatMoney, formatDate } from "../../components/ui";
-
-function statusTone(s: string) {
-  switch (s) {
-    case "accrued":
-    case "held":
-      return "neutral" as const;
-    case "requested":
-    case "approved":
-    case "processing":
-      return "warning" as const;
-    case "paid":
-      return "success" as const;
-    case "disputed":
-      return "danger" as const;
-    default:
-      return "neutral" as const;
-  }
-}
 
 export default function AgentDetailPage() {
   const params = useParams<{ agentId: string }>();
   const router = useRouter();
   const agentId = params.agentId;
-  const agent = useQuery(api.agents.getAgent, { agentId: agentId as any });
-  const history = useQuery(api.agents.getAgentAssignmentHistory, { agentId: agentId as any });
-  const commissions = useQuery(api.commissions.listCommissionsForAgent, { agentId: agentId as any });
+  const agent = useQuery(api.agents.getAgent, { agentId: agentId as Id<"agents"> });
+  const history = useQuery(api.agents.getAgentAssignmentHistory, { agentId: agentId as Id<"agents"> });
+  const commissions = useQuery(api.commissions.listCommissionsForAgent, { agentId: agentId as Id<"agents"> });
   const markets = useQuery(api.markets.listMarkets, {});
 
   const assignAgent = useMutation(api.agents.assignAgentToMarket);
@@ -40,7 +23,7 @@ export default function AgentDetailPage() {
   const finalize = useMutation(api.agents.offboardAgentFinalize);
   const unsold = useQuery(
     api.agents.getAgentUnsoldVouchersForOffboarding,
-    agent && agent.lifecycleStatus !== "terminated" ? { agentId: agentId as any } : "skip"
+    agent && agent.lifecycleStatus !== "terminated" ? { agentId: agentId as Id<"agents"> } : "skip"
   );
 
   // Assignment form
@@ -78,10 +61,10 @@ export default function AgentDetailPage() {
     try {
       await assignAgent({
         agentId: agent._id,
-        marketId: assignMarketId as any,
+        marketId: assignMarketId as Id<"markets">,
         compensationType: assignCompType,
         commissionRate: Number(assignRate),
-        endPreviousAssignmentId: endPreviousId ? (endPreviousId as any) : undefined,
+        endPreviousAssignmentId: endPreviousId ? (endPreviousId as Id<"agentMarketAssignments">) : undefined,
         endReason: endPreviousId ? "reassigned" : undefined,
       });
       setMessage(activeAssignments.length > 0 && !endPreviousId ? "Multi-market assignment added." : "Assignment recorded.");
@@ -114,9 +97,9 @@ export default function AgentDetailPage() {
         return;
       }
       await disposeVoucher({
-        voucherId: voucherId as any,
+        voucherId: voucherId as Id<"vouchers">,
         disposition,
-        newOwnerAgentId: disposition === "reassign" ? (reassignTarget[voucherId] as any) : undefined,
+        newOwnerAgentId: disposition === "reassign" ? (reassignTarget[voucherId] as Id<"agents">) : undefined,
       });
     } catch (err) {
       setDisposeError(err instanceof Error ? err.message : "Could not dispose voucher");
@@ -136,7 +119,7 @@ export default function AgentDetailPage() {
         agentId: agent._id,
         finalSettlementAmount: Number(finalAmount),
         currency,
-        marketId: marketIdForSettlement as any,
+        marketId: marketIdForSettlement as Id<"markets">,
       });
       setMessage("Agent offboarded. Final settlement entered the commission approval flow.");
       setTimeout(() => router.replace("/platform/agents"), 1200);
