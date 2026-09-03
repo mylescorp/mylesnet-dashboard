@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
-import { requireNetworkOperator } from "./lib/auth";
+import { requireNetworkOperator, requirePlatformOwner } from "./lib/auth";
+import { encryptRouterCredential, isEncryptedRouterCredential } from "./lib/routerCredentials";
 
 // List routers WITHOUT credentials (safe for client queries)
 export const listRouters = query({
@@ -146,8 +147,8 @@ export const addRouter = mutation({
     // Store credentials separately - NEVER exposed to client
     await ctx.db.insert("routerCredentials", {
       routerId,
-      encryptedUsername: args.username, // In production, this should be encrypted
-      encryptedPassword: args.password, // In production, this should be encrypted
+      encryptedUsername: await encryptRouterCredential(args.username),
+      encryptedPassword: await encryptRouterCredential(args.password),
       updatedAt: Date.now(),
     });
 
@@ -191,18 +192,58 @@ export const updateRouterCredentials = mutation({
 
     if (existing) {
       await ctx.db.patch(existing._id, {
-        encryptedUsername: args.username,
-        encryptedPassword: args.password,
+        encryptedUsername: await encryptRouterCredential(args.username),
+        encryptedPassword: await encryptRouterCredential(args.password),
         updatedAt: Date.now(),
       });
     } else {
       await ctx.db.insert("routerCredentials", {
         routerId: args.routerId,
-        encryptedUsername: args.username,
-        encryptedPassword: args.password,
+        encryptedUsername: await encryptRouterCredential(args.username),
+        encryptedPassword: await encryptRouterCredential(args.password),
         updatedAt: Date.now(),
       });
     }
+  },
+});
+
+/** Converts legacy plaintext router credentials without changing router records. */
+export const migrateLegacyRouterCredentials = mutation({
+  args: {},
+  handler: async (ctx) => {
+    await requirePlatformOwner(ctx);
+    const credentials = await ctx.db.query("routerCredentials").collect();
+    let migrated = 0;
+    for (const credential of credentials) {
+      if (isEncryptedRouterCredential(credential.encryptedUsername) && isEncryptedRouterCredential(credential.encryptedPassword)) continue;
+      await ctx.db.patch(credential._id, {
+        encryptedUsername: isEncryptedRouterCredential(credential.encryptedUsername)
+          ? credential.encryptedUsername
+          : await encryptRouterCredential(credential.encryptedUsername),
+        encryptedPassword: isEncryptedRouterCredential(credential.encryptedPassword)
+          ? credential.encryptedPassword
+          : await encryptRouterCredential(credential.encryptedPassword),
+        updatedAt: Date.now(),
+      });
+      migrated += 1;
+    }
+    return { migrated };
+  },
+});
+
+/** Owner-only migration status. It never returns credential values. */
+export const getRouterCredentialProtectionStatus = query({
+  args: {},
+  handler: async (ctx) => {
+    await requirePlatformOwner(ctx);
+    const credentials = await ctx.db.query("routerCredentials").collect();
+    return {
+      total: credentials.length,
+      legacy: credentials.filter((credential) =>
+        !isEncryptedRouterCredential(credential.encryptedUsername) ||
+        !isEncryptedRouterCredential(credential.encryptedPassword),
+      ).length,
+    };
   },
 });
 

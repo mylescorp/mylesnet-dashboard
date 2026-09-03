@@ -1,7 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action, internalAction } from "./_generated/server";
-import { requireAuthenticatedUser } from "./lib/auth";
 
 type RouterCredentials = {
   router: {
@@ -68,8 +67,8 @@ export const readMonitoringSnapshot = internalAction({
     interfaces: RouterOSRecord[];
     connectedUserCount: number;
   }> => {
-    const credentials: RouterCredentials | null = await ctx.runQuery(
-      internal.routers.getRouterWithCredentials,
+    const credentials: RouterCredentials | null = await ctx.runAction(
+      internal.routerCredentialActions.getDecryptedRouterConnection,
       args,
     );
 
@@ -102,8 +101,8 @@ export const readConfigurationSnapshot = internalAction({
     dns: RouterOSRecord[];
     routes: RouterOSRecord[];
   }> => {
-    const credentials: RouterCredentials | null = await ctx.runQuery(
-      internal.routers.getRouterWithCredentials,
+    const credentials: RouterCredentials | null = await ctx.runAction(
+      internal.routerCredentialActions.getDecryptedRouterConnection,
       args,
     );
     if (!credentials) {
@@ -130,9 +129,9 @@ function routerRead(path: string, singleRecord = false) {
   return action({
     args: { routerId: v.id("routers") },
     handler: async (ctx, args) => {
-      await requireAuthenticatedUser(ctx);
-      const credentials = await ctx.runQuery(
-        internal.routers.getRouterWithCredentials,
+      await ctx.runQuery(internal.platformUsers.assertNetworkOperator, {});
+      const credentials = await ctx.runAction(
+        internal.routerCredentialActions.getDecryptedRouterConnection,
         args,
       );
 

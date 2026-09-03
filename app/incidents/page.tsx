@@ -19,20 +19,21 @@ export default function IncidentsPage() {
     severity: "warning",
   });
   const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
 
   const handleAcknowledge = async (incidentId: Id<"incidents">) => {
     try {
       await acknowledgeIncident({ incidentId });
-    } catch (err) {
-      console.error("Failed to acknowledge incident:", err);
+    } catch {
+      setMessage("We could not acknowledge this incident. Please try again.");
     }
   };
 
   const handleResolve = async (incidentId: Id<"incidents">) => {
     try {
       await resolveIncident({ incidentId });
-    } catch (err) {
-      console.error("Failed to resolve incident:", err);
+    } catch {
+      setMessage("We could not resolve this incident. Please try again.");
     }
   };
 
@@ -54,8 +55,8 @@ export default function IncidentsPage() {
 
       setShowCreateModal(false);
       setFormData({ routerId: "", note: "", severity: "warning" });
-    } catch (err) {
-      console.error("Failed to create incident:", err);
+    } catch {
+      setMessage("We could not create this incident. Please review the details and try again.");
     } finally {
       setLoading(false);
     }
@@ -79,6 +80,7 @@ export default function IncidentsPage() {
             Create Incident
           </button>
         </div>
+        {message ? <div className="mb-6 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="status">{message}</div> : null}
         {/* Open Incidents */}
         <div className="mb-8">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">

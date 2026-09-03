@@ -80,7 +80,7 @@ http.route({
       );
     }
 
-    const connection = await ctx.runQuery(internal.routers.getCollectorConnection, { routerId });
+    const connection = await ctx.runAction(internal.routerCredentialActions.getDecryptedCollectorConnection, { routerId });
     if (!connection) {
       return Response.json(
         { success: false, message: "The requested router is not ready for collection." },

@@ -4,13 +4,10 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@workos-inc/authkit-nextjs/components";
 import {
-  ArrowRightLeft,
   ChevronDown,
   LogOut,
-  RadioTower,
   Settings2,
   ShieldCheck,
-  ShieldPlus,
   User as UserIcon,
 } from "lucide-react";
 import { UserProfileModal } from "./UserProfileModal";
@@ -144,29 +141,6 @@ export function UserProfileDropdown({ user: propUser }: UserProfileDropdownProps
                   <span>Manage Profile</span>
                   <small>Edit your contact details and view access</small>
                 </div>
-              </button>
-            </div>
-
-            <div className="profile-dropdown-divider" />
-
-            {/* Quick Workspace Switcher Item */}
-            <div className="profile-dropdown-section">
-              <p className="profile-section-label">Workspace Context</p>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setIsOpen(false);
-                  router.push(isPlatformMode ? "/dashboard" : "/platform");
-                }}
-                className="profile-menu-item"
-              >
-                {isPlatformMode ? <RadioTower size={16} /> : <ShieldPlus size={16} />}
-                <div className="profile-item-text">
-                  <span>{isPlatformMode ? "Switch to Network Ops" : "Switch to Control Panel"}</span>
-                  <small>{isPlatformMode ? "Live router estate & incidents" : "Master Admin & field ops"}</small>
-                </div>
-                <ArrowRightLeft size={14} className="item-arrow" />
               </button>
             </div>
 

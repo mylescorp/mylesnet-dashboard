@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { z } from "zod";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { requirePlatformOwner, requirePlatformUser, resolveUserByIdentity } from "./lib/auth";
 
@@ -15,6 +16,13 @@ const marketMembershipRoleValidator = v.union(
   v.literal("viewer"),
 );
 
+const profileSchema = z.object({
+  name: z.string().trim().min(1).max(120).optional(),
+  phone: z.string().trim().regex(/^\+[1-9]\d{7,14}$/).optional(),
+  image: z.string().trim().url().refine((value) => new URL(value).protocol === "https").max(2048).optional(),
+  jobTitle: z.string().trim().max(100).optional(),
+});
+
 /**
  * Public mutation allowing signed-in users to update their profile name,
  * phone number, and avatar image.
@@ -30,11 +38,21 @@ export const updateUserProfile = mutation({
     const user = await resolveUserByIdentity(ctx);
     if (!user) throw new Error("Unauthenticated");
 
+    const normalizedInput = {
+      ...args,
+      phone: args.phone?.replace(/[\s()-]/g, ""),
+      image: args.image?.trim() || undefined,
+      jobTitle: args.jobTitle?.trim() || undefined,
+      name: args.name?.trim() || undefined,
+    };
+    const validated = profileSchema.safeParse(normalizedInput);
+    if (!validated.success) throw new Error("Invalid profile details");
+
     const patchData: { name?: string; phone?: string; image?: string; jobTitle?: string; profileCompletedAt?: number } = {};
-    if (args.name !== undefined) patchData.name = args.name.trim();
-    if (args.phone !== undefined) patchData.phone = args.phone.trim();
-    if (args.image !== undefined) patchData.image = args.image.trim();
-    if (args.jobTitle !== undefined) patchData.jobTitle = args.jobTitle.trim();
+    if (validated.data.name !== undefined) patchData.name = validated.data.name;
+    if (validated.data.phone !== undefined) patchData.phone = validated.data.phone;
+    if (validated.data.image !== undefined) patchData.image = validated.data.image;
+    if (validated.data.jobTitle !== undefined) patchData.jobTitle = validated.data.jobTitle;
     if (patchData.name && patchData.phone) patchData.profileCompletedAt = Date.now();
 
     await ctx.db.patch(user._id, patchData);

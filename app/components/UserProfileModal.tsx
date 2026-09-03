@@ -44,7 +44,7 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
         setStatusMessage(null);
         onClose();
       }, 1000);
-    } catch (err) {
+    } catch {
       setStatusMessage({
         type: "error",
         text: "We could not save your profile. Please try again.",

@@ -19,6 +19,7 @@ export default function ShiftNotesPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
 
   const handleAddNote = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,8 +35,8 @@ export default function ShiftNotesPage() {
 
       setShowAddModal(false);
       setNoteText("");
-    } catch (err) {
-      console.error("Failed to add shift note:", err);
+    } catch {
+      setMessage("We could not save this handover note. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -46,8 +47,8 @@ export default function ShiftNotesPage() {
 
     try {
       await deleteShiftNote({ noteId });
-    } catch (err) {
-      console.error("Failed to delete note:", err);
+    } catch {
+      setMessage("We could not delete this handover note. Please try again.");
     }
   };
 
@@ -60,6 +61,7 @@ export default function ShiftNotesPage() {
             <p className="text-sm text-gray-600">Operator notes and handover information</p>
           </div>
         </div>
+        {message ? <div className="mb-6 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="status">{message}</div> : null}
 
         {/* Router Selection */}
         <div className="mb-6">

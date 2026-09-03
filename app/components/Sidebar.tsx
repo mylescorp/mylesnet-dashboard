@@ -30,6 +30,7 @@ import {
   X,
 } from "lucide-react";
 import { useSidebarState } from "./useSidebarState";
+import { useUserProfile } from "./UserProfileContext";
 
 const opsSections = [
   {
@@ -103,6 +104,7 @@ export default function Sidebar({ isMobile = false, onCloseMobile }: SidebarProp
   const router = useRouter();
   const { signOut } = useAuth();
   const { collapsed, toggleCollapsed } = useSidebarState();
+  const { user } = useUserProfile();
   const [isSigningOut, setIsSigningOut] = useState(false);
 
   const isPlatformMode = pathname.startsWith("/platform");
@@ -167,8 +169,8 @@ export default function Sidebar({ isMobile = false, onCloseMobile }: SidebarProp
         )}
       </div>
 
-      {/* Two Constant Top Workspace Buttons */}
-      {!effectiveCollapsed && (
+      {/* Privileged users may move between the two modules in the unified app. */}
+      {!effectiveCollapsed && user?.isPlatform && (
         <div className="sidebar-workspace-switcher" role="tablist" aria-label="Workspace switcher">
           <button
             type="button"
@@ -181,7 +183,7 @@ export default function Sidebar({ isMobile = false, onCloseMobile }: SidebarProp
             className={`switcher-tab ${!isPlatformMode ? "switcher-tab-active" : ""}`}
           >
             <RadioTower size={14} />
-            <span>Network Ops</span>
+            <span>Network</span>
           </button>
 
           <button
@@ -195,7 +197,7 @@ export default function Sidebar({ isMobile = false, onCloseMobile }: SidebarProp
             className={`switcher-tab ${isPlatformMode ? "switcher-tab-active" : ""}`}
           >
             <ShieldPlus size={14} />
-            <span>Control Panel</span>
+            <span>Platform</span>
           </button>
         </div>
       )}
