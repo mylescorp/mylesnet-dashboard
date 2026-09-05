@@ -30,6 +30,8 @@ import type * as incidents from "../incidents.js";
 import type * as leaderboard from "../leaderboard.js";
 import type * as lib_auditLog from "../lib/auditLog.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_centipidCredentials from "../lib/centipidCredentials.js";
+import type * as lib_centipidVerify from "../lib/centipidVerify.js";
 import type * as lib_routerCredentials from "../lib/routerCredentials.js";
 import type * as marketProspects from "../marketProspects.js";
 import type * as markets from "../markets.js";
@@ -77,6 +79,8 @@ declare const fullApi: ApiFromModules<{
   leaderboard: typeof leaderboard;
   "lib/auditLog": typeof lib_auditLog;
   "lib/auth": typeof lib_auth;
+  "lib/centipidCredentials": typeof lib_centipidCredentials;
+  "lib/centipidVerify": typeof lib_centipidVerify;
   "lib/routerCredentials": typeof lib_routerCredentials;
   marketProspects: typeof marketProspects;
   markets: typeof markets;

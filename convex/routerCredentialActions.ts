@@ -28,6 +28,7 @@ export const getDecryptedCollectorConnection = internalAction({
     restBaseUrl: string;
     username: string;
     password: string;
+    configVersion: string;
   } | null> => {
     const connection = await ctx.runQuery(internal.routers.getCollectorConnection, args);
     if (!connection) return null;
@@ -35,6 +36,7 @@ export const getDecryptedCollectorConnection = internalAction({
       restBaseUrl: connection.restBaseUrl,
       username: await decryptRouterCredential(connection.username),
       password: await decryptRouterCredential(connection.password),
+      configVersion: connection.configVersion,
     };
   },
 });

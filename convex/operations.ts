@@ -1,21 +1,76 @@
 import { v } from "convex/values";
-import { internalMutation, query, mutation } from "./_generated/server";
+import { internalMutation, query, type QueryCtx } from "./_generated/server";
 import { requireAuthenticatedUser } from "./lib/auth";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const COLLECTOR_FRESHNESS_MS = 60_000;
+
+function activeRouters(routers: Doc<"routers">[]): Doc<"routers">[] {
+  return routers.filter((router) => router.archivedAt === undefined);
+}
+
+async function dailyBytesForAccessPoint(ctx: Pick<QueryCtx, "db">, accessPointId: Id<"accessPoints">): Promise<number> {
+  const cutoff = Date.now() - DAY_MS;
+  const samples = await ctx.db
+    .query("usageSamples")
+    .withIndex("by_access_point_timestamp", (q) => q.eq("accessPointId", accessPointId))
+    .filter((q) => q.gte(q.field("timestamp"), cutoff))
+    .collect();
+  return samples.reduce((sum, sample) => sum + sample.byteDelta, 0);
+}
+
+async function accessPointLiveSummary(ctx: Pick<QueryCtx, "db">, accessPoint: Doc<"accessPoints">, routerId: Id<"routers">) {
+  const health = await ctx.db
+    .query("accessPointSamples")
+    .withIndex("by_access_point_timestamp", (q) => q.eq("accessPointId", accessPoint._id))
+    .order("desc")
+    .first();
+
+  const sessions = await ctx.db
+    .query("activeHotspotSessions")
+    .withIndex("by_access_point", (q) => q.eq("accessPointId", accessPoint._id))
+    .collect();
+  const activeUserCount = sessions.length;
+
+  const trafficSamples = await ctx.db
+    .query("healthSamples")
+    .withIndex("by_router_timestamp", (q) => q.eq("routerId", routerId))
+    .order("desc")
+    .take(24);
+
+  const trafficTrend = trafficSamples.slice(0, 24).map((sample) => ({
+    timestamp: sample.timestamp,
+    bytesPerSecond: sample.rxBytesPerSec + sample.txBytesPerSec,
+  }));
+
+  return {
+    accessPoint,
+    health,
+    activeUserCount,
+    dailyBytes: await dailyBytesForAccessPoint(ctx, accessPoint._id),
+    trafficTrend,
+  };
+}
+
+async function collectorStatusForRouter(ctx: Pick<QueryCtx, "db">, routerId: Id<"routers">) {
+  return ctx.db
+    .query("collectorRuns")
+    .withIndex("by_router_observedAt", (q) => q.eq("routerId", routerId))
+    .order("desc")
+    .first();
+}
 
 /**
- * Rich operations overview for the network dashboard — one query that
- * aggregates the current live state across all routers, access points, and
- * hotspot sessions.
+ * Lean KPI strip — cheap aggregates across the estate for the dashboard header.
+ * Subscribes independently so the header stays responsive while cards load.
  */
-export const getOverview = query({
+export const getKpis = query({
   args: {},
   handler: async (ctx) => {
     await requireAuthenticatedUser(ctx);
+    const routers = activeRouters(await ctx.db.query("routers").collect());
 
-    const routers = await ctx.db.query("routers").collect();
-
-    const routerEntries = [];
     let totalUsers = 0;
     let activeAccessPoints = 0;
     let totalAccessPoints = 0;
@@ -23,113 +78,140 @@ export const getOverview = query({
     let cpuSum = 0;
     let cpuCount = 0;
     let lastObservedAt: number | null = null;
+    let latestCollectorStatus: "connected" | "failed" | null = null;
+    let latestCollectorStatusMessage: string | null = null;
+    let latestCollectorStatusAt = 0;
 
     for (const router of routers) {
-      const accessPoints = await ctx.db
-        .query("accessPoints")
-        .withIndex("by_router", (q) => q.eq("routerId", router._id))
-        .collect();
-
-      const apEntries = [];
-      for (const accessPoint of accessPoints) {
-        totalAccessPoints++;
-        const health = await ctx.db
-          .query("accessPointSamples")
-          .withIndex("by_access_point_timestamp", (q) =>
-            q.eq("accessPointId", accessPoint._id)
-          )
-          .order("desc")
-          .first();
-
-        const sessions = await ctx.db
-          .query("activeHotspotSessions")
-          .withIndex("by_access_point", (q) => q.eq("accessPointId", accessPoint._id))
-          .collect();
-        const activeUserCount = sessions.length;
-
-        const trafficSamples = await ctx.db
-          .query("healthSamples")
-          .withIndex("by_router_timestamp", (q) =>
-            q.eq("routerId", router._id)
-          )
-          .order("desc")
-          .take(24);
-
-        const dailyBytes = await ctx.db
-          .query("usageSamples")
-          .withIndex("by_access_point_timestamp", (q) =>
-            q.eq("accessPointId", accessPoint._id)
-          )
-          .collect();
-
-        const dailyBytesTotal = dailyBytes
-          .filter((s) => s.timestamp >= Date.now() - 24 * 60 * 60 * 1000)
-          .reduce((sum: number, s) => sum + s.byteDelta, 0);
-
-        totalUsers += activeUserCount;
-        totalDailyBytes += dailyBytesTotal;
-
-        if (health) {
-          cpuSum += health.queueDrops > 0 ? 1 : 0;
-          cpuCount++;
-        }
-
-        const trafficTrend = trafficSamples.slice(0, 24).map((sample) => ({
-          timestamp: sample.timestamp,
-          bytesPerSecond: sample.rxBytesPerSec + sample.txBytesPerSec,
-        }));
-
-        apEntries.push({
-          accessPoint,
-          health,
-          activeUserCount,
-          dailyBytes: dailyBytesTotal,
-          trafficTrend,
-        });
-
-        if (health?.linkState) activeAccessPoints++;
-      }
-
+      const latestCollectorRun = await collectorStatusForRouter(ctx, router._id);
+      const latestRouterSample = await ctx.db
+        .query("healthSamples")
+        .withIndex("by_router_timestamp", (q) => q.eq("routerId", router._id))
+        .order("desc")
+        .first();
       const configSnapshot = await ctx.db
         .query("routerConfigurationSnapshots")
         .withIndex("by_router_timestamp", (q) => q.eq("routerId", router._id))
         .order("desc")
         .first();
-
-      const upstreamConfigured =
-        !!configSnapshot?.snapshotJson &&
-        configSnapshot.snapshotJson.includes("default route") ||
-        false;
-
-      if (lastObservedAt === null || (configSnapshot?.observedAt ?? 0) > lastObservedAt) {
-        lastObservedAt = configSnapshot?.observedAt ?? null;
+      if (latestCollectorRun && latestCollectorRun.observedAt >= latestCollectorStatusAt) {
+        latestCollectorStatusAt = latestCollectorRun.observedAt;
+        latestCollectorStatus = latestCollectorRun.status;
+        latestCollectorStatusMessage = latestCollectorRun.message ?? null;
+      }
+      const latestObservation = Math.max(
+        latestCollectorRun?.observedAt ?? 0,
+        latestRouterSample?.timestamp ?? 0,
+        configSnapshot?.observedAt ?? 0,
+      );
+      if (latestObservation > 0 && (lastObservedAt === null || latestObservation > lastObservedAt)) {
+        lastObservedAt = latestObservation;
       }
 
-      routerEntries.push({
-        router,
-        accessPoints: apEntries,
-        upstream: { configured: upstreamConfigured },
-      });
+      const accessPoints = (await ctx.db
+        .query("accessPoints")
+        .withIndex("by_router", (q) => q.eq("routerId", router._id))
+        .collect()).filter((accessPoint) => accessPoint.archivedAt === undefined);
+
+      for (const accessPoint of accessPoints) {
+        totalAccessPoints++;
+        const summary = await accessPointLiveSummary(ctx, accessPoint, router._id);
+        totalUsers += summary.activeUserCount;
+        totalDailyBytes += summary.dailyBytes;
+        if (summary.health) {
+          cpuSum += summary.health.queueDrops > 0 ? 1 : 0;
+          cpuCount++;
+        }
+        if (summary.health?.linkState) activeAccessPoints++;
+      }
     }
 
     const averageCpu = cpuCount > 0 ? (cpuSum / cpuCount) * 100 : null;
-    const healthScore =
-      totalAccessPoints === 0
-        ? null
-        : Math.round((activeAccessPoints / totalAccessPoints) * 100);
-
-    const metrics = {
-      collectorConnected: lastObservedAt !== null,
+    return {
+      collectorConnected:
+        latestCollectorStatus === "connected" && Date.now() - latestCollectorStatusAt < COLLECTOR_FRESHNESS_MS,
       lastObservedAt,
-      healthScore,
+      collectorStatus: latestCollectorStatus,
+      collectorStatusMessage: latestCollectorStatusMessage,
+      healthScore: totalAccessPoints === 0 ? null : Math.round((activeAccessPoints / totalAccessPoints) * 100),
       totalUsers,
       activeAccessPoints,
       totalAccessPoints,
       totalDailyBytes,
       averageCpu,
     };
+  },
+});
 
-    return { metrics, routers: routerEntries };
+/** Router select list for filters — cheap and subscribes rarely. */
+export const getRouterSummaries = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireAuthenticatedUser(ctx);
+    return activeRouters(await ctx.db.query("routers").collect()).map((router) => ({
+      _id: router._id,
+      name: router.name,
+      location: router.location,
+    }));
+  },
+});
+
+/**
+ * Live per-router subscription — one router with its access point cards, upstream
+ * observation, collector health, and telemetry summary.
+ */
+export const getLiveRouter = query({
+  args: { routerId: v.id("routers") },
+  handler: async (ctx, args) => {
+    await requireAuthenticatedUser(ctx);
+    const router = await ctx.db.get(args.routerId);
+    if (!router || router.archivedAt !== undefined) return null;
+
+    const accessPoints = (await ctx.db
+      .query("accessPoints")
+      .withIndex("by_router", (q) => q.eq("routerId", router._id))
+      .collect()).filter((accessPoint) => accessPoint.archivedAt === undefined);
+
+    const apEntries = [];
+    for (const accessPoint of accessPoints) {
+      apEntries.push(await accessPointLiveSummary(ctx, accessPoint, router._id));
+    }
+
+    const configSnapshot = await ctx.db
+      .query("routerConfigurationSnapshots")
+      .withIndex("by_router_timestamp", (q) => q.eq("routerId", router._id))
+      .order("desc")
+      .first();
+
+    let upstreamConfigured = false;
+    if (configSnapshot?.snapshotJson) {
+      if (configSnapshot.snapshotJson.includes("\"dst-address\":\"0.0.0.0/0\"")) {
+        upstreamConfigured = true;
+      } else {
+        try {
+          const config: { routes?: Array<{ "dst-address"?: string }> } = JSON.parse(configSnapshot.snapshotJson);
+          upstreamConfigured = (config.routes ?? []).some((route) =>
+            route["dst-address"] === "0.0.0.0/0" || route["dst-address"] === "::/0",
+          );
+        } catch {
+          upstreamConfigured = configSnapshot.snapshotJson.includes("default route");
+        }
+      }
+    }
+
+    const collector = await collectorStatusForRouter(ctx, router._id);
+    const telemetry = await ctx.db
+      .query("routerTelemetry")
+      .withIndex("by_router", (q) => q.eq("routerId", router._id))
+      .first();
+
+    return {
+      router,
+      accessPoints: apEntries,
+      upstream: { configured: upstreamConfigured },
+      collector,
+      telemetry: telemetry ?? null,
+    };
   },
 });
 
@@ -142,6 +224,160 @@ export const getAccessPointUsers = query({
       .query("activeHotspotSessions")
       .withIndex("by_access_point", (q) => q.eq("accessPointId", args.accessPointId))
       .collect();
+  },
+});
+
+/** Live detail for a single access point card — latest sample, users, 24h bytes. */
+export const getAccessPointLive = query({
+  args: { accessPointId: v.id("accessPoints") },
+  handler: async (ctx, args) => {
+    await requireAuthenticatedUser(ctx);
+    const accessPoint = await ctx.db.get(args.accessPointId);
+    if (!accessPoint || accessPoint.archivedAt !== undefined) return null;
+    return accessPointLiveSummary(ctx, accessPoint, accessPoint.routerId);
+  },
+});
+
+/** Current DHCP leases synced by the collector for a router. */
+export const getDhcpLeases = query({
+  args: { routerId: v.id("routers") },
+  handler: async (ctx, args) => {
+    await requireAuthenticatedUser(ctx);
+    return ctx.db
+      .query("dhcpLeases")
+      .withIndex("by_router", (q) => q.eq("routerId", args.routerId))
+      .collect();
+  },
+});
+
+/** DHCP pool usage derived from the latest collector configuration snapshot. */
+export const getDhcpPoolOverview = query({
+  args: { routerId: v.id("routers") },
+  handler: async (ctx, args) => {
+    await requireAuthenticatedUser(ctx);
+    const snapshot = await ctx.db
+      .query("routerConfigurationSnapshots")
+      .withIndex("by_router_timestamp", (q) => q.eq("routerId", args.routerId))
+      .order("desc")
+      .first();
+    const leases = await ctx.db
+      .query("dhcpLeases")
+      .withIndex("by_router", (q) => q.eq("routerId", args.routerId))
+      .collect();
+
+    const capacityOf = (ranges: string): number => {
+      if (!ranges) return 0;
+      let total = 0;
+      for (const range of ranges.split(",")) {
+        const [start, end] = range.split("-").map((part) => part.trim());
+        if (!start || !end) continue;
+        const startParts = start.split(".").map(Number);
+        const endParts = end.split(".").map(Number);
+        if (startParts.length !== 4 || endParts.length !== 4) continue;
+        if (startParts.some(Number.isNaN) || endParts.some(Number.isNaN)) continue;
+        const startInt = ((startParts[0] << 24) | (startParts[1] << 16) | (startParts[2] << 8) | startParts[3]) >>> 0;
+        const endInt = ((endParts[0] << 24) | (endParts[1] << 16) | (endParts[2] << 8) | endParts[3]) >>> 0;
+        if (endInt < startInt) continue;
+        total += endInt - startInt + 1;
+      }
+      return total;
+    };
+
+    const inRanges = (ip: string, ranges: string): boolean => {
+      const address = ip.split(".").map(Number);
+      if (address.length !== 4 || address.some(Number.isNaN)) return false;
+      const addressInt = ((address[0] << 24) | (address[1] << 16) | (address[2] << 8) | address[3]) >>> 0;
+      for (const range of ranges.split(",")) {
+        const [start, end] = range.split("-").map((part) => part.trim());
+        const startParts = start?.split(".").map(Number) ?? [];
+        const endParts = end?.split(".").map(Number) ?? [];
+        if (startParts.length !== 4 || endParts.length !== 4) continue;
+        if (startParts.some(Number.isNaN) || endParts.some(Number.isNaN)) continue;
+        const startInt = ((startParts[0] << 24) | (startParts[1] << 16) | (startParts[2] << 8) | startParts[3]) >>> 0;
+        const endInt = ((endParts[0] << 24) | (endParts[1] << 16) | (endParts[2] << 8) | endParts[3]) >>> 0;
+        if (addressInt >= startInt && addressInt <= endInt) return true;
+      }
+      return false;
+    };
+
+    let pools: Array<{ name?: string; ranges?: string; capacity: number; used: number; utilization: number }> = [];
+    if (snapshot?.snapshotJson) {
+      try {
+        const config: { pools?: Array<{ name?: string; ranges?: string }> } = JSON.parse(snapshot.snapshotJson);
+        pools = (config.pools ?? []).map((pool) => {
+          const ranges = pool.ranges;
+          const capacity = capacityOf(ranges ?? "");
+          const used = ranges
+            ? leases.filter((lease) => inRanges(lease.ipAddress, ranges)).length
+            : 0;
+          return {
+            name: pool.name,
+            ranges: pool.ranges,
+            capacity,
+            used,
+            utilization: capacity > 0 ? Math.min(100, (used / capacity) * 100) : 0,
+          };
+        });
+      } catch {
+        pools = [];
+      }
+    }
+    const totalCapacity = pools.reduce((sum, pool) => sum + pool.capacity, 0);
+    const totalUsed = leases.length;
+    return {
+      pools,
+      totalCapacity,
+      totalUsed,
+      utilization: totalCapacity > 0 ? Math.min(100, (totalUsed / totalCapacity) * 100) : 0,
+      observedAt: snapshot?.observedAt ?? null,
+    };
+  },
+});
+
+/** Current simple queues synced by the collector for a router. */
+export const getSimpleQueues = query({
+  args: { routerId: v.id("routers") },
+  handler: async (ctx, args) => {
+    await requireAuthenticatedUser(ctx);
+    return ctx.db
+      .query("simpleQueues")
+      .withIndex("by_router", (q) => q.eq("routerId", args.routerId))
+      .collect();
+  },
+});
+
+/** Latest telemetry details (identity, system health, ports, wifi radios). */
+export const getRouterTelemetryLatest = query({
+  args: { routerId: v.id("routers") },
+  handler: async (ctx, args) => {
+    await requireAuthenticatedUser(ctx);
+    return ctx.db
+      .query("routerTelemetry")
+      .withIndex("by_router", (q) => q.eq("routerId", args.routerId))
+      .first();
+  },
+});
+
+/** Recent telemetry self-health events for the ops-health strip. */
+export const getRecentSystemEvents = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    await requireAuthenticatedUser(ctx);
+    const events = await ctx.db
+      .query("systemEvents")
+      .withIndex("by_occurredAt", (q) => q)
+      .order("desc")
+      .take(args.limit ?? 8);
+    const routerNameById = new Map<string, string>();
+    for (const event of events) {
+      if (!event.routerId || routerNameById.has(event.routerId)) continue;
+      const router = await ctx.db.get(event.routerId);
+      if (router) routerNameById.set(event.routerId, router.name);
+    }
+    return events.map((event) => ({
+      ...event,
+      routerName: event.routerId ? (routerNameById.get(event.routerId) ?? null) : null,
+    }));
   },
 });
 

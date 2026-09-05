@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { useAuth } from "@workos-inc/authkit-nextjs/components";
 import {
+  Activity,
   AlertTriangle,
   BarChart3,
   Boxes,
@@ -13,6 +14,8 @@ import {
   ChevronRight,
   CircleDollarSign,
   ClipboardList,
+  Cog,
+  FileDiff,
   History,
   LayoutDashboard,
   LogOut,
@@ -42,17 +45,25 @@ const opsSections = [
     ],
   },
   {
+    title: "Monitoring",
+    items: [
+      { href: "/config-watch", label: "Config watch", icon: FileDiff },
+      { href: "/collector-setup", label: "Collector setup", icon: Cog },
+      { href: "/telemetry-health", label: "Telemetry health", icon: Activity },
+    ],
+  },
+  {
     title: "Shift & Analytics",
     items: [
       { href: "/shift-notes", label: "Shift handover", icon: ClipboardList },
       { href: "/usage", label: "Usage reports", icon: BarChart3 },
-      { href: "/business-activity", label: "Business activity", icon: CircleDollarSign },
+      { href: "/business-activity", label: "Business events", icon: CircleDollarSign },
     ],
   },
   {
     title: "System",
     items: [
-      { href: "/centipid", label: "Billing integration", icon: Settings2 },
+      { href: "/centipid", label: "Centipid", icon: Settings2 },
     ],
   },
 ];

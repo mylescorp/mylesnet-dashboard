@@ -59,4 +59,13 @@ crons.daily(
   internal.operations.purgeExpiredPii,
 );
 
+// Centipid retention — clears webhook delivery logs older than 30 days, wipes
+// subscriber raw payload previews older than 30 days, and drops events (plus
+// their projection rows) older than 24 months.
+crons.daily(
+  "Centipid data retention",
+  { hourUTC: 5, minuteUTC: 30 },
+  internal.centipid.pruneCentipidData,
+);
+
 export default crons;

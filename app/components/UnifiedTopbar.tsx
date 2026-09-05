@@ -12,8 +12,8 @@ const opsPageLabels: Record<string, string> = {
   "/incidents": "Incident desk",
   "/shift-notes": "Shift handover",
   "/usage": "Usage reports",
-  "/business-activity": "Business activity",
-  "/centipid": "Billing integration",
+  "/business-activity": "Business events",
+  "/centipid": "Centipid",
 };
 
 const platformPageLabels: Record<string, string> = {

@@ -73,6 +73,48 @@ planning notes; only build-time rulings are recorded here.
   schedule itself must still be manually verified against the live deployment
   before relying on it.
 
+### Centipid billing integration (2026-09-04)
+
+- **Two developer surfaces.** (1) MCP API token against
+  `https://mcp.centipidbilling.com/mcp` for read-only access; (2) signed
+  outbound webhooks for 9 events (`subscriber.created|paused|resumed`,
+  `payment.received|refunded`, `voucher.generated|redeemed`,
+  `ticket.opened|resolved`) delivered to `/receiveCentipidWebhook`.
+- **Credentials are encrypted at rest.** Both the API token and webhook signing
+  secret are AES-256-GCM encrypted (`convex/lib/centipidCredentials.ts`) under
+  `CENTIPID_CREDENTIALS_ENCRYPTION_KEY` (base64 32-byte, generated like
+  `ROUTER_CREDENTIALS_ENCRYPTION_KEY`) before persisting in
+  `centipidCredentials`. They are entered via the Centipid settings page
+  (`app/centipid`), never committed. The opencode MCP client reads its own
+  `CENTIPID_MCP_TOKEN` from the operator's git-ignored `.env.local`.
+- **Two-phase webhook rollout.** The signing scheme is not publicly documented,
+  so the receiver starts in **capture mode**: every delivery is acknowledged
+  (HTTP 200) and its raw signature header + body preview logged to
+  `webhookDeliveryLog`, but no events are written. Once credentials are saved it
+  switches to **live mode**: raw-body HMAC-SHA256 verification
+  (`convex/lib/centipidVerify.ts`), then per-category storage with dedupe on
+  `webhookEventId` (fallback: id + event type + timestamp). A real signed
+  delivery must be captured to pin the exact header/input/payload contract
+  before live mode can be trusted with production traffic.
+- **Retention.** `webhookDeliveryLog` rows are deleted after 30 days and the
+  subscriber raw payload preview wiped at the same horizon; all event tables and
+  their projection rows (`latestSubscriberState`, `ticketStatus`) are pruned
+  after 24 months (`pruneCentipidData`, daily cron).
+- **KPIs roll by the viewer's local day.** The client passes
+  `tzOffsetMinutes`; the server derives today/7d windows from it. Revenue is
+  hidden from `agent` roles (`revenueVisible`), consistent with the platform
+  dashboard.
+- **MCP backfill is best-effort seed only.** `fetchHistoricalCentipidData` reads
+  read-only tools (`list_subscribers`, `payments_report`, `voucher_stock`,
+  `open_tickets`) and treats webhooks as the source of truth. The 3
+  approval-gated tools (`reconnect_subscriber`, `disconnect_no_expiry`,
+  `apply_mikrotik_fix`) are intentionally never called.
+- **Toggle.** `saveCentipidCredentials` / `setCentipidIngestionPaused` let an
+  admin pause ingestion; paused mode acknowledges and logs deliveries but stores
+  nothing. Failures never throw out of the HTTP route (200/400/401/500 only).
+- **Tests.** `convex/lib/centipidVerify.test.ts` and
+  `centipidCredentials.test.ts` run under node:test (`npm test`).
+
 ### Identified as unbuilt / deferred
 
 - **Schema deployed to local dev deployment (2026-09-03).** `npx convex dev`

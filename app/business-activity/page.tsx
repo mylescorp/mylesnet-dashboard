@@ -2,168 +2,296 @@
 
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { useState } from "react";
+import {
+  ArrowDownToLine,
+  CircleDollarSign,
+  CreditCard,
+  Download,
+  RefreshCw,
+  Ticket,
+  UserPlus,
+  Users,
+  Wrench,
+} from "lucide-react";
+import { useMemo, useState } from "react";
+import Link from "next/link";
+
+type Category = "all" | "subscriber" | "payment" | "voucher" | "ticket";
+
+const categories: { value: Category; label: string }[] = [
+  { value: "all", label: "All events" },
+  { value: "subscriber", label: "Subscribers" },
+  { value: "payment", label: "Payments" },
+  { value: "voucher", label: "Vouchers" },
+  { value: "ticket", label: "Tickets" },
+];
+
+const categoryMetas: Record<string, { label: string; badge: string; icon: typeof UserPlus }> = {
+  subscriber: { label: "Subscriber", badge: "event-badge-subscriber", icon: Users },
+  payment: { label: "Payment", badge: "event-badge-payment", icon: CreditCard },
+  voucher: { label: "Voucher", badge: "event-badge-voucher", icon: Ticket },
+  ticket: { label: "Ticket", badge: "event-badge-ticket", icon: Wrench },
+  default: { label: "Event", badge: "event-badge-neutral", icon: RefreshCw },
+};
 
 export default function BusinessActivityPage() {
-  const allEvents = useQuery(api.centipid.getRecentAllEvents, { limit: 100 });
-  const [filter, setFilter] = useState<"all" | "subscriber" | "payment" | "voucher" | "ticket">("all");
+  const [filter, setFilter] = useState<Category>("all");
+  const [offset, setOffset] = useState(0);
+  const pageSize = 50;
+
+  const tzOffsetMinutes = useMemo(() => -new Date().getTimezoneOffset(), []);
+  const summary = useQuery(api.centipid.getCentipidBusinessSummary, { tzOffsetMinutes });
+  const allEvents = useQuery(api.centipid.getRecentAllEvents, { limit: pageSize, offset });
+  const integration = useQuery(api.centipid.getCentipidIntegrationStatus, {});
 
   const filteredEvents = allEvents?.filter((event) => {
     if (filter === "all") return true;
     return event.category === filter;
-  });
+  }) ?? [];
+  const hasMore = (allEvents?.length ?? 0) === pageSize;
 
-  const getEventIcon = (category: string) => {
-    switch (category) {
-      case "subscriber": return "👤";
-      case "payment": return "💳";
-      case "voucher": return "🎫";
-      case "ticket": return "🎫";
-      default: return "📋";
-    }
-  };
+  const formatMarks = (value: number | null | undefined) =>
+    value === null || value === undefined ? "—" : `UGX ${Math.round(value).toLocaleString()}`;
+  const formatPct = (value: number | null | undefined) =>
+    value === null || value === undefined ? "—" : `${Math.round(value * 100)}%`;
 
-  const getEventColor = (category: string) => {
-    switch (category) {
-      case "subscriber": return "bg-blue-50 border-blue-200";
-      case "payment": return "bg-green-50 border-green-200";
-      case "voucher": return "bg-purple-50 border-purple-200";
-      case "ticket": return "bg-yellow-50 border-yellow-200";
-      default: return "bg-gray-50 border-gray-200";
-    }
+  const exportCSV = () => {
+    if (filteredEvents.length === 0) return;
+    const headers = ["timestamp", "category", "eventType", "reference", "detail"];
+    const rows = filteredEvents.map((event) => {
+      let reference = "";
+      let detail = "";
+      if (event.category === "subscriber") {
+        reference = event.centipidSubscriberId;
+        detail = `${event.phone ? event.phone + " · " : ""}${event.packageName}${event.name ? ` · ${event.name}` : ""}`;
+      } else if (event.category === "payment") {
+        reference = event.centipidPaymentId;
+        detail = `${event.currency} ${event.amount} · ${event.method} · ${event.subscriberPhone}`;
+      } else if (event.category === "voucher") {
+        reference = event.centipidVoucherId;
+        detail = `${event.packageName}${event.customerPhone ? ` · ${event.customerPhone}` : ""}`;
+      } else {
+        reference = event.centipidTicketId;
+        detail = event.subject;
+      }
+      return [
+        new Date(event.timestamp).toISOString(),
+        event.category,
+        event.eventType,
+        reference,
+        detail.replace(/"/g, '""'),
+      ].map((cell) => `"${cell}"`);
+    });
+    const csvContent = [headers.join(","), ...rows.map((row) => row.join(","))].join("\n");
+    const blob = new Blob(["\ufeff", csvContent], { type: "text/csv;charset=utf-8" });
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `business-events-${new Date().toISOString().split("T")[0]}.csv`;
+    anchor.click();
+    window.URL.revokeObjectURL(url);
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex justify-between items-center mb-8">
+    <div className="workspace-page">
+      <div className="page-heading">
+        <div>
+          <p className="eyebrow">Billing &amp; business</p>
+          <h1 className="page-title">Business activity</h1>
+          <p className="page-subtitle">
+            Live subscriber, payment, voucher and ticket events streamed from the Centipid
+            billing platform. KPIs roll by day in your local timezone.
+          </p>
+        </div>
+        <div className="page-action-group">
+          <button type="button" className="secondary-button" onClick={exportCSV} disabled={filteredEvents.length === 0}>
+            <Download size={16} />
+            Export CSV
+          </button>
+          <Link href="/centipid" className="primary-button">
+            <CircleDollarSign size={16} />
+            Billing settings
+          </Link>
+        </div>
+      </div>
+
+      {integration && !integration.available && (
+        <div className="incident-banner" style={{ color: "var(--muted)", borderColor: "var(--line)" }}>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Business Activity Feed</h1>
-            <p className="text-sm text-gray-600">Real-time subscriber, payment, voucher, and ticket events from Centipid</p>
+            <RefreshCw aria-hidden="true" size={18} />
+            <div>
+              <strong>Billing integration not connected</strong>
+              <small>
+                Webhooks from the billing platform are still accepted in capture mode, but no
+                business events are written until credentials are configured.
+              </small>
+            </div>
           </div>
+          <Link href="/centipid" className="secondary-button">Configure</Link>
         </div>
+      )}
 
-        {/* Filters */}
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => setFilter("all")}
-              className={`px-4 py-2 rounded-md ${
-                filter === "all"
-                  ? "bg-orange-600 text-white"
-                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-              }`}
-            >
-              All Events
-            </button>
-            <button
-              onClick={() => setFilter("subscriber")}
-              className={`px-4 py-2 rounded-md ${
-                filter === "subscriber"
-                  ? "bg-orange-600 text-white"
-                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-              }`}
-            >
-              Subscribers
-            </button>
-            <button
-              onClick={() => setFilter("payment")}
-              className={`px-4 py-2 rounded-md ${
-                filter === "payment"
-                  ? "bg-orange-600 text-white"
-                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-              }`}
-            >
-              Payments
-            </button>
-            <button
-              onClick={() => setFilter("voucher")}
-              className={`px-4 py-2 rounded-md ${
-                filter === "voucher"
-                  ? "bg-orange-600 text-white"
-                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-              }`}
-            >
-              Vouchers
-            </button>
-            <button
-              onClick={() => setFilter("ticket")}
-              className={`px-4 py-2 rounded-md ${
-                filter === "ticket"
-                  ? "bg-orange-600 text-white"
-                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-              }`}
-            >
-              Tickets
-            </button>
-          </div>
+      <div className="operations-kpi-strip">
+        <div className="operations-kpi">
+          <span><CreditCard aria-hidden="true" size={16} /></span>
+          <p>Payments today</p>
+          <strong>{summary?.today.paymentCount ?? "—"}</strong>
+          <small>{summary ? `7d: ${summary.last7d.paymentCount}` : "Waiting for data."}</small>
         </div>
+        <div className="operations-kpi">
+          <span><ArrowDownToLine aria-hidden="true" size={16} /></span>
+          <p>Collected today</p>
+          <strong>{summary?.revenueVisible ? formatMarks(summary.today.net) : "—"}</strong>
+          <small>
+            {summary && !summary.revenueVisible
+              ? "Visible to admins only."
+              : summary
+                ? `Net of refunds · 7d: ${formatMarks(summary.last7d.net)}`
+                : "Waiting for data."}
+          </small>
+        </div>
+        <div className="operations-kpi">
+          <span><Ticket aria-hidden="true" size={16} /></span>
+          <p>Vouchers redeemed</p>
+          <strong>{summary?.today.vouchersRedeemed ?? "—"}</strong>
+          <small>
+            {summary
+              ? `Generated: ${summary.today.vouchersGenerated} · redemption ${formatPct(summary.today.redemptionRate)}`
+              : "Waiting for data."}
+          </small>
+        </div>
+        <div className="operations-kpi">
+          <span><Users aria-hidden="true" size={16} /></span>
+          <p>New subscribers</p>
+          <strong>{summary?.today.subscriberCreated ?? "—"}</strong>
+          <small>{summary ? `Paused: ${summary.today.subscriberPaused} · Resumed: ${summary.today.subscriberResumed}` : "Waiting for data."}</small>
+        </div>
+        <div className="operations-kpi">
+          <span><RefreshCw aria-hidden="true" size={16} /></span>
+          <p>Paused right now</p>
+          <strong>{summary?.live.pausedSubscribers ?? "—"}</strong>
+          <small>Subscribers with an active pause</small>
+        </div>
+        <div className="operations-kpi">
+          <span><Wrench aria-hidden="true" size={16} /></span>
+          <p>Open tickets</p>
+          <strong>{summary?.live.openTickets ?? "—"}</strong>
+          <small>
+            {summary
+              ? `Opened today: ${summary.today.ticketsOpened} · Resolved: ${summary.today.ticketsResolved}`
+              : "Waiting for data."}
+          </small>
+        </div>
+      </div>
 
-        {/* Events Feed */}
-        {filteredEvents && filteredEvents.length > 0 ? (
-          <div className="space-y-4">
-            {filteredEvents.map((event) => (
-              <div
-                key={event._id}
-                className={`border rounded-lg p-4 ${getEventColor(event.category)}`}
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-start space-x-3">
-                    <span className="text-2xl">{getEventIcon(event.category)}</span>
+      <div className="workspace-card" style={{ padding: "14px 18px", marginBottom: 16 }}>
+        <div className="filter-tabs" role="tablist" aria-label="Filter events">
+          {categories.map(({ value, label }) => (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              aria-selected={filter === value}
+              onClick={() => setFilter(value)}
+              className={`filter-tab ${filter === value ? "filter-tab-active" : ""}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {allEvents === undefined ? (
+        <div className="workspace-card loading-panel">Loading events…</div>
+      ) : filteredEvents.length === 0 ? (
+        <div className="workspace-card empty-state">
+          <h3>No {filter === "all" ? "" : `${filter} `}events yet</h3>
+          <p>
+            {filter === "all"
+              ? "Business events appear here as Centipid delivers them. Connect the billing integration to start streaming."
+              : `No ${filter} events have been recorded yet.`}
+          </p>
+          {filter === "all" && integration && !integration.available && (
+            <Link href="/centipid" className="primary-button">Open billing settings</Link>
+          )}
+        </div>
+      ) : (
+        <div className="event-list">
+          {filteredEvents.map((event) => {
+            const meta = categoryMetas[event.category] ?? categoryMetas.default;
+            const Icon = meta.icon;
+            return (
+              <div key={event._id} className="workspace-card event-item">
+                <div className="event-item-top">
+                  <div className="event-item-main">
+                    <span className="event-item-icon"><Icon aria-hidden="true" size={17} /></span>
                     <div>
-                      <p className="font-medium text-gray-900 capitalize">
-                        {event.category} - {event.eventType}
+                      <p className="event-item-title">
+                        {meta.label} · <span className={`event-badge ${meta.badge}`}>{event.eventType}</span>
                       </p>
-                      <p className="text-sm text-gray-600">
+                      <p className="event-item-meta">
                         {new Date(event.timestamp).toLocaleString()}
                       </p>
-                      
-                      {/* Event-specific details */}
-                      {event.category === "subscriber" && (
-                        <div className="mt-2 text-sm">
-                          <p><span className="font-medium">Phone:</span> {event.phone}</p>
-                          {event.name && <p><span className="font-medium">Name:</span> {event.name}</p>}
-                          <p><span className="font-medium">Package:</span> {event.packageName}</p>
-                        </div>
-                      )}
-                      
-                      {event.category === "payment" && (
-                        <div className="mt-2 text-sm">
-                          <p><span className="font-medium">Amount:</span> {event.currency} {event.amount}</p>
-                          <p><span className="font-medium">Method:</span> {event.method}</p>
-                          <p><span className="font-medium">Subscriber:</span> {event.subscriberPhone}</p>
-                        </div>
-                      )}
-                      
-                      {event.category === "voucher" && (
-                        <div className="mt-2 text-sm">
-                          <p><span className="font-medium">Package:</span> {event.packageName}</p>
-                        </div>
-                      )}
-                      
-                      {event.category === "ticket" && (
-                        <div className="mt-2 text-sm">
-                          <p><span className="font-medium">Subject:</span> {event.subject}</p>
-                        </div>
-                      )}
                     </div>
                   </div>
                 </div>
+                <div className="event-item-details">
+                  {event.category === "subscriber" && (
+                    <>
+                      {event.phone && <span className="event-detail">Phone: <strong>{event.phone}</strong></span>}
+                      {event.name && <span className="event-detail">Name: <strong>{event.name}</strong></span>}
+                      {event.packageName && <span className="event-detail">Package: <strong>{event.packageName}</strong></span>}
+                      <span className="event-detail">ID: <strong>{event.centipidSubscriberId}</strong></span>
+                    </>
+                  )}
+                  {event.category === "payment" && (
+                    <>
+                      <span className="event-detail">Amount: <strong>{event.currency} {Math.round(event.amount).toLocaleString()}</strong></span>
+                      <span className="event-detail">Method: <strong>{event.method}</strong></span>
+                      {event.subscriberPhone && <span className="event-detail">Subscriber: <strong>{event.subscriberPhone}</strong></span>}
+                      <span className="event-detail">Ref: <strong>{event.centipidPaymentId}</strong></span>
+                    </>
+                  )}
+                  {event.category === "voucher" && (
+                    <>
+                      {event.packageName && <span className="event-detail">Package: <strong>{event.packageName}</strong></span>}
+                      {event.customerPhone && <span className="event-detail">Customer: <strong>{event.customerPhone}</strong></span>}
+                      <span className="event-detail">Voucher: <strong>{event.centipidVoucherId}</strong></span>
+                    </>
+                  )}
+                  {event.category === "ticket" && (
+                    <>
+                      {event.subject && <span className="event-detail">Subject: <strong>{event.subject}</strong></span>}
+                      <span className="event-detail">Ticket: <strong>{event.centipidTicketId}</strong></span>
+                    </>
+                  )}
+                </div>
               </div>
-            ))}
+            );
+          })}
+
+          <div className="page-action-group">
+            {offset > 0 && (
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setOffset(Math.max(0, offset - pageSize))}
+              >
+                Newer events
+              </button>
+            )}
+            {hasMore && (
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setOffset(offset + pageSize)}
+              >
+                Older events
+              </button>
+            )}
           </div>
-        ) : (
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="text-center py-12">
-              <p className="text-gray-600">
-                {filter === "all"
-                  ? "No business events recorded yet. Configure Centipid integration to start receiving events."
-                  : `No ${filter} events recorded yet.`}
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

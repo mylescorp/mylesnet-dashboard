@@ -158,7 +158,7 @@ export function UserProfileDropdown({ user: propUser }: UserProfileDropdownProps
                 className="profile-menu-item"
               >
                 <Settings2 size={16} />
-                <span>{isPlatformMode ? "Audit Logs & System" : "Billing Integration"}</span>
+                <span>{isPlatformMode ? "Audit Logs & System" : "Centipid"}</span>
               </button>
             </div>
 

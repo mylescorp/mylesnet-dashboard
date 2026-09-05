@@ -23,7 +23,7 @@ type InterfaceTotals = {
 export const listRouterIds = internalQuery({
   args: {},
   handler: async (ctx) =>
-    (await ctx.db.query("routers").collect()).map((router) => router._id),
+    (await ctx.db.query("routers").collect()).filter((router) => router.archivedAt === undefined).map((router) => router._id),
 });
 
 export const recordRouterHealth = internalMutation({

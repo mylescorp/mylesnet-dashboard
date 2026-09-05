@@ -124,20 +124,20 @@ After setup:
 
 ## Centipid Integration Guide
 
-### Step 1: Generate Centipid API Token
+### Step 1: Generate Centipid MCP API Token
 
 1. Log in to your Centipid Billing account at [docs.centipidbilling.com](https://docs.centipidbilling.com)
-2. Navigate to Developer Settings → API Tokens
-3. Create a new token named "MylesNet Dashboard"
-4. Copy the token - you'll need it for the dashboard
-5. Ensure the token has read-only access to the resources you need (subscribers, payments, vouchers, tickets)
+2. Navigate to Developer Settings → API Tokens (MCP)
+3. Create a token named "MylesNet Dashboard" and copy it — format `12|…`
+4. The token is used (a) on the operator's machine by the opencode MCP client and (b) by the
+   dashboard's "Fetch historical snapshot" and "Verify token" actions via read-only MCP tools.
 
 ### Step 2: Configure Webhook in Centipid
 
 1. In Centipid, navigate to Developer Settings → Webhooks
 2. Add a new webhook with URL: `[YOUR_CONVEX_HTTP_ACTION_URL]`
    - The webhook URL will be displayed in the dashboard's Centipid Settings page
-   - It will look like: `https://your-deployment.convex.cloud/http/receiveCentipidWebhook`
+   - It will look like: `https://<deployment>.convex.site/receiveCentipidWebhook`
 3. Generate a signing secret and copy it
 4. Enable these events:
    - `subscriber.created` - When a new subscriber is created
@@ -161,53 +161,56 @@ After setup:
 
 ### Step 4: Configure Environment Variables
 
-Add the following environment variables to your deployment:
+The MCP token and webhook signing secret are **entered in the Centipid Settings page**, where they
+are encrypted with AES-256-GCM before being stored in the database. They are never committed and
+are not passed as app env vars. The only Centipid-related env vars are the server-side encryption
+key and the operator-local MCP token used by the opencode MCP client:
 
 **For local development (`.env.local`):**
 ```env
-CENTIPID_API_TOKEN=your_actual_api_token
-CENTIPID_WEBHOOK_SECRET=your_actual_webhook_secret
+CENTIPID_CREDENTIALS_ENCRYPTION_KEY=your_base64_32_byte_key
+CENTIPID_MCP_TOKEN=12|your_mcp_token   # opencode MCP client only, never read by the app
 ```
 
-**For Vercel production:**
-1. Go to Vercel dashboard → your project → Settings → Environment Variables
-2. Add `CENTIPID_API_TOKEN` with your actual API token
-3. Add `CENTIPID_WEBHOOK_SECRET` with your actual webhook signing secret
-4. Click Save and redeploy
-
-**For Convex production:**
-1. Go to Convex dashboard → your project → Settings → Environment Variables
-2. Add `CENTIPID_API_TOKEN` with your actual API token
-3. Add `CENTIPID_WEBHOOK_SECRET` with your actual webhook signing secret
-4. Click Save
+**For Vercel / Convex production:**
+1. Generate a base64 32-byte key: `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`
+2. Go to your hosting dashboard → project → Settings → Environment Variables
+3. Add only `CENTIPID_CREDENTIALS_ENCRYPTION_KEY` with the generated value
+4. Save and redeploy
 
 ### Step 5: Perform Historical Backfill (Optional)
 
 When first connecting a router or after webhook delivery issues:
 
-1. Navigate to "Centipid Settings"
-2. Click "Fetch Historical Data"
-3. This will fetch the last 7 days of subscriber, payment, and voucher data from Centipid API
-4. The data will populate the business activity feed
+1. Navigate to "Centipid Settings" (admin role required)
+2. Click "Verify token", then "Fetch historical snapshot"
+3. This best-effort reads a batch from the read-only MCP tools (`list_subscribers`,
+   `payments_report`, `voucher_stock`, `open_tickets`)
+4. The data populates the business activity feed; webhooks remain the source of truth
 
 ### Step 6: Verify Integration
 
 1. Check the connection status on the Centipid Settings page
-2. Verify "Credentials Configured" shows "Yes"
+2. Verify "Connection" shows "Configured"
 3. Trigger a test event in Centipid (e.g., create a test subscriber or generate a test voucher)
-4. Navigate to "Business Activity" in the sidebar
+4. Navigate to "Business events" in the sidebar
 5. Verify the event appears in the feed within a few seconds
-6. Check the "Recent Webhook Deliveries" section on the Centipid Settings page for any errors
+6. Check the "Webhook deliveries" section on the Centipid Settings page for any errors
 
 ### Security Notes for Centipid Integration
 
-- The Centipid API token is stored server-side only in the Convex database
+- The Centipid MCP token and webhook signing secret are encrypted at rest in the Convex database
+  (AES-256-GCM); plaintext only ever exists on the server during use
 - The webhook signing secret is never exposed to the client
-- All webhook payloads are HMAC-verified before processing
-- Duplicate webhook deliveries are rejected (idempotent processing)
-- The dashboard is read-only - it never writes back to Centipid
+- All webhook payloads are HMAC-verified against the raw body before processing
+- Duplicate webhook deliveries are rejected (idempotent on the webhook event id)
+- The dashboard is read-only - it never writes back to Centipid (the 3 approval-gated MCP tools
+  are intentionally never called)
 - No customer PII or payment details are stored in shift notes
-- Webhook delivery logs are pruned after 30 days to avoid PII accumulation
+- Webhook delivery logs are pruned after 30 days and their raw payload previews wiped;
+  event rows and projection state are pruned after 24 months
+- The receiver starts in capture mode (acknowledges and logs deliveries, writes no events) until
+  credentials are configured and a real signed delivery pins the provider contract
 
 ## RouterOS REST API Paths Used
 
@@ -240,8 +243,8 @@ AUTH_SECRET=your_auth_secret
 CONVEX_SITE_URL=your_site_url
 
 # Centipid Integration
-CENTIPID_API_TOKEN=your_centipid_api_token
-CENTIPID_WEBHOOK_SECRET=your_webhook_signing_secret
+CENTIPID_CREDENTIALS_ENCRYPTION_KEY=your_base64_32_byte_key
+CENTIPID_MCP_TOKEN=12|your_mcp_token
 ```
 
 ### Deploy to Vercel

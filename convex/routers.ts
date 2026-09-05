@@ -1,13 +1,35 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
-import { requireNetworkOperator, requirePlatformOwner } from "./lib/auth";
+import { requireNetworkOperator, requirePlatformAdmin, requirePlatformOwner } from "./lib/auth";
 import { encryptRouterCredential, isEncryptedRouterCredential } from "./lib/routerCredentials";
+import { logAudit } from "./lib/auditLog";
+
+function cleanText(value: string, label: string, maxLength = 160): string {
+  const cleaned = value.trim();
+  if (!cleaned || cleaned.length > maxLength) throw new Error(`Invalid ${label}`);
+  return cleaned;
+}
+
+function validatedHttpsUrl(value: string): string {
+  const candidate = cleanText(value, "router URL", 500);
+  let url: URL;
+  try { url = new URL(candidate); } catch { throw new Error("Router URL must be a valid HTTPS URL"); }
+  if (url.protocol !== "https:" || url.username || url.password || url.pathname !== "/" || url.search || url.hash) throw new Error("Router URL must be an HTTPS origin without credentials or a path");
+  return url.origin;
+}
+
+function validatedThresholds(warning: number | undefined, critical: number | undefined) {
+  const safeWarning = warning ?? 75;
+  const safeCritical = critical ?? 90;
+  if (!Number.isFinite(safeWarning) || !Number.isFinite(safeCritical) || safeWarning < 1 || safeCritical > 100 || safeWarning >= safeCritical) throw new Error("CPU warning must be lower than critical, within 1-100");
+  return { warning: safeWarning, critical: safeCritical };
+}
 
 // List routers WITHOUT credentials (safe for client queries)
 export const listRouters = query({
   handler: async (ctx) => {
     await requireNetworkOperator(ctx);
-    const routers = await ctx.db.query("routers").order("desc").collect();
+    const routers = (await ctx.db.query("routers").order("desc").collect()).filter((router) => router.archivedAt === undefined);
     
     // Check which routers have credentials set (without exposing them)
     const routersWithCredentials = await Promise.all(
@@ -24,6 +46,38 @@ export const listRouters = query({
     );
 
     return routersWithCredentials;
+  },
+});
+
+/** Safe onboarding state for the UI. It deliberately omits credentials and raw RouterOS responses. */
+export const getOnboardingStatuses = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireNetworkOperator(ctx);
+    const routers = (await ctx.db.query("routers").collect()).filter((router) => router.archivedAt === undefined);
+    return Promise.all(routers.map(async (router) => {
+      const [credentials, collectorRun, health] = await Promise.all([
+        ctx.db.query("routerCredentials").withIndex("by_router", (q) => q.eq("routerId", router._id)).first(),
+        ctx.db.query("collectorRuns").withIndex("by_router_observedAt", (q) => q.eq("routerId", router._id)).order("desc").first(),
+        ctx.db.query("healthSamples").withIndex("by_router_timestamp", (q) => q.eq("routerId", router._id)).order("desc").first(),
+      ]);
+      const now = Date.now();
+      const live = !!health && now - health.timestamp < 120_000;
+      const status = !credentials
+        ? "credentials_required"
+        : collectorRun?.status === "failed"
+          ? "collector_failed"
+          : live
+            ? "live"
+            : "collector_pending";
+      return {
+        routerId: router._id,
+        status,
+        collectorObservedAt: collectorRun?.observedAt ?? null,
+        collectorMessage: collectorRun?.message ?? null,
+        lastTelemetryAt: health?.timestamp ?? null,
+      };
+    }));
   },
 });
 
@@ -52,7 +106,7 @@ export const getRouterWithCredentials = internalQuery({
   args: { routerId: v.id("routers") },
   handler: async (ctx, args) => {
     const router = await ctx.db.get(args.routerId);
-    if (!router) return null;
+    if (!router || router.archivedAt !== undefined) return null;
 
     const credentials = await ctx.db
       .query("routerCredentials")
@@ -75,7 +129,7 @@ export const getCollectorConnection = internalQuery({
     if (!routerId) return null;
 
     const router = await ctx.db.get(routerId);
-    if (!router) return null;
+    if (!router || router.archivedAt !== undefined) return null;
 
     const credentials = await ctx.db
       .query("routerCredentials")
@@ -87,6 +141,7 @@ export const getCollectorConnection = internalQuery({
       restBaseUrl: router.restBaseUrl,
       username: credentials.encryptedUsername,
       password: credentials.encryptedPassword,
+      configVersion: `${router.updatedAt}:${credentials.updatedAt}`,
     };
   },
 });
@@ -127,31 +182,40 @@ export const addRouter = mutation({
     name: v.string(),
     restBaseUrl: v.string(),
     location: v.string(),
+    marketId: v.optional(v.id("markets")),
     username: v.string(),
     password: v.string(),
     cpuWarningThreshold: v.optional(v.number()),
     cpuCriticalThreshold: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await requireNetworkOperator(ctx);
+    const user = await requirePlatformAdmin(ctx);
+    const name = cleanText(args.name, "router name");
+    const location = cleanText(args.location, "location");
+    const username = cleanText(args.username, "RouterOS username", 128);
+    if (!args.password || args.password.length > 512) throw new Error("Invalid RouterOS password");
+    const thresholds = validatedThresholds(args.cpuWarningThreshold, args.cpuCriticalThreshold);
+    const restBaseUrl = validatedHttpsUrl(args.restBaseUrl);
     const routerId = await ctx.db.insert("routers", {
-      name: args.name,
-      restBaseUrl: args.restBaseUrl,
-      location: args.location,
+      name,
+      restBaseUrl,
+      location,
+      marketId: args.marketId,
       createdAt: Date.now(),
       updatedAt: Date.now(),
-      cpuWarningThreshold: args.cpuWarningThreshold || 75,
-      cpuCriticalThreshold: args.cpuCriticalThreshold || 90,
+      cpuWarningThreshold: thresholds.warning,
+      cpuCriticalThreshold: thresholds.critical,
     });
 
     // Store credentials separately - NEVER exposed to client
     await ctx.db.insert("routerCredentials", {
       routerId,
-      encryptedUsername: await encryptRouterCredential(args.username),
+      encryptedUsername: await encryptRouterCredential(username),
       encryptedPassword: await encryptRouterCredential(args.password),
       updatedAt: Date.now(),
     });
 
+    await logAudit(ctx, { action: "router.create", entityTable: "routers", entityId: routerId, changedBy: user._id, after: { name, location, restBaseUrl, marketId: args.marketId, hasCredentials: true } });
     return routerId;
   },
 });
@@ -163,16 +227,19 @@ export const updateRouter = mutation({
     name: v.optional(v.string()),
     restBaseUrl: v.optional(v.string()),
     location: v.optional(v.string()),
+    marketId: v.optional(v.id("markets")),
     cpuWarningThreshold: v.optional(v.number()),
     cpuCriticalThreshold: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await requireNetworkOperator(ctx);
+    const user = await requirePlatformAdmin(ctx);
     const { routerId, ...updates } = args;
-    await ctx.db.patch(routerId, {
-      ...updates,
-      updatedAt: Date.now(),
-    });
+    const router = await ctx.db.get(routerId);
+    if (!router || router.archivedAt !== undefined) throw new Error("Router not found");
+    const thresholds = validatedThresholds(updates.cpuWarningThreshold ?? router.cpuWarningThreshold, updates.cpuCriticalThreshold ?? router.cpuCriticalThreshold);
+    const patch = { name: updates.name === undefined ? undefined : cleanText(updates.name, "router name"), restBaseUrl: updates.restBaseUrl === undefined ? undefined : validatedHttpsUrl(updates.restBaseUrl), location: updates.location === undefined ? undefined : cleanText(updates.location, "location"), marketId: updates.marketId, cpuWarningThreshold: thresholds.warning, cpuCriticalThreshold: thresholds.critical, updatedAt: Date.now() };
+    await ctx.db.patch(routerId, patch);
+    await logAudit(ctx, { action: "router.update", entityTable: "routers", entityId: routerId, changedBy: user._id, before: { name: router.name, location: router.location, restBaseUrl: router.restBaseUrl, marketId: router.marketId }, after: { name: patch.name ?? router.name, location: patch.location ?? router.location, restBaseUrl: patch.restBaseUrl ?? router.restBaseUrl, marketId: patch.marketId } });
   },
 });
 
@@ -184,7 +251,11 @@ export const updateRouterCredentials = mutation({
     password: v.string(),
   },
   handler: async (ctx, args) => {
-    await requireNetworkOperator(ctx);
+    const user = await requirePlatformAdmin(ctx);
+    const router = await ctx.db.get(args.routerId);
+    if (!router || router.archivedAt !== undefined) throw new Error("Router not found");
+    const username = cleanText(args.username, "RouterOS username", 128);
+    if (!args.password || args.password.length > 512) throw new Error("Invalid RouterOS password");
     const existing = await ctx.db
       .query("routerCredentials")
       .withIndex("by_router", (q) => q.eq("routerId", args.routerId))
@@ -192,18 +263,19 @@ export const updateRouterCredentials = mutation({
 
     if (existing) {
       await ctx.db.patch(existing._id, {
-        encryptedUsername: await encryptRouterCredential(args.username),
+        encryptedUsername: await encryptRouterCredential(username),
         encryptedPassword: await encryptRouterCredential(args.password),
         updatedAt: Date.now(),
       });
     } else {
       await ctx.db.insert("routerCredentials", {
         routerId: args.routerId,
-        encryptedUsername: await encryptRouterCredential(args.username),
+        encryptedUsername: await encryptRouterCredential(username),
         encryptedPassword: await encryptRouterCredential(args.password),
         updatedAt: Date.now(),
       });
     }
+    await logAudit(ctx, { action: "router.credentials.rotate", entityTable: "routers", entityId: args.routerId, changedBy: user._id, after: { hasCredentials: true } });
   },
 });
 
@@ -247,30 +319,21 @@ export const getRouterCredentialProtectionStatus = query({
   },
 });
 
-// Delete a router and its credentials
-export const deleteRouter = mutation({
-  args: { routerId: v.id("routers") },
+/** Archive a router and its AP inventory. Historical monitoring remains intact. */
+export const archiveRouter = mutation({
+  args: { routerId: v.id("routers"), reason: v.string() },
   handler: async (ctx, args) => {
-    await requireNetworkOperator(ctx);
-    // Delete router
-    await ctx.db.delete(args.routerId);
-
-    // Delete credentials
-    const creds = await ctx.db
-      .query("routerCredentials")
-      .withIndex("by_router", (q) => q.eq("routerId", args.routerId))
-      .first();
-    if (creds) {
-      await ctx.db.delete(creds._id);
-    }
-
-    // Delete associated access points
+    const user = await requirePlatformAdmin(ctx);
+    const router = await ctx.db.get(args.routerId);
+    if (!router || router.archivedAt !== undefined) throw new Error("Router not found");
+    const reason = cleanText(args.reason, "archive reason", 300);
+    const now = Date.now();
     const accessPoints = await ctx.db
       .query("accessPoints")
       .withIndex("by_router", (q) => q.eq("routerId", args.routerId))
       .collect();
-    for (const ap of accessPoints) {
-      await ctx.db.delete(ap._id);
-    }
+    await ctx.db.patch(args.routerId, { archivedAt: now, archivedBy: user._id, archiveReason: reason, updatedAt: now });
+    await Promise.all(accessPoints.filter((ap) => ap.archivedAt === undefined).map((ap) => ctx.db.patch(ap._id, { archivedAt: now, archivedBy: user._id, archiveReason: `Router archived: ${reason}`, updatedAt: now })));
+    await logAudit(ctx, { action: "router.archive", entityTable: "routers", entityId: args.routerId, changedBy: user._id, before: { name: router.name }, after: { reason, archivedAccessPoints: accessPoints.length } });
   },
 });

@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { useQuery, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { AlertTriangle, Boxes, CircleDollarSign, Users, ShieldPlus } from "lucide-react";
-import { useState } from "react";
+import { AlertTriangle, Boxes, CircleDollarSign, Users, ShieldPlus, Ticket, RefreshCw, ArrowDownToLine } from "lucide-react";
+import { useMemo, useState } from "react";
 
 export default function PlatformDashboardPage() {
   const metrics = useQuery(api.platform.getPlatformDashboardMetrics, {});
+  const tzOffsetMinutes = useMemo(() => -new Date().getTimezoneOffset(), []);
+  const billingSummary = useQuery(api.centipid.getCentipidBusinessSummary, { tzOffsetMinutes });
   const claimStatus = useQuery(api.bootstrap.ownerClaimStatus, {});
   const claimOwner = useAction(api.bootstrap.claimPlatformOwner);
   const [claiming, setClaiming] = useState(false);
@@ -107,6 +109,58 @@ export default function PlatformDashboardPage() {
           <p>Commissions awaiting approval</p>
           <strong>{metrics?.awaitingApproval ?? "—"}</strong>
           <small>Requested payouts</small>
+        </div>
+      </div>
+
+      <div className="platform-action-items">
+        <h2 className="section-heading" style={{ marginBottom: 12 }}>
+          <span style={{ fontSize: 19, fontWeight: 750 }}>Billing &amp; business</span>
+        </h2>
+        <div className="operations-kpi-strip" style={{ marginBottom: 0 }}>
+          <div className="operations-kpi">
+            <span><CircleDollarSign aria-hidden="true" size={16} /></span>
+            <p>Payments today</p>
+            <strong>{billingSummary?.today.paymentCount ?? "—"}</strong>
+            <small>{billingSummary ? `7d: ${billingSummary.last7d.paymentCount}` : "Waiting for data."}</small>
+          </div>
+          <div className="operations-kpi">
+            <span><ArrowDownToLine aria-hidden="true" size={16} /></span>
+            <p>Collected today</p>
+            <strong>
+              {billingSummary?.revenueVisible
+                ? billingSummary.today.net === null || billingSummary.today.net === undefined
+                  ? "—"
+                  : `UGX ${Math.round(billingSummary.today.net).toLocaleString()}`
+                : "—"}
+            </strong>
+            <small>{billingSummary && !billingSummary.revenueVisible ? "Visible to admins only." : "Net of refunds."}</small>
+          </div>
+          <div className="operations-kpi">
+            <span><Ticket aria-hidden="true" size={16} /></span>
+            <p>Vouchers redeemed</p>
+            <strong>{billingSummary?.today.vouchersRedeemed ?? "—"}</strong>
+            <small>Generated: {billingSummary?.today.vouchersGenerated ?? "—"}</small>
+          </div>
+          <div className="operations-kpi">
+            <span><RefreshCw aria-hidden="true" size={16} /></span>
+            <p>Paused right now</p>
+            <strong>{billingSummary?.live.pausedSubscribers ?? "—"}</strong>
+            <small>Subscribers with an active pause</small>
+          </div>
+          <div className="operations-kpi">
+            <span><Users aria-hidden="true" size={16} /></span>
+            <p>Open tickets</p>
+            <strong>{billingSummary?.live.openTickets ?? "—"}</strong>
+            <small>Live support queue</small>
+          </div>
+          <div className="operations-kpi">
+            <span><CircleDollarSign aria-hidden="true" size={16} /></span>
+            <p>Events</p>
+            <strong>
+              <Link href="/business-activity" style={{ color: "inherit", textDecoration: "none" }}>Open</Link>
+            </strong>
+            <small>Full business activity feed</small>
+          </div>
         </div>
       </div>
 

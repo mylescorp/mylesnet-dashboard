@@ -59,6 +59,11 @@ export default defineSchema({
     updatedAt: v.number(),
     cpuWarningThreshold: v.optional(v.number()),
     cpuCriticalThreshold: v.optional(v.number()),
+    memoryWarningThreshold: v.optional(v.number()),
+    memoryCriticalThreshold: v.optional(v.number()),
+    archivedAt: v.optional(v.number()),
+    archivedBy: v.optional(v.id("users")),
+    archiveReason: v.optional(v.string()),
   })
     .index("by_location", ["location"])
     .index("by_market", ["marketId"]),
@@ -80,7 +85,21 @@ export default defineSchema({
     rateLimitReference: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
+    archivedAt: v.optional(v.number()),
+    archivedBy: v.optional(v.id("users")),
+    archiveReason: v.optional(v.string()),
   }).index("by_router", ["routerId"]),
+
+  /** Last authenticated collector result for each router. Never stores credentials. */
+  collectorRuns: defineTable({
+    routerId: v.id("routers"),
+    observedAt: v.number(),
+    status: v.union(v.literal("connected"), v.literal("failed")),
+    message: v.optional(v.string()),
+    latencyMs: v.optional(v.number()),
+    consecutiveFailures: v.optional(v.number()),
+    processUptimeMs: v.optional(v.number()),
+  }).index("by_router_observedAt", ["routerId", "observedAt"]),
 
   healthSamples: defineTable({
     routerId: v.id("routers"),
@@ -169,6 +188,91 @@ export default defineSchema({
     snapshotJson: v.string(),
   }).index("by_router_timestamp", ["routerId", "observedAt"]),
 
+  /** Live DHCP leases observed by the collector — subscriber IP↔MAC↔host mapping. */
+  dhcpLeases: defineTable({
+    routerId: v.id("routers"),
+    ipAddress: v.string(),
+    macAddress: v.string(),
+    hostname: v.optional(v.string()),
+    status: v.optional(v.string()),
+    expiresAt: v.optional(v.number()),
+    observedAt: v.number(),
+  })
+    .index("by_router", ["routerId"])
+    .index("by_router_ip", ["routerId", "ipAddress"])
+    .index("by_mac", ["macAddress"]),
+
+  /** RouterOS simple queues observed by the collector — per-subscriber rate limits. */
+  simpleQueues: defineTable({
+    routerId: v.id("routers"),
+    name: v.string(),
+    target: v.optional(v.string()),
+    rateBps: v.optional(v.number()),
+    maxLimitBps: v.optional(v.number()),
+    disabled: v.optional(v.boolean()),
+    observedAt: v.number(),
+  })
+    .index("by_router", ["routerId"])
+    .index("by_router_name", ["routerId", "name"]),
+
+  /** Latest per-router telemetry details (identity, system health, ports, wifi radios). */
+  routerTelemetry: defineTable({
+    routerId: v.id("routers"),
+    observedAt: v.number(),
+    identity: v.optional(v.string()),
+    systemHealth: v.optional(
+      v.object({
+        temperature: v.optional(v.number()),
+        temperatureUnit: v.optional(v.string()),
+        voltage: v.optional(v.number()),
+        badDrivers: v.optional(v.array(v.string())),
+      })
+    ),
+    ethernetPorts: v.optional(
+      v.array(
+        v.object({
+          name: v.string(),
+          running: v.optional(v.boolean()),
+          linkSpeedMbps: v.optional(v.number()),
+          duplex: v.optional(v.string()),
+          disabled: v.optional(v.boolean()),
+        })
+      )
+    ),
+    wifiRadios: v.optional(
+      v.array(
+        v.object({
+          interfaceName: v.string(),
+          state: v.optional(v.string()),
+          frequency: v.optional(v.number()),
+          channel: v.optional(v.string()),
+          signalStrength: v.optional(v.number()),
+          clientCount: v.optional(v.number()),
+        })
+      )
+    ),
+  }).index("by_router", ["routerId"]),
+
+  /** Operator-facing telemetry self-health events (ingest latency, backoff, drops). */
+  systemEvents: defineTable({
+    routerId: v.optional(v.id("routers")),
+    accessPointId: v.optional(v.id("accessPoints")),
+    type: v.union(
+      v.literal("ingest_latency"),
+      v.literal("rate_limited"),
+      v.literal("dropped"),
+      v.literal("collector_backoff"),
+      v.literal("partial_telemetry"),
+    ),
+    severity: v.union(v.literal("info"), v.literal("warning"), v.literal("critical")),
+    title: v.string(),
+    details: v.optional(v.string()),
+    occurredAt: v.number(),
+  })
+    .index("by_occurredAt", ["occurredAt"])
+    .index("by_router", ["routerId"])
+    .index("by_type", ["type"]),
+
   // ==========================================================================
   // CENTIPID INTEGRATION
   // ==========================================================================
@@ -176,6 +280,7 @@ export default defineSchema({
   centipidCredentials: defineTable({
     apiToken: v.string(),
     webhookSigningSecret: v.string(),
+    ingestionPaused: v.optional(v.boolean()),
     createdAt: v.number(),
   }).index("by_createdAt", ["createdAt"]),
 
@@ -186,9 +291,11 @@ export default defineSchema({
     name: v.optional(v.string()),
     packageName: v.string(),
     timestamp: v.number(),
-    rawPayloadRef: v.string(),
+    rawPayloadRef: v.optional(v.string()),
+    webhookEventId: v.optional(v.string()),
   }).index("by_timestamp", ["timestamp"])
-    .index("by_subscriber", ["centipidSubscriberId"]),
+    .index("by_subscriber", ["centipidSubscriberId"])
+    .index("by_webhookEventId", ["webhookEventId"]),
 
   paymentEvents: defineTable({
     centipidPaymentId: v.string(),
@@ -198,24 +305,32 @@ export default defineSchema({
     method: v.string(),
     subscriberPhone: v.string(),
     timestamp: v.number(),
+    webhookEventId: v.optional(v.string()),
   }).index("by_timestamp", ["timestamp"])
-    .index("by_payment", ["centipidPaymentId"]),
+    .index("by_payment", ["centipidPaymentId"])
+    .index("by_webhookEventId", ["webhookEventId"]),
 
   voucherEvents: defineTable({
     centipidVoucherId: v.string(),
     eventType: v.string(),
     packageName: v.string(),
     timestamp: v.number(),
+    webhookEventId: v.optional(v.string()),
+    customerPhone: v.optional(v.string()),
   }).index("by_timestamp", ["timestamp"])
-    .index("by_voucher", ["centipidVoucherId"]),
+    .index("by_voucher", ["centipidVoucherId"])
+    .index("by_webhookEventId", ["webhookEventId"])
+    .index("by_customerPhone", ["customerPhone"]),
 
   ticketEvents: defineTable({
     centipidTicketId: v.string(),
     eventType: v.string(),
     subject: v.string(),
     timestamp: v.number(),
+    webhookEventId: v.optional(v.string()),
   }).index("by_timestamp", ["timestamp"])
-    .index("by_ticket", ["centipidTicketId"]),
+    .index("by_ticket", ["centipidTicketId"])
+    .index("by_webhookEventId", ["webhookEventId"]),
 
   webhookDeliveryLog: defineTable({
     receivedAt: v.number(),
@@ -223,7 +338,30 @@ export default defineSchema({
     signatureValid: v.boolean(),
     processed: v.boolean(),
     errorMessage: v.optional(v.string()),
+    signatureHeader: v.optional(v.string()),
+    rawBodyPreview: v.optional(v.string()),
   }).index("by_receivedAt", ["receivedAt"]),
+
+  latestSubscriberState: defineTable({
+    centipidSubscriberId: v.string(),
+    status: v.union(v.literal("active"), v.literal("paused")),
+    phone: v.string(),
+    name: v.optional(v.string()),
+    packageName: v.string(),
+    lastEventType: v.string(),
+    lastSeen: v.number(),
+  }).index("by_subscriber", ["centipidSubscriberId"])
+    .index("by_status", ["status"]),
+
+  ticketStatus: defineTable({
+    centipidTicketId: v.string(),
+    status: v.union(v.literal("open"), v.literal("resolved")),
+    subject: v.string(),
+    openedAt: v.number(),
+    resolvedAt: v.optional(v.number()),
+    lastSeen: v.number(),
+  }).index("by_ticket", ["centipidTicketId"])
+    .index("by_status", ["status"]),
 
   // ==========================================================================
   // MASTER ADMIN / PLATFORM (business operations)

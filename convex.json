@@ -15,7 +15,7 @@
     },
     "preview": {
       "configure": {
-        "redirectUris": ["https://${buildEnv.VERCEL_BRANCH_URL}/callback"],
+        "redirectUris": ["https://${buildEnv.VERCEL_BRANCH_URL}/auth/callback"],
         "appHomepageUrl": "https://${buildEnv.VERCEL_PROJECT_PRODUCTION_URL}",
         "corsOrigins": ["https://${buildEnv.VERCEL_BRANCH_URL}"]
       }
@@ -23,7 +23,7 @@
     "prod": {
       "configure": {
         "redirectUris": [
-          "https://${buildEnv.VERCEL_PROJECT_PRODUCTION_URL}/callback"
+          "https://${buildEnv.VERCEL_PROJECT_PRODUCTION_URL}/auth/callback"
         ],
         "appHomepageUrl": "https://${buildEnv.VERCEL_PROJECT_PRODUCTION_URL}",
         "corsOrigins": ["https://${buildEnv.VERCEL_PROJECT_PRODUCTION_URL}"]

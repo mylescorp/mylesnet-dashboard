@@ -5,6 +5,14 @@
       "type": "remote",
       "url": "https://mcp.workos.com/mcp",
       "enabled": true
+    },
+    "centipid": {
+      "type": "remote",
+      "url": "https://mcp.centipidbilling.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${CENTIPID_MCP_TOKEN}"
+      },
+      "enabled": true
     }
   }
 }

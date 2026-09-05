@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { Plus, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { KeyRound, Plus, RadioTower, Trash2 } from "lucide-react";
 import type { Id } from "@/convex/_generated/dataModel";
 import { Field, Select, TextInput, StatusPill, EmptyState, Loading, ErrorNote } from "../components/ui";
 
@@ -20,10 +21,24 @@ const KIND_LABEL: Record<string, string> = {
 const lifecycleTone = (s: string) =>
   s === "active" ? "success" : s === "maintenance" ? "warning" : s === "suspended" ? "neutral" : "danger";
 
+const routerStatusTone = (status: string | undefined) =>
+  status === "live" ? "success" : status === "collector_failed" ? "danger" : status === "credentials_required" ? "neutral" : "warning";
+
+const routerStatusLabel = (status: string | undefined) =>
+  status === "live" ? "Live" : status === "collector_failed" ? "Collector blocked" : status === "credentials_required" ? "Credentials required" : "Onboarding";
+
+const routerStatusDetail = (status: string | undefined, message: string | null) =>
+  status === "live" ? "Receiving live telemetry from RouterOS."
+  : status === "collector_failed" ? (message ?? "The collector could not reach RouterOS.")
+  : status === "credentials_required" ? "Open the router console to add the read-only RouterOS login."
+  : "Awaiting the first collector run.";
+
 export default function DevicesPage() {
   const [marketId, setMarketId] = useState<string>("");
   const devices = useQuery(api.devices.listDevices, marketId ? { marketId: marketId as Id<"markets"> } : {});
   const markets = useQuery(api.markets.listMarkets, {});
+  const routers = useQuery(api.routers.listRouters, {});
+  const onboarding = useQuery(api.routers.getOnboardingStatuses, {});
   const createDevice = useMutation(api.devices.createDevice);
   const setMaintenance = useMutation(api.devices.setDeviceMaintenance);
   const softDelete = useMutation(api.devices.softDeleteDevice);
@@ -80,9 +95,10 @@ export default function DevicesPage() {
     }
   };
 
-  if (devices === undefined || markets === undefined) return <Loading />;
+  if (devices === undefined || markets === undefined || routers === undefined || onboarding === undefined) return <Loading />;
 
   const visible = marketId ? devices.filter((d) => d.marketId === (marketId as Id<"markets">)) : devices;
+  const visibleRouters = marketId ? routers.filter((r) => r.marketId === (marketId as Id<"markets">)) : routers;
 
   return (
     <div className="workspace-page">
@@ -108,6 +124,53 @@ export default function DevicesPage() {
             </Select>
           </Field>
         </div>
+      </div>
+
+      <div className="pf-panel" style={{ marginBottom: 22 }}>
+        <h2 style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <RadioTower aria-hidden="true" size={18} />
+          RouterOS estate ({visibleRouters.length})
+        </h2>
+        <p className="pf-muted">
+          Live router gateways monitored by the network collector. RouterOS credentials, configuration, drift watch and
+          live telemetry live in the Network module — open a router console to configure access and see its data.
+        </p>
+        {visibleRouters.length === 0 ? (
+          <EmptyState title="No routers in scope" body="Routers registered in the Network module appear here, filtered by the selected market." />
+        ) : (
+          <div className="pf-table-wrap">
+            <table className="pf-table">
+              <thead>
+                <tr>
+                  <th>Router</th>
+                  <th className="pf-hide-sm">Market</th>
+                  <th>Status</th>
+                  <th className="pf-hide-sm">HTTPS origin</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleRouters.map((router) => {
+                  const state = onboarding.find((item) => item.routerId === router._id);
+                  return (
+                    <tr key={router._id}>
+                      <td><Link style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600, color: "inherit" }} href={`/routers/${router._id}`}><KeyRound aria-hidden="true" size={14} />{router.name}</Link></td>
+                      <td className="pf-hide-sm">{markets.find((m) => m._id === router.marketId)?.name ?? "Unassigned"}</td>
+                      <td>
+                        <StatusPill tone={routerStatusTone(state?.status)}>{routerStatusLabel(state?.status)}</StatusPill>
+                        <span className="pf-muted" style={{ display: "block", marginTop: 4 }}>{routerStatusDetail(state?.status, state?.collectorMessage ?? null)}</span>
+                      </td>
+                      <td className="pf-hide-sm"><code>{router.restBaseUrl}</code></td>
+                      <td className="pf-actions">
+                        <Link className="secondary-button" href={`/routers/${router._id}`}>Console</Link>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <form className="pf-panel" style={{ marginBottom: 22 }} onSubmit={handleCreate}>
