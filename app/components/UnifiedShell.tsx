@@ -7,7 +7,7 @@ import { api } from "@/convex/_generated/api";
 import Sidebar from "./Sidebar";
 import { UnifiedTopbar } from "./UnifiedTopbar";
 import { UserProfileProvider, useUserProfile } from "./UserProfileContext";
-import { canAccess, effectiveRole, findNavEntry } from "./nav";
+import { canAccess, findNavEntry } from "./nav";
 import { ShieldPlus } from "lucide-react";
 
 function ClaimOwnerScreen() {
@@ -81,8 +81,7 @@ function UnifiedShellContent({ children }: { children: ReactNode }) {
 
   const profileReady = user !== undefined;
   const entry = findNavEntry(pathname);
-  const role = effectiveRole(user?.platformRole ?? null);
-  const denied = profileReady && !!user && !!entry && !canAccess(role, entry.item);
+  const denied = profileReady && !!user && !!entry && !canAccess(user.permissions ?? [], entry.item);
 
   // Handle role-gated route access (fail closed, friendly redirect)
   useEffect(() => {

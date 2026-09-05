@@ -184,3 +184,126 @@ planning notes; only build-time rulings are recorded here.
   (`requirePlatformAdmin`); an actual `operator` tier does not exist in Convex;
   `sweepExpiredVouchers` schedule still needs validation against the live
   deployment.
+
+## Network console + AP inventory hardening — build log
+
+> **2026-09-05:** Console index, first-class switch records, and richer access
+> point fields. Backend (`convex/`) shipped first so `convex codegen` types the
+> new module; UI landed after. `npm run lint` + `npm run build` green; `/console`
+> is static-prerendered.
+
+- **Console entry in the sidebar.** `app/components/nav.ts` adds
+  `{ href: "/console", label: "Console", icon: Monitor, roles: OPERATOR+PLATFORM }`
+  under "Routers & Network", between "Router estate" and "Router console".
+- **Network console page.** `app/console/page.tsx` is a client page that queries
+  `api.dashboard.getRouterDashboard` (no-arg = all routers) plus
+  `api.routers.getOnboardingStatuses`, `api.accessPoints.listAccessPoints` and
+  `api.networkSwitches.listSwitches`. Renders a KPI strip (routers, online
+  users, APs, switches, collector reach) and one card per router with CPU/mem
+  utilization, live-user count, last-telemetry age, AP and switch counts.
+  Mirroring existing pages, it guards on `currentUser.isPlatform` and shows an
+  "Access restricted" page otherwise.
+- **Switch registry.** New `networkSwitches` table in `convex/schema.ts`
+  (`routerId, name, model, serialNumber, macAddress, ipAddress, routerPort,
+  portCount, managed, note, createdAt/updatedAt, archivedAt/By, archiveReason`,
+  index `by_router`) and `convex/networkSwitches.ts` (`listSwitches`,
+  `addSwitch`, `updateSwitch`, `archiveSwitch`, `deleteSwitch`). Reads
+  `requireNetworkOperator`, writes `requirePlatformAdmin`, audit-logged with
+  `entityTable: "networkSwitches"`.
+- **AP ↔ switch link.** `accessPoints` gains `switchId` (→ `networkSwitches`)
+  and `switchPort`. `addAccessPoint`/`updateAccessPoint` enforce ownership via
+  `assertSwitchForRouter` — a switch must belong to the same router as the AP.
+  `deleteSwitch` clears `switchId`/`switchPort` on linked APs; `archiveRouter`
+  archives the router's switches too ("lifecycle everywhere", matching the
+  existing `routers`/`accessPoints` conventions).
+- **New AP fields + validation.** `networkAddress`, `ipAddress`, `macAddress`,
+  `serialNumber`, `model`, `note`. MAC normalized to uppercase with regex
+  `^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$`; IPv4 checked octet-by-octet;
+  optional strings cleaned via `optionalClean`. Field semantics follow user
+  guidance: `networkAddress` is the *subnet* the AP belongs to (dropdown);
+  `ipAddress` is the AP's management IP.
+- **Editors** (`app/components/router/RouterEditors.tsx`). `PortSelect` lists
+  interfaces live via `api.routeros.getInterfaces` with a cached fallback from
+  `api.operations.getRouterTelemetryLatest` (ethernet ports + wifi radios) and a
+  "Custom value" escape hatch; `NetworkAddressField` lists the router's live
+  subnets via `api.routeros.getIpAddresses` with the same fallback pattern;
+  router options for both are fetched per router, so each dropdown only shows
+  that router's own ports/networks. `ApEditor` is sectioned (Identity / Network
+  / Switch / Service & limits / Note) and `SwitchEditor` handles the registry.
+  Both combo boxes defer their mount-time auto-refresh with `setTimeout(0)`
+  because the repo lint (`react-hooks/set-state-in-effect`) forbids synchronous
+  `setState` inside an effect body.
+- **Router console tabs.** `app/routers/[routerId]/page.tsx` gains a "Switches"
+  tab (name/model/serial/MAC/IP/router port/port count/linked-AP count, add/edit/
+  archive) and the Access points tab now shows IP/MAC/network/model/serial and
+  the linked switch (name + port) per AP.
+- **Router estate chips.** `app/routers/page.tsx` adds AP chips for the new
+  fields (IP, MAC, serial, model, network, switch name·port) and a switch count
+  stat per router card.
+## Runtime troubleshooting runbook (2026-09-05)
+
+Reported: router username/password would not save when editing a router; and
+the browser console showed generic "Server Error" for
+`CONVEX Q(networkSwitches:listSwitches)` and
+`CONVEX A(routeros:getInterfaces)` / `getIpAddresses`.
+
+### Root causes
+1. Credential encryption requires `ROUTER_CREDENTIALS_ENCRYPTION_KEY` (base64
+   of 32 bytes, AES-256-GCM) on the deployment the app runs against. When it
+   is missing, `convex/lib/routerCredentials.ts` throws "Router credential
+   protection is not configured.", the `routers:updateRouterCredentials`
+   mutation aborts, and the edit appears to "not save". It also breaks the
+   `routeros:getInterfaces` / `getIpAddresses` actions, which decrypt stored
+   credentials before connecting.
+2. Deployment targeting gotcha: `npx convex run` / inline queries default to
+   the deployment selected by `convex.json` + `.env.local`
+   (`CONVEX_DEPLOYMENT`), NOT to `NEXT_PUBLIC_CONVEX_URL` or `CONVEX_URL`.
+   Probing "prod" without `--prod` silently hit the local deployment whose
+   schema/code/env are stale (old functions, no users, plaintext credentials),
+   which produced the bogus "function not found" and "empty users"
+   conclusions. Always pass `--prod` for production reads.
+3. Live network reads vs private routers: `routeros:*` actions run on the
+   Convex backend, so a router URL like `https://192.168.1.1:8443` (RFC1918)
+   is unreachable from Convex cloud. Those reads fail from prod by design; the
+   collector (`collector/forwarder.mjs`, runs on-prem) is the supported path
+   for private-LAN routers. PortSelect/NetworkAddressField dropdowns fall back
+   to cached telemetry + "Custom value".
+   - Confirmed 2026-09-05 via `npx convex logs --prod --history 400 --jsonl`:
+     the action executes, auth passes, credentials decrypt, and the thrown
+     error is exactly
+     `Uncaught ConvexError: The router could not be reached over the network.
+     Verify the router URL, credentials, and network path.` at
+     `readRouterResource (../convex/routeros.ts:67:6)` from the routerRead
+     handler (`routeros.ts:169:13`). Meanwhile the collector path is healthy:
+     `POST /collector/ingest` 200, `collector:ingestSnapshot`,
+     `routerCredentialActions:getDecryptedCollectorConnection` completing with
+     no errors. The browser console shows this as a generic "Server Error"
+     because Convex masks raw action errors; the deployments log carries the
+     real message.
+
+### Fix applied
+- Generated a new 32-byte key, set it on prod (`npx convex env set
+  ROUTER_CREDENTIALS_ENCRYPTION_KEY <key> --prod`), on the local deployment
+  (without `--prod`), and added it to `.env.local`.
+- Re-saved the router credentials via `routers:updateRouterCredentials` on
+  prod (router id `js75rvvax05pj9wz6hta2tasr98dtdbs`, user `MylesNet`) with
+  the owner identity; verified the stored `mnrc.v1.` ciphertext decrypts back
+  to the intended value with the new key.
+- Verified prod queries now work:
+  `npx convex run networkSwitches:listSwitches '{}' --prod --identity ...`
+  returns `[]`.
+- `routeros:*` live reads still can't reach a private-LAN router from prod
+  (expected). To fully exercise those from the browser, the router's REST API
+  must be reachable at a public URL the Convex backend can hit.
+
+### Self-service next time (if "credentials won't save" recurs)
+1. Set the key on the right deployment:
+   - prod:  `npx convex env set ROUTER_CREDENTIALS_ENCRYPTION_KEY <key> --prod`
+   - local: `npx convex env set ROUTER_CREDENTIALS_ENCRYPTION_KEY <key>` (no --prod)
+   - also add to `.env.local` for `convex dev`.
+2. Re-save the router username/password in the app. The mutation now encrypts.
+3. To check encryption works from the backend, run:
+   `npx convex run routers:updateRouterCredentials '{"routerId":"<id>","username":"<u>","password":"<p>"}' --prod --identity '{ ... }'`
+   A clean exit means the write succeeded.
+4. Remember which deployment `convex run` / queries target: add `--prod` for
+   production, omit it for the local dev deployment.

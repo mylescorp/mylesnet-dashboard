@@ -35,7 +35,7 @@ import {
 } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
-import { ApEditor, RouterEditor, errorText, type AccessPointRow, type RouterRow } from "@/app/components/router/RouterEditors";
+import { ApEditor, RouterEditor, SwitchEditor, errorText, type AccessPointRow, type RouterRow, type SwitchRow } from "@/app/components/router/RouterEditors";
 import { ConfigWatchPanel } from "@/app/components/router/ConfigWatchPanel";
 
 const bytes = (value: number) => value < 1024 ? `${Math.round(value)} B` : value < 1024 ** 2 ? `${(value / 1024).toFixed(1)} KB` : value < 1024 ** 3 ? `${(value / 1024 ** 2).toFixed(1)} MB` : `${(value / 1024 ** 3).toFixed(2)} GB`;
@@ -84,6 +84,7 @@ const tabs = [
   { id: "overview", label: "Overview", icon: Activity },
   { id: "setup", label: "Setup", icon: Settings2 },
   { id: "access", label: "Access points", icon: Wifi },
+  { id: "switches", label: "Switches", icon: Network },
   { id: "dhcp", label: "DHCP & queues", icon: Database },
   { id: "live", label: "Live inspection", icon: Cable },
   { id: "config", label: "Configuration", icon: FileDiff },
@@ -99,6 +100,7 @@ export default function RouterConsolePage() {
   const routers = useQuery(api.routers.listRouters, {});
   const markets = useQuery(api.markets.listMarkets, {});
   const aps = useQuery(api.accessPoints.listAccessPoints, { routerId });
+  const switches = useQuery(api.networkSwitches.listSwitches, { routerId });
   const onboarding = useQuery(api.routers.getOnboardingStatuses, {});
   const live = useQuery(api.operations.getLiveRouter, { routerId });
   const health = useQuery(api.healthSamples.getLatestRouterHealth, { routerId });
@@ -113,10 +115,12 @@ export default function RouterConsolePage() {
 
   const archiveRouter = useMutation(api.routers.archiveRouter);
   const archiveAp = useMutation(api.accessPoints.archiveAccessPoint);
+  const archiveSwitch = useMutation(api.networkSwitches.archiveSwitch);
 
   const [tab, setTab] = useState<TabId>("overview");
   const [routerEditor, setRouterEditor] = useState<RouterRow | false>(false);
   const [apEditor, setApEditor] = useState<{ routerId: Id<"routers">; item?: AccessPointRow } | null>(null);
+  const [switchEditor, setSwitchEditor] = useState<{ item?: SwitchRow } | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -125,7 +129,7 @@ export default function RouterConsolePage() {
   const market = markets?.find((entry) => entry._id === router?.marketId);
   const routerEvents = (systemEvents ?? []).filter((event) => event.routerId === routerId);
 
-  if (routers === undefined || markets === undefined || onboarding === undefined) {
+  if (routers === undefined || markets === undefined || onboarding === undefined || switches === undefined) {
     return <div className="workspace-page"><div className="loading-panel workspace-card"><Activity aria-hidden="true" size={22} />Loading router console…</div></div>;
   }
   if (!router) {
@@ -161,7 +165,8 @@ export default function RouterConsolePage() {
 
     {tab === "overview" ? <OverviewTab live={live} telemetry={telemetry} runHistory={runHistory ?? []} incidents={incidents ?? []} events={routerEvents} onboardingState={onboardingState} /> : null}
     {tab === "setup" ? <SetupTab router={router} markets={markets} onboardingState={onboardingState} onEdit={() => setRouterEditor(router)} onArchive={async () => { const reason = window.prompt(`Archive ${router.name}? Monitoring history will be kept. Enter a short reason:`); if (!reason?.trim()) return; setBusy("archive"); try { await archiveRouter({ routerId, reason }); setMessage("Router archived. Historical data was preserved."); nav.push("/routers"); } catch (caught) { setMessage(errorText(caught)); } finally { setBusy(null); } }} busy={busy === "archive"} /> : null}
-    {tab === "access" ? <AccessTab aps={aps ?? []} live={live} onAdd={() => setApEditor({ routerId })} onEdit={(item) => setApEditor({ routerId, item })} onArchive={async (item) => { const reason = window.prompt(`Archive ${item.name}? Historical data will be preserved. Enter a short reason:`); if (!reason?.trim()) return; setBusy(item._id); try { await archiveAp({ accessPointId: item._id, reason }); setMessage("Access point archived. Historical data was preserved."); } catch (caught) { setMessage(errorText(caught)); } finally { setBusy(null); } }} busy={busy} /> : null}
+    {tab === "access" ? <AccessTab aps={aps ?? []} live={live} switches={switches} onAdd={() => setApEditor({ routerId })} onEdit={(item) => setApEditor({ routerId, item })} onArchive={async (item) => { const reason = window.prompt(`Archive ${item.name}? Historical data will be preserved. Enter a short reason:`); if (!reason?.trim()) return; setBusy(item._id); try { await archiveAp({ accessPointId: item._id, reason }); setMessage("Access point archived. Historical data was preserved."); } catch (caught) { setMessage(errorText(caught)); } finally { setBusy(null); } }} busy={busy} /> : null}
+    {tab === "switches" ? <SwitchesTab switches={switches} aps={aps ?? []} onAdd={() => setSwitchEditor({})} onEdit={(item) => setSwitchEditor({ item })} onArchive={async (item) => { const reason = window.prompt(`Archive switch ${item.name}? Access points linked to it will keep their records but the switch link is cleared. Enter a short reason:`); if (!reason?.trim()) return; setBusy(item._id); try { await archiveSwitch({ switchId: item._id, reason }); setMessage("Switch archived. Its access-point links are preserved on the AP records."); } catch (caught) { setMessage(errorText(caught)); } finally { setBusy(null); } }} busy={busy} /> : null}
     {tab === "dhcp" ? <DhcpTab leases={leases} queues={queues} pools={pools} /> : null}
     {tab === "live" ? <LiveTab routerId={routerId} /> : null}
     {tab === "config" ? <ConfigTab routerId={routerId} /> : null}
@@ -169,6 +174,7 @@ export default function RouterConsolePage() {
 
     {routerEditor ? <RouterEditor router={router} markets={markets} close={() => setRouterEditor(false)} done={setMessage} /> : null}
     {apEditor ? <ApEditor accessPoint={apEditor.item} routerId={apEditor.routerId} close={() => setApEditor(null)} done={setMessage} /> : null}
+    {switchEditor ? <SwitchEditor switchRow={switchEditor.item} routerId={routerId} close={() => setSwitchEditor(null)} done={setMessage} /> : null}
   </div>;
 }
 
@@ -266,11 +272,21 @@ function SetupTab({ router, markets, onboardingState, onEdit, onArchive, busy }:
   </div>;
 }
 
-function AccessTab({ aps, live, onAdd, onEdit, onArchive, busy }: { aps: AccessPointRow[]; live: LiveRouter | null | undefined; onAdd: () => void; onEdit: (item: AccessPointRow) => void; onArchive: (item: AccessPointRow) => void; busy: string | null }) {
+function AccessTab({ aps, live, switches, onAdd, onEdit, onArchive, busy }: { aps: AccessPointRow[]; live: LiveRouter | null | undefined; switches: ReturnType<typeof useQuery<typeof api.networkSwitches.listSwitches>> | undefined; onAdd: () => void; onEdit: (item: AccessPointRow) => void; onArchive: (item: AccessPointRow) => void; busy: string | null }) {
   const liveByPort = new Map<string, LiveRouter["accessPoints"][number]>();
   if (live) { for (const entry of live.accessPoints) liveByPort.set(entry.accessPoint.port, entry); }
+  const switchName = (id: Id<"networkSwitches"> | undefined) => switches?.find((entry) => entry._id === id)?.name;
   return <Card eyebrow="Access points" title={`${aps.length} registered`} actions={<button type="button" className="primary-button" onClick={onAdd}><Plus size={16} />Add access point</button>}>
-    {aps.length === 0 ? <p className="dialog-message">No access points are registered for this router. Add one per RouterOS interface (ether port or wifi radio).</p> : <div className="monitor-table"><div className="monitor-head"><span>Name</span><span>Interface</span><span>Status</span><span>Users</span><span>Capacity</span><span>Details</span><span /></div>{aps.map((ap) => { const portLive = liveByPort.get(ap.port); return <div key={ap._id} className="monitor-row"><strong>{ap.name}</strong><span><code>{ap.port}</code></span><span>{portLive?.health?.linkState ? <Pill tone="success">Running</Pill> : <Pill tone="warning">Pending</Pill>}</span><span>{portLive?.activeUserCount ?? "—"}</span><span>{ap.capacity ? `${portLive?.activeUserCount ?? 0}/${ap.capacity}` : "Not configured"}</span><span className="monitor-detail">{ap.rateLimitReference ?? "No rate limit"}{ap.sharesPortWith ? ` · shared: ${ap.sharesPortWith}` : ""}</span><span><button type="button" className="secondary-button" onClick={() => onEdit(ap)}><Pencil size={14} />Edit</button><button type="button" className="secondary-button" disabled={busy === ap._id} onClick={() => onArchive(ap)}><Archive size={14} />Archive</button></span></div>; })}</div>}
+    {aps.length === 0 ? <p className="dialog-message">No access points are registered for this router. Add one per RouterOS interface (ether port or wifi radio).</p> : <div className="monitor-table"><div className="monitor-head"><span>Name</span><span>Interface</span><span>Status</span><span>Users</span><span>Capacity</span><span>Details</span><span /></div>{aps.map((ap) => { const portLive = liveByPort.get(ap.port); const switchNameForAp = ap.switchId ? (switchName(ap.switchId) ?? null) : null; return <div key={ap._id} className="monitor-row"><strong>{ap.name}</strong><span><code>{ap.port}</code></span><span>{portLive?.health?.linkState ? <Pill tone="success">Running</Pill> : <Pill tone="warning">Pending</Pill>}</span><span>{portLive?.activeUserCount ?? "—"}</span><span>{ap.capacity ? `${portLive?.activeUserCount ?? 0}/${ap.capacity}` : "Not configured"}</span><span className="monitor-detail">{ap.ipAddress ? <span><strong>IP</strong> {ap.ipAddress}</span> : null}{ap.macAddress ? <span><strong>MAC</strong> <code>{ap.macAddress}</code></span> : null}{ap.networkAddress ? <span><strong>Network</strong> <code>{ap.networkAddress}</code></span> : null}{ap.model ? <span><strong>Model</strong> {ap.model}</span> : null}{ap.serialNumber ? <span><strong>Serial</strong> {ap.serialNumber}</span> : null}{switchNameForAp ? <span><strong>Switch</strong> {switchNameForAp}{ap.switchPort ? ` · ${ap.switchPort}` : ""}</span> : null}{ap.sharesPortWith ? <span><strong>Shared</strong> {ap.sharesPortWith}</span> : null}{ap.rateLimitReference ? <span><strong>Rate limit</strong> {ap.rateLimitReference}</span> : null}{ap.note ? <span>{ap.note}</span> : null}</span><span><button type="button" className="secondary-button" onClick={() => onEdit(ap)}><Pencil size={14} />Edit</button><button type="button" className="secondary-button" disabled={busy === ap._id} onClick={() => onArchive(ap)}><Archive size={14} />Archive</button></span></div>; })}</div>}
+  </Card>;
+}
+
+function SwitchesTab({ switches, aps, onAdd, onEdit, onArchive, busy }: { switches: ReturnType<typeof useQuery<typeof api.networkSwitches.listSwitches>> | undefined; aps: AccessPointRow[]; onAdd: () => void; onEdit: (item: SwitchRow) => void; onArchive: (item: SwitchRow) => void; busy: string | null }) {
+  const apCountBySwitch = new Map<Id<"networkSwitches">, number>();
+  for (const ap of aps) { if (ap.switchId) apCountBySwitch.set(ap.switchId, (apCountBySwitch.get(ap.switchId) ?? 0) + 1); }
+  const switchRows = switches ?? [];
+  return <Card eyebrow="Switched infrastructure" title={`${switchRows.length} registered`} actions={<button type="button" className="primary-button" onClick={onAdd}><Plus size={16} />Add switch</button>}>
+    {switchRows.length === 0 ? <p className="dialog-message">No switches are registered for this router. Register a switch when access points hang off a separate device that plugs into one of the router’s ether ports.</p> : <div className="monitor-table"><div className="monitor-head"><span>Name</span><span>Model</span><span>Serial / MAC</span><span>IP</span><span>Router port</span><span>Ports</span><span>APs</span><span /></div>{switchRows.map((entry) => <div key={entry._id} className="monitor-row"><strong>{entry.name}</strong><span>{entry.model ?? "—"}</span><span>{entry.serialNumber || entry.macAddress ? <code>{entry.serialNumber ?? entry.macAddress}</code> : "—"}</span><span>{entry.ipAddress ? <code>{entry.ipAddress}</code> : "—"}</span><span>{entry.routerPort ? <code>{entry.routerPort}</code> : "—"}</span><span>{entry.portCount ? `${entry.portCount}` : "—"}{entry.managed ? <Pill tone="neutral">managed</Pill> : null}</span><span>{apCountBySwitch.get(entry._id) ?? 0}</span><span><button type="button" className="secondary-button" onClick={() => onEdit(entry)}><Pencil size={14} />Edit</button><button type="button" className="secondary-button" disabled={busy === entry._id} onClick={() => onArchive(entry)}><Archive size={14} />Archive</button></span></div>)}</div>}
   </Card>;
 }
 

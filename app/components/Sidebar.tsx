@@ -8,7 +8,7 @@ import { useAuth } from "@workos-inc/authkit-nextjs/components";
 import { ChevronLeft, ChevronRight, LogOut, X } from "lucide-react";
 import { useSidebarState } from "./useSidebarState";
 import { useUserProfile } from "./UserProfileContext";
-import { canAccess, effectiveRole, navSections } from "./nav";
+import { canAccess, navSections } from "./nav";
 
 interface SidebarProps {
   isMobile?: boolean;
@@ -23,13 +23,13 @@ export default function Sidebar({ isMobile = false, onCloseMobile }: SidebarProp
   const { user } = useUserProfile();
   const [isSigningOut, setIsSigningOut] = useState(false);
 
-  const role = effectiveRole(user?.platformRole ?? null);
+  const permissions = user?.permissions ?? [];
   const effectiveCollapsed = isMobile ? false : collapsed;
 
   const visibleSections = navSections
     .map((section) => ({
       ...section,
-      items: section.items.filter((item) => canAccess(role, item)),
+      items: section.items.filter((item) => canAccess(permissions, item)),
     }))
     .filter((section) => section.items.length > 0);
 

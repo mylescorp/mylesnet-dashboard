@@ -27,18 +27,27 @@ import type * as devices from "../devices.js";
 import type * as healthSamples from "../healthSamples.js";
 import type * as http from "../http.js";
 import type * as incidents from "../incidents.js";
+import type * as invitations from "../invitations.js";
+import type * as invitationsInternal from "../invitationsInternal.js";
 import type * as leaderboard from "../leaderboard.js";
 import type * as lib_auditLog from "../lib/auditLog.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_centipidCredentials from "../lib/centipidCredentials.js";
 import type * as lib_centipidVerify from "../lib/centipidVerify.js";
+import type * as lib_permissions from "../lib/permissions.js";
 import type * as lib_routerCredentials from "../lib/routerCredentials.js";
+import type * as lib_workosVerify from "../lib/workosVerify.js";
 import type * as marketProspects from "../marketProspects.js";
 import type * as markets from "../markets.js";
+import type * as networkSwitches from "../networkSwitches.js";
 import type * as operations from "../operations.js";
+import type * as organizations from "../organizations.js";
 import type * as platform from "../platform.js";
 import type * as platformUsers from "../platformUsers.js";
+import type * as profile from "../profile.js";
 import type * as renewalCredits from "../renewalCredits.js";
+import type * as rolesAdmin from "../rolesAdmin.js";
+import type * as rolesInternal from "../rolesInternal.js";
 import type * as routerCredentialActions from "../routerCredentialActions.js";
 import type * as routeros from "../routeros.js";
 import type * as routers from "../routers.js";
@@ -49,6 +58,7 @@ import type * as trash from "../trash.js";
 import type * as usage from "../usage.js";
 import type * as vouchers from "../vouchers.js";
 import type * as workos from "../workos.js";
+import type * as workosWebhook from "../workosWebhook.js";
 
 import type {
   ApiFromModules,
@@ -76,18 +86,27 @@ declare const fullApi: ApiFromModules<{
   healthSamples: typeof healthSamples;
   http: typeof http;
   incidents: typeof incidents;
+  invitations: typeof invitations;
+  invitationsInternal: typeof invitationsInternal;
   leaderboard: typeof leaderboard;
   "lib/auditLog": typeof lib_auditLog;
   "lib/auth": typeof lib_auth;
   "lib/centipidCredentials": typeof lib_centipidCredentials;
   "lib/centipidVerify": typeof lib_centipidVerify;
+  "lib/permissions": typeof lib_permissions;
   "lib/routerCredentials": typeof lib_routerCredentials;
+  "lib/workosVerify": typeof lib_workosVerify;
   marketProspects: typeof marketProspects;
   markets: typeof markets;
+  networkSwitches: typeof networkSwitches;
   operations: typeof operations;
+  organizations: typeof organizations;
   platform: typeof platform;
   platformUsers: typeof platformUsers;
+  profile: typeof profile;
   renewalCredits: typeof renewalCredits;
+  rolesAdmin: typeof rolesAdmin;
+  rolesInternal: typeof rolesInternal;
   routerCredentialActions: typeof routerCredentialActions;
   routeros: typeof routeros;
   routers: typeof routers;
@@ -98,6 +117,7 @@ declare const fullApi: ApiFromModules<{
   usage: typeof usage;
   vouchers: typeof vouchers;
   workos: typeof workos;
+  workosWebhook: typeof workosWebhook;
 }>;
 
 /**

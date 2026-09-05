@@ -12,7 +12,14 @@ import {
 } from "lucide-react";
 import { UserProfileModal } from "./UserProfileModal";
 import { useUserProfile } from "./UserProfileContext";
-import { canAccess, effectiveRole, navSections } from "./nav";
+import { canAccess, navSections } from "./nav";
+
+export interface PlatformUserRole {
+  _id?: string;
+  slug: string;
+  name: string;
+  isPlatform: boolean;
+}
 
 export type PlatformUser = {
   _id: string;
@@ -23,6 +30,11 @@ export type PlatformUser = {
   jobTitle?: string;
   platformRole: string | null;
   isPlatform: boolean;
+  roles: PlatformUserRole[];
+  permissions: string[];
+  /** Highest-ranking role, provided by the server. */
+  primaryRole?: { slug: string; name: string; isPlatform: boolean } | null;
+  canViewRevenue: boolean;
 };
 
 interface UserProfileDropdownProps {
@@ -40,10 +52,10 @@ export function UserProfileDropdown({ user: propUser }: UserProfileDropdownProps
   const [isSigningOut, setIsSigningOut] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const role = effectiveRole(user?.platformRole ?? null);
+  const permissions = user?.permissions ?? [];
   const allItems = navSections.flatMap((s) => s.items);
-  const auditAccessible = !!allItems.find((i) => i.href === "/audit-log" && canAccess(role, i));
-  const centipidAccessible = !!allItems.find((i) => i.href === "/centipid" && canAccess(role, i));
+  const auditAccessible = !!allItems.find((i) => i.href === "/audit-log" && canAccess(permissions, i));
+  const centipidAccessible = !!allItems.find((i) => i.href === "/centipid" && canAccess(permissions, i));
   const systemShortcutAccessible = auditAccessible || centipidAccessible;
 
   // Close dropdown on outside click
@@ -70,7 +82,7 @@ export function UserProfileDropdown({ user: propUser }: UserProfileDropdownProps
 
   const displayName = user?.name || user?.email?.split("@")[0] || "User";
   const displayEmail = user?.email || "Signed in";
-  const rawRole = user?.platformRole ? String(user.platformRole) : "operator";
+  const rawRole = user?.primaryRole?.slug ?? user?.platformRole ?? "operator";
   const formattedRole = rawRole.replace("platform_", "").replace(/_/g, " ").toUpperCase();
 
   // Get initials for avatar badge

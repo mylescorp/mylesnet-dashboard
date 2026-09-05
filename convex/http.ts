@@ -8,6 +8,7 @@ import {
   extractWebhookEventId,
   verifyWebhookSignature,
 } from "./lib/centipidVerify";
+import { extractWorkosEvent, verifyWorkosWebhook } from "./lib/workosVerify";
 
 const http = httpRouter();
 
@@ -284,6 +285,89 @@ http.route({
         rawBodyPreview: preview,
       });
       return Response.json({ success: false, message: "The event could not be stored." }, { status: 500 });
+    }
+  }),
+});
+
+/**
+ * WorkOS webhook receiver.
+ *
+ * Verifies the `WorkOS-Signature` header (HMAC-SHA256 over
+ * `<timestamp>.<raw_body>` with the endpoint signing secret, ~5 min tolerance),
+ * then dispatches user/membership/invitation/session/role events to keep the
+ * local identity, membership cache and role registry in sync.
+ */
+http.route({
+  path: "/workos/webhook",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const rawBody = await request.text();
+    const signatureHeader = request.headers.get("WorkOS-Signature");
+    const secret = process.env.WORKOS_WEBHOOK_SECRET;
+    const event = extractWorkosEvent(rawBody) ?? "unrecognized";
+
+    if (!secret) {
+      return Response.json(
+        { success: false, message: "The WorkOS webhook is not configured." },
+        { status: 503 },
+      );
+    }
+
+    let signatureValid = false;
+    try {
+      signatureValid = await verifyWorkosWebhook(rawBody, signatureHeader, secret);
+    } catch {
+      signatureValid = false;
+    }
+
+    if (!signatureValid) {
+      await ctx.runMutation(internal.workosWebhook.logWorkosDelivery, {
+        eventType: event,
+        signatureValid: false,
+        processed: false,
+        errorMessage: "Webhook signature verification failed.",
+      });
+      return Response.json(
+        { success: false, message: "The webhook signature is invalid." },
+        { status: 401 },
+      );
+    }
+
+    let data: unknown = {};
+    try {
+      const payload = JSON.parse(rawBody) as { data?: unknown };
+      data = payload.data ?? {};
+    } catch {
+      return Response.json(
+        { success: false, message: "The request body was not valid JSON." },
+        { status: 400 },
+      );
+    }
+
+    try {
+      const result = await ctx.runMutation(internal.workosWebhook.processWorkosEvent, { event, data });
+      const handled = Boolean(result && typeof result === "object" && (result as { handled?: boolean }).handled);
+      const failureReason: string | undefined = !handled
+        ? ((result && typeof result === "object" && (result as { reason?: string }).reason) as string | undefined) ?? "unhandled_event"
+        : undefined;
+      await ctx.runMutation(internal.workosWebhook.logWorkosDelivery, {
+        eventType: event,
+        signatureValid: true,
+        processed: handled,
+        errorMessage: failureReason,
+      });
+      return Response.json({ success: true, eventType: event, handled });
+    } catch (error) {
+      await ctx.runMutation(internal.workosWebhook.logWorkosDelivery, {
+        eventType: event,
+        signatureValid: true,
+        processed: false,
+        errorMessage: error instanceof Error ? error.message.slice(0, 240) : "The event could not be stored.",
+      });
+      return Response.json(
+        { success: false, message: "The event could not be stored." },
+        { status: 500 },
+      );
     }
   }),
 });

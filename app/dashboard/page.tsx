@@ -10,7 +10,6 @@ import type { Id } from "../../convex/_generated/dataModel";
 import { HealthTrendChart } from "../components/HealthTrendChart";
 import BillingKpiStrip from "../components/BillingKpiStrip";
 import { useUserProfile } from "../components/UserProfileContext";
-import { effectiveRole } from "../components/nav";
 
 const bytes = (value: number) => value < 1024 ? `${Math.round(value)} B` : value < 1024 ** 2 ? `${(value / 1024).toFixed(1)} KB` : value < 1024 ** 3 ? `${(value / 1024 ** 2).toFixed(1)} MB` : `${(value / 1024 ** 3).toFixed(2)} GB`;
 const rate = (value: number) => `${bytes(value)}/s`;
@@ -36,9 +35,7 @@ export default function DashboardPage() {
   const kpis = useQuery(api.operations.getKpis, {});
   const summaries = useQuery(api.operations.getRouterSummaries, {});
   const { user } = useUserProfile();
-  const role = effectiveRole(user?.platformRole ?? null);
-  const isPlatformRole =
-    role === "platform_owner" || role === "platform_admin" || role === "platform_support";
+  const isPlatformUser = user?.isPlatform === true;
   const [selectedRouterId, setSelectedRouterId] = useState<Id<"routers"> | null>(null);
   const [selectedAccessPoint, setSelectedAccessPoint] = useState<{ id: Id<"accessPoints">; name: string } | null>(null);
   const [detailRouterId, setDetailRouterId] = useState<Id<"routers"> | null>(null);
@@ -59,11 +56,11 @@ export default function DashboardPage() {
 
     <section className="operations-kpi-strip" aria-label="Live operations status">
       <Kpi label="Collector status" value={kpis.collectorConnected ? "Connected" : kpis.collectorStatus === "failed" ? "Needs attention" : "Awaiting data"} detail={kpis.collectorStatus === "failed" ? (kpis.collectorStatusMessage ?? "The last collector run failed.") : kpis.lastObservedAt ? `Last observation ${new Date(kpis.lastObservedAt).toLocaleTimeString()}` : "No collector observation received"} icon={<Activity size={17} />} />
-      <Kpi label="Network health" value={healthStatus} detail={kpis.healthScore === null ? "No access point telemetry" : `${kpis.healthScore}% of access points online`} icon={<Gauge size={17} />} />
+      <Kpi label="Network health" value={healthStatus} detail={kpis.healthScore === null ? "No router telemetry" : `${kpis.healthScore}% of routers reporting live telemetry`} icon={<Gauge size={17} />} />
       <Kpi label="Live users" value={kpis.totalUsers} detail="Current hotspot sessions" icon={<Users size={17} />} />
       <Kpi label="Access points" value={`${kpis.activeAccessPoints}/${kpis.totalAccessPoints}`} detail="Links currently online" icon={<Wifi size={17} />} />
       <Kpi label="Data used" value={bytes(kpis.totalDailyBytes)} detail="Observed in the last 24 hours" icon={<BarChart3 size={17} />} />
-      <Kpi label="Router load" value={kpis.averageCpu === null ? "—" : `${Math.round(kpis.averageCpu)}% CPU`} detail="Average reported CPU load" icon={<Gauge size={17} />} />
+      <Kpi label="Router load" value={kpis.averageCpu === null ? "—" : `${Math.round(kpis.averageCpu)}% CPU`} detail="Average reported router CPU load" icon={<Gauge size={17} />} />
     </section>
 
     <section className="section-block" aria-label="Billing and business summary">
@@ -84,7 +81,7 @@ export default function DashboardPage() {
     {selectedAccessPoint ? <AccessPointUsersDialog title={selectedAccessPoint.name} users={accessPointUsers} onClose={() => setSelectedAccessPoint(null)} /> : null}
     {selectedRouterId ? <section className="section-block" aria-label="Trends for the selected router"><HealthTrendChart routerId={selectedRouterId} /></section> : null}
 
-    {isPlatformRole ? <AdminOverviewSection /> : null}
+    {isPlatformUser ? <AdminOverviewSection /> : null}
   </div>;
 }
 
@@ -121,7 +118,7 @@ function RouterSection({ routerId, showChart, onOpenDetail, onViewUsers }: { rou
         <div className="ap-capacity"><div><span>Capacity</span><strong>{capacity ? `${activeUserCount} / ${capacity} users` : "Not configured"}</strong></div>{capacityPercent !== null ? <i><b style={{ width: `${capacityPercent}%` }} /></i> : null}</div>
         <div className="access-point-actions"><button type="button" className="secondary-button" onClick={() => onViewUsers({ id: accessPoint._id, name: accessPoint.name })}>View users</button><button type="button" className="primary-button" onClick={onOpenDetail}>Details</button></div>
       </article>;
-    })}</div> : <Empty title="No access points are registered" detail="Add access point records from Router settings before they can appear in the live operation view." action={() => nav.push("/routers")} label="Manage routers" />}
+    }) }</div> : <><RouterLivePanel live={live} /><div className="access-point-actions"><button type="button" className="secondary-button" onClick={() => nav.push("/routers")}>Register access points</button><span className="console-note">Router telemetry shows live data even before access point records are registered. Add records from Router settings to map users and traffic per link.</span></div></>}
 
     {showComparison ? <ComparisonDialog accessPoints={accessPoints} onClose={() => setShowComparison(false)} /> : null}
     {showChart ? <HealthTrendChart routerId={routerId} /> : null}
@@ -138,6 +135,27 @@ function CollectorHealthCard({ collector, fresh }: { collector: { observedAt: nu
       <div><dt>Process uptime</dt><dd>{collector?.processUptimeMs !== undefined ? uptimeLabel(collector.processUptimeMs) : "—"}</dd></div>
     </dl>
     {collector?.message ? <p className="collector-card-message">{collector.message}</p> : collector === null ? <p className="collector-card-message">No collector run recorded for this router yet. Deploy the backend with <code>npx convex deploy</code>, then follow the Collector setup steps to poll the RouterOS API.</p> : null}
+  </div>;
+}
+
+function RouterLivePanel({ live }: { live: { hotspotSessions: { subscriberIdentifier: string; observedBytes: number; observedAt: number }[]; leaseCount: number; queueCount: number; latestHealth: { cpuPercent: number; memoryPercent: number; txBytesPerSec: number; rxBytesPerSec: number; timestamp: number } | null; telemetry: { ethernetPorts?: { name: string; running?: boolean }[]; wifiRadios?: { interfaceName: string; state?: string }[] } | null } }) {
+  return <div className="access-point-grid access-point-grid-rich">
+    <article className="access-point-card workspace-card">
+      <div className="access-point-head"><div><h3>Live hotspot users</h3><p>Current sessions on the router</p></div><span className={`status-pill ${live.hotspotSessions.length ? "status-pill-success" : "status-pill-warning"}`}>{live.hotspotSessions.length ? "Active" : "Idle"}</span></div>
+      <div className="ap-user-row"><span><Users aria-hidden="true" size={15} />Users</span><strong>{live.hotspotSessions.length}</strong></div>
+      {live.hotspotSessions.length ? <div className="session-list">{live.hotspotSessions.slice(0, 6).map((session) => <div key={session.subscriberIdentifier}><strong>{session.subscriberIdentifier}</strong><span>Observed {relativeTime(session.observedAt)} · {bytes(session.observedBytes)}</span></div>)}</div> : <p className="dialog-message">No active hotspot sessions on the router.</p>}
+    </article>
+    <article className="access-point-card workspace-card">
+      <div className="access-point-head"><div><h3>Router in numbers</h3><p>Latest collector snapshot</p></div><span className={`status-pill ${live.latestHealth ? "status-pill-success" : "status-pill-warning"}`}>{live.latestHealth ? "Live" : "Awaiting telemetry"}</span></div>
+      <dl className="access-point-stats">
+        <div><dt>CPU</dt><dd>{live.latestHealth ? `${Math.round(live.latestHealth.cpuPercent)}%` : "—"}</dd></div>
+        <div><dt>Memory</dt><dd>{live.latestHealth ? `${Math.round(live.latestHealth.memoryPercent)}%` : "—"}</dd></div>
+        <div><dt>Throughput</dt><dd>↓ {rate(live.latestHealth?.rxBytesPerSec ?? 0)} · ↑ {rate(live.latestHealth?.txBytesPerSec ?? 0)}</dd></div>
+        <div><dt>DHCP leases</dt><dd>{live.leaseCount}</dd></div>
+        <div><dt>Simple queues</dt><dd>{live.queueCount}</dd></div>
+        <div><dt>Ethernet links</dt><dd>{live.telemetry?.ethernetPorts ? `${live.telemetry.ethernetPorts.filter((port) => port.running).length}/${live.telemetry.ethernetPorts.length} up` : "—"}</dd></div>
+      </dl>
+    </article>
   </div>;
 }
 

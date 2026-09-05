@@ -5,6 +5,25 @@ import type { Doc, Id } from "./_generated/dataModel";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const COLLECTOR_FRESHNESS_MS = 60_000;
+const COLLECTOR_HEALTH_MS = 90_000;
+
+async function dailyBytesForRouter(ctx: Pick<QueryCtx, "db">, routerId: Id<"routers">): Promise<number> {
+  const cutoff = Date.now() - DAY_MS;
+  const samples = await ctx.db
+    .query("usageSamples")
+    .withIndex("by_router_timestamp", (q) => q.eq("routerId", routerId))
+    .filter((q) => q.gte(q.field("timestamp"), cutoff))
+    .collect();
+  return samples.reduce((sum, sample) => sum + sample.byteDelta, 0);
+}
+
+async function hotspotSessionCount(ctx: Pick<QueryCtx, "db">, routerId: Id<"routers">): Promise<number> {
+  const sessions = await ctx.db
+    .query("activeHotspotSessions")
+    .withIndex("by_router", (q) => q.eq("routerId", routerId))
+    .collect();
+  return sessions.length;
+}
 
 function activeRouters(routers: Doc<"routers">[]): Doc<"routers">[] {
   return routers.filter((router) => router.archivedAt === undefined);
@@ -81,6 +100,7 @@ export const getKpis = query({
     let latestCollectorStatus: "connected" | "failed" | null = null;
     let latestCollectorStatusMessage: string | null = null;
     let latestCollectorStatusAt = 0;
+    let routersLive = 0;
 
     for (const router of routers) {
       const latestCollectorRun = await collectorStatusForRouter(ctx, router._id);
@@ -108,6 +128,16 @@ export const getKpis = query({
         lastObservedAt = latestObservation;
       }
 
+      totalUsers += await hotspotSessionCount(ctx, router._id);
+      totalDailyBytes += await dailyBytesForRouter(ctx, router._id);
+      if (latestCollectorRun?.status === "connected" && Date.now() - latestCollectorRun.observedAt < COLLECTOR_HEALTH_MS) {
+        routersLive += 1;
+      }
+      if (latestRouterSample) {
+        cpuSum += latestRouterSample.cpuPercent;
+        cpuCount += 1;
+      }
+
       const accessPoints = (await ctx.db
         .query("accessPoints")
         .withIndex("by_router", (q) => q.eq("routerId", router._id))
@@ -116,24 +146,18 @@ export const getKpis = query({
       for (const accessPoint of accessPoints) {
         totalAccessPoints++;
         const summary = await accessPointLiveSummary(ctx, accessPoint, router._id);
-        totalUsers += summary.activeUserCount;
-        totalDailyBytes += summary.dailyBytes;
-        if (summary.health) {
-          cpuSum += summary.health.queueDrops > 0 ? 1 : 0;
-          cpuCount++;
-        }
         if (summary.health?.linkState) activeAccessPoints++;
       }
     }
 
-    const averageCpu = cpuCount > 0 ? (cpuSum / cpuCount) * 100 : null;
+    const averageCpu = cpuCount > 0 ? cpuSum / cpuCount : null;
     return {
       collectorConnected:
         latestCollectorStatus === "connected" && Date.now() - latestCollectorStatusAt < COLLECTOR_FRESHNESS_MS,
       lastObservedAt,
       collectorStatus: latestCollectorStatus,
       collectorStatusMessage: latestCollectorStatusMessage,
-      healthScore: totalAccessPoints === 0 ? null : Math.round((activeAccessPoints / totalAccessPoints) * 100),
+      healthScore: routers.length === 0 ? null : Math.round((routersLive / routers.length) * 100),
       totalUsers,
       activeAccessPoints,
       totalAccessPoints,
@@ -204,6 +228,30 @@ export const getLiveRouter = query({
       .query("routerTelemetry")
       .withIndex("by_router", (q) => q.eq("routerId", router._id))
       .first();
+    const latestHealth = await ctx.db
+      .query("healthSamples")
+      .withIndex("by_router_timestamp", (q) => q.eq("routerId", router._id))
+      .order("desc")
+      .first();
+    const hotspotSessions = (await ctx.db
+      .query("activeHotspotSessions")
+      .withIndex("by_router", (q) => q.eq("routerId", router._id))
+      .collect())
+      .map((session) => ({
+        subscriberIdentifier: session.subscriberIdentifier,
+        observedBytes: session.observedBytes,
+        observedAt: session.observedAt,
+      }))
+      .sort((a, b) => b.observedBytes - a.observedBytes)
+      .slice(0, 25);
+    const dhcpLeases = await ctx.db
+      .query("dhcpLeases")
+      .withIndex("by_router", (q) => q.eq("routerId", router._id))
+      .collect();
+    const simpleQueues = await ctx.db
+      .query("simpleQueues")
+      .withIndex("by_router", (q) => q.eq("routerId", router._id))
+      .collect();
 
     return {
       router,
@@ -211,6 +259,10 @@ export const getLiveRouter = query({
       upstream: { configured: upstreamConfigured },
       collector,
       telemetry: telemetry ?? null,
+      latestHealth: latestHealth ?? null,
+      hotspotSessions,
+      leaseCount: dhcpLeases.length,
+      queueCount: simpleQueues.length,
     };
   },
 });

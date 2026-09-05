@@ -7,7 +7,6 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { api } from "@/convex/_generated/api";
 import { EmptyState, ErrorNote, Field, Loading, Select, StatusPill, TextArea, formatDateTime } from "@/app/components/ui";
 import { useUserProfile } from "@/app/components/UserProfileContext";
-import { effectiveRole } from "@/app/components/nav";
 
 const incidentTone: Record<string, "success" | "warning" | "danger" | "neutral"> = {
   critical: "danger", warning: "warning",
@@ -28,9 +27,9 @@ export default function IncidentsPage() {
   const acknowledgeAlert = useMutation(api.alerts.acknowledgeAlert);
   const resolveAlert = useMutation(api.alerts.resolveAlert);
   const { user } = useUserProfile();
-  const role = effectiveRole(user?.platformRole ?? null);
-  const canCreateIncident = role !== "platform_support";
-  const canManageAlerts = role === "platform_owner" || role === "platform_admin";
+  const permissions = user?.permissions ?? [];
+  const canCreateIncident = permissions.includes("incidents:manage");
+  const canManageAlerts = permissions.includes("alerts:manage");
 
   const [openFilter, setOpenFilter] = useState<"open" | "all">("open");
   const [showCreateModal, setShowCreateModal] = useState(false);

@@ -13,6 +13,7 @@ import {
   Map,
   MapPinned,
   Megaphone,
+  Monitor,
   RadioTower,
   Settings2,
   ShieldCheck,
@@ -25,15 +26,12 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-export type PlatformRole = "platform_owner" | "platform_admin" | "platform_support";
-export type OpsRole = "operator" | "agent";
-export type NavRole = PlatformRole | OpsRole;
-
 export interface NavItem {
   href: string;
   label: string;
   icon: LucideIcon;
-  roles: NavRole[];
+  /** The permission slug required to see this entry. */
+  permission: string;
   exact?: boolean;
 }
 
@@ -41,10 +39,6 @@ export interface NavSection {
   title: string;
   items: NavItem[];
 }
-
-const PLATFORM: PlatformRole[] = ["platform_owner", "platform_admin", "platform_support"];
-const OPERATOR: OpsRole[] = ["operator"];
-const AGENT: OpsRole[] = ["agent"];
 
 export const navSections: NavSection[] = [
   {
@@ -54,7 +48,7 @@ export const navSections: NavSection[] = [
         href: "/dashboard",
         label: "Dashboard",
         icon: LayoutDashboard,
-        roles: [...OPERATOR, ...PLATFORM, ...AGENT],
+        permission: "dashboard:access",
       },
     ],
   },
@@ -65,37 +59,43 @@ export const navSections: NavSection[] = [
         href: "/routers",
         label: "Router estate",
         icon: RadioTower,
-        roles: [...OPERATOR, ...PLATFORM],
+        permission: "routers:read",
+      },
+      {
+        href: "/console",
+        label: "Console",
+        icon: Monitor,
+        permission: "routers:manage",
       },
       {
         href: "/devices",
         label: "Devices & access points",
         icon: Boxes,
-        roles: [...PLATFORM],
+        permission: "devices:read",
       },
       {
         href: "/collector-setup",
         label: "Collector setup",
         icon: Cog,
-        roles: [...OPERATOR, ...PLATFORM],
+        permission: "collector:manage",
       },
       {
         href: "/config-watch",
         label: "Config watch",
         icon: FileDiff,
-        roles: [...OPERATOR, ...PLATFORM],
+        permission: "config_watch:manage",
       },
       {
         href: "/telemetry-health",
         label: "Telemetry health",
         icon: Activity,
-        roles: [...OPERATOR, ...PLATFORM],
+        permission: "telemetry_health:read",
       },
       {
         href: "/incidents",
         label: "Incident & alert desk",
         icon: TriangleAlert,
-        roles: [...OPERATOR, ...PLATFORM],
+        permission: "incidents:read",
       },
     ],
   },
@@ -106,13 +106,13 @@ export const navSections: NavSection[] = [
         href: "/shift-notes",
         label: "Shift handover",
         icon: ClipboardList,
-        roles: [...OPERATOR, ...PLATFORM],
+        permission: "shift_notes:manage",
       },
       {
         href: "/tickets",
         label: "Support tickets",
         icon: Ticket,
-        roles: [...PLATFORM, ...AGENT],
+        permission: "tickets:read",
       },
     ],
   },
@@ -123,25 +123,25 @@ export const navSections: NavSection[] = [
         href: "/markets",
         label: "Markets",
         icon: Map,
-        roles: [...PLATFORM],
+        permission: "markets:read",
       },
       {
         href: "/prospects",
         label: "Prospects",
         icon: MapPinned,
-        roles: ["platform_owner", "platform_admin", "platform_support"],
+        permission: "prospects:read",
       },
       {
         href: "/agents",
         label: "Agents",
         icon: Users,
-        roles: ["platform_owner", "platform_admin"],
+        permission: "agents:read",
       },
       {
         href: "/leaderboard",
         label: "Leaderboard",
         icon: Trophy,
-        roles: [...PLATFORM],
+        permission: "leaderboard:read",
       },
     ],
   },
@@ -152,25 +152,25 @@ export const navSections: NavSection[] = [
         href: "/business-activity",
         label: "Business events",
         icon: BarChart3,
-        roles: [...OPERATOR, ...PLATFORM, ...AGENT],
+        permission: "business_events:read",
       },
       {
         href: "/vouchers",
         label: "Voucher stock",
         icon: CreditCard,
-        roles: ["platform_owner", "platform_admin"],
+        permission: "vouchers:read",
       },
       {
         href: "/commissions",
         label: "Commissions",
         icon: CircleDollarSign,
-        roles: ["platform_owner", "platform_admin"],
+        permission: "commissions:read",
       },
       {
         href: "/usage",
         label: "Usage reports",
         icon: Download,
-        roles: [...OPERATOR, ...PLATFORM],
+        permission: "usage:read",
       },
     ],
   },
@@ -181,57 +181,46 @@ export const navSections: NavSection[] = [
         href: "/access",
         label: "Access management",
         icon: ShieldPlus,
-        roles: ["platform_owner"],
+        permission: "users:manage",
       },
       {
         href: "/audit-log",
         label: "Audit log",
         icon: History,
-        roles: ["platform_owner", "platform_admin"],
+        permission: "audit_log:read",
       },
       {
         href: "/comms",
         label: "Comms",
         icon: Megaphone,
-        roles: ["platform_owner", "platform_admin"],
+        permission: "comms:manage",
       },
       {
         href: "/centipid",
         label: "Centipid",
         icon: Settings2,
-        roles: ["platform_owner", "platform_admin"],
+        permission: "centipid:manage",
       },
       {
         href: "/trash",
         label: "Trash",
         icon: Trash2,
-        roles: ["platform_owner", "platform_admin"],
+        permission: "trash:manage",
       },
       {
         href: "/compliance",
         label: "Compliance",
         icon: ShieldCheck,
-        roles: [...OPERATOR, ...PLATFORM, ...AGENT],
+        permission: "compliance:access",
       },
     ],
   },
 ];
 
-export const ALL_NAV_ROLES: NavRole[] = ["platform_owner", "platform_admin", "platform_support", "operator", "agent"];
-
-/** Maps a stored `platformRole` (nullable) to the effective nav role. */
-export function effectiveRole(platformRole: string | null | undefined): NavRole {
-  return platformRole === "platform_owner" ||
-    platformRole === "platform_admin" ||
-    platformRole === "platform_support"
-    ? platformRole
-    : platformRole === "agent"
-      ? "agent"
-      : "operator";
-}
-
-export function canAccess(role: NavRole, item: NavItem): boolean {
-  return item.roles.includes(role);
+/** Permission-based access check. Empty permission sets deny everything. */
+export function canAccess(permissions: ReadonlySet<string> | readonly string[], item: NavItem): boolean {
+  const set = permissions instanceof Set ? permissions : new Set(permissions);
+  return set.has(item.permission);
 }
 
 type MatchKind = "exact" | "prefix" | null;

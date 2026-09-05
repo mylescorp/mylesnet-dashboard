@@ -1,10 +1,16 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
-import { requirePlatformUser, resolveUserByIdentity } from "./lib/auth";
+import {
+  isPlatformUser,
+  permissionsOf,
+  requirePlatformUser,
+  resolveRoles,
+  resolveUserByIdentity,
+} from "./lib/auth";
 
 /**
- * Returns the current authenticated platform user's role and profile, or
- * null if they are not signed in at all. Used by the layout guard
+ * Returns the current authenticated platform user's role, permissions and
+ * profile, or null if they are not signed in at all. Used by the layout guard
  * to decide whether to show the panel, bounce to /signin, or show /unauthorized.
  */
 export const getCurrentPlatformUser = query({
@@ -13,10 +19,8 @@ export const getCurrentPlatformUser = query({
     const user = await resolveUserByIdentity(ctx);
     if (!user) return null;
 
-    const isPlatform =
-      user.platformRole === "platform_owner" ||
-      user.platformRole === "platform_admin" ||
-      user.platformRole === "platform_support";
+    const roles = await resolveRoles(ctx, user);
+    const primary = roles.slice().sort((left, right) => right.rank - left.rank)[0] ?? null;
 
     return {
       _id: user._id,
@@ -24,8 +28,22 @@ export const getCurrentPlatformUser = query({
       email: user.email,
       phone: user.phone,
       image: user.image,
+      jobTitle: user.jobTitle,
       platformRole: user.platformRole ?? null,
-      isPlatform,
+      isPlatform: isPlatformUser(roles),
+      canViewRevenue: roles.some((role) => role.permissions.includes("revenue:view")),
+      permissions: permissionsOf(roles),
+      roles: roles.map((role) => ({
+        _id: role._id,
+        slug: role.slug,
+        name: role.name,
+        isPlatform: role.isPlatform,
+        rank: role.rank,
+      })),
+      primaryRole:
+        primary !== null
+          ? { slug: primary.slug, name: primary.name, isPlatform: primary.isPlatform }
+          : null,
     };
   },
 });

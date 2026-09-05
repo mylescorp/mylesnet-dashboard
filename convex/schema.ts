@@ -28,11 +28,77 @@ export default defineSchema({
         v.literal("agent")
       )
     ),
+    // Active role assignments. Authoritative for authorization once the
+    // system roles are seeded and users are backfilled. Empty/missing during
+    // migration falls back to the `platformRole` mirror.
+    roles: v.optional(v.array(v.id("roles"))),
+    // Convex file-storage id for the account avatar (resolved to a URL on read).
+    avatarStorageId: v.optional(v.string()),
+    // Soft delete: removed accounts keep their row (and WorkOS user) but lose
+    // all access. Restorable by trash:manage.
+    deletedAt: v.optional(v.number()),
+    deletedBy: v.optional(v.id("users")),
   })
     .index("email", ["email"])
     .index("by_workosUserId", ["workosUserId"])
     .index("phone", ["phone"])
     .index("by_platformRole", ["platformRole"]),
+
+  // ==========================================================================
+  // ROLE-BASED ACCESS CONTROL
+  // ==========================================================================
+
+  /** Authoritative role registry. System roles are seeded; custom roles are synced to WorkOS (org-scoped). */
+  roles: defineTable({
+    name: v.string(),
+    slug: v.string(),
+    description: v.optional(v.string()),
+    isSystem: v.boolean(),
+    isPlatform: v.boolean(),
+    rank: v.number(),
+    permissions: v.array(v.string()),
+    workosRoleId: v.optional(v.string()),
+    workosRoleSlug: v.optional(v.string()),
+    createdBy: v.optional(v.id("users")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+    deletedBy: v.optional(v.id("users")),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_rank", ["rank"]),
+
+  /** Mirror of WorkOS invitations (auto-joined to the platform org). */
+  invitations: defineTable({
+    workosInvitationId: v.string(),
+    email: v.string(),
+    roleId: v.optional(v.id("roles")),
+    roleSlug: v.optional(v.string()),
+    organizationId: v.string(),
+    status: v.union(v.literal("pending"), v.literal("accepted"), v.literal("revoked")),
+    invitedByUserId: v.optional(v.id("users")),
+    createdAt: v.number(),
+    expiresAt: v.optional(v.number()),
+    acceptedAt: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+  })
+    .index("by_email", ["email"])
+    .index("by_status", ["status"])
+    .index("by_workosId", ["workosInvitationId"]),
+
+  /** Cache of WorkOS organization memberships for the platform org, synced by webhook. */
+  organizationMemberships: defineTable({
+    workosMembershipId: v.string(),
+    workosUserId: v.string(),
+    organizationId: v.string(),
+    roleId: v.optional(v.id("roles")),
+    roleSlug: v.optional(v.string()),
+    status: v.union(v.literal("active"), v.literal("inactive"), v.literal("pending")),
+    syncedAt: v.number(),
+  })
+    .index("by_membership", ["workosMembershipId"])
+    .index("by_user", ["workosUserId"])
+    .index("by_org", ["organizationId"]),
 
   userMarketMemberships: defineTable({
     userId: v.id("users"),
@@ -83,6 +149,33 @@ export default defineSchema({
     sharesPortWith: v.optional(v.string()),
     capacity: v.optional(v.number()),
     rateLimitReference: v.optional(v.string()),
+    networkAddress: v.optional(v.string()),
+    ipAddress: v.optional(v.string()),
+    macAddress: v.optional(v.string()),
+    serialNumber: v.optional(v.string()),
+    model: v.optional(v.string()),
+    note: v.optional(v.string()),
+    switchId: v.optional(v.id("networkSwitches")),
+    switchPort: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    archivedAt: v.optional(v.number()),
+    archivedBy: v.optional(v.id("users")),
+    archiveReason: v.optional(v.string()),
+  }).index("by_router", ["routerId"]),
+
+  /** Layer-2 switches that sit between a router port and downstream access points. */
+  networkSwitches: defineTable({
+    routerId: v.id("routers"),
+    name: v.string(),
+    model: v.optional(v.string()),
+    serialNumber: v.optional(v.string()),
+    macAddress: v.optional(v.string()),
+    ipAddress: v.optional(v.string()),
+    routerPort: v.optional(v.string()),
+    portCount: v.optional(v.number()),
+    managed: v.optional(v.boolean()),
+    note: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
     archivedAt: v.optional(v.number()),

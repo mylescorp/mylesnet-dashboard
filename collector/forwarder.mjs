@@ -122,6 +122,12 @@ let consecutiveFailures = 0;
 let timer = null;
 let shuttingDown = false;
 
+if (String(process.env.MYLESNET_COLLECTOR_TLS_SKIP_VERIFY ?? "") === "1") {
+  // RouterOS www-ssl commonly ships a self-signed certificate. Opt into skipping
+  // TLS verification for the router connection only when explicitly requested.
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+}
+
 async function fetchFromDashboard(path, init) {
   let response;
   try {

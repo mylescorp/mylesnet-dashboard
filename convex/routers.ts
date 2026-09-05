@@ -332,9 +332,14 @@ export const archiveRouter = mutation({
       .query("accessPoints")
       .withIndex("by_router", (q) => q.eq("routerId", args.routerId))
       .collect();
+    const switches = await ctx.db
+      .query("networkSwitches")
+      .withIndex("by_router", (q) => q.eq("routerId", args.routerId))
+      .collect();
     await ctx.db.patch(args.routerId, { archivedAt: now, archivedBy: user._id, archiveReason: reason, updatedAt: now });
     await Promise.all(accessPoints.filter((ap) => ap.archivedAt === undefined).map((ap) => ctx.db.patch(ap._id, { archivedAt: now, archivedBy: user._id, archiveReason: `Router archived: ${reason}`, updatedAt: now })));
-    await logAudit(ctx, { action: "router.archive", entityTable: "routers", entityId: args.routerId, changedBy: user._id, before: { name: router.name }, after: { reason, archivedAccessPoints: accessPoints.length } });
+    await Promise.all(switches.filter((entry) => entry.archivedAt === undefined).map((entry) => ctx.db.patch(entry._id, { archivedAt: now, archivedBy: user._id, archiveReason: `Router archived: ${reason}`, updatedAt: now })));
+    await logAudit(ctx, { action: "router.archive", entityTable: "routers", entityId: args.routerId, changedBy: user._id, before: { name: router.name }, after: { reason, archivedAccessPoints: accessPoints.length, archivedSwitches: switches.length } });
   },
 });
 
@@ -361,6 +366,7 @@ export const deleteRouter = mutation({
 
     const resources: Array<[string, { _id: string }[]]> = [
       ["routerCredentials", await ctx.db.query("routerCredentials").withIndex("by_router", (q) => q.eq("routerId", args.routerId)).collect()],
+      ["networkSwitches", await ctx.db.query("networkSwitches").withIndex("by_router", (q) => q.eq("routerId", args.routerId)).collect()],
       ["collectorRuns", await ctx.db.query("collectorRuns").withIndex("by_router_observedAt", (q) => q.eq("routerId", args.routerId)).collect()],
       ["healthSamples", await ctx.db.query("healthSamples").withIndex("by_router_timestamp", (q) => q.eq("routerId", args.routerId)).collect()],
       ["activeHotspotSessions", await ctx.db.query("activeHotspotSessions").withIndex("by_router", (q) => q.eq("routerId", args.routerId)).collect()],

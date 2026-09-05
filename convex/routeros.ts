@@ -12,9 +12,13 @@ type RouterCredentials = {
 
 type RouterOSRecord = Record<string, unknown>;
 
+const ROUTER_FETCH_TIMEOUT_MS = 10_000;
+
 function encodeBasicCredentials(username: string, password: string): string {
   const credentials = new TextEncoder().encode(`${username}:${password}`);
-  return btoa(String.fromCodePoint(...credentials));
+  let binary = "";
+  for (const byte of credentials) binary += String.fromCharCode(byte);
+  return btoa(binary);
 }
 
 function parseRecords(body: string): RouterOSRecord[] {
@@ -42,19 +46,42 @@ async function readRouterResource(
     credentials.password,
   );
 
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      Accept: "application/json",
-      Authorization: `Basic ${authorization}`,
-    },
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ROUTER_FETCH_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Basic ${authorization}`,
+      },
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new ConvexError(
+        "The router did not respond in time. Check that it is online and reachable.",
+      );
+    }
+    throw new ConvexError(
+      "The router could not be reached over the network. Verify the router URL, credentials, and network path.",
+    );
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (!response.ok) {
     throw new ConvexError("We could not read the router right now.");
   }
 
-  return parseRecords(await response.text());
+  try {
+    return parseRecords(await response.text());
+  } catch {
+    throw new ConvexError(
+      "The router returned a response we could not understand.",
+    );
+  }
 }
 
 export const readMonitoringSnapshot = internalAction({

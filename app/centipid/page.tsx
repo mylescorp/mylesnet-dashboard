@@ -33,7 +33,7 @@ const readOnlyMcpTools = [
 
 export default function CentipidSettingsPage() {
   const { user } = useUserProfile();
-  const isAdmin = user?.platformRole === "platform_owner" || user?.platformRole === "platform_admin";
+  const isAdmin = user?.permissions?.includes("centipid:manage") ?? false;
 
   const settings = useQuery(api.centipid.getCentipidSettingsView, {});
   const deliveryLogs = useQuery(api.centipid.getWebhookDeliveryLogs, { limit: 30 });

@@ -31,6 +31,11 @@ export const claimPlatformOwner = action({
       throw new Error("Unauthorized bootstrap request");
     }
 
+    // The role registry must exist so the owner role row can be linked.
+    // seedLocalSystemRoles is an internal mutation (no permission guard), so it
+    // is safe for the first-claim bootstrap user who holds no roles yet.
+    await ctx.runMutation(internal.rolesAdmin.seedLocalSystemRoles, {});
+
     // Pre-check so we never promote a second user to WorkOS owner before the
     // atomically-guarded Convex write rejects it.
     const ownerId = await ctx.runQuery(internal.platformUsers.getPlatformOwnerId, {});

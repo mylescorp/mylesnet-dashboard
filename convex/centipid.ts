@@ -8,7 +8,7 @@ import {
   type MutationCtx,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { requireAuthenticatedUser, requirePlatformAdmin, resolveUserByIdentity } from "./lib/auth";
+import { permissionsOf as collectPermissions, requireAuthenticatedUser, requirePlatformAdmin, resolveRoles, resolveUserByIdentity } from "./lib/auth";
 import {
   decryptCentipidSecret,
   encryptCentipidSecret,
@@ -44,8 +44,8 @@ function webhookUrlFromSite(): string | null {
   return `${siteUrl.replace(/\/$/, "")}/receiveCentipidWebhook`;
 }
 
-function canViewRevenue(role: string | null | undefined): boolean {
-  return role === "platform_owner" || role === "platform_admin";
+function canViewRevenue(permissions: string[]): boolean {
+  return permissions.includes("revenue:view");
 }
 
 // ============================================================================
@@ -64,11 +64,9 @@ export const getCallerRole = internalQuery({
   handler: async (ctx) => {
     const user = await resolveUserByIdentity(ctx);
     if (!user) return null;
-    const isPlatform =
-      user.platformRole === "platform_owner" ||
-      user.platformRole === "platform_admin" ||
-      user.platformRole === "platform_support";
-    return { role: user.platformRole ?? null, isPlatform };
+    const roles = await resolveRoles(ctx, user);
+    const primary = roles.slice().sort((left, right) => right.rank - left.rank)[0] ?? null;
+    return { role: primary?.slug ?? null, isPlatform: roles.some((role) => role.isPlatform) };
   },
 });
 
@@ -292,7 +290,9 @@ export const getCentipidBusinessSummary = query({
     ]);
 
     const user = await resolveUserByIdentity(ctx);
-    const revenueVisible = canViewRevenue(user?.platformRole);
+    const revenueVisible = user
+      ? canViewRevenue(collectPermissions(await resolveRoles(ctx, user)))
+      : false;
 
     const money = (receivedRows: Array<{ amount?: number }>, refundRows: Array<{ amount?: number }>) => ({
       collected: sumAmount(receivedRows),

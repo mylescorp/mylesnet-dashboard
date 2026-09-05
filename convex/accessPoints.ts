@@ -1,5 +1,6 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, type MutationCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { requireNetworkOperator, requirePlatformAdmin } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 
@@ -15,6 +16,37 @@ function validateCapacity(value: number | undefined): number | undefined {
   return value;
 }
 
+function optionalClean(value: string | undefined, label: string, maxLength = 160): string | undefined {
+  if (value === undefined) return undefined;
+  const cleaned = value.trim();
+  if (cleaned.length > maxLength) throw new Error(`Invalid ${label}`);
+  return cleaned || undefined;
+}
+
+function validateMacAddress(value: string | undefined): string | undefined {
+  const cleaned = optionalClean(value, "MAC address", 32);
+  if (cleaned === undefined) return undefined;
+  if (!/^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$/.test(cleaned)) throw new Error("MAC address must look like AA:BB:CC:DD:EE:FF");
+  return cleaned.toUpperCase();
+}
+
+function validateIpAddress(value: string | undefined): string | undefined {
+  const cleaned = optionalClean(value, "IP address", 64);
+  if (cleaned === undefined) return undefined;
+  const octets = cleaned.split(".");
+  if (octets.length !== 4 || octets.some((octet) => !/^\d{1,3}$/.test(octet) || Number(octet) > 255)) {
+    throw new Error("IP address must be a valid IPv4 address");
+  }
+  return cleaned;
+}
+
+async function assertSwitchForRouter(ctx: MutationCtx, switchId: string | undefined, routerId: Id<"routers">): Promise<void> {
+  if (switchId === undefined) return;
+  const existing = await ctx.db.get(switchId as Id<"networkSwitches">);
+  if (!existing || existing.archivedAt !== undefined) throw new Error("Switch not found");
+  if (existing.routerId !== routerId) throw new Error("Switch does not belong to this router");
+}
+
 // Add an access point to a router
 export const addAccessPoint = mutation({
   args: {
@@ -25,6 +57,14 @@ export const addAccessPoint = mutation({
     sharesPortWith: v.optional(v.string()),
     capacity: v.optional(v.number()),
     rateLimitReference: v.optional(v.string()),
+    networkAddress: v.optional(v.string()),
+    ipAddress: v.optional(v.string()),
+    macAddress: v.optional(v.string()),
+    serialNumber: v.optional(v.string()),
+    model: v.optional(v.string()),
+    note: v.optional(v.string()),
+    switchId: v.optional(v.id("networkSwitches")),
+    switchPort: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const user = await requirePlatformAdmin(ctx);
@@ -35,6 +75,7 @@ export const addAccessPoint = mutation({
     const capacity = validateCapacity(args.capacity);
     const rateLimitReference = args.rateLimitReference === undefined ? undefined : cleanText(args.rateLimitReference, "rate-limit reference", 160);
     const sharesPortWith = args.sharesPortWith === undefined ? undefined : cleanText(args.sharesPortWith, "shared port reference", 160);
+    await assertSwitchForRouter(ctx, args.switchId, args.routerId);
     const duplicate = await ctx.db.query("accessPoints").withIndex("by_router", (q) => q.eq("routerId", args.routerId)).filter((q) => q.eq(q.field("port"), port)).first();
     if (duplicate && duplicate.archivedAt === undefined) throw new Error("An active access point already uses this RouterOS interface");
     const accessPointId = await ctx.db.insert("accessPoints", {
@@ -45,10 +86,18 @@ export const addAccessPoint = mutation({
       sharesPortWith,
       capacity,
       rateLimitReference,
+      networkAddress: optionalClean(args.networkAddress, "network address", 64),
+      ipAddress: validateIpAddress(args.ipAddress),
+      macAddress: validateMacAddress(args.macAddress),
+      serialNumber: optionalClean(args.serialNumber, "serial number", 120),
+      model: optionalClean(args.model, "model", 120),
+      note: optionalClean(args.note, "note", 1000),
+      switchId: args.switchId,
+      switchPort: optionalClean(args.switchPort, "switch port", 80),
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });
-    await logAudit(ctx, { action: "accessPoint.create", entityTable: "accessPoints", entityId: accessPointId, changedBy: user._id, after: { routerId: args.routerId, name, port, deviceType: args.deviceType, capacity } });
+    await logAudit(ctx, { action: "accessPoint.create", entityTable: "accessPoints", entityId: accessPointId, changedBy: user._id, after: { routerId: args.routerId, name, port, deviceType: args.deviceType, capacity, ipAddress: args.ipAddress, macAddress: args.macAddress, serialNumber: args.serialNumber, model: args.model, switchId: args.switchId, switchPort: args.switchPort } });
     return accessPointId;
   },
 });
@@ -79,6 +128,14 @@ export const updateAccessPoint = mutation({
     sharesPortWith: v.optional(v.string()),
     capacity: v.optional(v.number()),
     rateLimitReference: v.optional(v.string()),
+    networkAddress: v.optional(v.string()),
+    ipAddress: v.optional(v.string()),
+    macAddress: v.optional(v.string()),
+    serialNumber: v.optional(v.string()),
+    model: v.optional(v.string()),
+    note: v.optional(v.string()),
+    switchId: v.optional(v.id("networkSwitches")),
+    switchPort: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const user = await requirePlatformAdmin(ctx);
@@ -91,9 +148,10 @@ export const updateAccessPoint = mutation({
       const duplicate = await ctx.db.query("accessPoints").withIndex("by_router", (q) => q.eq("routerId", accessPoint.routerId)).filter((q) => q.eq(q.field("port"), port)).first();
       if (duplicate && duplicate._id !== accessPointId && duplicate.archivedAt === undefined) throw new Error("An active access point already uses this RouterOS interface");
     }
-    const patch = { name, port, deviceType: updates.deviceType, sharesPortWith: updates.sharesPortWith === undefined ? undefined : cleanText(updates.sharesPortWith, "shared port reference", 160), capacity: validateCapacity(updates.capacity), rateLimitReference: updates.rateLimitReference === undefined ? undefined : cleanText(updates.rateLimitReference, "rate-limit reference", 160), updatedAt: Date.now() };
+    await assertSwitchForRouter(ctx, updates.switchId, accessPoint.routerId);
+    const patch = { name, port, deviceType: updates.deviceType, sharesPortWith: updates.sharesPortWith === undefined ? undefined : cleanText(updates.sharesPortWith, "shared port reference", 160), capacity: validateCapacity(updates.capacity), rateLimitReference: updates.rateLimitReference === undefined ? undefined : cleanText(updates.rateLimitReference, "rate-limit reference", 160), networkAddress: optionalClean(updates.networkAddress, "network address", 64), ipAddress: validateIpAddress(updates.ipAddress), macAddress: validateMacAddress(updates.macAddress), serialNumber: optionalClean(updates.serialNumber, "serial number", 120), model: optionalClean(updates.model, "model", 120), note: optionalClean(updates.note, "note", 1000), switchId: updates.switchId, switchPort: optionalClean(updates.switchPort, "switch port", 80), updatedAt: Date.now() };
     await ctx.db.patch(accessPointId, patch);
-    await logAudit(ctx, { action: "accessPoint.update", entityTable: "accessPoints", entityId: accessPointId, changedBy: user._id, before: { name: accessPoint.name, port: accessPoint.port, deviceType: accessPoint.deviceType }, after: { name: patch.name ?? accessPoint.name, port: patch.port ?? accessPoint.port, deviceType: patch.deviceType ?? accessPoint.deviceType } });
+    await logAudit(ctx, { action: "accessPoint.update", entityTable: "accessPoints", entityId: accessPointId, changedBy: user._id, before: { name: accessPoint.name, port: accessPoint.port, deviceType: accessPoint.deviceType }, after: { name: patch.name ?? accessPoint.name, port: patch.port ?? accessPoint.port, deviceType: patch.deviceType ?? accessPoint.deviceType, switchId: patch.switchId, switchPort: patch.switchPort } });
   },
 });
 
