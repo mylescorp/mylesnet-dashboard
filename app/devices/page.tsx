@@ -3,8 +3,7 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import Link from "next/link";
-import { Plus, RadioTower, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import type { Id } from "@/convex/_generated/dataModel";
 import { Field, Select, TextInput, StatusPill, EmptyState, Loading, ErrorNote } from "@/app/components/ui";
 
@@ -111,20 +110,6 @@ export default function DevicesPage() {
         </div>
       </div>
 
-      <div className="pf-panel" style={{ marginBottom: 22 }}>
-        <h2 style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <RadioTower aria-hidden="true" size={18} />
-          RouterOS gateways
-        </h2>
-        <p className="pf-muted">
-          Router gateways live in the Router estate module — RouterOS credentials, collector health,
-          configuration and drift watch, live telemetry and thresholds are all managed there.
-        </p>
-        <div className="pf-form-actions">
-          <Link href="/routers" className="primary-button"><RadioTower aria-hidden="true" size={16} />Open Router estate</Link>
-        </div>
-      </div>
-
       <form className="pf-panel" style={{ marginBottom: 22 }} onSubmit={handleCreate}>
         <h2>Add a device</h2>
         <p className="pf-muted">Register a gateway or access point. Pick a parent gateway for APs.</p>
@@ -162,7 +147,7 @@ export default function DevicesPage() {
         <div className="pf-form-actions">
           <button type="submit" className="primary-button"><Plus aria-hidden="true" size={16} /> Create device</button>
         </div>
-      </form>
+</form>
 
       <div className="pf-panel">
         <h2>Device inventory ({visible.length})</h2>

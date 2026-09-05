@@ -59,7 +59,7 @@ export const navSections: NavSection[] = [
     ],
   },
   {
-    title: "Operations",
+    title: "Routers & Network",
     items: [
       {
         href: "/routers",
@@ -68,11 +68,40 @@ export const navSections: NavSection[] = [
         roles: [...OPERATOR, ...PLATFORM],
       },
       {
+        href: "/devices",
+        label: "Devices & access points",
+        icon: Boxes,
+        roles: [...PLATFORM],
+      },
+      {
+        href: "/collector-setup",
+        label: "Collector setup",
+        icon: Cog,
+        roles: [...OPERATOR, ...PLATFORM],
+      },
+      {
+        href: "/config-watch",
+        label: "Config watch",
+        icon: FileDiff,
+        roles: [...OPERATOR, ...PLATFORM],
+      },
+      {
+        href: "/telemetry-health",
+        label: "Telemetry health",
+        icon: Activity,
+        roles: [...OPERATOR, ...PLATFORM],
+      },
+      {
         href: "/incidents",
         label: "Incident & alert desk",
         icon: TriangleAlert,
         roles: [...OPERATOR, ...PLATFORM],
       },
+    ],
+  },
+  {
+    title: "Operations",
+    items: [
       {
         href: "/shift-notes",
         label: "Shift handover",
@@ -84,29 +113,6 @@ export const navSections: NavSection[] = [
         label: "Support tickets",
         icon: Ticket,
         roles: [...PLATFORM, ...AGENT],
-      },
-    ],
-  },
-  {
-    title: "Monitoring",
-    items: [
-      {
-        href: "/config-watch",
-        label: "Config watch",
-        icon: FileDiff,
-        roles: [...OPERATOR, ...PLATFORM],
-      },
-      {
-        href: "/collector-setup",
-        label: "Collector setup",
-        icon: Cog,
-        roles: [...OPERATOR, ...PLATFORM],
-      },
-      {
-        href: "/telemetry-health",
-        label: "Telemetry health",
-        icon: Activity,
-        roles: [...OPERATOR, ...PLATFORM],
       },
     ],
   },
@@ -124,12 +130,6 @@ export const navSections: NavSection[] = [
         label: "Prospects",
         icon: MapPinned,
         roles: ["platform_owner", "platform_admin", "platform_support"],
-      },
-      {
-        href: "/devices",
-        label: "Devices",
-        icon: Boxes,
-        roles: [...PLATFORM],
       },
       {
         href: "/agents",

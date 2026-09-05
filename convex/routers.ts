@@ -337,3 +337,55 @@ export const archiveRouter = mutation({
     await logAudit(ctx, { action: "router.archive", entityTable: "routers", entityId: args.routerId, changedBy: user._id, before: { name: router.name }, after: { reason, archivedAccessPoints: accessPoints.length } });
   },
 });
+
+/** Permanently delete a router and every dependent record: RouterOS credentials, access points and their samples, telemetry, config-watch history, DHCP/queue observations, sessions, incidents and shift notes. Admin or owner only. Cannot be undone. */
+export const deleteRouter = mutation({
+  args: { routerId: v.id("routers"), reason: v.string() },
+  handler: async (ctx, args) => {
+    const user = await requirePlatformAdmin(ctx);
+    const router = await ctx.db.get(args.routerId);
+    if (!router) throw new Error("Router not found");
+    const reason = cleanText(args.reason, "delete reason", 300);
+
+    const purge = async (rows: { _id: string }[]) => {
+      await Promise.all(rows.map((row) => ctx.db.delete(row._id as never)));
+      return rows.length;
+    };
+
+    const accessPoints = await ctx.db
+      .query("accessPoints")
+      .withIndex("by_router", (q) => q.eq("routerId", args.routerId))
+      .collect();
+    const accessPointIds = accessPoints.map((ap) => ap._id);
+    const counts: Record<string, number> = { accessPoints: accessPoints.length };
+
+    const resources: Array<[string, { _id: string }[]]> = [
+      ["routerCredentials", await ctx.db.query("routerCredentials").withIndex("by_router", (q) => q.eq("routerId", args.routerId)).collect()],
+      ["collectorRuns", await ctx.db.query("collectorRuns").withIndex("by_router_observedAt", (q) => q.eq("routerId", args.routerId)).collect()],
+      ["healthSamples", await ctx.db.query("healthSamples").withIndex("by_router_timestamp", (q) => q.eq("routerId", args.routerId)).collect()],
+      ["activeHotspotSessions", await ctx.db.query("activeHotspotSessions").withIndex("by_router", (q) => q.eq("routerId", args.routerId)).collect()],
+      ["usageSamples", await ctx.db.query("usageSamples").withIndex("by_router_timestamp", (q) => q.eq("routerId", args.routerId)).collect()],
+      ["incidents", await ctx.db.query("incidents").withIndex("by_router_open", (q) => q.eq("routerId", args.routerId)).collect()],
+      ["shiftNotes", await ctx.db.query("shiftNotes").withIndex("by_router_timestamp", (q) => q.eq("routerId", args.routerId)).collect()],
+      ["configWatchBaselines", await ctx.db.query("configWatchBaselines").withIndex("by_router", (q) => q.eq("routerId", args.routerId)).collect()],
+      ["routerConfigurationSnapshots", await ctx.db.query("routerConfigurationSnapshots").withIndex("by_router_timestamp", (q) => q.eq("routerId", args.routerId)).collect()],
+      ["dhcpLeases", await ctx.db.query("dhcpLeases").withIndex("by_router", (q) => q.eq("routerId", args.routerId)).collect()],
+      ["simpleQueues", await ctx.db.query("simpleQueues").withIndex("by_router", (q) => q.eq("routerId", args.routerId)).collect()],
+      ["routerTelemetry", await ctx.db.query("routerTelemetry").withIndex("by_router", (q) => q.eq("routerId", args.routerId)).collect()],
+      ["systemEvents", await ctx.db.query("systemEvents").withIndex("by_router", (q) => q.eq("routerId", args.routerId)).collect()],
+    ];
+    for (const [key, rows] of resources) {
+      counts[key] = await purge(rows);
+    }
+
+    for (const accessPointId of accessPointIds) {
+      counts.accessPointSamples = (counts.accessPointSamples ?? 0) + await purge(
+        await ctx.db.query("accessPointSamples").withIndex("by_access_point_timestamp", (q) => q.eq("accessPointId", accessPointId)).collect()
+      );
+    }
+
+    await ctx.db.delete(args.routerId);
+    await logAudit(ctx, { action: "router.delete", entityTable: "routers", entityId: args.routerId, changedBy: user._id, before: { name: router.name, location: router.location, restBaseUrl: router.restBaseUrl }, after: { reason, removed: counts } });
+    return { removed: counts };
+  },
+});
