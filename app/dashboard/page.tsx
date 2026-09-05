@@ -1,13 +1,16 @@
 "use client";
 
 import { useQuery } from "convex/react";
-import { Activity, ArrowUpRight, BarChart3, Boxes, FileDiff, Gauge, RadioTower, SlidersHorizontal, Spline, Timer, Users, Wifi } from "lucide-react";
+import { Activity, AlertTriangle, ArrowUpRight, BarChart3, Boxes, CircleDollarSign, FileDiff, Gauge, RadioTower, SlidersHorizontal, Spline, Timer, Users, Wifi } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { HealthTrendChart } from "../components/HealthTrendChart";
+import BillingKpiStrip from "../components/BillingKpiStrip";
+import { useUserProfile } from "../components/UserProfileContext";
+import { effectiveRole } from "../components/nav";
 
 const bytes = (value: number) => value < 1024 ? `${Math.round(value)} B` : value < 1024 ** 2 ? `${(value / 1024).toFixed(1)} KB` : value < 1024 ** 3 ? `${(value / 1024 ** 2).toFixed(1)} MB` : `${(value / 1024 ** 3).toFixed(2)} GB`;
 const rate = (value: number) => `${bytes(value)}/s`;
@@ -32,6 +35,10 @@ export default function DashboardPage() {
   const router = useRouter();
   const kpis = useQuery(api.operations.getKpis, {});
   const summaries = useQuery(api.operations.getRouterSummaries, {});
+  const { user } = useUserProfile();
+  const role = effectiveRole(user?.platformRole ?? null);
+  const isPlatformRole =
+    role === "platform_owner" || role === "platform_admin" || role === "platform_support";
   const [selectedRouterId, setSelectedRouterId] = useState<Id<"routers"> | null>(null);
   const [selectedAccessPoint, setSelectedAccessPoint] = useState<{ id: Id<"accessPoints">; name: string } | null>(null);
   const [detailRouterId, setDetailRouterId] = useState<Id<"routers"> | null>(null);
@@ -46,8 +53,8 @@ export default function DashboardPage() {
 
   return <div className={`workspace-page dashboard-page ${compact ? "dashboard-compact" : ""}`}>
     <header className="page-heading">
-      <div><p className="eyebrow">MylesNet operations centre</p><h1 className="page-title">Network overview</h1><p className="page-subtitle">Live collector-backed access point, user, capacity, DHCP, queue, and service-assurance telemetry.</p></div>
-      <div className="page-action-group"><Link href="/config-watch" className="secondary-button"><FileDiff aria-hidden="true" size={16} />Config watch</Link><Link href="/telemetry-health" className="secondary-button"><Activity aria-hidden="true" size={16} />Telemetry health</Link><button type="button" className="secondary-button" onClick={() => setCompact((value) => !value)}><SlidersHorizontal aria-hidden="true" size={17} />{compact ? "Comfortable view" : "Compact view"}</button><button type="button" onClick={() => router.push("/routers")} className="primary-button"><RadioTower aria-hidden="true" size={18} />Router settings</button></div>
+      <div><p className="eyebrow">MylesNet operations centre</p><h1 className="page-title">Dashboard</h1><p className="page-subtitle">One place for live network telemetry, billing activity and administrative status.</p></div>
+      <div className="page-action-group"><Link href="/config-watch" className="secondary-button"><FileDiff aria-hidden="true" size={16} />Config watch</Link><Link href="/telemetry-health" className="secondary-button"><Activity aria-hidden="true" size={16} />Telemetry health</Link><Link href="/business-activity" className="secondary-button"><BarChart3 aria-hidden="true" size={16} />Business activity</Link><button type="button" className="secondary-button" onClick={() => setCompact((value) => !value)}><SlidersHorizontal aria-hidden="true" size={17} />{compact ? "Comfortable view" : "Compact view"}</button><button type="button" onClick={() => router.push("/routers")} className="primary-button"><RadioTower aria-hidden="true" size={18} />Router settings</button></div>
     </header>
 
     <section className="operations-kpi-strip" aria-label="Live operations status">
@@ -57,6 +64,11 @@ export default function DashboardPage() {
       <Kpi label="Access points" value={`${kpis.activeAccessPoints}/${kpis.totalAccessPoints}`} detail="Links currently online" icon={<Wifi size={17} />} />
       <Kpi label="Data used" value={bytes(kpis.totalDailyBytes)} detail="Observed in the last 24 hours" icon={<BarChart3 size={17} />} />
       <Kpi label="Router load" value={kpis.averageCpu === null ? "—" : `${Math.round(kpis.averageCpu)}% CPU`} detail="Average reported CPU load" icon={<Gauge size={17} />} />
+    </section>
+
+    <section className="section-block" aria-label="Billing and business summary">
+      <div className="section-heading"><div><p className="eyebrow">Billing &amp; business</p><h2>Centipid activity</h2></div><div className="page-action-group"><Link href="/business-activity" className="secondary-button"><BarChart3 aria-hidden="true" size={15} />Full activity feed</Link></div></div>
+      <BillingKpiStrip />
     </section>
 
     <section className="dashboard-toolbar workspace-card">
@@ -71,6 +83,8 @@ export default function DashboardPage() {
     {detailRouter ? <RouterDetailDialog routerId={detailRouter._id} routerName={detailRouter.name} onClose={() => setDetailRouterId(null)} /> : null}
     {selectedAccessPoint ? <AccessPointUsersDialog title={selectedAccessPoint.name} users={accessPointUsers} onClose={() => setSelectedAccessPoint(null)} /> : null}
     {selectedRouterId ? <section className="section-block" aria-label="Trends for the selected router"><HealthTrendChart routerId={selectedRouterId} /></section> : null}
+
+    {isPlatformRole ? <AdminOverviewSection /> : null}
   </div>;
 }
 
@@ -158,3 +172,102 @@ function OpsHealthStrip() {
 }
 
 function ComparisonDialog({ accessPoints, onClose }: { accessPoints: { accessPoint: { _id: Id<"accessPoints">; name: string; capacity?: number }; activeUserCount: number; dailyBytes: number; health: { linkState: boolean } | null }[]; onClose: () => void }) { return <div className="operations-modal" role="dialog" aria-modal="true" aria-label="Compare access points"><div className="operations-dialog workspace-card"><div className="section-heading"><div><p className="eyebrow">Capacity and activity</p><h2>Access point comparison</h2></div><button type="button" className="secondary-button" onClick={onClose}>Close</button></div><div className="comparison-table"><div className="comparison-row comparison-head"><span>Access point</span><span>Status</span><span>Users</span><span>Capacity</span><span>Data today</span></div>{accessPoints.map((item) => <div key={item.accessPoint._id} className="comparison-row"><strong>{item.accessPoint.name}</strong><span>{item.health?.linkState ? "Online" : "Pending"}</span><span>{item.activeUserCount}</span><span>{item.accessPoint.capacity ? `${item.activeUserCount}/${item.accessPoint.capacity}` : "Not configured"}</span><span>{bytes(item.dailyBytes)}</span></div>)}</div></div></div>; }
+
+function AdminOverviewSection() {
+  const metrics = useQuery(api.platform.getPlatformDashboardMetrics, {});
+  const missingCostMarkets = metrics?.missingCostMarkets ?? [];
+  const unstaffedMarkets = metrics?.unstaffedMarkets ?? 0;
+  const activeProspects = metrics?.activeProspects ?? 0;
+  const hasActionItems =
+    !!metrics &&
+    (missingCostMarkets.length > 0 || unstaffedMarkets > 0 || activeProspects > 0);
+
+  return <section className="section-block" aria-label="Master administration overview">
+    <div className="section-heading"><div><p className="eyebrow">Master administration</p><h2>Platform status</h2></div><div className="page-action-group"><Link href="/markets" className="secondary-button"><Boxes aria-hidden="true" size={15} />Markets</Link><Link href="/agents" className="secondary-button"><Users aria-hidden="true" size={15} />Agents</Link></div></div>
+
+    <div className="metric-grid">
+      <div className="metric-card workspace-card metric-card-danger">
+        <div className="metric-icon"><AlertTriangle aria-hidden="true" size={20} /></div>
+        <p>Open alerts</p>
+        <strong>{metrics?.openAlerts ?? "—"}</strong>
+        <small>Requiring attention</small>
+      </div>
+      <div className="metric-card workspace-card metric-card-success">
+        <div className="metric-icon"><Boxes aria-hidden="true" size={20} /></div>
+        <p>Active markets</p>
+        <strong>{metrics?.activeMarkets ?? "—"}</strong>
+        <small>Live service areas</small>
+      </div>
+      <div className="metric-card workspace-card metric-card-warning">
+        <div className="metric-icon"><Users aria-hidden="true" size={20} /></div>
+        <p>Agents awaiting offboarding</p>
+        <strong>{metrics?.pendingOffboard ?? "—"}</strong>
+        <small>Terminated, pending close-out</small>
+      </div>
+      <div className="metric-card workspace-card metric-card-accent">
+        <div className="metric-icon"><CircleDollarSign aria-hidden="true" size={20} /></div>
+        <p>Commissions awaiting approval</p>
+        <strong>{metrics?.awaitingApproval ?? "—"}</strong>
+        <small>Requested payouts</small>
+      </div>
+    </div>
+
+    <div className="platform-action-items">
+      <h2 className="section-heading" style={{ marginBottom: 12 }}>
+        <span style={{ fontSize: 19, fontWeight: 750 }}>Action items</span>
+      </h2>
+      {hasActionItems ? (
+        <div className="platform-actions-grid">
+          {missingCostMarkets.length > 0 && (
+            <Link href="/markets" className="platform-action-card platform-action-card-warning">
+              <strong>Missing operating costs — {missingCostMarkets.length}</strong>
+              <span>
+                {missingCostMarkets.map((m) => m.name).join(", ")} have no cost entry for this month.
+                Missing entries are a visible gap in break-even, never silently defaulted.
+              </span>
+            </Link>
+          )}
+          {unstaffedMarkets > 0 && (
+            <Link href="/markets" className="platform-action-card platform-action-card-warning">
+              <strong>Unstaffed markets — {unstaffedMarkets}</strong>
+              <span>
+                {unstaffedMarkets} active market(s) have no active agent assignment. Assign an agent.
+              </span>
+            </Link>
+          )}
+          {activeProspects > 0 && (
+            <Link href="/prospects" className="platform-action-card platform-action-card-accent">
+              <strong>Prospects in pipeline — {activeProspects}</strong>
+              <span>
+                {activeProspects} prospect(s) not yet operational. Advance or provision them.
+              </span>
+            </Link>
+          )}
+        </div>
+      ) : (
+        <p className="pf-muted">No outstanding action items.</p>
+      )}
+    </div>
+
+    <div className="platform-quick-links">
+      <h2 className="section-heading" style={{ marginBottom: 0 }}>
+        <span style={{ fontSize: 19, fontWeight: 750 }}>Manage</span>
+      </h2>
+      <div className="platform-quick-grid">
+        {[
+          { href: "/markets", label: "Markets", desc: "Service areas and operating costs" },
+          { href: "/devices", label: "Devices", desc: "Gateways, APs and replacement log" },
+          { href: "/agents", label: "Agents", desc: "Assignments and offboarding" },
+          { href: "/vouchers", label: "Vouchers", desc: "Batches and redemption" },
+          { href: "/commissions", label: "Commissions", desc: "Payout approval workflow" },
+          { href: "/incidents", label: "Incident & alert desk", desc: "Root-cause grouped alerts and incidents" },
+        ].map(({ href, label, desc }) => (
+          <Link key={href} href={href} className="platform-quick-card">
+            <strong>{label}</strong>
+            <span>{desc}</span>
+          </Link>
+        ))}
+      </div>
+    </div>
+  </section>;
+}

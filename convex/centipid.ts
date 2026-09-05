@@ -621,7 +621,7 @@ export const verifyCentipidToken = action({
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
     });
     if (!response.ok) {
-      return { ok: false, error: `The MCP endpoint rejected the key: HTTP ${response.status}. Verify the token is complete (12|…) and unrevoked.` };
+      return { ok: false, error: `The MCP endpoint rejected the key: HTTP ${response.status}. Verify the token is complete and unrevoked.` };
     }
 
     const list = parseMcpResponse(await response.text()) as { result?: { tools?: unknown[] } };

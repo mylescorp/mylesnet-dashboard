@@ -40,6 +40,26 @@ The collector reads `/system/resource`, `/interface`, `/ip/hotspot/active`, `/ip
 - **Business Activity Feed**: Live feed of billing events from Centipid with filtering capabilities
 - **Connected User Count**: Real-time hotspot session tracking from RouterOS
 
+## Access Roles
+
+One unified dashboard (`/dashboard`) serves every role; the sidebar shows only
+what the signed-in role can reach. The Convex backend remains the security
+authority on every query, mutation and action.
+
+- **Owner** – everything, including access management, audit log, trash and
+  irreversible actions
+- **Admin** – day-to-day operations (markets, agents, vouchers, commissions,
+  comms, Centipid) but no access management
+- **Support** – read-only business views plus support tickets, the incident &
+  alert desk and monitoring
+- **Operator** – network operations (router estate, desk, shift handover,
+  config watch, collector setup, telemetry, usage)
+- **Agent** – dashboard and business events (revenue figures hidden) plus
+  support tickets and compliance
+
+Legacy `/platform/*` URLs permanently redirect to their flattened equivalents
+(see `next.config.ts`).
+
 ## Tech Stack
 
 - **Frontend**: Next.js 16.3 with TypeScript and Tailwind CSS v4
@@ -171,6 +191,13 @@ key and the operator-local MCP token used by the opencode MCP client:
 CENTIPID_CREDENTIALS_ENCRYPTION_KEY=your_base64_32_byte_key
 CENTIPID_MCP_TOKEN=12|your_mcp_token   # opencode MCP client only, never read by the app
 ```
+
+> **MCP token gotcha:** opencode does **not** read `.env.local`. This repo's
+> `opencode.json` loads the token from `{file:~/.config/opencode/centipid.token}`
+> (a git-safe, machine-local file containing exactly `12|...`, no trailing
+> newline). Paste the token into that file (create it if missing), or set the
+> token in your shell via `setx CENTIPID_MCP_TOKEN "12|...` — then start
+> opencode from a new terminal so the change is loaded.
 
 **For Vercel / Convex production:**
 1. Generate a base64 32-byte key: `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`

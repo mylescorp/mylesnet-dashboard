@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requirePlatformAdmin, requirePlatformUser } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
+import type { Id } from "./_generated/dataModel";
 
 /**
  * Compute and store a leaderboard snapshot. Intended to run as a daily cron.
@@ -33,8 +34,8 @@ export const computeLeaderboard = mutation({
       .collect();
 
     const rankings: Array<{
-      agentId: string;
-      marketId: string | undefined;
+      agentId: Id<"agents">;
+      marketId: Id<"markets"> | undefined;
       totalSalesVolume: number;
       totalSalesCount: number;
       renewalCount: number;
@@ -102,7 +103,7 @@ export const computeLeaderboard = mutation({
     for (let i = 0; i < rankings.length; i++) {
       await ctx.db.insert("leaderboardSnapshots", {
         snapshotDate: args.snapshotDate,
-        agentId: rankings[i].agentId as any,
+        agentId: rankings[i].agentId,
         marketId: args.marketId,
         totalSalesVolume: rankings[i].totalSalesVolume,
         totalSalesCount: rankings[i].totalSalesCount,

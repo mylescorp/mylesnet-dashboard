@@ -38,12 +38,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .sidebar-brand-inner { width: 100%; display: flex; flex-direction: column; gap: 8px; }
 .sidebar-logo { display: block; width: 100%; max-width: 170px; height: auto; border-radius: 8px; background: #fff; padding: 4px; object-fit: contain; }
 
-/* Two Constant Top Workspace Buttons */
-.sidebar-workspace-switcher { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 12px 12px 6px 12px; padding: 4px; border-radius: 10px; background: rgba(0, 0, 0, 0.28); border: 1px solid rgba(255, 255, 255, 0.08); }
-.switcher-tab { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 7px 8px; border-radius: 7px; border: 0; background: transparent; color: #a9bdd2; font-size: 12px; font-weight: 750; cursor: pointer; transition: all 150ms ease; white-space: nowrap; }
-.switcher-tab:hover { color: #fff; background: rgba(255, 255, 255, 0.06); }
-.switcher-tab-active { background: var(--primary); color: #fff !important; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); }
-
 /* Collapse Button */
 .sidebar-collapse { position: absolute; right: -13px; top: 20px; z-index: 1; display: grid; height: 26px; width: 26px; place-items: center; border: 1px solid #38526c; border-radius: 999px; background: #16314d; color: #fff; cursor: pointer; box-shadow: var(--shadow-sm); transition: background-color 150ms ease; }
 .sidebar-collapse:hover { background: #254865; }
@@ -62,7 +56,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .sidebar-signout:disabled { opacity: .6; cursor: wait; }
 
 /* Collapsed Sidebar overrides */
-.sidebar-collapsed .sidebar-logo, .sidebar-collapsed .sidebar-section-label, .sidebar-collapsed .sidebar-link span, .sidebar-collapsed .sidebar-signout span, .sidebar-collapsed .sidebar-workspace-switcher { display: none; }
+.sidebar-collapsed .sidebar-logo, .sidebar-collapsed .sidebar-section-label, .sidebar-collapsed .sidebar-link span, .sidebar-collapsed .sidebar-signout span { display: none; }
 .sidebar-collapsed .sidebar-brand { min-height: 72px; padding: 14px; justify-content: center; }
 .sidebar-collapsed .sidebar-nav, .sidebar-collapsed .sidebar-footer { padding-inline: 8px; }
 .sidebar-collapsed .sidebar-link, .sidebar-collapsed .sidebar-signout { justify-content: center; padding-inline: 0; }

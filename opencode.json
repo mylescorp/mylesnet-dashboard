@@ -9,8 +9,9 @@
     "centipid": {
       "type": "remote",
       "url": "https://mcp.centipidbilling.com/mcp",
+      "oauth": false,
       "headers": {
-        "Authorization": "Bearer ${CENTIPID_MCP_TOKEN}"
+        "Authorization": "Bearer {file:~/.config/opencode/centipid.token}"
       },
       "enabled": true
     }

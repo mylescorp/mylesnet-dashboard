@@ -2,6 +2,12 @@
 
 ## Master Admin (`/platform`) — build log
 
+> **2026-09-05 snapshot:** the two chrome surfaces described below (network-ops
+> shell vs `/platform` panel) have been **consolidated into one unified system**.
+> The `/platform/*` URL prefix was flattened with permanent redirects, all pages
+> moved to the app root, and one role-aware sidebar/topbar/dashboard now serves
+> every role. Historical rulings from the build remain recorded verbatim below.
+
 Decisions recorded for the integration of the Master Admin panel into the
 existing MylesNet network-operations dashboard. These complement the earlier
 planning notes; only build-time rulings are recorded here.
@@ -86,7 +92,10 @@ planning notes; only build-time rulings are recorded here.
   `ROUTER_CREDENTIALS_ENCRYPTION_KEY`) before persisting in
   `centipidCredentials`. They are entered via the Centipid settings page
   (`app/centipid`), never committed. The opencode MCP client reads its own
-  `CENTIPID_MCP_TOKEN` from the operator's git-ignored `.env.local`.
+  `CENTIPID_MCP_TOKEN` from the **shell environment** at launch
+  (`{env:CENTIPID_MCP_TOKEN}` header interpolation — opencode does not read
+  `.env.local`), so the operator sets it once in their profile before starting
+  opencode.
 - **Two-phase webhook rollout.** The signing scheme is not publicly documented,
   so the receiver starts in **capture mode**: every delivery is acknowledged
   (HTTP 200) and its raw signature header + body preview logged to
@@ -128,3 +137,50 @@ planning notes; only build-time rulings are recorded here.
 - **Offboarding step "revoke session / clear cookies"** is documented in
   `offboardAgentFinalize` as an HTTP-layer follow-up (Convex cannot touch
   cookies); not yet implemented.
+
+### Unified system consolidation (2026-09-05)
+
+- **One chrome, one nav.** The separate `/platform` shell (dark `PlatformShell`
+  + `PlatformSidebar`) is deleted. `app/components/nav.ts` is the single nav
+  source of truth (`navSections`, `effectiveRole`, `canAccess`,
+  `findNavEntry`) used by `Sidebar.tsx` (role-filtered tree),
+  `UnifiedTopbar.tsx` (breadcrumb via `findNavEntry`), `UnifiedShell.tsx`
+  (client role guard → `/no-access`; one-shot owner-claim banner now only on
+  `/dashboard`) and `UserProfileDropdown.tsx`.
+- **URLs flattened with redirects.** `app/platform/{markets,prospects,devices,
+  agents,vouchers,commissions,tickets,comms,leaderboard,trash,audit-log,access,
+  compliance}` → app root; `platform/components/ui.tsx` → `app/components/ui.tsx`;
+  `platform/unauthorized` → `app/no-access`. `next.config.ts` adds permanent
+  redirects for every old `/platform/*` path (`/platform` → `/dashboard`,
+  `/platform/alerts` → `/incidents`). No `/platform` references remain in app code.
+- **Role tiers drive navigation** (owner/admin everything; support read-only +
+  tickets + desk + monitoring; operator network ops; agent dashboard + business
+  events + tickets; `/compliance` all roles; `/access` owner only).
+  **Server remains authoritative** — `convex/lib/auth.ts` guards are unchanged.
+  Note: `requireNetworkOperator` aliases `requirePlatformUser`, so a user with
+  no `platformRole` cannot actually reach ops endpoints today; the nav's
+  "operator" tier is therefore only reachable for endpoints guarded by
+  `requireAuthenticatedUser`. Could be revisited if a real operator tier is
+  wanted.
+- **One dashboard.** `app/dashboard/page.tsx` merges the network overview
+  (collector/AP KPIs, health strip, per-router sections) with the platform
+  dashboard: `BillingKpiStrip` (new shared component, also used by
+  `/business-activity`) plus an `AdminOverviewSection` (open alerts, active
+  markets, pending offboard, commissions awaiting approval, action items, quick
+  links) mounted only for platform roles. Revenue stays hidden for agents via
+  the existing Centipid `revenueVisible` flag.
+- **Shared config watch.** `app/components/router/ConfigWatchPanel.tsx`
+  (baseline capture, drift check, history, latest snapshot JSON) backs both the
+  router console Configuration tab and `/config-watch`.
+- **Unified incident & alert desk.** `app/incidents/page.tsx` aggregates
+  incidents (`api.incidents`) and root-cause device alerts (`api.alerts`) with
+  separate tables, an open/all filter, ack/resolve in shared styling. Alert
+  ack/resolve buttons only render for owner/admin (server requires admin);
+  incident creation is hidden from support.
+- **Devices de-scoped.** The RouterOS estate echo table was removed from
+  `/devices`; the module now links to `/routers`. RouterOS estate, config watch,
+  collector setup and telemetry health all live under Network Operations.
+- **Known follow-ups:** support role cannot ack/resolve alerts server-side
+  (`requirePlatformAdmin`); an actual `operator` tier does not exist in Convex;
+  `sweepExpiredVouchers` schedule still needs validation against the live
+  deployment.

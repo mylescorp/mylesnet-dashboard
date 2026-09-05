@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@workos-inc/authkit-nextjs/components";
 import {
@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { UserProfileModal } from "./UserProfileModal";
 import { useUserProfile } from "./UserProfileContext";
+import { canAccess, effectiveRole, navSections } from "./nav";
 
 export type PlatformUser = {
   _id: string;
@@ -32,7 +33,6 @@ export function UserProfileDropdown({ user: propUser }: UserProfileDropdownProps
   const { user: contextUser } = useUserProfile();
   const user = propUser !== undefined ? propUser : contextUser;
 
-  const pathname = usePathname();
   const router = useRouter();
   const { signOut } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
@@ -40,7 +40,11 @@ export function UserProfileDropdown({ user: propUser }: UserProfileDropdownProps
   const [isSigningOut, setIsSigningOut] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const isPlatformMode = pathname.startsWith("/platform");
+  const role = effectiveRole(user?.platformRole ?? null);
+  const allItems = navSections.flatMap((s) => s.items);
+  const auditAccessible = !!allItems.find((i) => i.href === "/audit-log" && canAccess(role, i));
+  const centipidAccessible = !!allItems.find((i) => i.href === "/centipid" && canAccess(role, i));
+  const systemShortcutAccessible = auditAccessible || centipidAccessible;
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -147,20 +151,22 @@ export function UserProfileDropdown({ user: propUser }: UserProfileDropdownProps
             <div className="profile-dropdown-divider" />
 
             {/* System Settings */}
-            <div className="profile-dropdown-section">
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setIsOpen(false);
-                  router.push(isPlatformMode ? "/platform/audit-log" : "/centipid");
-                }}
-                className="profile-menu-item"
-              >
-                <Settings2 size={16} />
-                <span>{isPlatformMode ? "Audit Logs & System" : "Centipid"}</span>
-              </button>
-            </div>
+            {systemShortcutAccessible && (
+              <div className="profile-dropdown-section">
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setIsOpen(false);
+                    router.push(auditAccessible ? "/audit-log" : "/centipid");
+                  }}
+                  className="profile-menu-item"
+                >
+                  <Settings2 size={16} />
+                  <span>{auditAccessible ? "Audit log & system" : "Centipid"}</span>
+                </button>
+              </div>
+            )}
 
             <div className="profile-dropdown-divider" />
 

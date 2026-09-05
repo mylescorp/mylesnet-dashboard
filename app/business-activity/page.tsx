@@ -3,7 +3,6 @@
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import {
-  ArrowDownToLine,
   CircleDollarSign,
   CreditCard,
   Download,
@@ -13,8 +12,9 @@ import {
   Users,
   Wrench,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
+import BillingKpiStrip from "../components/BillingKpiStrip";
 
 type Category = "all" | "subscriber" | "payment" | "voucher" | "ticket";
 
@@ -39,8 +39,6 @@ export default function BusinessActivityPage() {
   const [offset, setOffset] = useState(0);
   const pageSize = 50;
 
-  const tzOffsetMinutes = useMemo(() => -new Date().getTimezoneOffset(), []);
-  const summary = useQuery(api.centipid.getCentipidBusinessSummary, { tzOffsetMinutes });
   const allEvents = useQuery(api.centipid.getRecentAllEvents, { limit: pageSize, offset });
   const integration = useQuery(api.centipid.getCentipidIntegrationStatus, {});
 
@@ -49,11 +47,6 @@ export default function BusinessActivityPage() {
     return event.category === filter;
   }) ?? [];
   const hasMore = (allEvents?.length ?? 0) === pageSize;
-
-  const formatMarks = (value: number | null | undefined) =>
-    value === null || value === undefined ? "—" : `UGX ${Math.round(value).toLocaleString()}`;
-  const formatPct = (value: number | null | undefined) =>
-    value === null || value === undefined ? "—" : `${Math.round(value * 100)}%`;
 
   const exportCSV = () => {
     if (filteredEvents.length === 0) return;
@@ -131,58 +124,7 @@ export default function BusinessActivityPage() {
         </div>
       )}
 
-      <div className="operations-kpi-strip">
-        <div className="operations-kpi">
-          <span><CreditCard aria-hidden="true" size={16} /></span>
-          <p>Payments today</p>
-          <strong>{summary?.today.paymentCount ?? "—"}</strong>
-          <small>{summary ? `7d: ${summary.last7d.paymentCount}` : "Waiting for data."}</small>
-        </div>
-        <div className="operations-kpi">
-          <span><ArrowDownToLine aria-hidden="true" size={16} /></span>
-          <p>Collected today</p>
-          <strong>{summary?.revenueVisible ? formatMarks(summary.today.net) : "—"}</strong>
-          <small>
-            {summary && !summary.revenueVisible
-              ? "Visible to admins only."
-              : summary
-                ? `Net of refunds · 7d: ${formatMarks(summary.last7d.net)}`
-                : "Waiting for data."}
-          </small>
-        </div>
-        <div className="operations-kpi">
-          <span><Ticket aria-hidden="true" size={16} /></span>
-          <p>Vouchers redeemed</p>
-          <strong>{summary?.today.vouchersRedeemed ?? "—"}</strong>
-          <small>
-            {summary
-              ? `Generated: ${summary.today.vouchersGenerated} · redemption ${formatPct(summary.today.redemptionRate)}`
-              : "Waiting for data."}
-          </small>
-        </div>
-        <div className="operations-kpi">
-          <span><Users aria-hidden="true" size={16} /></span>
-          <p>New subscribers</p>
-          <strong>{summary?.today.subscriberCreated ?? "—"}</strong>
-          <small>{summary ? `Paused: ${summary.today.subscriberPaused} · Resumed: ${summary.today.subscriberResumed}` : "Waiting for data."}</small>
-        </div>
-        <div className="operations-kpi">
-          <span><RefreshCw aria-hidden="true" size={16} /></span>
-          <p>Paused right now</p>
-          <strong>{summary?.live.pausedSubscribers ?? "—"}</strong>
-          <small>Subscribers with an active pause</small>
-        </div>
-        <div className="operations-kpi">
-          <span><Wrench aria-hidden="true" size={16} /></span>
-          <p>Open tickets</p>
-          <strong>{summary?.live.openTickets ?? "—"}</strong>
-          <small>
-            {summary
-              ? `Opened today: ${summary.today.ticketsOpened} · Resolved: ${summary.today.ticketsResolved}`
-              : "Waiting for data."}
-          </small>
-        </div>
-      </div>
+      <BillingKpiStrip />
 
       <div className="workspace-card" style={{ padding: "14px 18px", marginBottom: 16 }}>
         <div className="filter-tabs" role="tablist" aria-label="Filter events">

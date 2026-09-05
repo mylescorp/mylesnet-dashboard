@@ -7,6 +7,7 @@ import { api } from "@/convex/_generated/api";
 import Sidebar from "./Sidebar";
 import { UnifiedTopbar } from "./UnifiedTopbar";
 import { UserProfileProvider, useUserProfile } from "./UserProfileContext";
+import { canAccess, effectiveRole, findNavEntry } from "./nav";
 import { ShieldPlus } from "lucide-react";
 
 function ClaimOwnerScreen() {
@@ -60,7 +61,7 @@ function UnifiedShellContent({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   const isSignin = pathname === "/signin";
-  const isPlatformRoute = pathname.startsWith("/platform");
+  const isNoAccess = pathname === "/no-access";
 
   const { user } = useUserProfile();
   const claimStatus = useQuery(api.bootstrap.ownerClaimStatus, {});
@@ -73,20 +74,25 @@ function UnifiedShellContent({ children }: { children: ReactNode }) {
 
   // Redirect to signin if unauthenticated
   useEffect(() => {
-    if (!isSignin && delayed && user === null) {
+    if (!isSignin && !isNoAccess && delayed && user === null) {
       router.replace("/signin");
     }
-  }, [isSignin, delayed, user, router]);
+  }, [isSignin, isNoAccess, delayed, user, router]);
+
+  const profileReady = user !== undefined;
+  const entry = findNavEntry(pathname);
+  const role = effectiveRole(user?.platformRole ?? null);
+  const denied = profileReady && !!user && !!entry && !canAccess(role, entry.item);
+
+  // Handle role-gated route access (fail closed, friendly redirect)
+  useEffect(() => {
+    if (!isSignin && !isNoAccess && denied) {
+      router.replace("/no-access");
+    }
+  }, [isSignin, isNoAccess, denied, router]);
 
   const canClaimFirstOwner =
-    user && !user.isPlatform && pathname === "/platform" && claimStatus && !claimStatus.ownerExists;
-
-  // Handle unauthorized platform route access
-  useEffect(() => {
-    if (isPlatformRoute && delayed && user && !user.isPlatform && !canClaimFirstOwner) {
-      router.replace("/platform/unauthorized");
-    }
-  }, [isPlatformRoute, delayed, user, router, canClaimFirstOwner]);
+    user && !user.isPlatform && pathname === "/dashboard" && claimStatus && !claimStatus.ownerExists;
 
   // Render children directly on sign-in page
   if (isSignin) {
@@ -94,7 +100,7 @@ function UnifiedShellContent({ children }: { children: ReactNode }) {
   }
 
   // Handle owner claim screen for first owner
-  if (isPlatformRoute && canClaimFirstOwner) {
+  if (canClaimFirstOwner) {
     return <ClaimOwnerScreen />;
   }
 

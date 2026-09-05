@@ -5,105 +5,10 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { useAuth } from "@workos-inc/authkit-nextjs/components";
-import {
-  Activity,
-  AlertTriangle,
-  BarChart3,
-  Boxes,
-  ChevronLeft,
-  ChevronRight,
-  CircleDollarSign,
-  ClipboardList,
-  Cog,
-  FileDiff,
-  History,
-  LayoutDashboard,
-  LogOut,
-  Map,
-  MapPinned,
-  Megaphone,
-  RadioTower,
-  Settings2,
-  ShieldPlus,
-  Ticket,
-  Trash2,
-  TriangleAlert,
-  Trophy,
-  Users,
-  X,
-} from "lucide-react";
+import { ChevronLeft, ChevronRight, LogOut, X } from "lucide-react";
 import { useSidebarState } from "./useSidebarState";
 import { useUserProfile } from "./UserProfileContext";
-
-const opsSections = [
-  {
-    title: "Operations",
-    items: [
-      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-      { href: "/routers", label: "Router estate", icon: RadioTower },
-      { href: "/incidents", label: "Incident desk", icon: TriangleAlert },
-    ],
-  },
-  {
-    title: "Monitoring",
-    items: [
-      { href: "/config-watch", label: "Config watch", icon: FileDiff },
-      { href: "/collector-setup", label: "Collector setup", icon: Cog },
-      { href: "/telemetry-health", label: "Telemetry health", icon: Activity },
-    ],
-  },
-  {
-    title: "Shift & Analytics",
-    items: [
-      { href: "/shift-notes", label: "Shift handover", icon: ClipboardList },
-      { href: "/usage", label: "Usage reports", icon: BarChart3 },
-      { href: "/business-activity", label: "Business events", icon: CircleDollarSign },
-    ],
-  },
-  {
-    title: "System",
-    items: [
-      { href: "/centipid", label: "Centipid", icon: Settings2 },
-    ],
-  },
-];
-
-const platformSections = [
-  {
-    title: "Overview",
-    items: [
-      { href: "/platform", label: "Dashboard", icon: LayoutDashboard, exact: true },
-      { href: "/platform/leaderboard", label: "Leaderboard", icon: Trophy },
-    ],
-  },
-  {
-    title: "Field Operations",
-    items: [
-      { href: "/platform/markets", label: "Markets", icon: Map },
-      { href: "/platform/prospects", label: "Prospects", icon: MapPinned },
-      { href: "/platform/devices", label: "Devices", icon: Boxes },
-      { href: "/platform/agents", label: "Agents", icon: Users },
-    ],
-  },
-  {
-    title: "Revenue & Billing",
-    items: [
-      { href: "/platform/vouchers", label: "Vouchers", icon: Ticket },
-      { href: "/platform/commissions", label: "Commissions", icon: CircleDollarSign },
-    ],
-  },
-  {
-    title: "Support & Audit",
-    items: [
-      { href: "/platform/access", label: "Access management", icon: ShieldPlus },
-      { href: "/platform/alerts", label: "Alerts", icon: AlertTriangle },
-      { href: "/platform/tickets", label: "Tickets", icon: ClipboardList },
-      { href: "/platform/comms", label: "Comms", icon: Megaphone },
-      { href: "/platform/trash", label: "Trash", icon: Trash2 },
-      { href: "/platform/audit-log", label: "Audit Log", icon: History },
-    ],
-  },
-];
+import { canAccess, effectiveRole, navSections } from "./nav";
 
 interface SidebarProps {
   isMobile?: boolean;
@@ -118,9 +23,15 @@ export default function Sidebar({ isMobile = false, onCloseMobile }: SidebarProp
   const { user } = useUserProfile();
   const [isSigningOut, setIsSigningOut] = useState(false);
 
-  const isPlatformMode = pathname.startsWith("/platform");
+  const role = effectiveRole(user?.platformRole ?? null);
   const effectiveCollapsed = isMobile ? false : collapsed;
-  const currentSections = isPlatformMode ? platformSections : opsSections;
+
+  const visibleSections = navSections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => canAccess(role, item)),
+    }))
+    .filter((section) => section.items.length > 0);
 
   const handleSignOut = async () => {
     setIsSigningOut(true);
@@ -180,42 +91,9 @@ export default function Sidebar({ isMobile = false, onCloseMobile }: SidebarProp
         )}
       </div>
 
-      {/* Privileged users may move between the two modules in the unified app. */}
-      {!effectiveCollapsed && user?.isPlatform && (
-        <div className="sidebar-workspace-switcher" role="tablist" aria-label="Workspace switcher">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={!isPlatformMode}
-            onClick={() => {
-              if (isMobile && onCloseMobile) onCloseMobile();
-              router.push("/dashboard");
-            }}
-            className={`switcher-tab ${!isPlatformMode ? "switcher-tab-active" : ""}`}
-          >
-            <RadioTower size={14} />
-            <span>Network</span>
-          </button>
-
-          <button
-            type="button"
-            role="tab"
-            aria-selected={isPlatformMode}
-            onClick={() => {
-              if (isMobile && onCloseMobile) onCloseMobile();
-              router.push("/platform");
-            }}
-            className={`switcher-tab ${isPlatformMode ? "switcher-tab-active" : ""}`}
-          >
-            <ShieldPlus size={14} />
-            <span>Platform</span>
-          </button>
-        </div>
-      )}
-
       {/* Navigation Sections */}
       <nav className="sidebar-nav" aria-label="Sidebar navigation">
-        {currentSections.map((section) => (
+        {visibleSections.map((section) => (
           <div key={section.title} className="sidebar-section">
             <p className="sidebar-section-label">{section.title}</p>
             {section.items.map((item) => {

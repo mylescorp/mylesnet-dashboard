@@ -36,6 +36,7 @@ import {
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { ApEditor, RouterEditor, errorText, type AccessPointRow, type RouterRow } from "@/app/components/router/RouterEditors";
+import { ConfigWatchPanel } from "@/app/components/router/ConfigWatchPanel";
 
 const bytes = (value: number) => value < 1024 ? `${Math.round(value)} B` : value < 1024 ** 2 ? `${(value / 1024).toFixed(1)} KB` : value < 1024 ** 3 ? `${(value / 1024 ** 2).toFixed(1)} MB` : `${(value / 1024 ** 3).toFixed(2)} GB`;
 const rate = (value: number) => `${bytes(value)}/s`;
@@ -107,8 +108,6 @@ export default function RouterConsolePage() {
   const pools = useQuery(api.operations.getDhcpPoolOverview, { routerId });
   const runHistory = useQuery(api.collector.getCollectorRunHistory, { routerId, limit: 15 });
   const thresholds = useQuery(api.thresholds.getRouterMonitorThresholds, { routerId });
-  const baselines = useQuery(api.configWatch.getBaselines, { routerId });
-  const latestBaseline = useQuery(api.configWatch.getLatestBaseline, { routerId });
   const incidents = useQuery(api.incidents.listIncidents, { routerId });
   const systemEvents = useQuery(api.operations.getRecentSystemEvents, { limit: 20 });
 
@@ -165,7 +164,7 @@ export default function RouterConsolePage() {
     {tab === "access" ? <AccessTab aps={aps ?? []} live={live} onAdd={() => setApEditor({ routerId })} onEdit={(item) => setApEditor({ routerId, item })} onArchive={async (item) => { const reason = window.prompt(`Archive ${item.name}? Historical data will be preserved. Enter a short reason:`); if (!reason?.trim()) return; setBusy(item._id); try { await archiveAp({ accessPointId: item._id, reason }); setMessage("Access point archived. Historical data was preserved."); } catch (caught) { setMessage(errorText(caught)); } finally { setBusy(null); } }} busy={busy} /> : null}
     {tab === "dhcp" ? <DhcpTab leases={leases} queues={queues} pools={pools} /> : null}
     {tab === "live" ? <LiveTab routerId={routerId} /> : null}
-    {tab === "config" ? <ConfigTab routerId={routerId} baselines={baselines ?? []} latestBaseline={latestBaseline} /> : null}
+    {tab === "config" ? <ConfigTab routerId={routerId} /> : null}
     {tab === "thresholds" ? <ThresholdsTab router={router} thresholds={thresholds} /> : null}
 
     {routerEditor ? <RouterEditor router={router} markets={markets} close={() => setRouterEditor(false)} done={setMessage} /> : null}
@@ -373,47 +372,11 @@ function LiveTab({ routerId }: { routerId: Id<"routers"> }) {
   </Card>;
 }
 
-function ConfigTab({ routerId, baselines, latestBaseline }: { routerId: Id<"routers">; baselines: Baselines; latestBaseline: LatestBaseline | null | undefined }) {
-  const captureBaseline = useAction(api.configWatch.captureBaseline);
-  const checkConfigDrift = useAction(api.configWatch.checkConfigDrift);
-  const deleteBaseline = useMutation(api.configWatch.deleteBaseline);
-  const [captureMessage, setCaptureMessage] = useState("");
-  const [drift, setDrift] = useState<{ hasDrift: boolean; message: string; differences: string[]; baselineCapturedAt: number | null } | null>(null);
-  const [checking, setChecking] = useState(false);
-
-  const handleCapture = async () => {
-    setCaptureMessage("");
-    const result = await captureBaseline({ routerId });
-    setCaptureMessage(result.message);
-  };
-  const handleCheck = async () => {
-    setChecking(true);
-    setDrift(null);
-    try {
-      const result = await checkConfigDrift({ routerId });
-      setDrift({ hasDrift: result.hasDrift, message: result.message, differences: result.differences, baselineCapturedAt: result.baselineCapturedAt });
-    } finally { setChecking(false); }
-  };
-  const handleDelete = async (baselineId: Id<"configWatchBaselines">) => {
-    if (!window.confirm("Delete this baseline? You can capture a new one at any time.")) return;
-    await deleteBaseline({ baselineId });
-  };
-
+function ConfigTab({ routerId }: { routerId: Id<"routers"> }) {
   return <div className="console-grid">
     <section className="section-block console-col">
-      <Card eyebrow="Config watch" title="Baseline & drift detection" actions={<><button type="button" className="secondary-button" onClick={() => void handleCapture()}><Fingerprint size={15} />Capture baseline</button><button type="button" className="secondary-button" disabled={checking} onClick={() => void handleCheck()}><FileDiff size={15} />{checking ? "Checking…" : "Check drift"}</button></>}>
-        {captureMessage ? <p className="collector-card-message">{captureMessage}</p> : null}
-        {drift ? <div className={`drift-result ${drift.hasDrift ? "drift-result-drift" : "drift-result-clean"}`}><strong>{drift.hasDrift ? "Drift detected" : "No drift"}</strong><p>{drift.message}</p>{drift.differences.length > 0 ? <ul>{drift.differences.map((difference) => <li key={difference}>{difference}</li>)}</ul> : null}{drift.baselineCapturedAt ? <small>Against baseline from {relativeTime(drift.baselineCapturedAt)}</small> : null}</div> : <p className="dialog-message">Capture a baseline from the current collector snapshot, then check for drift whenever you suspect an unauthorized change.</p>}
-      </Card>
-
-      <Card eyebrow="Current baseline" title={latestBaseline ? `Captured ${relativeTime(latestBaseline.capturedAt)}` : "No baseline yet"}>
-        {latestBaseline ? <JsonViewer value={latestBaseline.snapshotJson} compact /> : <p className="dialog-message">No configuration baseline has been captured for this router.</p>}
-      </Card>
-    </section>
-
-    <section className="section-block console-col">
-      <Card eyebrow="Baseline history" title={`${baselines.length} stored`}>
-        {baselines.length === 0 ? <p className="dialog-message">No baselines have been captured.</p> : <div className="detail-list">{baselines.map((baseline) => <div key={baseline._id} className="detail-row"><span><strong>Baseline</strong> · {relativeTime(baseline.capturedAt)}</span><button type="button" className="secondary-button" onClick={() => void handleDelete(baseline._id)}>Delete</button></div>)}</div>}
+      <Card eyebrow="Config watch" title="Baseline & drift detection">
+        <ConfigWatchPanel routerId={routerId} />
       </Card>
     </section>
   </div>;
@@ -458,6 +421,3 @@ function ThresholdsTab({ router, thresholds }: { router: RouterRow; thresholds: 
     </form>
   </Card>;
 }
-
-type Baselines = NonNullable<NonNullable<ReturnType<typeof useQuery<typeof api.configWatch.getBaselines>>>>;
-type LatestBaseline = NonNullable<NonNullable<ReturnType<typeof useQuery<typeof api.configWatch.getLatestBaseline>>>>;
