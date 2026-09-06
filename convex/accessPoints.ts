@@ -76,8 +76,9 @@ export const addAccessPoint = mutation({
     const rateLimitReference = args.rateLimitReference === undefined ? undefined : cleanText(args.rateLimitReference, "rate-limit reference", 160);
     const sharesPortWith = args.sharesPortWith === undefined ? undefined : cleanText(args.sharesPortWith, "shared port reference", 160);
     await assertSwitchForRouter(ctx, args.switchId, args.routerId);
+    const sharesPortDeclared = sharesPortWith !== undefined || args.switchId !== undefined;
     const duplicate = await ctx.db.query("accessPoints").withIndex("by_router", (q) => q.eq("routerId", args.routerId)).filter((q) => q.eq(q.field("port"), port)).first();
-    if (duplicate && duplicate.archivedAt === undefined) throw new Error("An active access point already uses this RouterOS interface");
+    if (duplicate && duplicate.archivedAt === undefined && !sharesPortDeclared) throw new Error("An active access point already uses this RouterOS interface");
     const accessPointId = await ctx.db.insert("accessPoints", {
       routerId: args.routerId,
       name,
@@ -125,7 +126,7 @@ export const updateAccessPoint = mutation({
     name: v.optional(v.string()),
     port: v.optional(v.string()),
     deviceType: v.optional(v.union(v.literal("cpe220"), v.literal("indoor_ap"), v.literal("builtin_radio"), v.literal("other"))),
-    sharesPortWith: v.optional(v.string()),
+    sharesPortWith: v.optional(v.union(v.string(), v.null())),
     capacity: v.optional(v.number()),
     rateLimitReference: v.optional(v.string()),
     networkAddress: v.optional(v.string()),
@@ -134,8 +135,8 @@ export const updateAccessPoint = mutation({
     serialNumber: v.optional(v.string()),
     model: v.optional(v.string()),
     note: v.optional(v.string()),
-    switchId: v.optional(v.id("networkSwitches")),
-    switchPort: v.optional(v.string()),
+    switchId: v.optional(v.union(v.id("networkSwitches"), v.null())),
+    switchPort: v.optional(v.union(v.string(), v.null())),
   },
   handler: async (ctx, args) => {
     const user = await requirePlatformAdmin(ctx);
@@ -146,10 +147,30 @@ export const updateAccessPoint = mutation({
     const port = updates.port === undefined ? undefined : cleanText(updates.port, "RouterOS interface", 80);
     if (port && port !== accessPoint.port) {
       const duplicate = await ctx.db.query("accessPoints").withIndex("by_router", (q) => q.eq("routerId", accessPoint.routerId)).filter((q) => q.eq(q.field("port"), port)).first();
-      if (duplicate && duplicate._id !== accessPointId && duplicate.archivedAt === undefined) throw new Error("An active access point already uses this RouterOS interface");
+      const sharesPort = updates.sharesPortWith !== undefined && updates.sharesPortWith !== null
+        ? cleanText(updates.sharesPortWith, "shared port reference", 160)
+        : accessPoint.sharesPortWith;
+      const sharingPort = sharesPort !== undefined || (updates.switchId !== undefined && updates.switchId !== null);
+      if (duplicate && duplicate._id !== accessPointId && duplicate.archivedAt === undefined && !sharingPort) throw new Error("An active access point already uses this RouterOS interface");
     }
-    await assertSwitchForRouter(ctx, updates.switchId, accessPoint.routerId);
-    const patch = { name, port, deviceType: updates.deviceType, sharesPortWith: updates.sharesPortWith === undefined ? undefined : cleanText(updates.sharesPortWith, "shared port reference", 160), capacity: validateCapacity(updates.capacity), rateLimitReference: updates.rateLimitReference === undefined ? undefined : cleanText(updates.rateLimitReference, "rate-limit reference", 160), networkAddress: optionalClean(updates.networkAddress, "network address", 64), ipAddress: validateIpAddress(updates.ipAddress), macAddress: validateMacAddress(updates.macAddress), serialNumber: optionalClean(updates.serialNumber, "serial number", 120), model: optionalClean(updates.model, "model", 120), note: optionalClean(updates.note, "note", 1000), switchId: updates.switchId, switchPort: optionalClean(updates.switchPort, "switch port", 80), updatedAt: Date.now() };
+    if (updates.switchId !== undefined && updates.switchId !== null) {
+      await assertSwitchForRouter(ctx, updates.switchId, accessPoint.routerId);
+    }
+    const patch: Record<string, unknown> = { updatedAt: Date.now() };
+    if (name !== undefined) patch.name = name;
+    if (port !== undefined) patch.port = port;
+    if (updates.deviceType !== undefined) patch.deviceType = updates.deviceType;
+    if (updates.sharesPortWith !== undefined) patch.sharesPortWith = updates.sharesPortWith === null ? undefined : cleanText(updates.sharesPortWith, "shared port reference", 160);
+    if (updates.capacity !== undefined) patch.capacity = validateCapacity(updates.capacity);
+    if (updates.rateLimitReference !== undefined) patch.rateLimitReference = cleanText(updates.rateLimitReference, "rate-limit reference", 160);
+    if (updates.networkAddress !== undefined) patch.networkAddress = optionalClean(updates.networkAddress, "network address", 64);
+    if (updates.ipAddress !== undefined) patch.ipAddress = validateIpAddress(updates.ipAddress);
+    if (updates.macAddress !== undefined) patch.macAddress = validateMacAddress(updates.macAddress);
+    if (updates.serialNumber !== undefined) patch.serialNumber = optionalClean(updates.serialNumber, "serial number", 120);
+    if (updates.model !== undefined) patch.model = optionalClean(updates.model, "model", 120);
+    if (updates.note !== undefined) patch.note = optionalClean(updates.note, "note", 1000);
+    if (updates.switchId !== undefined) patch.switchId = updates.switchId === null ? undefined : updates.switchId;
+    if (updates.switchPort !== undefined) patch.switchPort = updates.switchPort === null ? undefined : optionalClean(updates.switchPort, "switch port", 80);
     await ctx.db.patch(accessPointId, patch);
     await logAudit(ctx, { action: "accessPoint.update", entityTable: "accessPoints", entityId: accessPointId, changedBy: user._id, before: { name: accessPoint.name, port: accessPoint.port, deviceType: accessPoint.deviceType }, after: { name: patch.name ?? accessPoint.name, port: patch.port ?? accessPoint.port, deviceType: patch.deviceType ?? accessPoint.deviceType, switchId: patch.switchId, switchPort: patch.switchPort } });
   },

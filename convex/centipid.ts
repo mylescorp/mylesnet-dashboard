@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import {
   action,
+  internalAction,
   internalMutation,
   internalQuery,
   mutation,
@@ -74,47 +75,56 @@ export const getCentipidSettingsView = query({
   args: {},
   handler: async (ctx) => {
     await requireAuthenticatedUser(ctx);
-    const creds = await ctx.db.query("centipidCredentials").order("desc").first();
+    const [creds, latestDelivery] = await Promise.all([
+      ctx.db.query("centipidCredentials").order("desc").first(),
+      ctx.db.query("webhookDeliveryLog").withIndex("by_receivedAt").order("desc").first(),
+    ]);
     return {
       hasCredentials: !!creds,
       ingestionPaused: creds?.ingestionPaused === true,
       webhookUrl: webhookUrlFromSite(),
       encryptionConfigured: !!process.env.CENTIPID_CREDENTIALS_ENCRYPTION_KEY,
+      latestDeliveryAt: latestDelivery?.receivedAt ?? null,
+      lastHealthCheckAt: creds?.lastHealthCheckAt ?? null,
+      lastHealthCheckOk: creds?.lastHealthCheckOk ?? null,
+      lastHealthCheckError: creds?.lastHealthCheckError ?? null,
     };
   },
 });
 
 export const saveCentipidCredentials = mutation({
   args: {
-    apiToken: v.string(),
-    webhookSigningSecret: v.string(),
+    apiToken: v.optional(v.string()),
+    webhookSigningSecret: v.optional(v.string()),
     ingestionPaused: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     await requirePlatformAdmin(ctx);
-    const token = args.apiToken.trim();
-    const secret = args.webhookSigningSecret.trim();
-    if (!token) throw new Error("The Centipid API token is required.");
-    if (!secret) throw new Error("The webhook signing secret is required.");
-
-    const encryptedToken = await encryptCentipidSecret(token);
-    const encryptedSecret = await encryptCentipidSecret(secret);
+    const token = args.apiToken?.trim() ?? "";
+    const secret = args.webhookSigningSecret?.trim() ?? "";
 
     const existing = await ctx.db.query("centipidCredentials").order("desc").first();
-    if (existing) {
-      await ctx.db.patch(existing._id, {
-        apiToken: encryptedToken,
-        webhookSigningSecret: encryptedSecret,
-        ingestionPaused: args.ingestionPaused ?? existing.ingestionPaused ?? false,
-      });
-    } else {
+    if (!existing) {
+      if (!token) throw new Error("The Centipid API token is required for initial setup.");
+      if (!secret) throw new Error("The webhook signing secret is required for initial setup.");
       await ctx.db.insert("centipidCredentials", {
-        apiToken: encryptedToken,
-        webhookSigningSecret: encryptedSecret,
+        apiToken: await encryptCentipidSecret(token),
+        webhookSigningSecret: await encryptCentipidSecret(secret),
         ingestionPaused: args.ingestionPaused ?? false,
         createdAt: Date.now(),
       });
+      return { saved: true };
     }
+
+    if (!token && !secret) {
+      throw new Error("Enter a new API token, a new webhook signing secret, or both to update credentials.");
+    }
+
+    const patch: { apiToken?: string; webhookSigningSecret?: string; ingestionPaused?: boolean } = {};
+    if (token) patch.apiToken = await encryptCentipidSecret(token);
+    if (secret) patch.webhookSigningSecret = await encryptCentipidSecret(secret);
+    if (args.ingestionPaused !== undefined) patch.ingestionPaused = args.ingestionPaused;
+    await ctx.db.patch(existing._id, patch);
     return { saved: true };
   },
 });
@@ -603,6 +613,169 @@ async function runMcpTool(
   return contents;
 }
 
+function parseMcpToolItems(content: string): Array<Record<string, unknown>> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    return [];
+  }
+  if (Array.isArray(parsed)) return parsed;
+  if (!parsed || typeof parsed !== "object") return [];
+  const envelope = parsed as Record<string, unknown>;
+  for (const key of ["subscribers", "payments", "batches", "tickets", "items", "results", "data", "rows"]) {
+    const value = envelope[key];
+    if (Array.isArray(value)) return value as Array<Record<string, unknown>>;
+  }
+  return [];
+}
+
+function parseAmountDisplay(value: unknown): { amount: number; currency: string } {
+  const text = String(value ?? "").trim();
+  const match = text.match(/^([A-Za-z]{2,4})\s*([\d,]+(?:\.\d+)?)$/);
+  if (match) {
+    const amount = Number(match[2].replace(/,/g, ""));
+    return { amount: Number.isFinite(amount) ? amount : 0, currency: match[1].toUpperCase() };
+  }
+  const amount = Number(text.replace(/[^\d.-]/g, ""));
+  return { amount: Number.isFinite(amount) ? amount : 0, currency: "UGX" };
+}
+
+function parseCentipidTimestamp(value: unknown): number | undefined {
+  const text = String(value ?? "").trim();
+  if (!text) return undefined;
+  const dateMatch = text.match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (dateMatch) {
+    const stamped = new Date(
+      Number(dateMatch[1]),
+      Number(dateMatch[2]) - 1,
+      Number(dateMatch[3]),
+      Number(dateMatch[4]),
+      Number(dateMatch[5]),
+      Number(dateMatch[6] ?? 0),
+    ).getTime();
+    return Number.isFinite(stamped) ? stamped : undefined;
+  }
+  const iso = Date.parse(text);
+  return Number.isFinite(iso) ? iso : undefined;
+}
+
+type RevenueSummarySnapshot = {
+  revenueToday: number | null;
+  revenueYesterday: number | null;
+  subscribersOnline: number | null;
+  activeSubscriptions: number | null;
+  expiring24h: number | null;
+  unreconciledPayments: number | null;
+  currency: string;
+};
+
+function normalizeSummaryKey(key: string): string {
+  return key.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function numericSummaryValue(value: unknown): number {
+  if (typeof value === "number") return Number.isFinite(value) ? value : Number.NaN;
+  if (typeof value === "string") {
+    const stripped = value.trim();
+    if (!stripped) return Number.NaN;
+    const amount = parseAmountDisplay(stripped);
+    return Number.isFinite(amount.amount) ? amount.amount : Number.NaN;
+  }
+  return Number.NaN;
+}
+
+function summaryMatch(kind: keyof Omit<RevenueSummarySnapshot, "currency">, normalized: string): boolean {
+  switch (kind) {
+    case "revenueToday":
+      return normalized === "revenue" || normalized.startsWith("revenuetoday") || normalized.startsWith("todayrevenue");
+    case "revenueYesterday":
+      return normalized.startsWith("revenueyesterday") || normalized.startsWith("yesterdayrevenue");
+    case "subscribersOnline":
+      return normalized.includes("subscribersonline") || normalized.includes("onlinesubscriber") || normalized.includes("subscriberonline");
+    case "activeSubscriptions":
+      return normalized.includes("activesubscription");
+    case "expiring24h":
+      return normalized.includes("expiring");
+    case "unreconciledPayments":
+      return normalized.includes("unreconciled");
+    default:
+      return false;
+  }
+}
+
+function parseRevenueSummary(content: string): RevenueSummarySnapshot {
+  const candidates: Array<{ key: string; normalized: string; value: number; currency: string }> = [];
+
+  const pushCandidate = (key: string, value: unknown) => {
+    const number = numericSummaryValue(value);
+    if (!Number.isFinite(number)) return;
+    let currency = "UGX";
+    if (typeof value === "string") {
+      const parsed = parseAmountDisplay(value);
+      if (parsed.currency && !/^UGX$/i.test(parsed.currency)) currency = parsed.currency;
+    }
+    candidates.push({ key: String(key), normalized: normalizeSummaryKey(String(key)), value: number, currency });
+  };
+
+  const walk = (node: unknown, parent = "") => {
+    if (!node || typeof node !== "object") return;
+    for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+      const joined = parent ? `${parent} ${key}` : key;
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        walk(value, joined);
+        continue;
+      }
+      if (Array.isArray(value)) continue;
+      pushCandidate(joined, value);
+    }
+  };
+
+  let parsed: unknown = null;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    parsed = null;
+  }
+  if (parsed && typeof parsed === "object") walk(parsed);
+
+  for (const line of content.split(/\r?\n/)) {
+    const match = line.trim().match(/^([^:：]+?)[:：]\s*(.+)$/);
+    if (match) pushCandidate(match[1], match[2]);
+  }
+
+  const kinds: Array<keyof Omit<RevenueSummarySnapshot, "currency">> = [
+    "revenueToday",
+    "revenueYesterday",
+    "subscribersOnline",
+    "activeSubscriptions",
+    "expiring24h",
+    "unreconciledPayments",
+  ];
+  const snapshot: RevenueSummarySnapshot = {
+    revenueToday: null,
+    revenueYesterday: null,
+    subscribersOnline: null,
+    activeSubscriptions: null,
+    expiring24h: null,
+    unreconciledPayments: null,
+    currency: "UGX",
+  };
+  const claimed = new Set<number>();
+  for (const kind of kinds) {
+    for (let index = 0; index < candidates.length; index += 1) {
+      if (claimed.has(index)) continue;
+      const entry = candidates[index];
+      if (!summaryMatch(kind, entry.normalized)) continue;
+      snapshot[kind] = entry.value;
+      if (entry.currency && !/^UGX$/i.test(entry.currency)) snapshot.currency = entry.currency;
+      claimed.add(index);
+      break;
+    }
+  }
+  return snapshot;
+}
+
 export const verifyCentipidToken = action({
   args: {},
   handler: async (ctx): Promise<{ ok: boolean; toolCount?: number; probe?: string; error?: string }> => {
@@ -638,56 +811,135 @@ export const verifyCentipidToken = action({
   },
 });
 
-export const fetchHistoricalCentipidData = action({
+export const getCentipidLiveOverview = action({
+  args: {},
+  handler: async (ctx): Promise<
+    | ({ ok: true; at: number } & RevenueSummarySnapshot)
+    | { ok: false; error: string }
+  > => {
+    await requireAdminCaller(ctx);
+    const creds = await ctx.runQuery(internal.centipid.getCentipidCredentials, {});
+    if (!creds) return { ok: false, error: "No Centipid credentials are configured." };
+    const token = await decryptCentipidSecret(creds.apiToken);
+    try {
+      const contents = await runMcpTool(token, "revenue_summary", {});
+      return { ok: true, at: Date.now(), ...parseRevenueSummary(contents[0] ?? "") };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "Unknown error" };
+    }
+  },
+});
+
+export const runCentipidHealthCheck = internalAction({
   args: {},
   handler: async (ctx) => {
-    await requireAdminCaller(ctx);
+    const creds = await ctx.runQuery(internal.centipid.getCentipidCredentials, {});
+    if (!creds) return { checked: false };
+
+    const token = await decryptCentipidSecret(creds.apiToken);
+    let ok = false;
+    let toolCount = 0;
+    let error: string | undefined;
+    try {
+      const response = await fetch(centipidMcpEndpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+          "Accept": "application/json, text/event-stream",
+        },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+      });
+      if (!response.ok) {
+        error = `The MCP endpoint rejected the key: HTTP ${response.status}`;
+      } else {
+        const list = parseMcpResponse(await response.text()) as { result?: { tools?: unknown[] } };
+        toolCount = list?.result?.tools?.length ?? 0;
+        ok = toolCount > 0;
+        if (!ok) error = "The MCP endpoint returned no tools for this token.";
+      }
+    } catch (errorValue) {
+      error = errorValue instanceof Error ? errorValue.message : "Unknown error";
+    }
+
+    await ctx.runMutation(internal.centipid.recordCentipidHealthCheck, {
+      at: Date.now(),
+      ok,
+      error: ok ? undefined : error,
+    });
+    return { checked: true, ok, toolCount, error: ok ? undefined : error };
+  },
+});
+
+export const recordCentipidHealthCheck = internalMutation({
+  args: { at: v.number(), ok: v.boolean(), error: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const creds = await ctx.db.query("centipidCredentials").order("desc").first();
+    if (!creds) return;
+    await ctx.db.patch(creds._id, {
+      lastHealthCheckAt: args.at,
+      lastHealthCheckOk: args.ok,
+      lastHealthCheckError: args.error,
+    });
+  },
+});
+
+export const runCentipidSnapshot = internalAction({
+  args: {},
+  handler: async (ctx) => {
     const creds = await ctx.runQuery(internal.centipid.getCentipidCredentials, {});
     if (!creds) throw new Error("No Centipid credentials are configured.");
     const token = await decryptCentipidSecret(creds.apiToken);
 
     type CentipidEntry =
-      | { kind: "subscriber"; payload: { subscriber_id: string; phone: string; name?: unknown; package_name: string; timestamp: number } }
-      | { kind: "payment"; payload: { payment_id: string; amount: number; currency: string; method: string; subscriber_phone: string; timestamp: number } }
-      | { kind: "voucher"; payload: { voucher_id: string; package_name: string; timestamp: number } }
-      | { kind: "ticket"; payload: { ticket_id: string; subject: string; timestamp: number } };
+      | { kind: "subscriber"; eventType?: string; payload: { subscriber_id: string; phone: string; name?: unknown; package_name: string; timestamp: number } }
+      | { kind: "payment"; eventType?: string; payload: { payment_id: string; amount: number; currency: string; method: string; subscriber_phone: string; timestamp: number } }
+      | { kind: "voucher"; eventType?: string; payload: { voucher_id: string; package_name: string; timestamp: number } }
+      | { kind: "ticket"; eventType?: string; payload: { ticket_id: string; subject: string; timestamp: number } };
 
     const tools: Array<[string, (item: Record<string, unknown>) => CentipidEntry]> = [
-      ["list_subscribers", (item) => ({
-        kind: "subscriber" as const,
-        payload: {
-          subscriber_id: (item.id ?? item.subscriber_id ?? "") as string,
-          phone: (item.phone ?? item.mobile ?? "") as string,
-          name: item.name ?? item.customer_name,
-          package_name: (item.package ?? item.package_name ?? "") as string,
-          timestamp: Date.parse(String(item.created_at ?? "")) || Date.now(),
-        },
-      })],
-      ["payments_report", (item) => ({
-        kind: "payment" as const,
-        payload: {
-          payment_id: (item.id ?? item.payment_id ?? item.reference ?? "") as string,
-          amount: Number(item.amount ?? 0),
-          currency: (item.currency ?? "UGX") as string,
-          method: (item.method ?? item.channel ?? "unknown") as string,
-          subscriber_phone: (item.phone ?? item.subscriber_phone ?? "") as string,
-          timestamp: Date.parse(String(item.created_at ?? item.timestamp ?? "")) || Date.now(),
-        },
-      })],
+      ["list_subscribers", (item) => {
+        const paused = item.paused === true;
+        return {
+          kind: "subscriber" as const,
+          eventType: paused ? "subscriber.paused" : "subscriber.created",
+          payload: {
+            subscriber_id: String(item.id ?? item.subscriber_id ?? item.account ?? ""),
+            phone: String(item.phone ?? item.mobile ?? ""),
+            name: item.name ?? item.customer_name,
+            package_name: String(item.package_name ?? item.package ?? item.type ?? ""),
+            timestamp: parseCentipidTimestamp(item.created_at) ?? Date.now(),
+          },
+        };
+      }],
+      ["payments_report", (item) => {
+        const { amount, currency } = parseAmountDisplay(item.amount);
+        return {
+          kind: "payment" as const,
+          payload: {
+            payment_id: String(item.receipt ?? item.id ?? item.payment_id ?? item.reference ?? ""),
+            amount,
+            currency: String(item.currency ?? currency),
+            method: String(item.method ?? item.channel ?? "unknown"),
+            subscriber_phone: String(item.phone ?? item.subscriber_phone ?? ""),
+            timestamp: parseCentipidTimestamp(item.at ?? item.created_at ?? item.timestamp) ?? Date.now(),
+          },
+        };
+      }],
       ["voucher_stock", (item) => ({
         kind: "voucher" as const,
         payload: {
-          voucher_id: (item.id ?? item.voucher_id ?? item.code ?? "") as string,
-          package_name: (item.package ?? item.package_name ?? "") as string,
-          timestamp: Date.parse(String(item.created_at ?? "")) || Date.now(),
+          voucher_id: String(item.id ?? item.batch_id ?? item.code ?? ""),
+          package_name: String(item.package_name ?? item.package ?? ""),
+          timestamp: parseCentipidTimestamp(item.created_at ?? item.name) ?? Date.now(),
         },
       })],
       ["open_tickets", (item) => ({
         kind: "ticket" as const,
         payload: {
-          ticket_id: (item.id ?? item.ticket_id ?? "") as string,
-          subject: (item.subject ?? item.title ?? "") as string,
-          timestamp: Date.parse(String(item.created_at ?? "")) || Date.now(),
+          ticket_id: String(item.id ?? item.ticket_id ?? ""),
+          subject: String(item.subject ?? item.title ?? item.summary ?? ""),
+          timestamp: parseCentipidTimestamp(item.created_at ?? item.opened_at ?? item.timestamp) ?? Date.now(),
         },
       })],
     ];
@@ -698,23 +950,18 @@ export const fetchHistoricalCentipidData = action({
         const contents = await runMcpTool(token, toolName, {});
         let inserted = 0;
         for (const content of contents) {
-          let items: Array<Record<string, unknown>> = [];
-          try {
-            const parsed = JSON.parse(content);
-            items = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.items) ? parsed.items : parsed?.data && Array.isArray(parsed.data) ? parsed.data : [];
-          } catch {
-            items = [];
-          }
+          const items = parseMcpToolItems(content);
           for (const item of items) {
             const entry = normalize(item);
             const eventType =
-              entry.kind === "subscriber"
+              entry.eventType ??
+              (entry.kind === "subscriber"
                 ? "subscriber.created"
                 : entry.kind === "payment"
                   ? "payment.received"
                   : entry.kind === "voucher"
                     ? "voucher.generated"
-                    : "ticket.opened";
+                    : "ticket.opened");
             let result: { inserted: boolean } = { inserted: false };
             const payload = { event_type: eventType, ...entry.payload };
             if (entry.kind === "subscriber") {
@@ -751,6 +998,14 @@ export const fetchHistoricalCentipidData = action({
       }
     }
     return { report };
+  },
+});
+
+export const fetchHistoricalCentipidData = action({
+  args: {},
+  handler: async (ctx): Promise<{ report: { tool: string; inserted: number; error?: string }[] }> => {
+    await requireAdminCaller(ctx);
+    return ctx.runAction(internal.centipid.runCentipidSnapshot, {});
   },
 });
 

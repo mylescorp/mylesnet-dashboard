@@ -163,6 +163,73 @@ export async function requirePlatformOwner(ctx: QueryCtx | MutationCtx): Promise
   return user;
 }
 
+/** Require the caller to hold any one of the given role slugs. */
+export async function requireAnyRole(
+  ctx: QueryCtx | MutationCtx,
+  slugs: string[],
+): Promise<Doc<"users">> {
+  const user = await getCurrentUserRecord(ctx);
+  if (user.isActive === false || user.deactivatedAt !== undefined) {
+    throw new Error("Unauthorized: account is inactive");
+  }
+  const roles = await resolveRoles(ctx, user);
+  if (!slugs.some((slug) => roles.some((role) => role.slug === slug))) {
+    throw new Error("Unauthorized: insufficient role");
+  }
+  return user;
+}
+
+/** Operations lead + above (owner / admin / ops_manager). */
+export function isOpsOrAbove(roles: ResolvedRole[]): boolean {
+  return roles.some((role) =>
+    ["platform_owner", "platform_admin", "ops_manager"].includes(role.slug),
+  );
+}
+
+export async function requireOpsOrAbove(ctx: QueryCtx | MutationCtx): Promise<Doc<"users">> {
+  const user = await getCurrentUserRecord(ctx);
+  if (user.isActive === false || user.deactivatedAt !== undefined) {
+    throw new Error("Unauthorized: account is inactive");
+  }
+  const roles = await resolveRoles(ctx, user);
+  if (!isOpsOrAbove(roles)) {
+    throw new Error("Unauthorized: operations role required");
+  }
+  return user;
+}
+
+/** Finance lead + above (owner / admin / finance_manager). */
+export function isFinanceOrAbove(roles: ResolvedRole[]): boolean {
+  return roles.some((role) =>
+    ["platform_owner", "platform_admin", "finance_manager"].includes(role.slug),
+  );
+}
+
+export async function requireFinanceOrAbove(ctx: QueryCtx | MutationCtx): Promise<Doc<"users">> {
+  const user = await getCurrentUserRecord(ctx);
+  if (user.isActive === false || user.deactivatedAt !== undefined) {
+    throw new Error("Unauthorized: account is inactive");
+  }
+  const roles = await resolveRoles(ctx, user);
+  if (!isFinanceOrAbove(roles)) {
+    throw new Error("Unauthorized: finance role required");
+  }
+  return user;
+}
+
+/** Investor read-only view (investor_viewer role; investors may self-serve later). */
+export async function requireInvestorViewer(ctx: QueryCtx | MutationCtx): Promise<Doc<"users">> {
+  const user = await getCurrentUserRecord(ctx);
+  if (user.isActive === false || user.deactivatedAt !== undefined) {
+    throw new Error("Unauthorized: account is inactive");
+  }
+  const roles = await resolveRoles(ctx, user);
+  if (!isFinanceOrAbove(roles) && !roles.some((role) => role.slug === "investor_viewer")) {
+    throw new Error("Unauthorized: investor access required");
+  }
+  return user;
+}
+
 /** Require the caller to hold a specific permission. Returns the user record. */
 export async function requirePermission(
   ctx: QueryCtx | MutationCtx,

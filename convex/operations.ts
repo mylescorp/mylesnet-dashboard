@@ -253,6 +253,18 @@ export const getLiveRouter = query({
       .withIndex("by_router", (q) => q.eq("routerId", router._id))
       .collect();
 
+    const switches = (await ctx.db
+      .query("networkSwitches")
+      .withIndex("by_router", (q) => q.eq("routerId", router._id))
+      .collect()).filter((entry) => entry.archivedAt === undefined);
+    const switchesWithLinks = await Promise.all(switches.map(async (entry) => ({
+      _switch: entry,
+      linkedAccessPoints: (await ctx.db
+        .query("accessPoints")
+        .withIndex("by_router", (q) => q.eq("routerId", router._id))
+        .collect()).filter((accessPoint) => accessPoint.archivedAt === undefined && accessPoint.switchId === entry._id),
+    })));
+
     return {
       router,
       accessPoints: apEntries,
@@ -263,6 +275,7 @@ export const getLiveRouter = query({
       hotspotSessions,
       leaseCount: dhcpLeases.length,
       queueCount: simpleQueues.length,
+      switches: switchesWithLinks,
     };
   },
 });
@@ -499,7 +512,7 @@ export const centipidCsvReconcile = internalMutation({
       if (existing) continue;
 
       const market = await ctx.db.get(voucher.marketId);
-      const effectiveCurrency: "UGX" | "KSH" = market?.currency ?? currency;
+      const effectiveCurrency: string = market?.currency ?? currency;
 
       await ctx.db.insert("renewalCredits", {
         agentId: voucher.ownerAgentId,
@@ -548,7 +561,7 @@ export const computeLeaderboardDaily = internalMutation({
       renewalRateAvailable: boolean;
       renewalRate: number | undefined;
       totalCommissionEarned: number;
-      currency: "UGX" | "KSH";
+      currency: string;
     }> = [];
 
     for (const agent of agents) {
@@ -564,7 +577,7 @@ export const computeLeaderboardDaily = internalMutation({
       const marketForCurrency = soldVouchers[0]?.marketId
         ? await ctx.db.get(soldVouchers[0].marketId)
         : null;
-      const currency: "UGX" | "KSH" = marketForCurrency?.currency ?? "UGX";
+      const currency: string = marketForCurrency?.currency ?? "UGX";
 
       const commissions = await ctx.db
         .query("commissions")

@@ -41,7 +41,7 @@ export default function IncidentsPage() {
 
   const routerName = (id: Id<"routers">) => routers.find((r) => r._id === id)?.name ?? "#" + String(id).slice(-6);
   const marketName = (id: string) => markets.find((m) => m._id === id)?.name ?? "#" + String(id).slice(-6);
-  const deviceName = (id: string) => devices.find((d) => d._id === id)?.name ?? "#" + String(id).slice(-6);
+  const deviceName = (id: string | undefined) => (id ? (devices.find((d) => d._id === id)?.name ?? "#" + String(id).slice(-6)) : "—");
 
   const visibleIncidents = openFilter === "open"
     ? roles.filter((i) => !i.resolvedAt)

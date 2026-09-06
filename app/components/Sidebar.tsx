@@ -3,9 +3,11 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@workos-inc/authkit-nextjs/components";
-import { ChevronLeft, ChevronRight, LogOut, X } from "lucide-react";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { ChevronDown, ChevronLeft, ChevronRight, LogOut, X } from "lucide-react";
 import { useSidebarState } from "./useSidebarState";
 import { useUserProfile } from "./UserProfileContext";
 import { canAccess, navSections } from "./nav";
@@ -15,6 +17,17 @@ interface SidebarProps {
   onCloseMobile?: () => void;
 }
 
+const SECTION_STORAGE_KEY = "mylesnet-dashboard-sidebar-sections";
+
+function loadSectionState(): Record<string, boolean> {
+  try {
+    const raw = window.localStorage.getItem(SECTION_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
+  } catch {
+    return {};
+  }
+}
+
 export default function Sidebar({ isMobile = false, onCloseMobile }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
@@ -22,16 +35,62 @@ export default function Sidebar({ isMobile = false, onCloseMobile }: SidebarProp
   const { collapsed, toggleCollapsed } = useSidebarState();
   const { user } = useUserProfile();
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
 
   const permissions = user?.permissions ?? [];
   const effectiveCollapsed = isMobile ? false : collapsed;
 
+  const ability = useMemo(() => new Set(permissions), [permissions]);
+
+  const showIncidentBadge = ability.has("incidents:read");
+  const showDeviceBadge = ability.has("devices:read");
+  const openIncidents = useQuery(api.incidents.getOpenIncidents, showIncidentBadge ? {} : "skip");
+  const deviceRows = useQuery(api.devices.listDevices, showDeviceBadge ? {} : "skip");
+
+  const badges = useMemo(() => {
+    const map: Record<string, number> = {};
+    if (openIncidents && openIncidents.length > 0) map["/incidents"] = openIncidents.length;
+    const pending = (deviceRows ?? []).filter((d) => d.status !== "deleted" && d.role === "site_ap" && d.status === "unverified").length;
+    if (pending > 0) map["/devices"] = pending;
+    return map;
+  }, [openIncidents, deviceRows]);
+
   const visibleSections = navSections
-    .map((section) => ({
-      ...section,
-      items: section.items.filter((item) => canAccess(permissions, item)),
-    }))
+    .map((section) => ({ ...section, items: section.items.filter((item) => canAccess(ability, item)) }))
     .filter((section) => section.items.length > 0);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const stored = loadSectionState();
+      const activeSection = visibleSections.find((section) =>
+        section.items.some((item) => pathname === item.href || pathname.startsWith(item.href + "/")),
+      );
+      if (activeSection) {
+        stored[activeSection.title] = true;
+      } else if (visibleSections.length === 1) {
+        stored[visibleSections[0].title] = true;
+      }
+      setOpenSections(stored);
+      try {
+        window.localStorage.setItem(SECTION_STORAGE_KEY, JSON.stringify(stored));
+      } catch {
+        // Storage can be unavailable in restricted browser contexts.
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [pathname, visibleSections.length]);
+
+  const toggleSection = (title: string) => {
+    setOpenSections((prev) => {
+      const next = { ...prev, [title]: prev[title] === false };
+      try {
+        window.localStorage.setItem(SECTION_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // Ignore
+      }
+      return next;
+    });
+  };
 
   const handleSignOut = async () => {
     setIsSigningOut(true);
@@ -93,28 +152,52 @@ export default function Sidebar({ isMobile = false, onCloseMobile }: SidebarProp
 
       {/* Navigation Sections */}
       <nav className="sidebar-nav" aria-label="Sidebar navigation">
-        {visibleSections.map((section) => (
-          <div key={section.title} className="sidebar-section">
-            <p className="sidebar-section-label">{section.title}</p>
-            {section.items.map((item) => {
-              const Icon = item.icon;
-              const active = isItemActive(item);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={isMobile ? onCloseMobile : undefined}
-                  className={`sidebar-link ${active ? "sidebar-link-active" : ""}`}
-                  aria-current={active ? "page" : undefined}
-                  title={effectiveCollapsed ? item.label : undefined}
-                >
-                  <Icon aria-hidden="true" size={19} strokeWidth={1.8} />
-                  <span>{item.label}</span>
-                </Link>
-              );
-            })}
-          </div>
-        ))}
+        {visibleSections.map((section) => {
+          const isOpen = effectiveCollapsed ? true : openSections[section.title] !== false;
+          const activeSection = section.items.some((item) => isItemActive(item));
+          return (
+            <div key={section.title} className="sidebar-section">
+              <button
+                type="button"
+                onClick={() => toggleSection(section.title)}
+                className={`sidebar-section-header ${activeSection ? "sidebar-section-header-active" : ""}`}
+                aria-expanded={isOpen}
+              >
+                <span className="sidebar-section-label">{section.title}</span>
+                <ChevronDown aria-hidden="true" size={14} className={`sidebar-section-chevron ${isOpen ? "" : "sidebar-section-chevron-closed"}`} />
+              </button>
+              {isOpen ? (
+                <div className="sidebar-section-items">
+                  {section.items.map((item) => {
+                    const Icon = item.icon;
+                    const active = isItemActive(item);
+                    const badge = badges[item.href];
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={isMobile ? onCloseMobile : undefined}
+                        className={`sidebar-link ${active ? "sidebar-link-active" : ""}`}
+                        aria-current={active ? "page" : undefined}
+                        title={effectiveCollapsed ? item.label : undefined}
+                      >
+                        <Icon aria-hidden="true" size={19} strokeWidth={1.8} />
+                        <span className="sidebar-link-text">
+                          <span>{item.label}</span>
+                          {badge !== undefined && badge > 0 ? (
+                            <span className="sidebar-badge">{badge}</span>
+                          ) : null}
+                          {item.planned && <span className="sidebar-planned" title="Planned module">soon</span>}
+                        </span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+        {visibleSections.length === 0 ? <p className="sidebar-empty">No modules available for your role.</p> : null}
       </nav>
 
       {/* Minimal Footer (Sign Out Only) */}

@@ -42,7 +42,7 @@ export const computeLeaderboard = mutation({
       renewalRateAvailable: boolean;
       renewalRate: number | undefined;
       totalCommissionEarned: number;
-      currency: "UGX" | "KSH";
+      currency: string;
     }> = [];
 
     for (const agent of agents) {

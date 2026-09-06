@@ -72,6 +72,7 @@ const wifiRadioValidator = v.object({
   frequency: v.optional(v.number()),
   channel: v.optional(v.string()),
   signalStrength: v.optional(v.number()),
+  ccq: v.optional(v.number()),
   clientCount: v.optional(v.number()),
 });
 
@@ -248,6 +249,10 @@ export const ingestSnapshot = internalMutation({
     if (!router || router.archivedAt !== undefined) throw new Error("Router not found.");
     const now = args.observedAt;
 
+    // Estate bridge: timestamp of last successful ingestion drives liveness
+    // indicators on the registry rows.
+    await ctx.db.patch(args.routerId, { lastSeenAt: now, updatedAt: now });
+
     if (typeof args.latencyMs === "number" && args.latencyMs > 5_000) {
       await logSystemEvent(ctx, {
         routerId: args.routerId,
@@ -295,18 +300,27 @@ export const ingestSnapshot = internalMutation({
       .query("accessPoints")
       .withIndex("by_router", (query) => query.eq("routerId", args.routerId))
       .collect();
-    const accessPointByPort = new Map(accessPoints.filter((accessPoint) => accessPoint.archivedAt === undefined).map((accessPoint) => [accessPoint.port, accessPoint]));
+    const activeAccessPoints = accessPoints.filter((accessPoint) => accessPoint.archivedAt === undefined);
+    const accessPointsByPort = new Map<string, (typeof accessPoints)[number][]>();
+    for (const accessPoint of activeAccessPoints) {
+      const list = accessPointsByPort.get(accessPoint.port) ?? [];
+      list.push(accessPoint);
+      accessPointsByPort.set(accessPoint.port, list);
+    }
+    const primaryAccessPointForPort = (port: string) =>
+      (accessPointsByPort.get(port) ?? []).find((accessPoint) => accessPoint.sharesPortWith === undefined) ??
+      (accessPointsByPort.get(port) ?? [])[0];
     const portByMac = new Map(
       (args.bridgeHosts ?? [])
         .filter((host) => host.macAddress && host.interfaceName)
         .map((host) => [host.macAddress.toUpperCase(), host.interfaceName]),
     );
     const resolveAccessPointForSession = (session: { interfaceName: string; macAddress?: string }) => {
-      const byInterface = accessPointByPort.get(session.interfaceName);
+      const byInterface = primaryAccessPointForPort(session.interfaceName);
       if (byInterface) return byInterface;
       if (session.macAddress) {
         const port = portByMac.get(session.macAddress.toUpperCase());
-        if (port) return accessPointByPort.get(port);
+        if (port) return primaryAccessPointForPort(port);
       }
       return undefined;
     };
@@ -372,49 +386,61 @@ export const ingestSnapshot = internalMutation({
     }
 
     for (const item of args.interfaces) {
-      const accessPoint = accessPointByPort.get(item.name);
-      if (!accessPoint) continue;
-      const previousAccessPointSample = await ctx.db
-        .query("accessPointSamples")
-        .withIndex("by_access_point_timestamp", (query) =>
-          query.eq("accessPointId", accessPoint._id),
-        )
-        .order("desc")
-        .first();
-      const accessPointElapsedSeconds = previousAccessPointSample
-        ? Math.max(1, (args.observedAt - previousAccessPointSample.timestamp) / 1000)
-        : 1;
-      const connectedUserCount = sessionAccessPointIds.filter((id) => id === accessPoint._id).length;
-      await ctx.db.insert("accessPointSamples", {
-        routerId: args.routerId,
-        accessPointId: accessPoint._id,
-        timestamp: args.observedAt,
-        linkState: item.running,
-        txBytesPerSec: rate(item.txBytes, previousAccessPointSample?.txBytes, accessPointElapsedSeconds),
-        rxBytesPerSec: rate(item.rxBytes, previousAccessPointSample?.rxBytes, accessPointElapsedSeconds),
-        errorCount: item.txErrors + item.rxErrors,
-        queueDrops: item.txDrops + item.rxDrops,
-        txBytes: item.txBytes,
-        rxBytes: item.rxBytes,
-        connectedUserCount,
-      });
-      const openLinkIncident = openIncidents.find(
-        (incident) =>
-          incident.resolvedAt === undefined &&
-          incident.accessPointId === accessPoint._id &&
-          incident.note === "Access point link is down.",
-      );
-      if (!item.running && !openLinkIncident) {
-        await ctx.db.insert("incidents", {
+      const interfaceAccessPoints = accessPointsByPort.get(item.name) ?? [];
+      if (interfaceAccessPoints.length === 0) continue;
+      for (const accessPoint of interfaceAccessPoints) {
+        const previousAccessPointSample = await ctx.db
+          .query("accessPointSamples")
+          .withIndex("by_access_point_timestamp", (query) =>
+            query.eq("accessPointId", accessPoint._id),
+          )
+          .order("desc")
+          .first();
+        const accessPointElapsedSeconds = previousAccessPointSample
+          ? Math.max(1, (args.observedAt - previousAccessPointSample.timestamp) / 1000)
+          : 1;
+        const connectedUserCount = sessionAccessPointIds.filter((id) => id === accessPoint._id).length;
+        const radio = (args.wifiRadios ?? []).find((r) => r.interfaceName === accessPoint.port);
+        const signalStrengthDbm = radio?.signalStrength;
+        await ctx.db.insert("accessPointSamples", {
           routerId: args.routerId,
           accessPointId: accessPoint._id,
-          openedAt: now,
-          note: "Access point link is down.",
-          severity: "critical",
+          timestamp: args.observedAt,
+          linkState: item.running,
+          txBytesPerSec: rate(item.txBytes, previousAccessPointSample?.txBytes, accessPointElapsedSeconds),
+          rxBytesPerSec: rate(item.rxBytes, previousAccessPointSample?.rxBytes, accessPointElapsedSeconds),
+          errorCount: item.txErrors + item.rxErrors,
+          queueDrops: item.txDrops + item.rxDrops,
+          txBytes: item.txBytes,
+          rxBytes: item.rxBytes,
+          connectedUserCount,
+          ccq: radio?.ccq,
+          signalStrengthDbm,
         });
-      }
-      if (item.running && openLinkIncident) {
-        await ctx.db.patch(openLinkIncident._id, { resolvedAt: now });
+        await ctx.db.patch(accessPoint._id, {
+          lastSeenAt: now,
+          updatedAt: now,
+          lastSnapshotCcq: radio?.ccq,
+          lastSnapshotSignalDbm: signalStrengthDbm,
+        });
+        const openLinkIncident = openIncidents.find(
+          (incident) =>
+            incident.resolvedAt === undefined &&
+            incident.accessPointId === accessPoint._id &&
+            incident.note === "Access point link is down.",
+        );
+        if (!item.running && !openLinkIncident) {
+          await ctx.db.insert("incidents", {
+            routerId: args.routerId,
+            accessPointId: accessPoint._id,
+            openedAt: now,
+            note: "Access point link is down.",
+            severity: "critical",
+          });
+        }
+        if (item.running && openLinkIncident) {
+          await ctx.db.patch(openLinkIncident._id, { resolvedAt: now });
+        }
       }
     }
 

@@ -26,7 +26,7 @@ export const createMarket = mutation({
   args: {
     name: v.string(),
     country: v.string(),
-    currency: v.union(v.literal("UGX"), v.literal("KSH")),
+    currency: v.string(),
   },
   handler: async (ctx, args) => {
     const user = await requirePlatformAdmin(ctx);
@@ -194,7 +194,7 @@ export const reportOperatingCost = mutation({
     yearMonth: v.string(), // "2026-09"
     airtelDataCost: v.number(),
     electricityCost: v.number(),
-    currency: v.union(v.literal("UGX"), v.literal("KSH")),
+    currency: v.string(),
   },
   handler: async (ctx, args) => {
     const user = await requirePlatformAdmin(ctx);

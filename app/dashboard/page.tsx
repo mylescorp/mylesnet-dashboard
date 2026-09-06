@@ -121,7 +121,29 @@ function RouterSection({ routerId, showChart, onOpenDetail, onViewUsers }: { rou
     }) }</div> : <><RouterLivePanel live={live} /><div className="access-point-actions"><button type="button" className="secondary-button" onClick={() => nav.push("/routers")}>Register access points</button><span className="console-note">Router telemetry shows live data even before access point records are registered. Add records from Router settings to map users and traffic per link.</span></div></>}
 
     {showComparison ? <ComparisonDialog accessPoints={accessPoints} onClose={() => setShowComparison(false)} /> : null}
+
+    {live.switches.length ? <SwitchSection switches={live.switches} routerName={live.router.name} /> : null}
+
     {showChart ? <HealthTrendChart routerId={routerId} /> : null}
+  </section>;
+}
+
+function SwitchSection({ switches, routerName }: { switches: { _switch: { _id: string; name: string; model?: string; managed?: boolean; routerPort?: string; portCount?: number; ipAddress?: string; macAddress?: string }; linkedAccessPoints: { _id: string; name: string; port: string; deviceType: string }[] }[]; routerName: string }) {
+  return <section aria-label="Switched infrastructure" className="section-block">
+    <div className="section-heading"><div><p className="eyebrow">Infrastructure · {routerName}</p><h2>Switches</h2></div></div>
+    <div className="access-point-grid access-point-grid-rich">
+      {switches.map((entry) => <article key={entry._switch._id} className="access-point-card workspace-card">
+        <div className="access-point-head"><div><h3>{entry._switch.name}</h3><p>{entry._switch.routerPort ?? "Port not set"} · {routerName}</p></div><span className={`status-pill ${entry._switch.managed ? "status-pill-success" : "status-pill-warning"}`}>{entry._switch.managed ? "Managed" : "Unmanaged"}</span></div>
+        <dl className="access-point-stats">
+          <div><dt>Model</dt><dd>{entry._switch.model ?? "Not configured"}</dd></div>
+          <div><dt>Port count</dt><dd>{entry._switch.portCount ?? "Not configured"}</dd></div>
+          <div><dt>Management IP</dt><dd>{entry._switch.ipAddress ?? "—"}</dd></div>
+          <div><dt>MAC</dt><dd>{entry._switch.macAddress ?? "—"}</dd></div>
+        </dl>
+        <div className="switch-links">{entry.linkedAccessPoints.length ? <><span>Linked access points</span><div className="switch-link-list">{entry.linkedAccessPoints.map((ap) => <span key={ap._id} className="switch-link-chip">{ap.name} · {ap.port}</span>)}</div></> : <p className="console-note">No access points registered as connected to this switch.</p>}</div>
+        {!entry.linkedAccessPoints.length ? <p className="console-note">Enter the switch details (model, port count, IP, MAC) from Router settings to complete this record.</p> : null}
+      </article>)}
+    </div>
   </section>;
 }
 

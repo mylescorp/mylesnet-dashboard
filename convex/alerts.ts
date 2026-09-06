@@ -1,7 +1,9 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { requirePlatformAdmin, requirePlatformUser } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
+import { notifyUser } from "./lib/notify";
 
 /**
  * Raise an alert for a device going offline. If the device is a MikroTik
@@ -20,6 +22,16 @@ export const raiseDeviceOfflineAlert = mutation({
       return { suppressed: true, reason: "device_in_maintenance" };
     }
 
+    // Planned maintenance window covering this device/market suppresses alerts
+    // (spec §17) — treat it exactly like lifecycle maintenance.
+    const inWindow = await ctx.runQuery(internal.maintenance.deviceInMaintenance, {
+      deviceId: args.deviceId,
+      marketId: device.marketId,
+    });
+    if (inWindow) {
+      return { suppressed: true, reason: "maintenance_window" };
+    }
+
     // Already-open alert for this root device? Don't duplicate.
     const existingOpen = await ctx.db
       .query("alerts")
@@ -32,6 +44,7 @@ export const raiseDeviceOfflineAlert = mutation({
 
     let dependentDeviceIds: typeof device._id[] = [];
     let message = `${device.name} is offline.`;
+    let severity: "info" | "warning" | "critical" = "warning";
 
     if (device.deviceKind === "mikrotik_gateway") {
       const children = await ctx.db
@@ -47,9 +60,11 @@ export const raiseDeviceOfflineAlert = mutation({
       dependentDeviceIds = children.map((c) => c._id);
       if (dependentDeviceIds.length > 0) {
         message = `Market offline (MikroTik down, ${dependentDeviceIds.length} dependent AP(s) unreachable).`;
+        severity = "critical";
       }
     }
 
+    const openedAt = Date.now();
     const alertId = await ctx.db.insert("alerts", {
       marketId: device.marketId,
       rootDeviceId: args.deviceId,
@@ -57,8 +72,29 @@ export const raiseDeviceOfflineAlert = mutation({
       alertType: "device_offline",
       message,
       alertStatus: "open",
-      openedAt: Date.now(),
+      openedAt,
+      triggeredAt: openedAt,
+      severity,
+      recommendedAction: dependentDeviceIds.length > 0
+        ? "Market outage: dispatch field team and check power/backhaul at the site."
+        : "Check the device's link state and power; reboot if unresponsive.",
     });
+
+    // Fan out to platform users who opted into SMS/email for offline alerts
+    // (the dashboard bell always records via systemEvents regardless).
+    const operators = (await ctx.db.query("users").take(100)).filter((u) => u.platformRole !== undefined);
+    for (const operator of operators) {
+      await notifyUser(ctx, operator._id, "device_offline", "sms", {
+        subject: message,
+        smsText: `MYLESNET: ${message} Recommended: check power/backhaul.`,
+        emailHtml: `<p><strong>${message}</strong></p><p>Alert raised for ${device.name} at ${new Date(openedAt).toLocaleString()}.</p>`,
+      });
+      await notifyUser(ctx, operator._id, "device_offline", "email", {
+        subject: `Alert: ${message}`,
+        smsText: "",
+        emailHtml: `<p><strong>${message}</strong></p><p>Alert raised for ${device.name} at ${new Date(openedAt).toLocaleString()}.</p>`,
+      });
+    }
 
     return { suppressed: false, alertId };
   },

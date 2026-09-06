@@ -38,6 +38,14 @@ export default defineSchema({
     // all access. Restorable by trash:manage.
     deletedAt: v.optional(v.number()),
     deletedBy: v.optional(v.id("users")),
+    // Persisted workspace scope for the sidebar selector (Section 30 of the
+    // NOC spec): survives page refresh without browser storage.
+    lastWorkspaceScope: v.optional(
+      v.object({
+        country: v.optional(v.string()),
+        marketId: v.optional(v.id("markets")),
+      })
+    ),
   })
     .index("email", ["email"])
     .index("by_workosUserId", ["workosUserId"])
@@ -130,6 +138,9 @@ export default defineSchema({
     archivedAt: v.optional(v.number()),
     archivedBy: v.optional(v.id("users")),
     archiveReason: v.optional(v.string()),
+    // Estate bridge (spec "Device Information").
+    macAddress: v.optional(v.string()),
+    lastSeenAt: v.optional(v.number()),
   })
     .index("by_location", ["location"])
     .index("by_market", ["marketId"]),
@@ -162,6 +173,13 @@ export default defineSchema({
     archivedAt: v.optional(v.number()),
     archivedBy: v.optional(v.id("users")),
     archiveReason: v.optional(v.string()),
+    // Estate bridge (spec "Device Information"): when an access point is
+    // registered in the spec device registry, these fields track liveness and
+    // who registered it.
+    lastSeenAt: v.optional(v.number()),
+    registeredBy: v.optional(v.union(v.literal("self"), v.id("users"))),
+    lastSnapshotCcq: v.optional(v.number()),
+    lastSnapshotSignalDbm: v.optional(v.number()),
   }).index("by_router", ["routerId"]),
 
   /** Layer-2 switches that sit between a router port and downstream access points. */
@@ -222,6 +240,10 @@ export default defineSchema({
     txBytes: v.number(),
     rxBytes: v.number(),
     connectedUserCount: v.optional(v.number()),
+    // Wi-Fi quality (spec "Device Details"): required for CCQ threshold alerts
+    // and signal-strength capacity planning.
+    ccq: v.optional(v.number()),
+    signalStrengthDbm: v.optional(v.number()),
   }).index("by_access_point_timestamp", ["accessPointId", "timestamp"]),
 
   activeHotspotSessions: defineTable({
@@ -356,6 +378,7 @@ export default defineSchema({
       v.literal("dropped"),
       v.literal("collector_backoff"),
       v.literal("partial_telemetry"),
+      v.literal("notification"),
     ),
     severity: v.union(v.literal("info"), v.literal("warning"), v.literal("critical")),
     title: v.string(),
@@ -374,6 +397,9 @@ export default defineSchema({
     apiToken: v.string(),
     webhookSigningSecret: v.string(),
     ingestionPaused: v.optional(v.boolean()),
+    lastHealthCheckAt: v.optional(v.number()),
+    lastHealthCheckOk: v.optional(v.boolean()),
+    lastHealthCheckError: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_createdAt", ["createdAt"]),
 
@@ -463,7 +489,9 @@ export default defineSchema({
   markets: defineTable({
     name: v.string(),
     country: v.string(),
-    currency: v.union(v.literal("UGX"), v.literal("KSH")),
+    // Widened from a UGX/KSH union: Uganda and Kenya today, spec §22 allows any
+    // ISO-4217 code as markets expand.
+    currency: v.string(),
     lifecycleStatus: v.union(v.literal("planned"), v.literal("active"), v.literal("paused"), v.literal("decommissioned")),
     status: v.string(),
     createdAt: v.number(),
@@ -473,14 +501,26 @@ export default defineSchema({
     deleteReason: v.optional(v.string()),
     restoredAt: v.optional(v.number()),
     restoredBy: v.optional(v.id("users")),
-  }).index("by_status", ["status"]),
+    // Locality + install/backhaul metadata (spec §22 "MylesNet markets").
+    coordinates: v.optional(v.object({ lat: v.number(), lng: v.number() })),
+    installDate: v.optional(v.string()),
+    airtelPlanMbps: v.optional(v.number()),
+    notes: v.optional(v.string()),
+    badges: v.optional(v.array(v.string())),
+    // Per-market site-kit API key (spec §10 siteKit). Only a SHA-256 hash is
+    // ever stored — the raw key is shown once at generation time.
+    apiKeyHash: v.optional(v.string()),
+    apiKeyCreatedAt: v.optional(v.number()),
+  })
+    .index("by_status", ["status"])
+    .index("by_country", ["country"]),
 
   marketOperatingCosts: defineTable({
     marketId: v.id("markets"),
     yearMonth: v.string(),
     airtelDataCost: v.number(),
     electricityCost: v.number(),
-    currency: v.union(v.literal("UGX"), v.literal("KSH")),
+    currency: v.string(),
     reportedBy: v.id("users"),
     reportedAt: v.number(),
   })
@@ -502,11 +542,23 @@ export default defineSchema({
     deleteReason: v.optional(v.string()),
     restoredAt: v.optional(v.number()),
     restoredBy: v.optional(v.id("users")),
+    // Business/NOC bridge fields (spec "Device Information"): the devices table
+    // doubles as the spec device registry, linked to the ops estate below.
+    deviceType: v.optional(
+      v.union(v.literal("mikrotik"), v.literal("outdoor_ap"), v.literal("indoor_ap"), v.literal("extender"))
+    ),
+    role: v.optional(v.string()),
+    macAddress: v.optional(v.string()),
+    lastSeenAt: v.optional(v.number()),
+    registeredBy: v.optional(v.union(v.literal("self"), v.id("users"))),
+    routerId: v.optional(v.id("routers")),
+    accessPointId: v.optional(v.id("accessPoints")),
   })
     .index("by_market", ["marketId"])
     .index("by_parent", ["parentDeviceId"])
     .index("by_lifecycleStatus", ["lifecycleStatus"])
-    .index("by_status", ["status"]),
+    .index("by_status", ["status"])
+    .index("by_macAddress", ["macAddress"]),
 
   deviceReplacementEvents: defineTable({
     deviceId: v.id("devices"),
@@ -531,6 +583,11 @@ export default defineSchema({
     deleteReason: v.optional(v.string()),
     restoredAt: v.optional(v.number()),
     restoredBy: v.optional(v.id("users")),
+    // NOC spec "Agent Management": optional platform account link + default
+    // commission model + achievement badges.
+    userId: v.optional(v.id("users")),
+    commissionModel: v.optional(v.union(v.literal("percentage"), v.literal("flat_per_sale"), v.literal("bonus_based"))),
+    badges: v.optional(v.array(v.string())),
   })
     .index("by_lifecycleStatus", ["lifecycleStatus"])
     .index("by_status", ["status"]),
@@ -554,7 +611,7 @@ export default defineSchema({
     marketId: v.id("markets"),
     voucherId: v.optional(v.id("vouchers")),
     amount: v.number(),
-    currency: v.union(v.literal("UGX"), v.literal("KSH")),
+    currency: v.string(),
     payoutStatus: v.string(),
     isFinalSettlement: v.boolean(),
     accruedAt: v.number(),
@@ -596,15 +653,18 @@ export default defineSchema({
     marketId: v.id("markets"),
     planType: v.string(),
     quantity: v.number(),
-    currency: v.union(v.literal("UGX"), v.literal("KSH")),
+    currency: v.string(),
     priceEach: v.number(),
     generatedBy: v.id("users"),
     createdAt: v.number(),
+    // Optional link to a spec `plans` row (spec §26) so sales analytics can
+    // join batches to configured plan prices.
+    planId: v.optional(v.id("plans")),
   }).index("by_market", ["marketId"]),
 
   alerts: defineTable({
     marketId: v.id("markets"),
-    rootDeviceId: v.id("devices"),
+    rootDeviceId: v.optional(v.id("devices")),
     dependentDeviceIds: v.array(v.id("devices")),
     alertType: v.string(),
     message: v.string(),
@@ -613,9 +673,17 @@ export default defineSchema({
     acknowledgedBy: v.optional(v.id("users")),
     acknowledgedAt: v.optional(v.number()),
     resolvedAt: v.optional(v.number()),
+    // NOC spec §17 alert enrichments. `triggeredAt` aliases `openedAt` under
+    // the spec name; escalation uses severity + channels.
+    triggeredAt: v.optional(v.number()),
+    severity: v.optional(v.union(v.literal("info"), v.literal("warning"), v.literal("critical"))),
+    notifiedVia: v.optional(v.array(v.union(v.literal("sms"), v.literal("email"), v.literal("dashboard")))),
+    ownerId: v.optional(v.id("users")),
+    recommendedAction: v.optional(v.string()),
   })
     .index("by_status", ["alertStatus"])
-    .index("by_rootDevice", ["rootDeviceId"]),
+    .index("by_rootDevice", ["rootDeviceId"])
+    .index("by_market_status", ["marketId", "alertStatus"]),
 
   auditLog: defineTable({
     action: v.string(),
@@ -709,7 +777,7 @@ export default defineSchema({
     initialVoucherId: v.id("vouchers"),
     renewalType: v.string(),
     renewalAmount: v.number(),
-    currency: v.union(v.literal("UGX"), v.literal("KSH")),
+    currency: v.string(),
     centipidMatchRef: v.optional(v.string()),
     creditedAt: v.number(),
     reconciliationBatchId: v.optional(v.string()),
@@ -733,7 +801,7 @@ export default defineSchema({
     renewalRateAvailable: v.boolean(),
     renewalRate: v.optional(v.number()),
     totalCommissionEarned: v.number(),
-    currency: v.union(v.literal("UGX"), v.literal("KSH")),
+    currency: v.string(),
     rank: v.number(),
     createdAt: v.number(),
   })
@@ -796,4 +864,375 @@ export default defineSchema({
   })
     .index("by_token", ["invitationToken"])
     .index("by_email", ["email"]),
+
+  // ==========================================================================
+  // NOC SPEC V2 — EXCHANGE / FINANCIALS
+  // ==========================================================================
+
+  // Cached USD reference rates (spec §28), refreshed by the forex cron. The
+  // daily/monthly financial rollups read this instead of calling APIs.
+  exchangeRates: defineTable({
+    date: v.string(),
+    currency: v.string(),
+    rateToUSD: v.number(),
+    source: v.union(v.literal("primary"), v.literal("fallback")),
+    refreshedAt: v.number(),
+  })
+    .index("by_currency_date", ["currency", "date"])
+    .index("by_date", ["date"]),
+
+  // Per-market, per-month financials (spec §22): paid-in vs. break-even.
+  marketFinancials: defineTable({
+    marketId: v.id("markets"),
+    month: v.string(), // "2026-08"
+    revenueLocal: v.number(),
+    revenueUSD: v.number(),
+    airtelCostLocal: v.number(),
+    electricityCostLocal: v.number(),
+    centipidFeeLocal: v.number(),
+    variableCostLocal: v.number(),
+    netContributionLocal: v.number(),
+    breakEvenStatus: v.union(v.literal("profit"), v.literal("break_even"), v.literal("loss")),
+    currency: v.string(),
+    enteredBy: v.id("users"),
+    enteredAt: v.number(),
+  })
+    .index("by_market_month", ["marketId", "month"])
+    .index("by_month", ["month"]),
+
+  // Subscriber snapshot projections (spec §24 population model).
+  subscriberSnapshots: defineTable({
+    marketId: v.id("markets"),
+    date: v.string(), // "2026-08-14"
+    activeCount: v.number(),
+    newCount: v.number(),
+    renewalCount: v.number(),
+    renewalRate: v.optional(v.number()),
+    avgPlanPriceLocal: v.optional(v.number()),
+    currency: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_market_date", ["marketId", "date"])
+    .index("by_date", ["date"]),
+
+  // Thin ledger of every revenue-generating agent action (voucher sale,
+  // renewal, new subscription). Single source for daily_snapshots, cost
+  // allocation, analytics and the leaderboard (spec §25).
+  agentActivity: defineTable({
+    agentId: v.id("agents"),
+    marketId: v.id("markets"),
+    action: v.union(v.literal("voucher_sale"), v.literal("renewal"), v.literal("new_subscription")),
+    occurredAt: v.number(),
+    amountLocal: v.number(),
+    currency: v.string(),
+    planCode: v.optional(v.string()),
+    voucherId: v.optional(v.id("vouchers")),
+    commissionAccruedLocal: v.optional(v.number()),
+    platformFeeLocal: v.optional(v.number()),
+  })
+    .index("by_agent", ["agentId"])
+    .index("by_agent_market", ["agentId", "marketId"])
+    .index("by_market_time", ["marketId", "occurredAt"])
+    .index("by_time", ["occurredAt"]),
+
+  // Operating expenses ledger (spec §27). Modernises the legacy
+  // marketOperatingCosts rows — a startup migration folds those in.
+  expenses: defineTable({
+    marketId: v.optional(v.id("markets")),
+    category: v.union(
+      v.literal("airtel_data"),
+      v.literal("electricity"),
+      v.literal("rent"),
+      v.literal("salaries"),
+      v.literal("fuel"),
+      v.literal("maintenance"),
+      v.literal("equipment"),
+      v.literal("other")
+    ),
+    amountLocal: v.number(),
+    currency: v.string(),
+    amountUSD: v.number(),
+    type: v.union(v.literal("fixed"), v.literal("variable")),
+    month: v.string(), // "2026-08"
+    enteredBy: v.id("users"),
+    enteredAt: v.number(),
+    receiptFileId: v.optional(v.id("_storage")),
+    notes: v.optional(v.string()),
+  })
+    .index("by_market_month", ["marketId", "month"])
+    .index("by_month", ["month"])
+    .index("by_type", ["type"]),
+
+  // Withdrawal / payout requests to any payee class (agent commissions,
+  // investor dividends, vendors). Built on the spec §27 finance rules.
+  payouts: defineTable({
+    type: v.string(),
+    payeeType: v.union(v.literal("user"), v.literal("agent"), v.literal("investor"), v.literal("vendor")),
+    payeeId: v.string(),
+    marketId: v.optional(v.id("markets")),
+    amountLocal: v.number(),
+    currency: v.string(),
+    amountUSD: v.number(),
+    method: v.union(v.literal("mpesa"), v.literal("airtel_money"), v.literal("bank_transfer"), v.literal("stripe")),
+    status: v.union(v.literal("pending_approval"), v.literal("approved"), v.literal("processing"), v.literal("paid"), v.literal("rejected")),
+    approvalTier: v.union(v.literal("tier_1"), v.literal("tier_2"), v.literal("tier_3")),
+    requestedBy: v.id("users"),
+    requestedAt: v.number(),
+    approvedBy: v.optional(v.id("users")),
+    approvedAt: v.optional(v.number()),
+    otpHash: v.optional(v.string()),
+    otpVerifiedAt: v.optional(v.number()),
+    processedAt: v.optional(v.number()),
+    notes: v.optional(v.string()),
+  })
+    .index("by_status", ["status"])
+    .index("by_payee_type_status", ["type", "status"])
+    .index("by_payee", ["payeeId", "status"])
+    .index("by_requested", ["requestedAt"]),
+
+  // ==========================================================================
+  // NOC SPEC V2 — INVESTORS / REPORTING
+  // ==========================================================================
+
+  investors: defineTable({
+    userId: v.optional(v.id("users")),
+    name: v.string(),
+    email: v.string(),
+    investmentAmountUSD: v.number(),
+    investmentDate: v.string(),
+    equityPercent: v.optional(v.number()),
+    instrumentType: v.union(v.literal("equity"), v.literal("safe"), v.literal("loan"), v.literal("revenue_share")),
+    status: v.union(v.literal("active"), v.literal("exited"), v.literal("removed")),
+    reportFrequency: v.union(v.literal("weekly"), v.literal("monthly")),
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_status", ["status"])
+    .index("by_user", ["userId"])
+    .index("by_email", ["email"]),
+
+  // Frozen investor report snapshots — immutable once generated.
+  investorReports: defineTable({
+    investorId: v.optional(v.id("investors")),
+    period: v.string(),
+    snapshot: v.any(),
+    generatedAt: v.number(),
+    sentAt: v.optional(v.number()),
+    viewedAt: v.optional(v.number()),
+  })
+    .index("by_investor", ["investorId"])
+    .index("by_period", ["period"]),
+
+  // Per-market daily revenue/contribution snapshot (spec §25). The daily
+  // rollup cron derives these from agentActivity + expenses.
+  dailySnapshots: defineTable({
+    marketId: v.id("markets"),
+    date: v.string(), // "2026-08-14"
+    revenueLocal: v.number(),
+    revenueUSD: v.number(),
+    salesCount: v.number(),
+    newSubscribers: v.number(),
+    variableCostLocal: v.number(),
+    netContributionLocal: v.number(),
+    avgUptimePercent: v.optional(v.number()),
+    activeAlertsCount: v.optional(v.number()),
+    topAgentId: v.optional(v.id("agents")),
+    currency: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_market_date", ["marketId", "date"])
+    .index("by_date", ["date"]),
+
+  // ==========================================================================
+  // NOC SPEC V2 — PLANS / MAINTENANCE / NOTIFICATIONS
+  // ==========================================================================
+
+  // Configured tariff plans (spec §26). Existing voucher batches keep planType
+  // and optionally reference a planId.
+  plans: defineTable({
+    marketId: v.optional(v.id("markets")),
+    code: v.string(),
+    name: v.string(),
+    category: v.union(v.literal("data"), v.literal("tv"), v.literal("home_bundle")),
+    priceLocal: v.number(),
+    currency: v.string(),
+    durationLabel: v.optional(v.string()),
+    status: v.union(v.literal("active"), v.literal("inactive")),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+  })
+    .index("by_market", ["marketId"])
+    .index("by_code", ["code"])
+    .index("by_status", ["status"]),
+
+  // Scheduled maintenance windows suppress alerting for the covered devices
+  // (spec §17 maintenance mode).
+  maintenanceWindows: defineTable({
+    marketId: v.id("markets"),
+    deviceId: v.optional(v.id("devices")),
+    scheduledStart: v.number(),
+    scheduledEnd: v.number(),
+    reason: v.string(),
+    suppressAlerts: v.boolean(),
+    status: v.union(v.literal("scheduled"), v.literal("active"), v.literal("completed"), v.literal("cancelled")),
+    createdBy: v.id("users"),
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_market", ["marketId"])
+    .index("by_status", ["status"])
+    .index("by_device", ["deviceId"]),
+
+  // Per-user alert preference matrix (spec §17 + §32).
+  notificationPreferences: defineTable({
+    userId: v.id("users"),
+    category: v.union(
+      v.literal("device_online"),
+      v.literal("device_offline"),
+      v.literal("low_ccq"),
+      v.literal("high_tx_power"),
+      v.literal("rogue_device"),
+      v.literal("link_flap"),
+      v.literal("high_cpu"),
+      v.literal("high_memory"),
+      v.literal("packet_loss"),
+      v.literal("bounce_rate"),
+      v.literal("renewal_digest"),
+      v.literal("payout_status"),
+      v.literal("daily_digest"),
+      v.literal("investor_report")
+    ),
+    channel: v.union(v.literal("sms"), v.literal("email"), v.literal("dashboard")),
+    enabled: v.boolean(),
+    escalationDelayMinutes: v.optional(v.number()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_category_channel", ["category", "channel"]),
+
+  // Approved device/build configurations (spec "Device Information").
+  standardSiteKit: defineTable({
+    deviceType: v.union(v.literal("mikrotik"), v.literal("outdoor_ap"), v.literal("indoor_ap"), v.literal("extender")),
+    approvedModel: v.string(),
+    approvedFirmwareVersion: v.optional(v.string()),
+    requiresUps: v.boolean(),
+    snmpProfile: v.optional(v.string()),
+    effectiveFrom: v.string(),
+    status: v.union(v.literal("active"), v.literal("superseded")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_device_type", ["deviceType", "status"])
+    .index("by_status", ["status"]),
+
+  // Scheduled report definitions (spec §29); each run appends a reportExport.
+  scheduledReports: defineTable({
+    name: v.string(),
+    reportType: v.union(v.literal("daily_digest"), v.literal("investor"), v.literal("custom_analytics")),
+    recipients: v.array(v.string()),
+    frequency: v.union(v.literal("daily"), v.literal("weekly"), v.literal("monthly")),
+    scopeFilter: v.optional(v.any()),
+    format: v.union(v.literal("pdf"), v.literal("csv")),
+    enabled: v.boolean(),
+    createdBy: v.id("users"),
+    lastRunAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_enabled", ["enabled", "frequency"])
+    .index("by_type", ["reportType"]),
+
+  // One row per generated report artifact; file bytes live in _storage.
+  reportExports: defineTable({
+    scheduledReportId: v.optional(v.id("scheduledReports")),
+    requestedBy: v.id("users"),
+    format: v.union(v.literal("pdf"), v.literal("csv")),
+    scopeFilter: v.optional(v.any()),
+    dataset: v.optional(v.string()),
+    fileId: v.optional(v.id("_storage")),
+    status: v.union(v.literal("generating"), v.literal("ready"), v.literal("failed")),
+    errorMessage: v.optional(v.string()),
+    generatedAt: v.optional(v.number()),
+    viewedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_requested", ["requestedBy", "createdAt"])
+    .index("by_status", ["status"])
+    .index("by_report", ["scheduledReportId"]),
+
+  // ==========================================================================
+  // NOC SPEC V2 — CAPACITY / TELEMETRY ROLLUPS
+  // ==========================================================================
+
+  // Hourly per-device telemetry rollups (spec §20). The rollup cron folds
+  // raw healthSamples/accessPointSamples into these for fast charting.
+  telemetryHourly: defineTable({
+    marketId: v.id("markets"),
+    deviceKind: v.union(v.literal("router"), v.literal("access_point")),
+    routerId: v.optional(v.id("routers")),
+    accessPointId: v.optional(v.id("accessPoints")),
+    deviceId: v.optional(v.id("devices")),
+    hourStart: v.number(),
+    sampleCount: v.number(),
+    avgCpuPercent: v.optional(v.number()),
+    avgMemoryPercent: v.optional(v.number()),
+    avgTxRateMbps: v.number(),
+    avgRxRateMbps: v.number(),
+    maxTxRateMbps: v.number(),
+    maxRxRateMbps: v.number(),
+    maxConnectedClients: v.number(),
+    avgCcq: v.optional(v.number()),
+    avgSignalStrengthDbm: v.optional(v.number()),
+  })
+    .index("by_market_hour", ["marketId", "hourStart"])
+    .index("by_router_hour", ["routerId", "hourStart"])
+    .index("by_access_point_hour", ["accessPointId", "hourStart"])
+    .index("by_device_hour", ["deviceId", "hourStart"]),
+
+  telemetryDaily: defineTable({
+    marketId: v.id("markets"),
+    deviceKind: v.union(v.literal("router"), v.literal("access_point")),
+    routerId: v.optional(v.id("routers")),
+    accessPointId: v.optional(v.id("accessPoints")),
+    deviceId: v.optional(v.id("devices")),
+    date: v.string(),
+    sampleCount: v.number(),
+    avgCpuPercent: v.optional(v.number()),
+    avgMemoryPercent: v.optional(v.number()),
+    avgTxRateMbps: v.number(),
+    avgRxRateMbps: v.number(),
+    maxTxRateMbps: v.number(),
+    maxRxRateMbps: v.number(),
+    maxConnectedClients: v.number(),
+    avgCcq: v.optional(v.number()),
+    avgSignalStrengthDbm: v.optional(v.number()),
+  })
+    .index("by_market_date", ["marketId", "date"])
+    .index("by_router_date", ["routerId", "date"])
+    .index("by_access_point_date", ["accessPointId", "date"])
+    .index("by_device_date", ["deviceId", "date"]),
+
+  // ==========================================================================
+  // NOC SPEC V2 — TEAMS
+  // ==========================================================================
+
+  teams: defineTable({
+    name: v.string(),
+    leaderAgentId: v.optional(v.id("agents")),
+    status: v.union(v.literal("active"), v.literal("removed")),
+    createdAt: v.number(),
+    removedAt: v.optional(v.number()),
+    removedBy: v.optional(v.id("users")),
+  })
+    .index("by_status", ["status"])
+    .index("by_leader", ["leaderAgentId"]),
+
+  teamMembers: defineTable({
+    teamId: v.id("teams"),
+    agentId: v.id("agents"),
+    joinedAt: v.number(),
+    leftAt: v.optional(v.number()),
+  })
+    .index("by_team", ["teamId"])
+    .index("by_agent", ["agentId"])
+    .index("by_team_member", ["teamId", "agentId"]),
 });

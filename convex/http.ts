@@ -372,4 +372,145 @@ http.route({
   }),
 });
 
+/**
+ * NOC v2 site-device endpoints (spec §10 siteKit + §20 telemetry).
+ *
+ * POST /api/telemetry         — outdoor APs report per-market readings; the
+ *                               X-Site-Key header must match the market's
+ *                               generated site key (constant-time hashed check).
+ * POST /api/site-device/register — self-registration for the estate.
+ */
+http.route({
+  path: "/api/telemetry",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const siteKey = request.headers.get("x-site-key");
+    if (!siteKey) {
+      return Response.json({ success: false, message: "The site key is missing." }, { status: 401 });
+    }
+
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return Response.json({ success: false, message: "The request body was not valid JSON." }, { status: 400 });
+    }
+
+    const payload = body as {
+      apiVersion?: unknown;
+      marketId?: unknown;
+      observedAt?: unknown;
+      devices?: unknown;
+    };
+    if (
+      typeof payload.marketId !== "string" ||
+      typeof payload.observedAt !== "number" ||
+      !Array.isArray(payload.devices)
+    ) {
+      return Response.json({ success: false, message: "The telemetry payload is incomplete." }, { status: 400 });
+    }
+
+    const verified = await ctx.runQuery(internal.siteKit.verifyMarketSiteKey, {
+      marketId: payload.marketId as never,
+      keyToHash: siteKey,
+    });
+    if (!verified) {
+      return Response.json({ success: false, message: "The site key is invalid." }, { status: 401 });
+    }
+
+    const devices = payload.devices.map((item: unknown) => item as {
+      macAddress?: unknown;
+      model?: unknown;
+      firmware?: unknown;
+      ccq?: unknown;
+      signalStrengthDbm?: unknown;
+      clientCount?: unknown;
+      txBytesPerSec?: unknown;
+      rxBytesPerSec?: unknown;
+    });
+    if (devices.some((device) => typeof device.macAddress !== "string")) {
+      return Response.json({ success: false, message: "Each device must include a macAddress." }, { status: 400 });
+    }
+    const sanitized = devices.map((device) => ({
+      macAddress: device.macAddress as string,
+      model: typeof device.model === "string" ? device.model : undefined,
+      firmware: typeof device.firmware === "string" ? device.firmware : undefined,
+      ccq: typeof device.ccq === "number" ? device.ccq : undefined,
+      signalStrengthDbm: typeof device.signalStrengthDbm === "number" ? device.signalStrengthDbm : undefined,
+      clientCount: typeof device.clientCount === "number" ? device.clientCount : undefined,
+      txBytesPerSec: typeof device.txBytesPerSec === "number" ? device.txBytesPerSec : undefined,
+      rxBytesPerSec: typeof device.rxBytesPerSec === "number" ? device.rxBytesPerSec : undefined,
+    }));
+
+    try {
+      const result = await ctx.runMutation(internal.siteTelemetry.ingestSpecTelemetry, {
+        marketId: payload.marketId as never,
+        observedAt: payload.observedAt,
+        devices: sanitized,
+      });
+      return Response.json({ success: true, ...result });
+    } catch {
+      return Response.json({ success: false, message: "The telemetry could not be stored." }, { status: 500 });
+    }
+  }),
+});
+
+http.route({
+  path: "/api/site-device/register",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const siteKey = request.headers.get("x-site-key");
+    if (!siteKey) {
+      return Response.json({ success: false, message: "The site key is missing." }, { status: 401 });
+    }
+
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return Response.json({ success: false, message: "The request body was not valid JSON." }, { status: 400 });
+    }
+
+    const payload = body as {
+      marketId?: unknown;
+      macAddress?: unknown;
+      model?: unknown;
+      deviceType?: unknown;
+      name?: unknown;
+    };
+    if (
+      typeof payload.marketId !== "string" ||
+      typeof payload.macAddress !== "string" ||
+      (payload.deviceType !== undefined &&
+        payload.deviceType !== "mikrotik" &&
+        payload.deviceType !== "outdoor_ap" &&
+        payload.deviceType !== "indoor_ap" &&
+        payload.deviceType !== "extender")
+    ) {
+      return Response.json({ success: false, message: "The registration payload is incomplete." }, { status: 400 });
+    }
+
+    const verified = await ctx.runQuery(internal.siteKit.verifyMarketSiteKey, {
+      marketId: payload.marketId as never,
+      keyToHash: siteKey,
+    });
+    if (!verified) {
+      return Response.json({ success: false, message: "The site key is invalid." }, { status: 401 });
+    }
+
+    try {
+      const result = await ctx.runMutation(internal.siteTelemetry.registerSpecDevice, {
+        marketId: payload.marketId as never,
+        macAddress: payload.macAddress,
+        deviceType: (payload.deviceType as "mikrotik" | "outdoor_ap" | "indoor_ap" | "extender") ?? "outdoor_ap",
+        model: typeof payload.model === "string" ? payload.model : undefined,
+        name: typeof payload.name === "string" ? payload.name : undefined,
+      });
+      return Response.json({ success: true, ...result });
+    } catch {
+      return Response.json({ success: false, message: "The device could not be registered." }, { status: 500 });
+    }
+  }),
+});
+
 export default http;

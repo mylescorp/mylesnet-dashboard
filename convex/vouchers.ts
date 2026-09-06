@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
 import { requirePlatformAdmin, requirePlatformUser } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
+import { insertActivityLedger } from "./agentActivity";
 
 /** Simple mod-97 style checksum so guessed/tampered codes are rejected without a DB lookup. */
 function computeChecksum(code: string): string {
@@ -184,6 +185,21 @@ export const markVoucherSold = mutation({
               disputeWindowEndsAt: now + DISPUTE_WINDOW_MS,
             });
           }
+
+          // Revenue ledger (spec §25): one append-only row per sale feeds
+          // daily_snapshots, cost allocation, analytics and the leaderboard.
+          await insertActivityLedger(ctx, {
+            agentId: voucher.ownerAgentId,
+            marketId: voucher.marketId,
+            action: "voucher_sale",
+            occurredAt: now,
+            amountLocal: batch.priceEach,
+            currency: batch.currency,
+            planCode: batch.planType,
+            voucherId: voucher._id,
+            commissionAccruedLocal: commissionAmount,
+            platformFeeLocal: 0,
+          });
         }
       }
     }
@@ -227,6 +243,24 @@ export const redeemVoucher = mutation({
       redeemedAt: Date.now(),
       customerPhoneAtRedemption: args.customerPhoneAtRedemption,
     });
+
+    // Activation of a service counts as a new subscription against the owning
+    // agent (spec §25) when one is known.
+    if (voucher.ownerAgentId) {
+      const batch = await ctx.db.get(voucher.batchId);
+      if (batch) {
+        await insertActivityLedger(ctx, {
+          agentId: voucher.ownerAgentId,
+          marketId: voucher.marketId,
+          action: "new_subscription",
+          occurredAt: Date.now(),
+          amountLocal: 0,
+          currency: batch.currency,
+          planCode: batch.planType,
+          voucherId: voucher._id,
+        });
+      }
+    }
 
     await logAudit(ctx, {
       action: "voucher.redeem",
