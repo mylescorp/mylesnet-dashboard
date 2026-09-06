@@ -40,6 +40,7 @@ export default function DashboardPage() {
   const [selectedAccessPoint, setSelectedAccessPoint] = useState<{ id: Id<"accessPoints">; name: string } | null>(null);
   const [detailRouterId, setDetailRouterId] = useState<Id<"routers"> | null>(null);
   const [compact, setCompact] = useState(false);
+  const [dashboardError, setDashboardError] = useState<string | null>(null);
   const accessPointUsers = useQuery(api.operations.getAccessPointUsers, selectedAccessPoint?.id ? { accessPointId: selectedAccessPoint.id } : "skip");
 
   // Handle user not found or loading
@@ -47,45 +48,63 @@ export default function DashboardPage() {
   if (!user) return <div className="workspace-page"><div className="loading-panel workspace-card"><p>Your profile is being set up. Please wait a moment and reload the page.</p></div></div>;
   if (!kpis || !summaries) return <div className="workspace-page"><div className="loading-panel workspace-card"><Activity aria-hidden="true" size={22} />Loading the operational overview…</div></div>;
 
-  const visibleRouters = summaries.filter((entry) => !selectedRouterId || entry._id === selectedRouterId);
-  const detailRouter = summaries.find((entry) => entry._id === detailRouterId) ?? null;
-  const healthStatus = kpis.healthScore === null ? "Awaiting telemetry" : kpis.healthScore === 100 ? "Healthy" : "Needs attention";
+  // Show error state if dashboard crashed
+  if (dashboardError) {
+    return (
+      <div className="workspace-page">
+        <div className="loading-panel workspace-card">
+          <p className="error-message">Unable to load dashboard: {dashboardError}</p>
+          <p className="error-subtext">Please refresh the page or contact support.</p>
+        </div>
+      </div>
+    );
+  }
 
-  return <div className={`workspace-page dashboard-page ${compact ? "dashboard-compact" : ""}`}>
-    <header className="page-heading">
-      <div><p className="eyebrow">MylesNet operations centre</p><h1 className="page-title">Dashboard</h1><p className="page-subtitle">One place for live network telemetry, billing activity and administrative status.</p></div>
-      <div className="page-action-group"><Link href="/config-watch" className="secondary-button"><FileDiff aria-hidden="true" size={16} />Config watch</Link><Link href="/telemetry-health" className="secondary-button"><Activity aria-hidden="true" size={16} />Telemetry health</Link><Link href="/business-activity" className="secondary-button"><BarChart3 aria-hidden="true" size={16} />Business activity</Link><button type="button" className="secondary-button" onClick={() => setCompact((value) => !value)}><SlidersHorizontal aria-hidden="true" size={17} />{compact ? "Comfortable view" : "Compact view"}</button><button type="button" onClick={() => router.push("/routers")} className="primary-button"><RadioTower aria-hidden="true" size={18} />Router settings</button></div>
-    </header>
+  try {
+    const visibleRouters = summaries.filter((entry) => !selectedRouterId || entry._id === selectedRouterId);
+    const detailRouter = summaries.find((entry) => entry._id === detailRouterId) ?? null;
+    const healthStatus = kpis.healthScore === null ? "Awaiting telemetry" : kpis.healthScore === 100 ? "Healthy" : "Needs attention";
 
-    <section className="operations-kpi-strip" aria-label="Live operations status">
-      <Kpi label="Collector status" value={kpis.collectorConnected ? "Connected" : kpis.collectorStatus === "failed" ? "Needs attention" : "Awaiting data"} detail={kpis.collectorStatus === "failed" ? (kpis.collectorStatusMessage ?? "The last collector run failed.") : kpis.lastObservedAt ? `Last observation ${new Date(kpis.lastObservedAt).toLocaleTimeString()}` : "No collector observation received"} icon={<Activity size={17} />} />
-      <Kpi label="Network health" value={healthStatus} detail={kpis.healthScore === null ? "No router telemetry" : `${kpis.healthScore}% of routers reporting live telemetry`} icon={<Gauge size={17} />} />
-      <Kpi label="Live users" value={kpis.totalUsers} detail="Current hotspot sessions" icon={<Users size={17} />} />
-      <Kpi label="Access points" value={`${kpis.activeAccessPoints}/${kpis.totalAccessPoints}`} detail="Links currently online" icon={<Wifi size={17} />} />
-      <Kpi label="Data used" value={bytes(kpis.totalDailyBytes)} detail="Observed in the last 24 hours" icon={<BarChart3 size={17} />} />
-      <Kpi label="Router load" value={kpis.averageCpu === null ? "—" : `${Math.round(kpis.averageCpu)}% CPU`} detail="Average reported router CPU load" icon={<Gauge size={17} />} />
-    </section>
+    return <div className={`workspace-page dashboard-page ${compact ? "dashboard-compact" : ""}`}>
+      <header className="page-heading">
+        <div><p className="eyebrow">MylesNet operations centre</p><h1 className="page-title">Dashboard</h1><p className="page-subtitle">One place for live network telemetry, billing activity and administrative status.</p></div>
+        <div className="page-action-group"><Link href="/config-watch" className="secondary-button"><FileDiff aria-hidden="true" size={16} />Config watch</Link><Link href="/telemetry-health" className="secondary-button"><Activity aria-hidden="true" size={16} />Telemetry health</Link><Link href="/business-activity" className="secondary-button"><BarChart3 aria-hidden="true" size={16} />Business activity</Link><button type="button" className="secondary-button" onClick={() => setCompact((value) => !value)}><SlidersHorizontal aria-hidden="true" size={17} />{compact ? "Comfortable view" : "Compact view"}</button><button type="button" onClick={() => router.push("/routers")} className="primary-button"><RadioTower aria-hidden="true" size={18} />Router settings</button></div>
+      </header>
 
-    <section className="section-block" aria-label="Billing and business summary">
-      <div className="section-heading"><div><p className="eyebrow">Billing &amp; business</p><h2>Centipid activity</h2></div><div className="page-action-group"><Link href="/business-activity" className="secondary-button"><BarChart3 aria-hidden="true" size={15} />Full activity feed</Link></div></div>
-      <BillingKpiStrip />
-    </section>
+      <section className="operations-kpi-strip" aria-label="Live operations status">
+        <Kpi label="Collector status" value={kpis.collectorConnected ? "Connected" : kpis.collectorStatus === "failed" ? "Needs attention" : "Awaiting data"} detail={kpis.collectorStatus === "failed" ? (kpis.collectorStatusMessage ?? "The last collector run failed.") : kpis.lastObservedAt ? `Last observation ${new Date(kpis.lastObservedAt).toLocaleTimeString()}` : "No collector observation received"} icon={<Activity size={17} />} />
+        <Kpi label="Network health" value={healthStatus} detail={kpis.healthScore === null ? "No router telemetry" : `${kpis.healthScore}% of routers reporting live telemetry`} icon={<Gauge size={17} />} />
+        <Kpi label="Live users" value={kpis.totalUsers} detail="Current hotspot sessions" icon={<Users size={17} />} />
+        <Kpi label="Access points" value={`${kpis.activeAccessPoints}/${kpis.totalAccessPoints}`} detail="Links currently online" icon={<Wifi size={17} />} />
+        <Kpi label="Data used" value={bytes(kpis.totalDailyBytes)} detail="Observed in the last 24 hours" icon={<BarChart3 size={17} />} />
+        <Kpi label="Router load" value={kpis.averageCpu === null ? "—" : `${Math.round(kpis.averageCpu)}% CPU`} detail="Average reported router CPU load" icon={<Gauge size={17} />} />
+      </section>
 
-    <section className="dashboard-toolbar workspace-card">
-      <div><span className="toolbar-label">Operational scope</span><strong>Filter the operational view to a single router, or review the complete estate.</strong></div>
-      <label className="router-select-label">Router<select value={selectedRouterId ?? ""} onChange={(event) => { setSelectedRouterId(event.target.value ? (event.target.value as Id<"routers">) : null); setDetailRouterId(null); }}><option value="">All routers</option>{summaries.map((entry) => <option key={entry._id} value={entry._id}>{entry.name} · {entry.location}</option>)}</select></label>
-    </section>
+      <section className="section-block" aria-label="Billing and business summary">
+        <div className="section-heading"><div><p className="eyebrow">Billing &amp; business</p><h2>Centipid activity</h2></div><div className="page-action-group"><Link href="/business-activity" className="secondary-button"><BarChart3 aria-hidden="true" size={15} />Full activity feed</Link></div></div>
+        <BillingKpiStrip />
+      </section>
 
-    <OpsHealthStrip />
+      <section className="dashboard-toolbar workspace-card">
+        <div><span className="toolbar-label">Operational scope</span><strong>Filter the operational view to a single router, or review the complete estate.</strong></div>
+        <label className="router-select-label">Router<select value={selectedRouterId ?? ""} onChange={(event) => { setSelectedRouterId(event.target.value ? (event.target.value as Id<"routers">) : null); setDetailRouterId(null); }}><option value="">All routers</option>{summaries.map((entry) => <option key={entry._id} value={entry._id}>{entry.name} · {entry.location}</option>)}</select></label>
+      </section>
 
-    {visibleRouters.length ? visibleRouters.map((entry) => <RouterSection key={entry._id} routerId={entry._id} showChart={visibleRouters.length === 1} onOpenDetail={() => setDetailRouterId(entry._id)} onViewUsers={setSelectedAccessPoint} />) : <Empty title="No routers are registered" detail="Add a router record from Router settings, deploy the backend with npx convex deploy, then run the collector so live telemetry appears here." action={() => router.push("/routers")} label="Manage routers" />}
+      <OpsHealthStrip />
 
-    {detailRouter ? <RouterDetailDialog routerId={detailRouter._id} routerName={detailRouter.name} onClose={() => setDetailRouterId(null)} /> : null}
-    {selectedAccessPoint ? <AccessPointUsersDialog title={selectedAccessPoint.name} users={accessPointUsers} onClose={() => setSelectedAccessPoint(null)} /> : null}
-    {selectedRouterId ? <section className="section-block" aria-label="Trends for the selected router"><HealthTrendChart routerId={selectedRouterId} /></section> : null}
+      {visibleRouters.length ? visibleRouters.map((entry) => <RouterSection key={entry._id} routerId={entry._id} showChart={visibleRouters.length === 1} onOpenDetail={() => setDetailRouterId(entry._id)} onViewUsers={setSelectedAccessPoint} />) : <Empty title="No routers are registered" detail="Add a router record from Router settings, deploy the backend with npx convex deploy, then run the collector so live telemetry appears here." action={() => router.push("/routers")} label="Manage routers" />}
 
-    {isPlatformUser ? <AdminOverviewSection /> : null}
-  </div>;
+      {detailRouter ? <RouterDetailDialog routerId={detailRouter._id} routerName={detailRouter.name} onClose={() => setDetailRouterId(null)} /> : null}
+      {selectedAccessPoint ? <AccessPointUsersDialog title={selectedAccessPoint.name} users={accessPointUsers} onClose={() => setSelectedAccessPoint(null)} /> : null}
+      {selectedRouterId ? <section className="section-block" aria-label="Trends for the selected router"><HealthTrendChart routerId={selectedRouterId} /></section> : null}
+
+      {isPlatformUser ? <AdminOverviewSection /> : null}
+    </div>;
+  } catch (error) {
+    console.error("Dashboard render error:", error);
+    setDashboardError(error instanceof Error ? error.message : "Unknown error occurred");
+    return null; // Will show error state on next render
+  }
 }
 
 function Kpi({ label, value, detail, icon }: { label: string; value: string | number; detail: string; icon: React.ReactNode }) { return <article className="operations-kpi"><span>{icon}</span><p>{label}</p><strong>{value}</strong><small>{detail}</small></article>; }
@@ -97,7 +116,15 @@ function RouterSection({ routerId, showChart, onOpenDetail, onViewUsers }: { rou
   const nav = useRouter();
   const live = useQuery(api.operations.getLiveRouter, { routerId });
   const [showComparison, setShowComparison] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (error) {
+    return <section className="section-block"><div className="loading-panel workspace-card"><p className="error-message">Unable to load router data: {error}</p></div></section>;
+  }
+
   if (!live) return <section className="section-block"><div className="loading-panel workspace-card"><Activity aria-hidden="true" size={20} />Loading router telemetry…</div></section>;
+
+  try {
 
   const accessPoints = live.accessPoints.map((entry) => ({ ...entry, router: live.router }));
   const collectorFresh = isCollectorFresh(live.collector?.observedAt);
@@ -129,6 +156,11 @@ function RouterSection({ routerId, showChart, onOpenDetail, onViewUsers }: { rou
 
     {showChart ? <HealthTrendChart routerId={routerId} /> : null}
   </section>;
+  } catch (error) {
+    console.error("RouterSection render error:", error);
+    setError(error instanceof Error ? error.message : "Unknown error occurred");
+    return null;
+  }
 }
 
 function SwitchSection({ switches, routerName }: { switches: { _switch: { _id: string; name: string; model?: string; managed?: boolean; routerPort?: string; portCount?: number; ipAddress?: string; macAddress?: string }; linkedAccessPoints: { _id: string; name: string; port: string; deviceType: string }[] }[]; routerName: string }) {
