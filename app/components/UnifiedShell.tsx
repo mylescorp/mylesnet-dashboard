@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import { useAction, useQuery } from "convex/react";
+import { useAction, useConvexAuth, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import Sidebar from "./Sidebar";
 import { UnifiedTopbar } from "./UnifiedTopbar";
@@ -59,6 +59,7 @@ function ClaimOwnerScreen() {
 function UnifiedShellContent({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
 
   const isSignin = pathname === "/signin";
   const isNoAccess = pathname === "/no-access";
@@ -72,12 +73,18 @@ function UnifiedShellContent({ children }: { children: ReactNode }) {
     return () => clearTimeout(t);
   }, []);
 
-  // Redirect to signin if unauthenticated (but wait for user profile to load)
+  // A newly authenticated user has no local profile for a short time while
+  // OrgGuard creates its WorkOS membership and Convex record. Do not start a
+  // second sign-in flow during that window: it can replace the PKCE cookie
+  // needed by the callback that is still completing.
+  const profileProvisioning = !authLoading && isAuthenticated && user === null;
+
+  // Redirect only when AuthKit itself says the visitor is unauthenticated.
   useEffect(() => {
-    if (!isSignin && !isNoAccess && delayed && !userLoading && user === null) {
+    if (!isSignin && !isNoAccess && delayed && !authLoading && !isAuthenticated && !userLoading && user === null) {
       router.replace("/signin");
     }
-  }, [isSignin, isNoAccess, delayed, userLoading, user, router]);
+  }, [isSignin, isNoAccess, delayed, authLoading, isAuthenticated, userLoading, user, router]);
 
   const profileReady = user !== undefined;
   const entry = findNavEntry(pathname);
@@ -99,14 +106,14 @@ function UnifiedShellContent({ children }: { children: ReactNode }) {
   }
 
   // Show loading state while user profile is being synced
-  if (userLoading) {
+  if (userLoading || profileProvisioning) {
     return (
       <div className="app-shell">
         <div className="app-content">
           <main className="app-main">
             <div className="workspace-page">
               <div className="loading-panel workspace-card">
-                <p>Loading your profile…</p>
+                <p>{profileProvisioning ? "Setting up your workspace access…" : "Loading your profile…"}</p>
               </div>
             </div>
           </main>
