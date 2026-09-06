@@ -117,6 +117,7 @@ export default function Sidebar({ isMobile = false, onCloseMobile }: SidebarProp
       {/* Permanent Brand Header (Constant MylesNet Logo) */}
       <div className="sidebar-brand">
         <div className="sidebar-brand-inner">
+          <span className="sidebar-mark" aria-hidden="true">M</span>
           <Image
             src="/brand/mylesnet-logo.png"
             alt="MylesNet Logo"
@@ -162,6 +163,8 @@ export default function Sidebar({ isMobile = false, onCloseMobile }: SidebarProp
                 onClick={() => toggleSection(section.title)}
                 className={`sidebar-section-header ${activeSection ? "sidebar-section-header-active" : ""}`}
                 aria-expanded={isOpen}
+                aria-label={effectiveCollapsed ? `${section.title} navigation group` : undefined}
+                title={effectiveCollapsed ? section.title : undefined}
               >
                 <span className="sidebar-section-label">{section.title}</span>
                 <ChevronDown aria-hidden="true" size={14} className={`sidebar-section-chevron ${isOpen ? "" : "sidebar-section-chevron-closed"}`} />

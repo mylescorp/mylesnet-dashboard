@@ -11,6 +11,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { api } from "@/convex/_generated/api";
+import { useUserProfile } from "./UserProfileContext";
 
 const formatMarks = (value: number | null | undefined) =>
   value === null || value === undefined ? "—" : `UGX ${Math.round(value).toLocaleString()}`;
@@ -18,8 +19,21 @@ const formatPct = (value: number | null | undefined) =>
   value === null || value === undefined ? "—" : `${Math.round(value * 100)}%`;
 
 export default function BillingKpiStrip() {
+  const { user } = useUserProfile();
   const tzOffsetMinutes = useMemo(() => -new Date().getTimezoneOffset(), []);
   const summary = useQuery(api.centipid.getCentipidBusinessSummary, { tzOffsetMinutes });
+  // The live MCP projection is intentionally queried only for callers that
+  // have the same Centipid-management permission required by the endpoint.
+  // This avoids turning a dashboard card into an authorization failure for
+  // users who can view the dashboard but not the Centipid integration.
+  const canReadCentipidSnapshot = user?.permissions?.includes("centipid:manage") ?? false;
+  const liveSnapshot = useQuery(
+    api.centipid.getCentipidLiveSnapshot,
+    canReadCentipidSnapshot ? {} : "skip",
+  );
+  const collectedToday = liveSnapshot?.revenueToday
+    ?? summary?.platformSnapshot?.revenueToday
+    ?? summary?.today.net;
 
   return (
     <section className="operations-kpi-strip" aria-label="Billing and business summary">
@@ -32,7 +46,7 @@ export default function BillingKpiStrip() {
       <div className="operations-kpi">
         <span><ArrowDownToLine aria-hidden="true" size={16} /></span>
         <p>Collected today</p>
-        <strong>{summary?.revenueVisible ? formatMarks(summary.today.net) : "—"}</strong>
+        <strong>{summary?.revenueVisible ? formatMarks(collectedToday) : "—"}</strong>
         <small>
           {summary && !summary.revenueVisible
             ? "Visible to admins only."

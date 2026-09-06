@@ -400,6 +400,19 @@ export default defineSchema({
     lastHealthCheckAt: v.optional(v.number()),
     lastHealthCheckOk: v.optional(v.boolean()),
     lastHealthCheckError: v.optional(v.string()),
+    // Persisted MCP output lets authorized Convex subscribers update without
+    // keeping a browser-only action result or using a manual refresh button.
+    liveSnapshotAt: v.optional(v.number()),
+    liveSnapshotRevenueToday: v.optional(v.union(v.number(), v.null())),
+    liveSnapshotRevenueYesterday: v.optional(v.union(v.number(), v.null())),
+    liveSnapshotSubscribersOnline: v.optional(v.union(v.number(), v.null())),
+    liveSnapshotActiveSubscriptions: v.optional(v.union(v.number(), v.null())),
+    liveSnapshotExpiring24h: v.optional(v.union(v.number(), v.null())),
+    liveSnapshotUnreconciledPayments: v.optional(v.union(v.number(), v.null())),
+    liveSnapshotCurrency: v.optional(v.string()),
+    liveSnapshotLastAttemptAt: v.optional(v.number()),
+    liveSnapshotLastAttemptOk: v.optional(v.boolean()),
+    liveSnapshotLastAttemptError: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_createdAt", ["createdAt"]),
 

@@ -77,6 +77,15 @@ crons.daily(
   internal.centipid.runCentipidHealthCheck,
 );
 
+// The MCP transport is pull-based. Reconcile the platform overview and the
+// event-backed activity projections every 30 seconds for Convex subscribers.
+crons.interval(
+  "sync Centipid live data",
+  { seconds: 30 },
+  internal.centipid.syncCentipidLiveData,
+  {},
+);
+
 // ---------------------------------------------------------------------------
 // NOC v2 schedules
 // ---------------------------------------------------------------------------

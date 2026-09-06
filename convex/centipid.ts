@@ -9,7 +9,7 @@ import {
   type MutationCtx,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { permissionsOf as collectPermissions, requireAuthenticatedUser, requirePlatformAdmin, resolveRoles, resolveUserByIdentity } from "./lib/auth";
+import { permissionsOf as collectPermissions, requireAuthenticatedUser, requirePermission, resolveRoles, resolveUserByIdentity } from "./lib/auth";
 import {
   decryptCentipidSecret,
   encryptCentipidSecret,
@@ -67,7 +67,11 @@ export const getCallerRole = internalQuery({
     if (!user) return null;
     const roles = await resolveRoles(ctx, user);
     const primary = roles.slice().sort((left, right) => right.rank - left.rank)[0] ?? null;
-    return { role: primary?.slug ?? null, isPlatform: roles.some((role) => role.isPlatform) };
+    return {
+      role: primary?.slug ?? null,
+      isPlatform: roles.some((role) => role.isPlatform),
+      permissions: collectPermissions(roles),
+    };
   },
 });
 
@@ -99,7 +103,7 @@ export const saveCentipidCredentials = mutation({
     ingestionPaused: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    await requirePlatformAdmin(ctx);
+    await requirePermission(ctx, "centipid:manage");
     const token = args.apiToken?.trim() ?? "";
     const secret = args.webhookSigningSecret?.trim() ?? "";
 
@@ -113,6 +117,7 @@ export const saveCentipidCredentials = mutation({
         ingestionPaused: args.ingestionPaused ?? false,
         createdAt: Date.now(),
       });
+      await ctx.scheduler.runAfter(0, internal.centipid.syncCentipidLiveData, {});
       return { saved: true };
     }
 
@@ -125,6 +130,7 @@ export const saveCentipidCredentials = mutation({
     if (secret) patch.webhookSigningSecret = await encryptCentipidSecret(secret);
     if (args.ingestionPaused !== undefined) patch.ingestionPaused = args.ingestionPaused;
     await ctx.db.patch(existing._id, patch);
+    await ctx.scheduler.runAfter(0, internal.centipid.syncCentipidLiveData, {});
     return { saved: true };
   },
 });
@@ -132,10 +138,13 @@ export const saveCentipidCredentials = mutation({
 export const setCentipidIngestionPaused = mutation({
   args: { paused: v.boolean() },
   handler: async (ctx, args) => {
-    await requirePlatformAdmin(ctx);
+    await requirePermission(ctx, "centipid:manage");
     const existing = await ctx.db.query("centipidCredentials").order("desc").first();
     if (!existing) throw new Error("Configure credentials before pausing ingestion.");
     await ctx.db.patch(existing._id, { ingestionPaused: args.paused });
+    if (!args.paused) {
+      await ctx.scheduler.runAfter(0, internal.centipid.syncCentipidLiveData, {});
+    }
     return { paused: args.paused };
   },
 });
@@ -148,6 +157,36 @@ export const getCentipidIntegrationStatus = query({
     return {
       available: !!creds,
       ingestionPaused: creds?.ingestionPaused === true,
+    };
+  },
+});
+
+/**
+ * Read-only MCP output persisted by the collector. Because this is a Convex
+ * query rather than the result of a browser action, clients receive updates
+ * whenever the collector writes a newer snapshot.
+ */
+export const getCentipidLiveSnapshot = query({
+  args: {},
+  handler: async (ctx) => {
+    await requirePermission(ctx, "centipid:manage");
+    const creds = await ctx.db.query("centipidCredentials").order("desc").first();
+    if (!creds) {
+      return { configured: false, at: null, lastAttemptAt: null, lastAttemptOk: null, lastAttemptError: null };
+    }
+    return {
+      configured: true,
+      at: creds.liveSnapshotAt ?? null,
+      revenueToday: creds.liveSnapshotRevenueToday ?? null,
+      revenueYesterday: creds.liveSnapshotRevenueYesterday ?? null,
+      subscribersOnline: creds.liveSnapshotSubscribersOnline ?? null,
+      activeSubscriptions: creds.liveSnapshotActiveSubscriptions ?? null,
+      expiring24h: creds.liveSnapshotExpiring24h ?? null,
+      unreconciledPayments: creds.liveSnapshotUnreconciledPayments ?? null,
+      currency: creds.liveSnapshotCurrency ?? "UGX",
+      lastAttemptAt: creds.liveSnapshotLastAttemptAt ?? null,
+      lastAttemptOk: creds.liveSnapshotLastAttemptOk ?? null,
+      lastAttemptError: creds.liveSnapshotLastAttemptError ?? null,
     };
   },
 });
@@ -294,9 +333,10 @@ export const getCentipidBusinessSummary = query({
     const todayGenerated = countOf(todayVouchers, "voucher.generated");
     const todayRedeemed = countOf(todayVouchers, "voucher.redeemed");
 
-    const [pausedSubscribers, openTickets] = await Promise.all([
+    const [pausedSubscribers, openTickets, creds] = await Promise.all([
       ctx.db.query("latestSubscriberState").withIndex("by_status", (q) => q.eq("status", "paused")).collect(),
       ctx.db.query("ticketStatus").withIndex("by_status", (q) => q.eq("status", "open")).collect(),
+      ctx.db.query("centipidCredentials").order("desc").first(),
     ]);
 
     const user = await resolveUserByIdentity(ctx);
@@ -338,6 +378,17 @@ export const getCentipidBusinessSummary = query({
       live: {
         pausedSubscribers: pausedSubscribers.length,
         openTickets: openTickets.length,
+      },
+      // A fresh MCP summary complements the event-backed activity stream.
+      // Revenue remains permission-gated; the operational counts are safe for
+      // every authenticated Centipid activity viewer.
+      platformSnapshot: {
+        at: creds?.liveSnapshotAt ?? null,
+        subscribersOnline: creds?.liveSnapshotSubscribersOnline ?? null,
+        activeSubscriptions: creds?.liveSnapshotActiveSubscriptions ?? null,
+        expiring24h: creds?.liveSnapshotExpiring24h ?? null,
+        unreconciledPayments: creds?.liveSnapshotUnreconciledPayments ?? null,
+        revenueToday: revenueVisible ? creds?.liveSnapshotRevenueToday ?? null : null,
       },
     };
   },
@@ -382,6 +433,26 @@ async function alreadyProcessed(
   return !!existing;
 }
 
+/** MCP list tools return persistent provider records, not webhook delivery ids.
+ * Deduplicate those records by their Centipid id + event kind before inserting
+ * them into the same activity stream as signed webhook deliveries. */
+async function alreadyStoredSourceEvent(
+  ctx: MutationCtx,
+  table: "subscriberEvents" | "paymentEvents" | "voucherEvents" | "ticketEvents",
+  sourceId: string,
+  eventType: string,
+): Promise<boolean> {
+  if (!sourceId) return false;
+  const rows = table === "subscriberEvents"
+    ? await ctx.db.query("subscriberEvents").withIndex("by_subscriber", (q) => q.eq("centipidSubscriberId", sourceId)).collect()
+    : table === "paymentEvents"
+      ? await ctx.db.query("paymentEvents").withIndex("by_payment", (q) => q.eq("centipidPaymentId", sourceId)).collect()
+      : table === "voucherEvents"
+        ? await ctx.db.query("voucherEvents").withIndex("by_voucher", (q) => q.eq("centipidVoucherId", sourceId)).collect()
+        : await ctx.db.query("ticketEvents").withIndex("by_ticket", (q) => q.eq("centipidTicketId", sourceId)).collect();
+  return rows.some((row) => row.eventType === eventType);
+}
+
 export const handleSubscriberEvent = internalMutation({
   args: { payload: v.any(), webhookEventId: v.optional(v.string()) },
   handler: async (ctx, args) => {
@@ -392,6 +463,7 @@ export const handleSubscriberEvent = internalMutation({
       pickString(p, ["subscriber_id", "subscriberId", "id", "account", "username"]) ||
       pickString(p.data as Record<string, unknown>, ["subscriber_id", "subscriberId", "id", "account"]) ||
       "";
+    if (await alreadyStoredSourceEvent(ctx, "subscriberEvents", subscriberId, eventType)) return { inserted: false };
     const phone =
       pickString(p, ["phone", "mobile", "msisdn"]) ||
       pickString(p.data as Record<string, unknown>, ["phone", "mobile", "msisdn"]) ||
@@ -454,13 +526,15 @@ export const handlePaymentEvent = internalMutation({
     const eventType = extractEventType(args.payload) ?? "payment.unknown";
     if (await alreadyProcessed(ctx, "paymentEvents", args.webhookEventId)) return { inserted: false };
     const p = args.payload as Record<string, unknown>;
+    const paymentId =
+      pickString(p, ["payment_id", "paymentId", "id", "reference", "transaction_id"]) ||
+      pickString(p.data as Record<string, unknown>, ["payment_id", "paymentId", "id", "reference"]) ||
+      "";
+    if (await alreadyStoredSourceEvent(ctx, "paymentEvents", paymentId, eventType)) return { inserted: false };
     const rawAmount = p.amount ?? (p.data as Record<string, unknown> | null)?.["amount"];
     const amount = Number(rawAmount);
     await ctx.db.insert("paymentEvents", {
-      centipidPaymentId:
-        pickString(p, ["payment_id", "paymentId", "id", "reference", "transaction_id"]) ||
-        pickString(p.data as Record<string, unknown>, ["payment_id", "paymentId", "id", "reference"]) ||
-        "",
+      centipidPaymentId: paymentId,
       eventType,
       amount: Number.isFinite(amount) ? amount : 0,
       currency:
@@ -493,15 +567,17 @@ export const handleVoucherEvent = internalMutation({
     const eventType = extractEventType(args.payload) ?? "voucher.unknown";
     if (await alreadyProcessed(ctx, "voucherEvents", args.webhookEventId)) return { inserted: false };
     const p = args.payload as Record<string, unknown>;
+    const voucherId =
+      pickString(p, ["voucher_id", "voucherId", "id", "code"]) ||
+      pickString(p.data as Record<string, unknown>, ["voucher_id", "voucherId", "id", "code"]) ||
+      "";
+    if (await alreadyStoredSourceEvent(ctx, "voucherEvents", voucherId, eventType)) return { inserted: false };
     const phone =
       pickString(p, ["phone", "mobile", "customer_phone", "customerPhone"]) ||
       pickString(p.data as Record<string, unknown>, ["phone", "mobile", "customer_phone", "customerPhone"]) ||
       undefined;
     await ctx.db.insert("voucherEvents", {
-      centipidVoucherId:
-        pickString(p, ["voucher_id", "voucherId", "id", "code"]) ||
-        pickString(p.data as Record<string, unknown>, ["voucher_id", "voucherId", "id", "code"]) ||
-        "",
+      centipidVoucherId: voucherId,
       eventType,
       packageName:
         pickString(p, ["package_name", "packageName", "package"]) ||
@@ -530,6 +606,7 @@ export const handleTicketEvent = internalMutation({
       pickString(p, ["ticket_id", "ticketId", "id"]) ||
       pickString(p.data as Record<string, unknown>, ["ticket_id", "ticketId", "id"]) ||
       "";
+    if (await alreadyStoredSourceEvent(ctx, "ticketEvents", ticketId, eventType)) return { inserted: false };
     const subject =
       pickString(p, ["subject", "title"]) ||
       pickString(p.data as Record<string, unknown>, ["subject", "title"]) ||
@@ -580,11 +657,15 @@ export const handleTicketEvent = internalMutation({
 // ============================================================================
 
 async function requireAdminCaller(ctx: {
-  runQuery: (fn: typeof internal.centipid.getCallerRole, args: Record<string, never>) => Promise<{ role: string | null; isPlatform: boolean } | null>;
+  runQuery: (fn: typeof internal.centipid.getCallerRole, args: Record<string, never>) => Promise<{
+    role: string | null;
+    isPlatform: boolean;
+    permissions: string[];
+  } | null>;
 }): Promise<void> {
   const caller = await ctx.runQuery(internal.centipid.getCallerRole, {});
-  if (!caller || (caller.role !== "platform_owner" && caller.role !== "platform_admin")) {
-    throw new Error("Unauthorized: admin role required");
+  if (!caller || !caller.permissions.includes("centipid:manage")) {
+    throw new Error("Unauthorized: the centipid:manage permission is required");
   }
 }
 
@@ -618,14 +699,50 @@ function parseMcpToolItems(content: string): Array<Record<string, unknown>> {
   try {
     parsed = JSON.parse(content);
   } catch {
-    return [];
+    parsed = null;
   }
-  if (Array.isArray(parsed)) return parsed;
-  if (!parsed || typeof parsed !== "object") return [];
-  const envelope = parsed as Record<string, unknown>;
-  for (const key of ["subscribers", "payments", "batches", "tickets", "items", "results", "data", "rows"]) {
-    const value = envelope[key];
-    if (Array.isArray(value)) return value as Array<Record<string, unknown>>;
+  const normalizeItem = (item: Record<string, unknown>) => Object.fromEntries(
+    Object.entries(item).map(([key, value]) => [key.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, ""), value]),
+  );
+  const findArray = (value: unknown, depth = 0): Array<Record<string, unknown>> => {
+    if (depth > 4) return [];
+    if (Array.isArray(value) && value.every((item) => item && typeof item === "object" && !Array.isArray(item))) {
+      return value.map((item) => normalizeItem(item as Record<string, unknown>));
+    }
+    if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+    const record = value as Record<string, unknown>;
+    for (const key of ["subscribers", "payments", "batches", "tickets", "items", "results", "data", "rows"]) {
+      const nested = findArray(record[key], depth + 1);
+      if (nested.length > 0) return nested;
+    }
+    for (const nested of Object.values(record)) {
+      const found = findArray(nested, depth + 1);
+      if (found.length > 0) return found;
+    }
+    return [];
+  };
+  if (parsed) {
+    const found = findArray(parsed);
+    if (found.length > 0) return found;
+  }
+
+  // Some Centipid MCP tools return a Markdown table inside a text block.
+  // Normalize its headings to the same snake_case shape as JSON responses.
+  const lines = content.split(/\r?\n/).map((line) => line.trim());
+  for (let index = 0; index < lines.length - 1; index += 1) {
+    const header = lines[index];
+    const divider = lines[index + 1];
+    if (!header.includes("|") || !/^\|?\s*:?-{3,}/.test(divider)) continue;
+    const columns = header.split("|").map((part) => part.trim()).filter(Boolean)
+      .map((key) => key.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, ""));
+    const rows: Array<Record<string, unknown>> = [];
+    for (const row of lines.slice(index + 2)) {
+      if (!row.includes("|")) break;
+      const cells = row.split("|").map((part) => part.trim()).filter(Boolean);
+      if (cells.length !== columns.length) continue;
+      rows.push(Object.fromEntries(columns.map((column, cellIndex) => [column, cells[cellIndex]])));
+    }
+    if (rows.length > 0) return rows;
   }
   return [];
 }
@@ -692,11 +809,11 @@ function summaryMatch(kind: keyof Omit<RevenueSummarySnapshot, "currency">, norm
     case "revenueYesterday":
       return normalized.startsWith("revenueyesterday") || normalized.startsWith("yesterdayrevenue");
     case "subscribersOnline":
-      return normalized.includes("subscribersonline") || normalized.includes("onlinesubscriber") || normalized.includes("subscriberonline");
+      return normalized.includes("subscribersonline") || normalized.includes("onlinesubscriber") || normalized.includes("subscriberonline") || normalized.includes("currentlyonline") || normalized.includes("onlineusers") || normalized.includes("activeusers") || normalized.includes("livsessions") || normalized.includes("livesessions");
     case "activeSubscriptions":
       return normalized.includes("activesubscription");
     case "expiring24h":
-      return normalized.includes("expiring");
+      return normalized.includes("expiring") || normalized.includes("expiry24") || normalized.includes("expires24") || normalized.includes("renewalsdue") || normalized.includes("duewithin24") || normalized.includes("expiringsoon");
     case "unreconciledPayments":
       return normalized.includes("unreconciled");
     default:
@@ -742,6 +859,14 @@ function parseRevenueSummary(content: string): RevenueSummarySnapshot {
   for (const line of content.split(/\r?\n/)) {
     const match = line.trim().match(/^([^:：]+?)[:：]\s*(.+)$/);
     if (match) pushCandidate(match[1], match[2]);
+  }
+
+  // Also recognize Markdown summary rows such as `| Currently online | 15 |`.
+  for (const line of content.split(/\r?\n/)) {
+    const cells = line.trim().split("|").map((cell) => cell.trim()).filter(Boolean);
+    if (cells.length >= 2 && !cells.every((cell) => /^:?-{3,}:?$/.test(cell))) {
+      pushCandidate(cells[0], cells[1]);
+    }
   }
 
   const kinds: Array<keyof Omit<RevenueSummarySnapshot, "currency">> = [
@@ -811,6 +936,47 @@ export const verifyCentipidToken = action({
   },
 });
 
+/** Fetches and persists the MCP overview; scheduled and browser-triggered callers share this path. */
+export const refreshCentipidLiveSnapshot = internalAction({
+  args: {},
+  handler: async (ctx): Promise<
+    | ({ ok: true; at: number } & RevenueSummarySnapshot)
+    | { ok: false; error: string }
+  > => {
+    const at = Date.now();
+    const creds = await ctx.runQuery(internal.centipid.getCentipidCredentials, {});
+    if (!creds) return { ok: false, error: "No Centipid credentials are configured." };
+    const token = await decryptCentipidSecret(creds.apiToken);
+    try {
+      const contents = await runMcpTool(token, "revenue_summary", {});
+      const snapshot = parseRevenueSummary(contents.join("\n"));
+      await ctx.runMutation(internal.centipid.recordCentipidLiveSnapshot, { at, ok: true, ...snapshot });
+      return { ok: true, at, ...snapshot };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      await ctx.runMutation(internal.centipid.recordCentipidLiveSnapshot, {
+        at,
+        ok: false,
+        error: message.slice(0, 240),
+      });
+      return { ok: false, error: message };
+    }
+  },
+});
+
+/** Allows the page to request its first snapshot immediately; it then subscribes to updates. */
+export const syncCentipidLiveSnapshot = action({
+  args: {},
+  handler: async (ctx): Promise<
+    | ({ ok: true; at: number } & RevenueSummarySnapshot)
+    | { ok: false; error: string }
+  > => {
+    await requireAdminCaller(ctx);
+    const { overview } = await ctx.runAction(internal.centipid.syncCentipidLiveData, {});
+    return overview;
+  },
+});
+
 export const getCentipidLiveOverview = action({
   args: {},
   handler: async (ctx): Promise<
@@ -818,15 +984,7 @@ export const getCentipidLiveOverview = action({
     | { ok: false; error: string }
   > => {
     await requireAdminCaller(ctx);
-    const creds = await ctx.runQuery(internal.centipid.getCentipidCredentials, {});
-    if (!creds) return { ok: false, error: "No Centipid credentials are configured." };
-    const token = await decryptCentipidSecret(creds.apiToken);
-    try {
-      const contents = await runMcpTool(token, "revenue_summary", {});
-      return { ok: true, at: Date.now(), ...parseRevenueSummary(contents[0] ?? "") };
-    } catch (error) {
-      return { ok: false, error: error instanceof Error ? error.message : "Unknown error" };
-    }
+    return ctx.runAction(internal.centipid.refreshCentipidLiveSnapshot, {});
   },
 });
 
@@ -884,12 +1042,108 @@ export const recordCentipidHealthCheck = internalMutation({
   },
 });
 
+export const recordCentipidLiveSnapshot = internalMutation({
+  args: {
+    at: v.number(),
+    ok: v.boolean(),
+    error: v.optional(v.string()),
+    revenueToday: v.optional(v.union(v.number(), v.null())),
+    revenueYesterday: v.optional(v.union(v.number(), v.null())),
+    subscribersOnline: v.optional(v.union(v.number(), v.null())),
+    activeSubscriptions: v.optional(v.union(v.number(), v.null())),
+    expiring24h: v.optional(v.union(v.number(), v.null())),
+    unreconciledPayments: v.optional(v.union(v.number(), v.null())),
+    currency: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const creds = await ctx.db.query("centipidCredentials").order("desc").first();
+    if (!creds) return;
+    const attempt = {
+      liveSnapshotLastAttemptAt: args.at,
+      liveSnapshotLastAttemptOk: args.ok,
+      liveSnapshotLastAttemptError: args.ok ? undefined : args.error ?? "Unknown error",
+    };
+    if (!args.ok) {
+      await ctx.db.patch(creds._id, attempt);
+      return;
+    }
+    await ctx.db.patch(creds._id, {
+      ...attempt,
+      liveSnapshotAt: args.at,
+      liveSnapshotRevenueToday: args.revenueToday ?? null,
+      liveSnapshotRevenueYesterday: args.revenueYesterday ?? null,
+      liveSnapshotSubscribersOnline: args.subscribersOnline ?? null,
+      liveSnapshotActiveSubscriptions: args.activeSubscriptions ?? null,
+      liveSnapshotExpiring24h: args.expiring24h ?? null,
+      liveSnapshotUnreconciledPayments: args.unreconciledPayments ?? null,
+      liveSnapshotCurrency: args.currency ?? "UGX",
+    });
+  },
+});
+
+/** Supplements only MCP fields that the list tools explicitly expose. */
+export const enrichCentipidLiveSnapshot = internalMutation({
+  args: {
+    at: v.number(),
+    subscribersOnline: v.optional(v.number()),
+    expiring24h: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const creds = await ctx.db.query("centipidCredentials").order("desc").first();
+    if (!creds) return;
+    const patch: {
+      liveSnapshotAt: number;
+      liveSnapshotSubscribersOnline?: number;
+      liveSnapshotExpiring24h?: number;
+    } = { liveSnapshotAt: args.at };
+    if (args.subscribersOnline !== undefined) patch.liveSnapshotSubscribersOnline = args.subscribersOnline;
+    if (args.expiring24h !== undefined) patch.liveSnapshotExpiring24h = args.expiring24h;
+    await ctx.db.patch(creds._id, patch);
+  },
+});
+
+/**
+ * One scheduled read-only collector cycle. The overview supplies current
+ * platform KPIs while the list tools reconcile event-backed cards and their
+ * live Convex projections. Signed webhooks still arrive immediately.
+ */
+export const syncCentipidLiveData = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    const overview = await ctx.runAction(internal.centipid.refreshCentipidLiveSnapshot, {});
+    if (!overview.ok) return { overview, report: [] as { tool: string; inserted: number; error?: string }[] };
+    const { report } = await ctx.runAction(internal.centipid.runCentipidSnapshot, {});
+    return { overview, report };
+  },
+});
+
 export const runCentipidSnapshot = internalAction({
   args: {},
   handler: async (ctx) => {
     const creds = await ctx.runQuery(internal.centipid.getCentipidCredentials, {});
     if (!creds) throw new Error("No Centipid credentials are configured.");
     const token = await decryptCentipidSecret(creds.apiToken);
+    const derivedSnapshot: { subscribersOnline?: number; expiring24h?: number } = {};
+
+    const booleanValue = (value: unknown): boolean | null => {
+      if (value === true || value === 1) return true;
+      if (value === false || value === 0) return false;
+      if (typeof value !== "string") return null;
+      const normalized = value.trim().toLowerCase();
+      if (["true", "yes", "online", "connected", "active"].includes(normalized)) return true;
+      if (["false", "no", "offline", "disconnected", "inactive"].includes(normalized)) return false;
+      return null;
+    };
+
+    const expiryTimestamp = (value: unknown): number | undefined => {
+      const absolute = parseCentipidTimestamp(value);
+      if (absolute !== undefined) return absolute;
+      const relative = String(value ?? "").toLowerCase().match(/(?:in\s*)?(\d+)\s*(m|h|d|minutes?|hours?|days?)/);
+      if (!relative) return undefined;
+      const quantity = Number(relative[1]);
+      const unit = relative[2].charAt(0);
+      return Date.now() + quantity * (unit === "d" ? 86_400_000 : unit === "h" ? 3_600_000 : 60_000);
+    };
 
     type CentipidEntry =
       | { kind: "subscriber"; eventType?: string; payload: { subscriber_id: string; phone: string; name?: unknown; package_name: string; timestamp: number } }
@@ -899,7 +1153,8 @@ export const runCentipidSnapshot = internalAction({
 
     const tools: Array<[string, (item: Record<string, unknown>) => CentipidEntry]> = [
       ["list_subscribers", (item) => {
-        const paused = item.paused === true;
+        const status = String(item.status ?? item.state ?? item.subscription_status ?? "").toLowerCase();
+        const paused = booleanValue(item.paused ?? item.is_paused) === true || status.includes("paused") || status.includes("suspend");
         return {
           kind: "subscriber" as const,
           eventType: paused ? "subscriber.paused" : "subscriber.created",
@@ -926,14 +1181,19 @@ export const runCentipidSnapshot = internalAction({
           },
         };
       }],
-      ["voucher_stock", (item) => ({
-        kind: "voucher" as const,
-        payload: {
-          voucher_id: String(item.id ?? item.batch_id ?? item.code ?? ""),
-          package_name: String(item.package_name ?? item.package ?? ""),
-          timestamp: parseCentipidTimestamp(item.created_at ?? item.name) ?? Date.now(),
-        },
-      })],
+      ["voucher_stock", (item) => {
+        const status = String(item.status ?? item.state ?? "").toLowerCase();
+        const redeemed = item.redeemed === true || !!item.redeemed_at || status.includes("redeem");
+        return {
+          kind: "voucher" as const,
+          eventType: redeemed ? "voucher.redeemed" : "voucher.generated",
+          payload: {
+            voucher_id: String(item.id ?? item.batch_id ?? item.code ?? ""),
+            package_name: String(item.package_name ?? item.package ?? ""),
+            timestamp: parseCentipidTimestamp(item.redeemed_at ?? item.created_at ?? item.updated_at) ?? Date.now(),
+          },
+        };
+      }],
       ["open_tickets", (item) => ({
         kind: "ticket" as const,
         payload: {
@@ -951,6 +1211,19 @@ export const runCentipidSnapshot = internalAction({
         let inserted = 0;
         for (const content of contents) {
           const items = parseMcpToolItems(content);
+          if (toolName === "list_subscribers" && items.length > 0) {
+            const onlineSignals = items.map((item) => booleanValue(item.online ?? item.is_online ?? item.session_online ?? item.connection_status));
+            if (onlineSignals.some((value) => value !== null)) {
+              derivedSnapshot.subscribersOnline = onlineSignals.filter((value) => value === true).length;
+            }
+            const now = Date.now();
+            const expiries = items
+              .map((item) => expiryTimestamp(item.expires_at ?? item.expiry_at ?? item.expiration_at ?? item.expiry ?? item.expires_on))
+              .filter((value): value is number => value !== undefined);
+            if (expiries.length > 0) {
+              derivedSnapshot.expiring24h = expiries.filter((value) => value >= now && value <= now + 86_400_000).length;
+            }
+          }
           for (const item of items) {
             const entry = normalize(item);
             const eventType =
@@ -997,6 +1270,9 @@ export const runCentipidSnapshot = internalAction({
         });
       }
     }
+    if (derivedSnapshot.subscribersOnline !== undefined || derivedSnapshot.expiring24h !== undefined) {
+      await ctx.runMutation(internal.centipid.enrichCentipidLiveSnapshot, { at: Date.now(), ...derivedSnapshot });
+    }
     return { report };
   },
 });
@@ -1012,7 +1288,7 @@ export const fetchHistoricalCentipidData = action({
 export const seedCentipidEventsForTesting = mutation({
   args: { count: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    await requirePlatformAdmin(ctx);
+    await requirePermission(ctx, "centipid:manage");
     const count = Math.min(Math.max(args.count ?? 12, 1), 50);
     const now = Date.now();
     const phones = ["256701111111", "256702222222", "256703333333", "256704444444", "256705555555", "256706666666"];

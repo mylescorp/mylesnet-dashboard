@@ -2,7 +2,7 @@
 
 import { useAction, useMutation, useQuery } from "convex/react";
 import Link from "next/link";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { useUserProfile } from "../components/UserProfileContext";
 import {
@@ -100,8 +100,8 @@ interface WebhookDeliveryShape {
 }
 
 interface LiveSnapshotResult {
-  ok: boolean;
-  at?: number;
+  configured: boolean;
+  at: number | null;
   revenueToday?: number | null;
   revenueYesterday?: number | null;
   subscribersOnline?: number | null;
@@ -109,7 +109,9 @@ interface LiveSnapshotResult {
   expiring24h?: number | null;
   unreconciledPayments?: number | null;
   currency?: string;
-  error?: string;
+  lastAttemptAt: number | null;
+  lastAttemptOk: boolean | null;
+  lastAttemptError: string | null;
 }
 
 const prettyBody = (raw: string | undefined) => {
@@ -150,7 +152,8 @@ export default function CentipidSettingsPage() {
   const setPaused = useMutation(api.centipid.setCentipidIngestionPaused);
   const verifyToken = useAction(api.centipid.verifyCentipidToken);
   const fetchHistorical = useAction(api.centipid.fetchHistoricalCentipidData);
-  const fetchLiveOverview = useAction(api.centipid.getCentipidLiveOverview);
+  const syncLiveSnapshot = useAction(api.centipid.syncCentipidLiveSnapshot);
+  const liveSnapshot = useQuery(api.centipid.getCentipidLiveSnapshot, isAdmin ? {} : "skip") as LiveSnapshotResult | undefined;
 
   const [apiToken, setApiToken] = useState("");
   const [webhookSigningSecret, setWebhookSigningSecret] = useState("");
@@ -161,14 +164,25 @@ export default function CentipidSettingsPage() {
   const [backfillResult, setBackfillResult] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
   const [expandedDelivery, setExpandedDelivery] = useState<string | null>(null);
-  const [liveSnapshot, setLiveSnapshot] = useState<LiveSnapshotResult | null>(null);
-  const [refreshingLive, setRefreshingLive] = useState(false);
+  const [autoSyncingLive, setAutoSyncingLive] = useState(false);
+  const lastAutoSyncAt = useRef(0);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 60_000);
     return () => window.clearInterval(timer);
   }, []);
+
+  // A newly opened page should not wait for the first scheduled collector run.
+  // Once stored, the Convex query above pushes all later collector updates.
+  useEffect(() => {
+    if (!isAdmin || !settings?.hasCredentials || liveSnapshot === undefined) return;
+    const snapshotAge = liveSnapshot.at === null ? Number.POSITIVE_INFINITY : Date.now() - liveSnapshot.at;
+    if (snapshotAge < 30_000 || Date.now() - lastAutoSyncAt.current < 30_000) return;
+    lastAutoSyncAt.current = Date.now();
+    setAutoSyncingLive(true);
+    void syncLiveSnapshot().finally(() => setAutoSyncingLive(false));
+  }, [isAdmin, liveSnapshot, settings?.hasCredentials, syncLiveSnapshot]);
 
   const lastDelivery = deliveryLogs && deliveryLogs.length > 0 ? deliveryLogs[0].receivedAt : null;
   const latestDeliveryAt = settings?.latestDeliveryAt ?? lastDelivery;
@@ -178,6 +192,14 @@ export default function CentipidSettingsPage() {
     && !settings.ingestionPaused
     && lastDeliveryAge !== null
     && lastDeliveryAge > staleThresholdMs;
+  // Convex can briefly serve the previous query result shape during a rolling
+  // function deployment. Keep the live page usable until the new projection
+  // is available instead of dereferencing an absent optional field.
+  const platformSnapshot = summary?.platformSnapshot;
+  // `getCentipidLiveSnapshot` is the canonical persisted MCP projection. The
+  // business summary is a convenience aggregate and can briefly be served
+  // with its older shape during a rolling Convex function deployment.
+  const currentSnapshot = liveSnapshot?.at ? liveSnapshot : platformSnapshot;
 
   const showStatus = (message: string, isError = false) => {
     setStatusMessage(message);
@@ -268,20 +290,6 @@ export default function CentipidSettingsPage() {
     if (!settings?.webhookUrl) return;
     void navigator.clipboard.writeText(settings.webhookUrl);
     showStatus("Webhook URL copied to the clipboard.");
-  };
-
-  const handleRefreshLive = async () => {
-    setRefreshingLive(true);
-    setLiveSnapshot(null);
-    setStatusMessage(null);
-    try {
-      const result = await fetchLiveOverview() as LiveSnapshotResult;
-      setLiveSnapshot(result);
-    } catch (error) {
-      setLiveSnapshot({ ok: false, error: error instanceof Error ? error.message : "Could not fetch the live overview." });
-    } finally {
-      setRefreshingLive(false);
-    }
   };
 
   const toggleDelivery = (id: string) => {
@@ -426,16 +434,16 @@ export default function CentipidSettingsPage() {
           <div>
             <p className="eyebrow">Pooled from Centipid</p>
             <h2>Live platform activity</h2>
-            <p>Aggregated from signed webhooks delivered from the Centipid platform · updates as events arrive.</p>
+            <p>Reconciled from signed webhooks and read-only Centipid MCP data · updates automatically every 30 seconds.</p>
           </div>
           <div className="centipid-section-head-right">
             <span className="status-chip status-chip-success">
               <CircleDot size={12} className="pulse-dot" />
-              Live feed
+              {currentSnapshot?.at ? `Synced ${timeAgo(currentSnapshot.at, now)}` : "Live feed"}
             </span>
           </div>
         </div>
-        <div className="operations-kpi-strip">
+        <div className="operations-kpi-strip kpi-strip-live">
           <div className="operations-kpi">
             <span><CreditCard aria-hidden="true" size={17} /></span>
             <p>Payments today</p>
@@ -447,12 +455,14 @@ export default function CentipidSettingsPage() {
           <div className="operations-kpi">
             <span><ArrowDownToLine aria-hidden="true" size={17} /></span>
             <p>Collected today</p>
-            <strong>{summary?.revenueVisible ? formatMoney(summary.today.net) : "—"}</strong>
+            <strong>{summary?.revenueVisible ? formatMoney(currentSnapshot?.revenueToday ?? summary.today.net) : "—"}</strong>
             <small>
               {summary && !summary.revenueVisible
                 ? "Visible to admins only."
                 : summary
-                  ? `Net of refunds · 7d: ${formatMoney(summary.last7d.net)}`
+                  ? currentSnapshot?.revenueToday !== null && currentSnapshot?.revenueToday !== undefined
+                    ? "Current Centipid platform total"
+                    : `Net of refunds · 7d: ${formatMoney(summary.last7d.net)}`
                   : "Waiting for data."}
             </small>
           </div>
@@ -490,6 +500,18 @@ export default function CentipidSettingsPage() {
                 : "Waiting for data."}
             </small>
           </div>
+          <div className="operations-kpi">
+            <span><Signal aria-hidden="true" size={17} /></span>
+            <p>Subscribers online</p>
+            <strong>{currentSnapshot?.subscribersOnline?.toLocaleString() ?? "—"}</strong>
+            <small>Current network presence from Centipid</small>
+          </div>
+          <div className="operations-kpi">
+            <span><Clock3 aria-hidden="true" size={17} /></span>
+            <p>Expiring in 24h</p>
+            <strong>{currentSnapshot?.expiring24h?.toLocaleString() ?? "—"}</strong>
+            <small>Renewals due before tomorrow</small>
+          </div>
         </div>
       </section>
 
@@ -505,13 +527,17 @@ export default function CentipidSettingsPage() {
               </p>
             </div>
             <div className="centipid-section-head-right">
-              {liveSnapshot?.ok && (
-                <span className="status-chip status-chip-success">Fetched {timeAgo(liveSnapshot.at ?? 0, now)}</span>
+              {liveSnapshot?.at && (
+                <span className={`status-chip ${liveSnapshot.lastAttemptOk === false ? "status-chip-error" : "status-chip-success"}`}>
+                  {liveSnapshot.lastAttemptOk === false
+                    ? `Last sync failed · showing ${timeAgo(liveSnapshot.at, now)}`
+                    : `Synced ${timeAgo(liveSnapshot.at, now)}`}
+                </span>
               )}
-              <button type="button" className="secondary-button" onClick={() => void handleRefreshLive()} disabled={refreshingLive || !settings?.hasCredentials}>
-                <RefreshCw size={15} className={refreshingLive ? "spinning" : undefined} />
-                {refreshingLive ? "Fetching…" : "Refresh now"}
-              </button>
+              <span className="status-chip status-chip-info">
+                <CircleDot size={12} className={autoSyncingLive ? "pulse-dot" : undefined} />
+                {autoSyncingLive ? "Syncing…" : "Auto-sync · 30s"}
+              </span>
             </div>
           </div>
 
@@ -520,56 +546,59 @@ export default function CentipidSettingsPage() {
               <h3>Configure credentials first</h3>
               <p>Add the MCP API token in the credentials panel before pulling a live snapshot.</p>
             </div>
-          ) : liveSnapshot === null ? (
+          ) : liveSnapshot === undefined || liveSnapshot.at === null ? (
             <div className="empty-state">
-              <h3>No snapshot pulled yet</h3>
-              <p>Tap “Refresh now” to read the current platform figures from Centipid.</p>
+              <h3>Starting automatic sync</h3>
+              <p>Centipid&apos;s MCP overview is being collected automatically and will appear here without a manual refresh.</p>
             </div>
-          ) : !liveSnapshot.ok ? (
-            <p className="result-message result-message-error">
-              Could not fetch the live overview — {liveSnapshot.error ?? "unknown error"}.
-            </p>
           ) : (
-            <div className="operations-kpi-strip kpi-strip-5">
-              <div className="operations-kpi">
-                <span><Signal aria-hidden="true" size={17} /></span>
-                <p>Subscribers online</p>
-                <strong>{liveSnapshot.subscribersOnline?.toLocaleString() ?? "—"}</strong>
-                <small>Currently on the network, per Centipid</small>
+            <>
+              {liveSnapshot.lastAttemptOk === false && (
+                <p className="result-message result-message-error">
+                  The latest automatic MCP sync failed — {liveSnapshot.lastAttemptError ?? "unknown error"}. Showing the last successful snapshot.
+                </p>
+              )}
+              <div className="operations-kpi-strip kpi-strip-5">
+                <div className="operations-kpi">
+                  <span><Signal aria-hidden="true" size={17} /></span>
+                  <p>Subscribers online</p>
+                  <strong>{liveSnapshot.subscribersOnline?.toLocaleString() ?? "—"}</strong>
+                  <small>Currently on the network, per Centipid</small>
+                </div>
+                <div className="operations-kpi">
+                  <span><Radio aria-hidden="true" size={17} /></span>
+                  <p>Active subscriptions</p>
+                  <strong>{liveSnapshot.activeSubscriptions?.toLocaleString() ?? "—"}</strong>
+                  <small>Subscriptions with an unexpired plan</small>
+                </div>
+                <div className="operations-kpi">
+                  <span><Clock3 aria-hidden="true" size={17} /></span>
+                  <p>Expiring in 24h</p>
+                  <strong>{liveSnapshot.expiring24h?.toLocaleString() ?? "—"}</strong>
+                  <small>Renewals due before this time tomorrow</small>
+                </div>
+                <div className="operations-kpi">
+                  <span><Wallet aria-hidden="true" size={17} /></span>
+                  <p>Unreconciled payments</p>
+                  <strong>{liveSnapshot.unreconciledPayments?.toLocaleString() ?? "—"}</strong>
+                  <small>Payments not yet matched to an invoice</small>
+                </div>
+                <div className="operations-kpi">
+                  <span><ArrowDownToLine aria-hidden="true" size={17} /></span>
+                  <p>Revenue today</p>
+                  <strong>
+                    {summary?.revenueVisible
+                      ? formatMoney(liveSnapshot.revenueToday, liveSnapshot.currency ?? "UGX")
+                      : "—"}
+                  </strong>
+                  <small>
+                    {summary?.revenueVisible
+                      ? `Yesterday: ${formatMoney(liveSnapshot.revenueYesterday, liveSnapshot.currency ?? "UGX")}`
+                      : "Visible to admins only."}
+                  </small>
+                </div>
               </div>
-              <div className="operations-kpi">
-                <span><Radio aria-hidden="true" size={17} /></span>
-                <p>Active subscriptions</p>
-                <strong>{liveSnapshot.activeSubscriptions?.toLocaleString() ?? "—"}</strong>
-                <small>Subscriptions with an unexpired plan</small>
-              </div>
-              <div className="operations-kpi">
-                <span><Clock3 aria-hidden="true" size={17} /></span>
-                <p>Expiring in 24h</p>
-                <strong>{liveSnapshot.expiring24h?.toLocaleString() ?? "—"}</strong>
-                <small>Renewals due before this time tomorrow</small>
-              </div>
-              <div className="operations-kpi">
-                <span><Wallet aria-hidden="true" size={17} /></span>
-                <p>Unreconciled payments</p>
-                <strong>{liveSnapshot.unreconciledPayments?.toLocaleString() ?? "—"}</strong>
-                <small>Payments not yet matched to an invoice</small>
-              </div>
-              <div className="operations-kpi">
-                <span><ArrowDownToLine aria-hidden="true" size={17} /></span>
-                <p>Revenue today</p>
-                <strong>
-                  {summary?.revenueVisible
-                    ? formatMoney(liveSnapshot.revenueToday, liveSnapshot.currency ?? "UGX")
-                    : "—"}
-                </strong>
-                <small>
-                  {summary?.revenueVisible
-                    ? `Yesterday: ${formatMoney(liveSnapshot.revenueYesterday, liveSnapshot.currency ?? "UGX")}`
-                    : "Visible to admins only."}
-                </small>
-              </div>
-            </div>
+            </>
           )}
         </section>
       )}

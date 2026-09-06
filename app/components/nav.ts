@@ -77,7 +77,7 @@ export const navSections: NavSection[] = [
     ],
   },
   {
-    title: "Operations",
+    title: "Network & infrastructure",
     items: [
       {
         href: "/markets",
@@ -110,6 +110,23 @@ export const navSections: NavSection[] = [
         permission: "telemetry_health:read",
       },
       {
+        href: "/collector-setup",
+        label: "Collector setup",
+        icon: Cog,
+        permission: "collector:manage",
+      },
+      {
+        href: "/config-watch",
+        label: "Config watch",
+        icon: FileDiff,
+        permission: "config_watch:manage",
+      },
+    ],
+  },
+  {
+    title: "Service operations",
+    items: [
+      {
         href: "/incidents",
         label: "Alerts & incidents",
         icon: TriangleAlert,
@@ -123,18 +140,6 @@ export const navSections: NavSection[] = [
         planned: true,
       },
       {
-        href: "/collector-setup",
-        label: "Collector setup",
-        icon: Cog,
-        permission: "collector:manage",
-      },
-      {
-        href: "/config-watch",
-        label: "Config watch",
-        icon: FileDiff,
-        permission: "config_watch:manage",
-      },
-      {
         href: "/shift-notes",
         label: "Shift handover",
         icon: ClipboardList,
@@ -146,22 +151,22 @@ export const navSections: NavSection[] = [
         icon: Ticket,
         permission: "tickets:read",
       },
-      {
-        href: "/prospects",
-        label: "Prospects",
-        icon: ArrowDownUp,
-        permission: "prospects:read",
-      },
     ],
   },
   {
-    title: "Business",
+    title: "Centipid & billing",
     items: [
       {
         href: "/business-activity",
         label: "Business events",
         icon: LineChart,
         permission: "business_events:read",
+      },
+      {
+        href: "/centipid",
+        label: "Centipid sync",
+        icon: Settings2,
+        permission: "centipid:manage",
       },
       {
         href: "/revenue",
@@ -207,7 +212,7 @@ export const navSections: NavSection[] = [
     ],
   },
   {
-    title: "Performance",
+    title: "Growth & performance",
     items: [
       {
         href: "/analytics",
@@ -235,6 +240,12 @@ export const navSections: NavSection[] = [
         icon: TrendingUp,
         permission: "capacity:read",
         planned: true,
+      },
+      {
+        href: "/prospects",
+        label: "Prospects",
+        icon: ArrowDownUp,
+        permission: "prospects:read",
       },
     ],
   },
@@ -362,12 +373,6 @@ export const navSections: NavSection[] = [
         icon: Network,
         permission: "centipid:manage",
         planned: true,
-      },
-      {
-        href: "/centipid",
-        label: "Centipid",
-        icon: Settings2,
-        permission: "centipid:manage",
       },
       {
         href: "/audit-log",
