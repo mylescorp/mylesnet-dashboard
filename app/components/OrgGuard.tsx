@@ -14,31 +14,59 @@ import { Activity } from "lucide-react";
 export function OrgGuard() {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const ensureOrg = useAction(api.workos.ensureOrgMembership);
-  const ran = useRef(false);
+  const completed = useRef(false);
+  const attempts = useRef(0);
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [retryNonce, setRetryNonce] = useState(0);
 
   useEffect(() => {
-    if (isLoading || !isAuthenticated || ran.current) return;
-    ran.current = true;
+    if (isLoading || !isAuthenticated || completed.current) return;
+    attempts.current += 1;
     setIsSyncing(true);
     setSyncError(null);
+    let retryScheduled = false;
+
+    const retry = (reason: string) => {
+      // A network reconnect can occur while Convex is completing the action.
+      // Retry the idempotent membership check before surfacing an error so a
+      // new user is not stranded by a momentary connection loss.
+      if (attempts.current < 4) {
+        retryScheduled = true;
+        retryTimer.current = setTimeout(() => {
+          retryTimer.current = null;
+          setRetryNonce((value) => value + 1);
+        }, 600 * attempts.current);
+        return;
+      }
+      setSyncError(reason);
+    };
 
     ensureOrg()
       .then((result) => {
         console.log("Organization membership status:", result);
         if (result.status === "error") {
-          setSyncError(result.reason || "Failed to set up workspace access");
+          retry(result.reason || "Failed to set up workspace access");
+          return;
         }
+        completed.current = true;
       })
       .catch((error) => {
         console.error("Organization membership sync failed:", error);
-        setSyncError(error instanceof Error ? error.message : "Failed to set up workspace access");
+        retry(error instanceof Error ? error.message : "Failed to set up workspace access");
       })
       .finally(() => {
-        setIsSyncing(false);
+        if (!retryScheduled) setIsSyncing(false);
       });
-  }, [isAuthenticated, isLoading, ensureOrg]);
+
+    return () => {
+      if (retryTimer.current) {
+        clearTimeout(retryTimer.current);
+        retryTimer.current = null;
+      }
+    };
+  }, [isAuthenticated, isLoading, ensureOrg, retryNonce]);
 
   // Show loading state while syncing organization membership
   if (isSyncing) {
