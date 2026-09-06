@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalQuery } from "./_generated/server";
 import { requireNetworkOperator, requirePlatformAdmin } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 
@@ -46,6 +46,14 @@ export const listSwitches = query({
     await requireNetworkOperator(ctx);
     if (!args.routerId) return (await ctx.db.query("networkSwitches").collect()).filter((entry) => entry.archivedAt === undefined);
     return (await ctx.db.query("networkSwitches").withIndex("by_router", (q) => q.eq("routerId", args.routerId!)).collect()).filter((entry) => entry.archivedAt === undefined);
+  },
+});
+
+// Internal query for cron job to list switches without auth check
+export const listSwitchesInternal = internalQuery({
+  args: { routerId: v.id("routers") },
+  handler: async (ctx, args) => {
+    return (await ctx.db.query("networkSwitches").withIndex("by_router", (q) => q.eq("routerId", args.routerId)).collect()).filter((entry) => entry.archivedAt === undefined);
   },
 });
 

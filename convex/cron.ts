@@ -180,6 +180,18 @@ export const collectAllRouterHealth = internalAction({
       } catch {
         await ctx.runMutation(internal.cron.recordCollectionFailure, { routerId });
       }
+
+      // Check switch health for all switches on this router
+      const switches = await ctx.runQuery(
+        internal.networkSwitches.listSwitchesInternal,
+        { routerId }
+      );
+      for (const switchData of switches) {
+        await ctx.runMutation(internal.incidents.checkSwitchHealth, {
+          routerId,
+          switchId: switchData._id,
+        });
+      }
     }
   },
 });

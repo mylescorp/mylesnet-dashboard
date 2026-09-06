@@ -38,6 +38,7 @@ export function SwitchHealthMonitor({ switchId, routerId, onClose }: SwitchHealt
   const currentSwitch = switchData?.find(s => s._id === switchId);
   const accessPoints = useQuery(api.accessPoints.listAccessPoints, { routerId });
   const liveRouter = useQuery(api.operations.getLiveRouter, { routerId });
+  const openIncidents = useQuery(api.incidents.listIncidents, { routerId });
 
   // Derive health status from connected access points
   const healthStatus = (() => {
@@ -65,61 +66,40 @@ export function SwitchHealthMonitor({ switchId, routerId, onClose }: SwitchHealt
     const totalCount = apHealth.length;
 
     if (healthyCount === totalCount) {
-      return { 
-        status: "healthy", 
+      return {
+        status: "healthy",
         message: `All ${totalCount} access points online`,
         apHealth
       };
     }
 
     if (healthyCount === 0) {
-      return { 
-        status: "critical", 
+      return {
+        status: "critical",
         message: `All ${totalCount} access points offline`,
         apHealth
       };
     }
 
-    return { 
-      status: "warning", 
+    return {
+      status: "warning",
       message: `${healthyCount}/${totalCount} access points online`,
       apHealth
     };
   })();
 
-  // Generate alerts based on health status
-  const alerts: HealthAlert[] = (() => {
-    const alertList: HealthAlert[] = [];
+  // Display actual incidents from the database
+  const switchIncidents = openIncidents?.filter(
+    (incident) =>
+      !incident.resolvedAt &&
+      incident.note.includes(`Switch ${currentSwitch?.name}`)
+  ) ?? [];
 
-    if (healthStatus.status === "critical") {
-      alertList.push({
-        severity: "critical",
-        message: healthStatus.message,
-        timestamp: now,
-      });
-    } else if (healthStatus.status === "warning") {
-      alertList.push({
-        severity: "warning",
-        message: healthStatus.message,
-        timestamp: now,
-      });
-    }
-
-    // Check for stale data
-    if (healthStatus.apHealth) {
-      healthStatus.apHealth.forEach(ap => {
-        if (ap.lastSeen && now - ap.lastSeen > 300_000) { // 5 minutes
-          alertList.push({
-            severity: "warning",
-            message: `${ap.name} last seen > 5 minutes ago`,
-            timestamp: ap.lastSeen,
-          });
-        }
-      });
-    }
-
-    return alertList;
-  })();
+  const alerts: HealthAlert[] = switchIncidents.map((incident) => ({
+    severity: incident.severity as "critical" | "warning" | "info",
+    message: incident.note,
+    timestamp: incident.openedAt,
+  }));
 
   if (!currentSwitch) {
     return (
