@@ -34,7 +34,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const kpis = useQuery(api.operations.getKpis, {});
   const summaries = useQuery(api.operations.getRouterSummaries, {});
-  const { user } = useUserProfile();
+  const { user, isLoading: userLoading } = useUserProfile();
   const isPlatformUser = user?.isPlatform === true;
   const [selectedRouterId, setSelectedRouterId] = useState<Id<"routers"> | null>(null);
   const [selectedAccessPoint, setSelectedAccessPoint] = useState<{ id: Id<"accessPoints">; name: string } | null>(null);
@@ -42,6 +42,9 @@ export default function DashboardPage() {
   const [compact, setCompact] = useState(false);
   const accessPointUsers = useQuery(api.operations.getAccessPointUsers, selectedAccessPoint?.id ? { accessPointId: selectedAccessPoint.id } : "skip");
 
+  // Handle user not found or loading
+  if (userLoading) return <div className="workspace-page"><div className="loading-panel workspace-card"><Activity aria-hidden="true" size={22} />Loading your profile…</div></div>;
+  if (!user) return <div className="workspace-page"><div className="loading-panel workspace-card"><p>Your profile is being set up. Please wait a moment and reload the page.</p></div></div>;
   if (!kpis || !summaries) return <div className="workspace-page"><div className="loading-panel workspace-card"><Activity aria-hidden="true" size={22} />Loading the operational overview…</div></div>;
 
   const visibleRouters = summaries.filter((entry) => !selectedRouterId || entry._id === selectedRouterId);
