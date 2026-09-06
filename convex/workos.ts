@@ -64,18 +64,19 @@ type WorkosMembership = {
   status: string;
 };
 
-async function getActivePlatformMembership(workosUserId: string): Promise<WorkosMembership | null> {
+async function getPlatformMembership(workosUserId: string): Promise<WorkosMembership | null> {
   const payload = (await workosFetch(
-    `/user_management/users/${encodeURIComponent(workosUserId)}/organization_memberships`,
+    `/user_management/organization_memberships` +
+      `?organization_id=${encodeURIComponent(platformOrganizationId())}` +
+      `&user_id=${encodeURIComponent(workosUserId)}` +
+      `&statuses=active,inactive`,
   )) as { data?: WorkosMembership[] };
-  return payload.data?.find((membership) =>
-    membership.status === "active" && membership.organization_id === platformOrganizationId(),
-  ) ?? null;
+  return payload.data?.[0] ?? null;
 }
 
 /** Update a user's WorkOS role within the configured platform organization. */
 export async function setWorkosUserRole(workosUserId: string, role: WorkosRoleName | string): Promise<void> {
-  const membership = await getActivePlatformMembership(workosUserId);
+  const membership = await getPlatformMembership(workosUserId);
   if (!membership) throw new Error("Target account is not assigned to this workspace");
   await workosFetch(
     `/user_management/organization_memberships/${encodeURIComponent(membership.id)}`,
@@ -85,8 +86,9 @@ export async function setWorkosUserRole(workosUserId: string, role: WorkosRoleNa
 
 /** Deactivate a user's platform organization membership (revokes sessions). */
 export async function deactivateWorkosMembership(workosUserId: string): Promise<void> {
-  const membership = await getActivePlatformMembership(workosUserId);
+  const membership = await getPlatformMembership(workosUserId);
   if (!membership) throw new Error("Target account is not assigned to this workspace");
+  if (membership.status !== "active") return;
   await workosFetch(
     `/user_management/organization_memberships/${encodeURIComponent(membership.id)}/deactivate`,
     { method: "PUT" },
@@ -95,8 +97,9 @@ export async function deactivateWorkosMembership(workosUserId: string): Promise<
 
 /** Reactivate a user's platform organization membership. */
 export async function reactivateWorkosMembership(workosUserId: string): Promise<void> {
-  const membership = await getActivePlatformMembership(workosUserId);
+  const membership = await getPlatformMembership(workosUserId);
   if (!membership) throw new Error("Target account is not assigned to this workspace");
+  if (membership.status === "active") return;
   await workosFetch(
     `/user_management/organization_memberships/${encodeURIComponent(membership.id)}/reactivate`,
     { method: "PUT" },
@@ -298,11 +301,11 @@ async function getOwnMembership(ctx: ActionCtx): Promise<{
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) throw new Error("Unauthenticated");
 
-  const active = await getActivePlatformMembership(identity.subject);
-  if (!active) {
+  const membership = await getPlatformMembership(identity.subject);
+  if (!membership || membership.status !== "active") {
     throw new Error("Not a member of any organization");
   }
-  return { membershipId: active.id, organizationId: active.organization_id };
+  return { membershipId: membership.id, organizationId: membership.organization_id };
 }
 
 /** Set the caller's WorkOS organization membership role. */

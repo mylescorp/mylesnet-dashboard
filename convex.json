@@ -21,13 +21,7 @@
       }
     },
     "prod": {
-      "configure": {
-        "redirectUris": [
-          "https://${buildEnv.VERCEL_PROJECT_PRODUCTION_URL}/auth/callback"
-        ],
-        "appHomepageUrl": "https://${buildEnv.VERCEL_PROJECT_PRODUCTION_URL}",
-        "corsOrigins": ["https://${buildEnv.VERCEL_PROJECT_PRODUCTION_URL}"]
-      }
+      "configure": false
     }
   }
 }
