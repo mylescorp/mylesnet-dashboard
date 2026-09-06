@@ -282,14 +282,20 @@ export async function addWorkosOrganizationMembership(
     // Get the role ID if a role slug is provided
     let roleId: string | undefined;
     if (roleSlug) {
-      const roles = await getWorkosEnvironmentRoles();
-      const role = roles.find((r) => r.slug === roleSlug);
-      if (!role) {
-        console.error(`Role ${roleSlug} not found in environment roles. Available roles:`, roles.map(r => r.slug));
-        throw new Error(`Role ${roleSlug} not found in environment`);
+      try {
+        const roles = await getWorkosEnvironmentRoles();
+        const role = roles.find((r) => r.slug === roleSlug);
+        if (!role) {
+          console.error(`Role ${roleSlug} not found in environment roles. Available roles:`, roles.map(r => r.slug));
+          throw new Error(`Role ${roleSlug} not found in environment`);
+        }
+        roleId = role.id;
+        console.log(`Resolved role ${roleSlug} to ID ${roleId}`);
+      } catch (roleError) {
+        console.error(`Failed to resolve role ${roleSlug}, will try without role:`, roleError);
+        // Continue without role if resolution fails
+        roleId = undefined;
       }
-      roleId = role.id;
-      console.log(`Resolved role ${roleSlug} to ID ${roleId}`);
     }
 
     // Use the correct WorkOS API format for AuthKit
@@ -351,7 +357,7 @@ export async function setOwnWorkosRole(ctx: ActionCtx, role: WorkosRoleName | st
  * organization. Called after first login. Idempotent — safe to call repeatedly.
  *
  * New non-owner users are automatically added to the MylesNet Platform org with the
- * platform_support role as a default. This allows new users to access the dashboard
+ * member role as a default. This allows new users to access the dashboard
  * after authentication while maintaining security through role-based permissions.
  */
 export const ensureOrgMembership = action({
@@ -381,6 +387,7 @@ export const ensureOrgMembership = action({
 
       // User is not a member - add them to the platform organization with default role
       console.log("ensureOrgMembership: Adding user to platform organization");
+      let orgAdded = false;
       try {
         await addWorkosOrganizationMembership(
           platformOrganizationId(),
@@ -388,6 +395,7 @@ export const ensureOrgMembership = action({
           "member" // Default role for new users
         );
         console.log("ensureOrgMembership: Successfully added to organization with member role");
+        orgAdded = true;
       } catch (orgError) {
         console.error("ensureOrgMembership: Failed to add to organization with member role, trying without role", orgError);
         // Fallback: try adding without a specific role (uses org default)
@@ -398,14 +406,16 @@ export const ensureOrgMembership = action({
             undefined // Use organization default role
           );
           console.log("ensureOrgMembership: Successfully added to organization with default role");
+          orgAdded = true;
         } catch (fallbackError) {
           console.error("ensureOrgMembership: Failed to add to organization even with default role", fallbackError);
-          throw new Error(`Failed to add user to organization: ${orgError instanceof Error ? orgError.message : String(orgError)}`);
+          // Continue anyway - sync the user identity so they can at least use the app
+          // They won't have org membership but will have a Convex user record
         }
       }
 
-      // Sync their identity after adding to organization
-      console.log("ensureOrgMembership: Syncing identity after organization membership");
+      // Sync their identity regardless of whether org membership succeeded
+      console.log("ensureOrgMembership: Syncing identity after organization membership attempt");
       await ctx.runMutation(internal.platformUsers.syncWorkosIdentity, {
         workosUserId: identity.subject,
         email: identity.email,
@@ -414,7 +424,9 @@ export const ensureOrgMembership = action({
       });
 
       console.log("ensureOrgMembership: Complete");
-      return { status: "added_member" as const, organizationId: platformOrganizationId() };
+      return orgAdded 
+        ? { status: "added_member" as const, organizationId: platformOrganizationId() }
+        : { status: "synced_only" as const, reason: "User synced to Convex but not added to organization" };
     } catch (error) {
       console.error("ensureOrgMembership: Organization membership error:", error);
       const errorMessage = error instanceof Error ? error.message : String(error);
