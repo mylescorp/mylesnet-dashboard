@@ -4,6 +4,7 @@ import { action, internalMutation, internalQuery, mutation, query } from "./_gen
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 import { requirePermission, resolveRoles, resolveUserByIdentity } from "./lib/auth";
+import { workosSlugForRole } from "./lib/permissions";
 import {
   addWorkosOrganizationMembership,
   createWorkosUser,
@@ -526,8 +527,16 @@ export const createUser = action({
     const existing = await ctx.runQuery(internal.platformUsers.getUserByEmail, { email });
     if (existing) throw new Error(`A user for ${email} already exists in the directory.`);
 
-    const roleIds = args.roleIds ?? [];
-    const roles = await ctx.runQuery(internal.platformUsers.getRolesByIds, { roleIds });
+    let roleIds = args.roleIds ?? [];
+    let roles = await ctx.runQuery(internal.platformUsers.getRolesByIds, { roleIds });
+    // Every directory-created account gets an explicit baseline role. This is
+    // required both for local authorization and the WorkOS membership claim.
+    if (roles.length === 0) {
+      const memberRole = await ctx.runQuery(internal.rolesInternal.getRoleBySlug, { slug: "member" });
+      if (!memberRole) throw new Error("The default member role has not been seeded.");
+      roleIds = [memberRole._id];
+      roles = [memberRole];
+    }
     if (roles.some((role) => role.slug === "platform_owner")) {
       throw new Error("The owner role can only be assigned during bootstrap.");
     }
@@ -538,16 +547,13 @@ export const createUser = action({
     let workosUserId = await getWorkosUserByEmail(email);
     if (!workosUserId) workosUserId = await createWorkosUser(email);
 
-    const membershipRole = primary?.workosRoleSlug ?? undefined;
-    try {
-      await addWorkosOrganizationMembership(
-        platformOrganizationIdForRoleSync(),
-        workosUserId,
-        membershipRole,
-      );
-    } catch {
-      // Membership provisioning is best-effort; the directory row already exists.
-    }
+    const membershipRole = primary?.workosRoleSlug ?? (primary ? workosSlugForRole(primary) : undefined);
+    if (!membershipRole) throw new Error("The selected role is not synchronized to WorkOS.");
+    await addWorkosOrganizationMembership(
+      platformOrganizationIdForRoleSync(),
+      workosUserId,
+      membershipRole,
+    );
 
     const userId = (await ctx.runMutation(internal.platformUsers.createUserLocal, {
       workosUserId,

@@ -33,6 +33,11 @@ function workosAuth() {
 
 const WORKOS_API = "https://api.workos.com";
 
+// WorkOS includes role permissions in AuthKit session claims. Application
+// authorization is enforced from Convex role records, so keep this projection
+// deliberately small to remain under AuthKit's token-size limit.
+export const WORKOS_AUTHKIT_BASELINE_PERMISSION = "dashboard:access";
+
 async function workosFetch(
   path: string,
   init: RequestInit = {},
@@ -62,7 +67,13 @@ type WorkosMembership = {
   id: string;
   organization_id: string;
   status: string;
+  role?: { slug?: string };
+  roles?: Array<{ slug?: string }>;
 };
+
+function membershipRoleSlug(membership: WorkosMembership): string | undefined {
+  return membership.role?.slug ?? membership.roles?.[0]?.slug;
+}
 
 async function getPlatformMembership(workosUserId: string): Promise<WorkosMembership | null> {
   const payload = (await workosFetch(
@@ -272,55 +283,35 @@ export async function createWorkosUser(email: string): Promise<string> {
   return payload.id;
 }
 
-/** Add a user to an organization with an optional role slug. Returns the new membership id. */
+/**
+ * Add a user to an organization with a role.
+ *
+ * WorkOS expects `user_id` and `role_slug` here.  Do not retry without a
+ * role: that creates an active but un-authorized membership and makes the
+ * subsequent sign-in state depend on an eventual manual repair.
+ */
 export async function addWorkosOrganizationMembership(
   organizationId: string,
   workosUserId: string,
-  roleSlug?: string,
-): Promise<string | null> {
-  try {
-    // Get the role ID if a role slug is provided
-    let roleId: string | undefined;
-    if (roleSlug) {
-      try {
-        const roles = await getWorkosEnvironmentRoles();
-        const role = roles.find((r) => r.slug === roleSlug);
-        if (!role) {
-          console.error(`Role ${roleSlug} not found in environment roles. Available roles:`, roles.map(r => r.slug));
-          throw new Error(`Role ${roleSlug} not found in environment`);
-        }
-        roleId = role.id;
-        console.log(`Resolved role ${roleSlug} to ID ${roleId}`);
-      } catch (roleError) {
-        console.error(`Failed to resolve role ${roleSlug}, will try without role:`, roleError);
-        // Continue without role if resolution fails
-        roleId = undefined;
-      }
-    }
-
-    // Use the correct WorkOS API format for AuthKit
-    const body: Record<string, string> = {
+  roleSlug: string,
+): Promise<WorkosMembership> {
+  if (!roleSlug) throw new Error("A WorkOS role is required for a new membership");
+  const payload = (await workosFetch("/user_management/organization_memberships", {
+    method: "POST",
+    body: JSON.stringify({
       organization_id: organizationId,
-      userland_user_id: workosUserId,
-    };
-    if (roleId) body.role_id = roleId;
-
-    console.log("Adding user to organization:", { organizationId, workosUserId, roleId, roleSlug });
-
-    const payload = (await workosFetch("/user_management/organization_memberships", {
-      method: "POST",
-      body: JSON.stringify(body),
-    })) as { id?: unknown };
-    if (typeof payload.id !== "string") {
-      throw new Error("WorkOS did not return a membership id");
-    }
-    console.log("Successfully added user to organization, membership ID:", payload.id);
-    return payload.id;
-  } catch (error) {
-    console.error("Failed to add user to organization:", error);
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    throw new Error(`Failed to add user to organization: ${errorMessage}`);
+      user_id: workosUserId,
+      role_slug: roleSlug,
+    }),
+  })) as Partial<WorkosMembership>;
+  if (
+    typeof payload.id !== "string" ||
+    typeof payload.organization_id !== "string" ||
+    typeof payload.status !== "string"
+  ) {
+    throw new Error("WorkOS did not return a valid organization membership");
   }
+  return payload as WorkosMembership;
 }
 
 /**
@@ -370,63 +361,46 @@ export const ensureOrgMembership = action({
         return { status: "unauthenticated" as const };
       }
 
-      const orgId = (identity as Record<string, unknown>)["organization_id"] as string | undefined;
-      console.log("ensureOrgMembership: Identity found", { subject: identity.subject, email: identity.email, orgId });
+      const platformOrgId = platformOrganizationId();
+      let membership = await getPlatformMembership(identity.subject);
+      let status: "already_member" | "added_member" = "already_member";
 
-      if (orgId && orgId === platformOrganizationId()) {
-        // User is already a member - sync their identity
-        console.log("ensureOrgMembership: User already member, syncing identity");
-        await ctx.runMutation(internal.platformUsers.syncWorkosIdentity, {
-          workosUserId: identity.subject,
-          email: identity.email,
-          name: typeof identity.name === "string" ? identity.name : undefined,
-          image: typeof identity.picture === "string" ? identity.picture : undefined,
-        });
-        return { status: "already_member" as const, organizationId: orgId };
+      if (!membership) {
+        membership = await addWorkosOrganizationMembership(platformOrgId, identity.subject, "member");
+        status = "added_member";
+      } else if (membership.status !== "active") {
+        await reactivateWorkosMembership(identity.subject);
+        membership = await getPlatformMembership(identity.subject);
+        if (!membership) throw new Error("WorkOS did not return the reactivated membership");
       }
 
-      // User is not a member - add them to the platform organization with default role
-      console.log("ensureOrgMembership: Adding user to platform organization");
-      let orgAdded = false;
-      try {
-        await addWorkosOrganizationMembership(
-          platformOrganizationId(),
-          identity.subject,
-          "member" // Default role for new users
-        );
-        console.log("ensureOrgMembership: Successfully added to organization with member role");
-        orgAdded = true;
-      } catch (orgError) {
-        console.error("ensureOrgMembership: Failed to add to organization with member role, trying without role", orgError);
-        // Fallback: try adding without a specific role (uses org default)
-        try {
-          await addWorkosOrganizationMembership(
-            platformOrganizationId(),
-            identity.subject,
-            undefined // Use organization default role
-          );
-          console.log("ensureOrgMembership: Successfully added to organization with default role");
-          orgAdded = true;
-        } catch (fallbackError) {
-          console.error("ensureOrgMembership: Failed to add to organization even with default role", fallbackError);
-          // Continue anyway - sync the user identity so they can at least use the app
-          // They won't have org membership but will have a Convex user record
-        }
+      // Memberships without a role are an invalid state. Repair only the empty
+      // assignment; never downgrade a role selected by an administrator.
+      let roleSlug = membershipRoleSlug(membership);
+      if (!roleSlug) {
+        await setWorkosUserRole(identity.subject, "member");
+        membership = await getPlatformMembership(identity.subject);
+        if (!membership) throw new Error("WorkOS did not return the role-updated membership");
+        roleSlug = membershipRoleSlug(membership);
+        if (!roleSlug) throw new Error("WorkOS did not assign the default member role");
       }
 
-      // Sync their identity regardless of whether org membership succeeded
-      console.log("ensureOrgMembership: Syncing identity after organization membership attempt");
       await ctx.runMutation(internal.platformUsers.syncWorkosIdentity, {
         workosUserId: identity.subject,
         email: identity.email,
         name: typeof identity.name === "string" ? identity.name : undefined,
         image: typeof identity.picture === "string" ? identity.picture : undefined,
       });
-
-      console.log("ensureOrgMembership: Complete");
-      return orgAdded 
-        ? { status: "added_member" as const, organizationId: platformOrganizationId() }
-        : { status: "synced_only" as const, reason: "User synced to Convex but not added to organization" };
+      await ctx.runMutation(internal.platformUsers.recordOrganizationMembership, {
+        workosMembershipId: membership.id,
+        workosUserId: identity.subject,
+        organizationId: platformOrgId,
+        roleSlug,
+        status: membership.status === "inactive" ? "inactive" : membership.status === "pending" ? "pending" : "active",
+        email: identity.email,
+        name: typeof identity.name === "string" ? identity.name : undefined,
+      });
+      return { status, organizationId: platformOrgId, roleSlug };
     } catch (error) {
       console.error("ensureOrgMembership: Organization membership error:", error);
       const errorMessage = error instanceof Error ? error.message : String(error);

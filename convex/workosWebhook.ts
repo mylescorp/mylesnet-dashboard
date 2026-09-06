@@ -26,6 +26,21 @@ function pickNumber(record: EventPayload, keys: string[]): number | null {
   return null;
 }
 
+function pickRoleSlug(record: EventPayload): string | null {
+  const direct = pickString(record, ["role_slug", "roleSlug"]);
+  if (direct) return direct;
+  const role = asRecord(record.role);
+  const fromRole = role ? pickString(role, ["slug"]) : null;
+  if (fromRole) return fromRole;
+  const roles = record.roles;
+  if (!Array.isArray(roles)) return null;
+  for (const candidate of roles) {
+    const slug = asRecord(candidate) ? pickString(asRecord(candidate)!, ["slug"]) : null;
+    if (slug) return slug;
+  }
+  return null;
+}
+
 function parseWosTimestamp(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value) {
@@ -99,7 +114,7 @@ export const processWorkosEvent = internalMutation({
       const membershipId = pickString(payload, ["id"]);
       const organizationId = pickString(payload, ["organization_id", "organizationId"]);
       const workosUserId = pickString(payload, ["user_id", "userId"]);
-      const roleSlug = pickString(payload, ["role_slug", "roleSlug"]) ?? pickString(payload, ["role", "slug"]);
+      const roleSlug = pickRoleSlug(payload);
       const statusValue = pickString(payload, ["status"]);
       const status = statusValue === "inactive" ? "inactive" : statusValue === "pending" ? "pending" : "active";
       const email = pickString(payload, ["user_email", "email"]);

@@ -12,6 +12,7 @@ import {
   platformOrganizationIdForRoleSync,
   setWorkosOrganizationRolePermissions,
   updateWorkosOrganizationRole,
+  WORKOS_AUTHKIT_BASELINE_PERMISSION,
 } from "./workos";
 
 export const rolePermissionValidator = v.array(v.string());
@@ -219,7 +220,7 @@ export const createRole = action({
 
     const workosRoleId = await createWorkosOrganizationRole(organizationId, workosSlug, name, args.description);
     try {
-      await setWorkosOrganizationRolePermissions(organizationId, workosSlug, args.permissions);
+      await setWorkosOrganizationRolePermissions(organizationId, workosSlug, [WORKOS_AUTHKIT_BASELINE_PERMISSION]);
     } catch {
       // WorkOS role-permission sync is best-effort; Convex remains authoritative.
     }
@@ -304,7 +305,7 @@ export const updateRole = action({
     try {
       await updateWorkosOrganizationRole(organizationId, workosSlug, name, description);
       try {
-        await setWorkosOrganizationRolePermissions(organizationId, workosSlug, permissions);
+        await setWorkosOrganizationRolePermissions(organizationId, workosSlug, [WORKOS_AUTHKIT_BASELINE_PERMISSION]);
       } catch {
         // best-effort
       }
