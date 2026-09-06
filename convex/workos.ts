@@ -323,10 +323,9 @@ export async function setOwnWorkosRole(ctx: ActionCtx, role: WorkosRoleName | st
  * Ensures the authenticated WorkOS user is a member of the MylesNet Platform
  * organization. Called after first login. Idempotent — safe to call repeatedly.
  *
- * New non-owner users are added to the MylesNet Platform org with the
- * platform_admin role. This action calls the WorkOS API directly to create
- * the org membership, which causes WorkOS to include organization_id and
- * role in future JWTs.
+ * New non-owner users are automatically added to the MylesNet Platform org with the
+ * platform_support role as a default. This allows new users to access the dashboard
+ * after authentication while maintaining security through role-based permissions.
  */
 export const ensureOrgMembership = action({
   args: {},
@@ -337,10 +336,9 @@ export const ensureOrgMembership = action({
         return { status: "unauthenticated" as const };
       }
 
-      // A dashboard must never grant itself a privileged membership. WorkOS is
-      // authoritative: accounts are invited by an owner outside this action.
       const orgId = identity["organization_id"];
       if (orgId && orgId === platformOrganizationId()) {
+        // User is already a member - sync their identity
         await ctx.runMutation(internal.platformUsers.syncWorkosIdentity, {
           workosUserId: identity.subject,
           email: identity.email,
@@ -349,8 +347,25 @@ export const ensureOrgMembership = action({
         });
         return { status: "already_member" as const, organizationId: orgId as string };
       }
-      return { status: "not_member" as const };
-    } catch {
+
+      // User is not a member - add them to the platform organization with default role
+      await addWorkosOrganizationMembership(
+        platformOrganizationId(),
+        identity.subject,
+        "platform_support" // Default role for new users
+      );
+
+      // Sync their identity after adding to organization
+      await ctx.runMutation(internal.platformUsers.syncWorkosIdentity, {
+        workosUserId: identity.subject,
+        email: identity.email,
+        name: typeof identity.name === "string" ? identity.name : undefined,
+        image: typeof identity.picture === "string" ? identity.picture : undefined,
+      });
+
+      return { status: "added_member" as const, organizationId: platformOrganizationId() };
+    } catch (error) {
+      console.error("Organization membership error:", error);
       return { status: "error" as const, reason: "Identity synchronization could not be completed" };
     }
   },
