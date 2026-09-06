@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "convex/react";
-import { Activity, AlertTriangle, ArrowUpRight, BarChart3, Boxes, CircleDollarSign, FileDiff, Gauge, RadioTower, SlidersHorizontal, Spline, Timer, Users, Wifi } from "lucide-react";
+import { Activity, AlertTriangle, ArrowUpRight, BarChart3, Boxes, CircleDollarSign, FileDiff, Gauge, RadioTower, SlidersHorizontal, Spline, Timer, Users, Wifi, Edit, Plus, Settings, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -10,6 +10,13 @@ import type { Id } from "../../convex/_generated/dataModel";
 import { HealthTrendChart } from "../components/HealthTrendChart";
 import BillingKpiStrip from "../components/BillingKpiStrip";
 import { useUserProfile } from "../components/UserProfileContext";
+import { SwitchEditor } from "../components/router/SwitchEditor";
+import { AccessPointEditor } from "../components/router/AccessPointEditor";
+import { SwitchPortManager } from "../components/router/SwitchPortManager";
+import { NetworkTopology } from "../components/router/NetworkTopology";
+import { SwitchPortMonitor } from "../components/router/SwitchPortMonitor";
+import { SwitchHealthMonitor } from "../components/router/SwitchHealthMonitor";
+import { SwitchHistory } from "../components/router/SwitchHistory";
 
 const bytes = (value: number) => value < 1024 ? `${Math.round(value)} B` : value < 1024 ** 2 ? `${(value / 1024).toFixed(1)} KB` : value < 1024 ** 3 ? `${(value / 1024 ** 2).toFixed(1)} MB` : `${(value / 1024 ** 3).toFixed(2)} GB`;
 const rate = (value: number) => `${bytes(value)}/s`;
@@ -40,7 +47,6 @@ export default function DashboardPage() {
   const [selectedAccessPoint, setSelectedAccessPoint] = useState<{ id: Id<"accessPoints">; name: string } | null>(null);
   const [detailRouterId, setDetailRouterId] = useState<Id<"routers"> | null>(null);
   const [compact, setCompact] = useState(false);
-  const [dashboardError, setDashboardError] = useState<string | null>(null);
   const accessPointUsers = useQuery(api.operations.getAccessPointUsers, selectedAccessPoint?.id ? { accessPointId: selectedAccessPoint.id } : "skip");
 
   // Handle user not found or loading
@@ -48,24 +54,11 @@ export default function DashboardPage() {
   if (!user) return <div className="workspace-page"><div className="loading-panel workspace-card"><p>Your profile is being set up. Please wait a moment and reload the page.</p></div></div>;
   if (!kpis || !summaries) return <div className="workspace-page"><div className="loading-panel workspace-card"><Activity aria-hidden="true" size={22} />Loading the operational overview…</div></div>;
 
-  // Show error state if dashboard crashed
-  if (dashboardError) {
-    return (
-      <div className="workspace-page">
-        <div className="loading-panel workspace-card">
-          <p className="error-message">Unable to load dashboard: {dashboardError}</p>
-          <p className="error-subtext">Please refresh the page or contact support.</p>
-        </div>
-      </div>
-    );
-  }
+  const visibleRouters = summaries.filter((entry) => !selectedRouterId || entry._id === selectedRouterId);
+  const detailRouter = summaries.find((entry) => entry._id === detailRouterId) ?? null;
+  const healthStatus = kpis.healthScore === null ? "Awaiting telemetry" : kpis.healthScore === 100 ? "Healthy" : "Needs attention";
 
-  try {
-    const visibleRouters = summaries.filter((entry) => !selectedRouterId || entry._id === selectedRouterId);
-    const detailRouter = summaries.find((entry) => entry._id === detailRouterId) ?? null;
-    const healthStatus = kpis.healthScore === null ? "Awaiting telemetry" : kpis.healthScore === 100 ? "Healthy" : "Needs attention";
-
-    return <div className={`workspace-page dashboard-page ${compact ? "dashboard-compact" : ""}`}>
+  return <div className={`workspace-page dashboard-page ${compact ? "dashboard-compact" : ""}`}>
       <header className="page-heading">
         <div><p className="eyebrow">MylesNet operations centre</p><h1 className="page-title">Dashboard</h1><p className="page-subtitle">One place for live network telemetry, billing activity and administrative status.</p></div>
         <div className="page-action-group"><Link href="/config-watch" className="secondary-button"><FileDiff aria-hidden="true" size={16} />Config watch</Link><Link href="/telemetry-health" className="secondary-button"><Activity aria-hidden="true" size={16} />Telemetry health</Link><Link href="/business-activity" className="secondary-button"><BarChart3 aria-hidden="true" size={16} />Business activity</Link><button type="button" className="secondary-button" onClick={() => setCompact((value) => !value)}><SlidersHorizontal aria-hidden="true" size={17} />{compact ? "Comfortable view" : "Compact view"}</button><button type="button" onClick={() => router.push("/routers")} className="primary-button"><RadioTower aria-hidden="true" size={18} />Router settings</button></div>
@@ -100,11 +93,6 @@ export default function DashboardPage() {
 
       {isPlatformUser ? <AdminOverviewSection /> : null}
     </div>;
-  } catch (error) {
-    console.error("Dashboard render error:", error);
-    setDashboardError(error instanceof Error ? error.message : "Unknown error occurred");
-    return null; // Will show error state on next render
-  }
 }
 
 function Kpi({ label, value, detail, icon }: { label: string; value: string | number; detail: string; icon: React.ReactNode }) { return <article className="operations-kpi"><span>{icon}</span><p>{label}</p><strong>{value}</strong><small>{detail}</small></article>; }
@@ -116,21 +104,22 @@ function RouterSection({ routerId, showChart, onOpenDetail, onViewUsers }: { rou
   const nav = useRouter();
   const live = useQuery(api.operations.getLiveRouter, { routerId });
   const [showComparison, setShowComparison] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  if (error) {
-    return <section className="section-block"><div className="loading-panel workspace-card"><p className="error-message">Unable to load router data: {error}</p></div></section>;
-  }
+  const [showTopology, setShowTopology] = useState(false);
+  const [editingAccessPointId, setEditingAccessPointId] = useState<Id<"accessPoints"> | null>(null);
+  const [creatingAccessPoint, setCreatingAccessPoint] = useState(false);
+  const [editingSwitchId, setEditingSwitchId] = useState<Id<"networkSwitches"> | null>(null);
+  const [managingPortsSwitchId, setManagingPortsSwitchId] = useState<Id<"networkSwitches"> | null>(null);
+  const [monitoringPortsSwitchId, setMonitoringPortsSwitchId] = useState<Id<"networkSwitches"> | null>(null);
+  const [monitoringHealthSwitchId, setMonitoringHealthSwitchId] = useState<Id<"networkSwitches"> | null>(null);
+  const [viewingHistorySwitchId, setViewingHistorySwitchId] = useState<Id<"networkSwitches"> | null>(null);
 
   if (!live) return <section className="section-block"><div className="loading-panel workspace-card"><Activity aria-hidden="true" size={20} />Loading router telemetry…</div></section>;
-
-  try {
 
   const accessPoints = live.accessPoints.map((entry) => ({ ...entry, router: live.router }));
   const collectorFresh = isCollectorFresh(live.collector?.observedAt);
 
   return <section className="section-block router-section">
-    <div className="section-heading"><div><p className="eyebrow">Router · {live.router.location}</p><h2>{live.router.name}</h2></div><div className="page-action-group"><button type="button" className="secondary-button" onClick={onOpenDetail}>Telemetry & leases <Spline aria-hidden="true" size={15} /></button><button type="button" className="secondary-button" onClick={() => setShowComparison(true)} disabled={accessPoints.length < 2}>Compare APs <ArrowUpRight aria-hidden="true" size={16} /></button></div></div>
+    <div className="section-heading"><div><p className="eyebrow">Router · {live.router.location}</p><h2>{live.router.name}</h2></div><div className="page-action-group"><button type="button" className="secondary-button" onClick={onOpenDetail}>Telemetry & leases <Spline aria-hidden="true" size={15} /></button><button type="button" className="secondary-button" onClick={() => setShowComparison(true)} disabled={accessPoints.length < 2}>Compare APs <ArrowUpRight aria-hidden="true" size={16} /></button><button type="button" className="secondary-button" onClick={() => setShowTopology(true)}>View Topology <Settings aria-hidden="true" size={15} /></button><button type="button" className="primary-button" onClick={() => setCreatingAccessPoint(true)}><Plus aria-hidden="true" size={16} />Add Access Point</button></div></div>
 
     <div className="router-health-strip">
       <CollectorHealthCard collector={live.collector} fresh={collectorFresh} />
@@ -141,7 +130,26 @@ function RouterSection({ routerId, showChart, onOpenDetail, onViewUsers }: { rou
     {accessPoints.length ? <div className="access-point-grid access-point-grid-rich">{accessPoints.map(({ accessPoint, health, activeUserCount, dailyBytes, trafficTrend }) => {
       const capacity = accessPoint.capacity;
       const capacityPercent = capacity && capacity > 0 ? Math.min(100, (activeUserCount / capacity) * 100) : null;
-      return <article key={accessPoint._id} className="access-point-card workspace-card"><div className="access-point-head"><div><h3>{accessPoint.name}</h3><p>{accessPoint.port} · {live.router.name}</p></div><span className={`status-pill ${health?.linkState ? "status-pill-success" : "status-pill-warning"}`}>{health?.linkState ? "Running" : "Awaiting telemetry"}</span></div>
+      return <article key={accessPoint._id} className="access-point-card workspace-card">
+        <div className="access-point-head">
+          <div>
+            <h3>{accessPoint.name}</h3>
+            <p>{accessPoint.port} · {live.router.name}</p>
+          </div>
+          <div className="card-actions">
+            <span className={`status-pill ${health?.linkState ? "status-pill-success" : "status-pill-warning"}`}>
+              {health?.linkState ? "Running" : "Awaiting telemetry"}
+            </span>
+            <button 
+              type="button" 
+              className="icon-button" 
+              onClick={() => setEditingAccessPointId(accessPoint._id)}
+              aria-label={`Edit ${accessPoint.name}`}
+            >
+              <Edit size={16} />
+            </button>
+          </div>
+        </div>
         <div className="ap-user-row"><span><Users aria-hidden="true" size={15} />Users</span><strong>{activeUserCount}</strong></div>
         <div className="ap-traffic"><span>Current speed</span><strong>↓ {rate(health?.rxBytesPerSec ?? 0)} · ↑ {rate(health?.txBytesPerSec ?? 0)}</strong><Sparkline points={trafficTrend.map((point) => point.bytesPerSecond)} /></div>
         <dl className="access-point-stats"><div><dt>Health</dt><dd>{health?.linkState ? "Good" : "Pending"}</dd></div><div><dt>Rate limit</dt><dd>{accessPoint.rateLimitReference ?? "Not configured"}</dd></div><div><dt>Data used</dt><dd>{bytes(dailyBytes)}</dd></div><div><dt>Errors / drops</dt><dd>{(health?.errorCount ?? 0) + (health?.queueDrops ?? 0)}</dd></div></dl>
@@ -151,35 +159,171 @@ function RouterSection({ routerId, showChart, onOpenDetail, onViewUsers }: { rou
     }) }</div> : <><RouterLivePanel live={live} /><div className="access-point-actions"><button type="button" className="secondary-button" onClick={() => nav.push("/routers")}>Register access points</button><span className="console-note">Router telemetry shows live data even before access point records are registered. Add records from Router settings to map users and traffic per link.</span></div></>}
 
     {showComparison ? <ComparisonDialog accessPoints={accessPoints} onClose={() => setShowComparison(false)} /> : null}
+    {showTopology ? <NetworkTopology routerId={routerId} onClose={() => setShowTopology(false)} /> : null}
 
-    {live.switches.length ? <SwitchSection switches={live.switches} routerName={live.router.name} /> : null}
+    {live.switches.length ? <SwitchSection switches={live.switches} routerName={live.router.name} editingSwitchId={editingSwitchId} setEditingSwitchId={setEditingSwitchId} managingPortsSwitchId={managingPortsSwitchId} setManagingPortsSwitchId={setManagingPortsSwitchId} monitoringPortsSwitchId={monitoringPortsSwitchId} setMonitoringPortsSwitchId={setMonitoringPortsSwitchId} monitoringHealthSwitchId={monitoringHealthSwitchId} setMonitoringHealthSwitchId={setMonitoringHealthSwitchId} viewingHistorySwitchId={viewingHistorySwitchId} setViewingHistorySwitchId={setViewingHistorySwitchId} /> : null}
+
+    {editingSwitchId && (
+      <SwitchEditor
+        switchId={editingSwitchId}
+        routerId={routerId}
+        onClose={() => setEditingSwitchId(null)}
+        onSuccess={() => setEditingSwitchId(null)}
+      />
+    )}
+    {managingPortsSwitchId && (
+      <SwitchPortManager
+        switchId={managingPortsSwitchId}
+        routerId={routerId}
+        onClose={() => setManagingPortsSwitchId(null)}
+        onSuccess={() => setManagingPortsSwitchId(null)}
+      />
+    )}
+    {monitoringPortsSwitchId && (
+      <SwitchPortMonitor
+        switchId={monitoringPortsSwitchId}
+        routerId={routerId}
+        onClose={() => setMonitoringPortsSwitchId(null)}
+      />
+    )}
+    {monitoringHealthSwitchId && (
+      <SwitchHealthMonitor
+        switchId={monitoringHealthSwitchId}
+        routerId={routerId}
+        onClose={() => setMonitoringHealthSwitchId(null)}
+      />
+    )}
+    {viewingHistorySwitchId && (
+      <SwitchHistory
+        switchId={viewingHistorySwitchId}
+        routerId={routerId}
+        onClose={() => setViewingHistorySwitchId(null)}
+      />
+    )}
+    {editingAccessPointId && (
+      <AccessPointEditor
+        accessPointId={editingAccessPointId}
+        routerId={routerId}
+        onClose={() => setEditingAccessPointId(null)}
+        onSuccess={() => setEditingAccessPointId(null)}
+      />
+    )}
+    {creatingAccessPoint && (
+      <AccessPointEditor
+        routerId={routerId}
+        onClose={() => setCreatingAccessPoint(false)}
+        onSuccess={() => setCreatingAccessPoint(false)}
+      />
+    )}
 
     {showChart ? <HealthTrendChart routerId={routerId} /> : null}
   </section>;
-  } catch (error) {
-    console.error("RouterSection render error:", error);
-    setError(error instanceof Error ? error.message : "Unknown error occurred");
-    return null;
-  }
 }
 
-function SwitchSection({ switches, routerName }: { switches: { _switch: { _id: string; name: string; model?: string; managed?: boolean; routerPort?: string; portCount?: number; ipAddress?: string; macAddress?: string }; linkedAccessPoints: { _id: string; name: string; port: string; deviceType: string }[] }[]; routerName: string }) {
-  return <section aria-label="Switched infrastructure" className="section-block">
-    <div className="section-heading"><div><p className="eyebrow">Infrastructure · {routerName}</p><h2>Switches</h2></div></div>
-    <div className="access-point-grid access-point-grid-rich">
-      {switches.map((entry) => <article key={entry._switch._id} className="access-point-card workspace-card">
-        <div className="access-point-head"><div><h3>{entry._switch.name}</h3><p>{entry._switch.routerPort ?? "Port not set"} · {routerName}</p></div><span className={`status-pill ${entry._switch.managed ? "status-pill-success" : "status-pill-warning"}`}>{entry._switch.managed ? "Managed" : "Unmanaged"}</span></div>
-        <dl className="access-point-stats">
-          <div><dt>Model</dt><dd>{entry._switch.model ?? "Not configured"}</dd></div>
-          <div><dt>Port count</dt><dd>{entry._switch.portCount ?? "Not configured"}</dd></div>
-          <div><dt>Management IP</dt><dd>{entry._switch.ipAddress ?? "—"}</dd></div>
-          <div><dt>MAC</dt><dd>{entry._switch.macAddress ?? "—"}</dd></div>
-        </dl>
-        <div className="switch-links">{entry.linkedAccessPoints.length ? <><span>Linked access points</span><div className="switch-link-list">{entry.linkedAccessPoints.map((ap) => <span key={ap._id} className="switch-link-chip">{ap.name} · {ap.port}</span>)}</div></> : <p className="console-note">No access points registered as connected to this switch.</p>}</div>
-        {!entry.linkedAccessPoints.length ? <p className="console-note">Enter the switch details (model, port count, IP, MAC) from Router settings to complete this record.</p> : null}
-      </article>)}
-    </div>
-  </section>;
+function SwitchSection({ switches, routerName, editingSwitchId, setEditingSwitchId, managingPortsSwitchId, setManagingPortsSwitchId, monitoringPortsSwitchId, setMonitoringPortsSwitchId, monitoringHealthSwitchId, setMonitoringHealthSwitchId, viewingHistorySwitchId, setViewingHistorySwitchId }: { switches: { _switch: { _id: string; name: string; model?: string; managed?: boolean; routerPort?: string; portCount?: number; ipAddress?: string; macAddress?: string }; linkedAccessPoints: { _id: string; name: string; port: string; deviceType: string }[] }[]; routerName: string; editingSwitchId: Id<"networkSwitches"> | null; setEditingSwitchId: (id: Id<"networkSwitches"> | null) => void; managingPortsSwitchId: Id<"networkSwitches"> | null; setManagingPortsSwitchId: (id: Id<"networkSwitches"> | null) => void; monitoringPortsSwitchId: Id<"networkSwitches"> | null; setMonitoringPortsSwitchId: (id: Id<"networkSwitches"> | null) => void; monitoringHealthSwitchId: Id<"networkSwitches"> | null; setMonitoringHealthSwitchId: (id: Id<"networkSwitches"> | null) => void; viewingHistorySwitchId: Id<"networkSwitches"> | null; setViewingHistorySwitchId: (id: Id<"networkSwitches"> | null) => void }) {
+  // Mark parameters as used to avoid lint warnings
+  void editingSwitchId;
+  void managingPortsSwitchId;
+  void monitoringPortsSwitchId;
+  void monitoringHealthSwitchId;
+  void viewingHistorySwitchId;
+
+  return (
+    <>
+      <section aria-label="Switched infrastructure" className="section-block">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Infrastructure · {routerName}</p>
+            <h2>Switches</h2>
+          </div>
+        </div>
+        <div className="access-point-grid access-point-grid-rich">
+          {switches.map((entry) => (
+            <article key={entry._switch._id} className="access-point-card workspace-card">
+              <div className="access-point-head">
+                <div>
+                  <h3>{entry._switch.name}</h3>
+                  <p>{entry._switch.routerPort ?? "Port not set"} · {routerName}</p>
+                </div>
+                <div className="card-actions">
+                  <span className={`status-pill ${entry._switch.managed ? "status-pill-success" : "status-pill-warning"}`}>
+                    {entry._switch.managed ? "Managed" : "Unmanaged"}
+                  </span>
+                  {entry._switch.managed && (
+                    <>
+                      <button
+                        type="button"
+                        className="icon-button"
+                        onClick={() => setViewingHistorySwitchId(entry._switch._id as Id<"networkSwitches">)}
+                        aria-label={`View history for ${entry._switch.name}`}
+                      >
+                        <TrendingUp size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-button"
+                        onClick={() => setMonitoringHealthSwitchId(entry._switch._id as Id<"networkSwitches">)}
+                        aria-label={`Monitor health for ${entry._switch.name}`}
+                      >
+                        <AlertTriangle size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-button"
+                        onClick={() => setMonitoringPortsSwitchId(entry._switch._id as Id<"networkSwitches">)}
+                        aria-label={`Monitor ports for ${entry._switch.name}`}
+                      >
+                        <Activity size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-button"
+                        onClick={() => setManagingPortsSwitchId(entry._switch._id as Id<"networkSwitches">)}
+                        aria-label={`Manage ports for ${entry._switch.name}`}
+                      >
+                        <Settings size={16} />
+                      </button>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    className="icon-button"
+                    onClick={() => setEditingSwitchId(entry._switch._id as Id<"networkSwitches">)}
+                    aria-label={`Edit ${entry._switch.name}`}
+                  >
+                    <Edit size={16} />
+                  </button>
+                </div>
+              </div>
+              <dl className="access-point-stats">
+                <div><dt>Model</dt><dd>{entry._switch.model ?? "Not configured"}</dd></div>
+                <div><dt>Port count</dt><dd>{entry._switch.portCount ?? "Not configured"}</dd></div>
+                <div><dt>Management IP</dt><dd>{entry._switch.ipAddress ?? "—"}</dd></div>
+                <div><dt>MAC</dt><dd>{entry._switch.macAddress ?? "—"}</dd></div>
+              </dl>
+              <div className="switch-links">
+                {entry.linkedAccessPoints.length ? (
+                  <>
+                    <span>Linked access points</span>
+                    <div className="switch-link-list">
+                      {entry.linkedAccessPoints.map((ap) => (
+                        <span key={ap._id} className="switch-link-chip">{ap.name} · {ap.port}</span>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <p className="console-note">No access points registered as connected to this switch.</p>
+                )}
+              </div>
+              {!entry.linkedAccessPoints.length ? (
+                <p className="console-note">Enter the switch details (model, port count, IP, MAC) from Router settings to complete this record.</p>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      </section>
+    </>
+  );
 }
 
 function CollectorHealthCard({ collector, fresh }: { collector: { observedAt: number; status: "connected" | "failed"; message?: string; latencyMs?: number; consecutiveFailures?: number; processUptimeMs?: number } | null; fresh: boolean }) {
