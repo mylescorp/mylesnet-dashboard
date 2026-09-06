@@ -13,6 +13,8 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     "convex/_generated/**",
+    // Local HTTPS dev-proxy helper script (CommonJS, not app code).
+    "https-dev.js",
   ]),
 ]);
 
