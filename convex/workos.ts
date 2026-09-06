@@ -333,29 +333,41 @@ export const ensureOrgMembership = action({
     try {
       const identity = await ctx.auth.getUserIdentity();
       if (!identity) {
+        console.log("ensureOrgMembership: Unauthenticated");
         return { status: "unauthenticated" as const };
       }
 
-      const orgId = identity["organization_id"];
+      const orgId = (identity as Record<string, unknown>)["organization_id"] as string | undefined;
+      console.log("ensureOrgMembership: Identity found", { subject: identity.subject, email: identity.email, orgId });
+
       if (orgId && orgId === platformOrganizationId()) {
         // User is already a member - sync their identity
+        console.log("ensureOrgMembership: User already member, syncing identity");
         await ctx.runMutation(internal.platformUsers.syncWorkosIdentity, {
           workosUserId: identity.subject,
           email: identity.email,
           name: typeof identity.name === "string" ? identity.name : undefined,
           image: typeof identity.picture === "string" ? identity.picture : undefined,
         });
-        return { status: "already_member" as const, organizationId: orgId as string };
+        return { status: "already_member" as const, organizationId: orgId };
       }
 
       // User is not a member - add them to the platform organization with default role
-      await addWorkosOrganizationMembership(
-        platformOrganizationId(),
-        identity.subject,
-        "platform_support" // Default role for new users
-      );
+      console.log("ensureOrgMembership: Adding user to platform organization");
+      try {
+        await addWorkosOrganizationMembership(
+          platformOrganizationId(),
+          identity.subject,
+          "platform_support" // Default role for new users
+        );
+        console.log("ensureOrgMembership: Successfully added to organization");
+      } catch (orgError) {
+        console.error("ensureOrgMembership: Failed to add to organization", orgError);
+        throw orgError;
+      }
 
       // Sync their identity after adding to organization
+      console.log("ensureOrgMembership: Syncing identity after organization membership");
       await ctx.runMutation(internal.platformUsers.syncWorkosIdentity, {
         workosUserId: identity.subject,
         email: identity.email,
@@ -363,10 +375,12 @@ export const ensureOrgMembership = action({
         image: typeof identity.picture === "string" ? identity.picture : undefined,
       });
 
+      console.log("ensureOrgMembership: Complete");
       return { status: "added_member" as const, organizationId: platformOrganizationId() };
     } catch (error) {
-      console.error("Organization membership error:", error);
-      return { status: "error" as const, reason: "Identity synchronization could not be completed" };
+      console.error("ensureOrgMembership: Organization membership error:", error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return { status: "error" as const, reason: `Identity synchronization failed: ${errorMessage}` };
     }
   },
 });

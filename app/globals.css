@@ -280,6 +280,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .quick-actions > div { display: grid; gap: 8px; }
 .quick-actions .secondary-button { justify-content: flex-start; }
 .loading-panel { display: flex; min-height: 180px; align-items: center; justify-content: center; gap: 10px; color: var(--muted); font-size: 14px; }
+.loading-panel .error-message { color: var(--danger); font-weight: 700; margin-bottom: 8px; }
+.loading-panel .error-subtext { color: var(--muted); font-size: 12px; }
 
 .trend-card { padding: 20px; }.trend-card h3 { margin: 0; color: var(--text); font-size: 19px; letter-spacing: -.02em; }
 .trend-empty { margin: 22px 0 0; border: 1px dashed var(--line-strong); border-radius: 8px; padding: 16px; color: var(--muted); font-size: 13px; }
