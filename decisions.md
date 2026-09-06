@@ -307,3 +307,40 @@ the browser console showed generic "Server Error" for
    A clean exit means the write succeeded.
 4. Remember which deployment `convex run` / queries target: add `--prod` for
    production, omit it for the local dev deployment.
+
+## Access point user / traffic attribution fix (2026-09-06)
+
+Reported: AP cards on the dashboard show the "Users" section empty and no per-AP
+data/Speed/GB. Diagnosis found the hotspot server is bridged
+(`centipid-hotspot` on `centipid-bridge`), so RouterOS `/ip/hotspot/active`
+entries carry NO `interface` field, while the collector's
+`normalizeHotspotSessions` read only that missing field and set
+`interfaceName` to `""`. Every session then failed `accessPointByPort` lookup →
+`activeHotspotSessions.accessPointId` and `usageSamples.accessPointId` were
+always `undefined` → 0 users, 0 daily bytes per AP (router-level totals were
+fine). Interface counter samples were unaffected, so speed rendered while user
+counts/data did not.
+
+### Fix applied
+- `collector/forwarder.mjs`:
+  - `normalizeHotspotSessions` now also captures the client MAC
+    (`mac-address`, uppercased).
+  - New `normalizeBridgeHosts` reads `/interface/bridge/host`
+    (`readExtendedGroup`) and emits `{ macAddress, interfaceName }`; the
+    bridge-host table is the authoritative MAC → physical port map for bridged
+    clients (AP device MACs sit on their own ether ports there, clients on the
+    ether/wlan port they associate with).
+  - Snapshot payload now includes `bridgeHosts`.
+- `convex/collector.ts` (`collector:ingestSnapshot`):
+  - `hotspotSessionValidator` accepts optional `macAddress`; new
+    `bridgeHostValidator`; ingest args accept optional `bridgeHosts`.
+  - Builds `portByMac` and `resolveAccessPointForSession`: uses
+    `session.interfaceName` when present (non-bridged setups keep working),
+    otherwise resolves the client MAC → bridge port → access point.
+  - `accessPointSamples.connectedUserCount` and the session loop now use the
+    resolver, so sessions behind bridged APs (e.g. YRBWAD on ether2 → AP1,
+    MamaSaloon on ether4 → AP3) get a real `accessPointId`. Clients on the
+    router's own wlan1 (Rinnah/Remi) correctly stay unattributed.
+- Expected result: AP cards show active users, per-AP usage bytes, and
+  per-AP user lists once the backend is deployed (`npx convex deploy`) and the
+  collector restarted.

@@ -34,6 +34,12 @@ const hotspotSessionValidator = v.object({
   username: v.string(),
   bytes: v.number(),
   interfaceName: v.string(),
+  macAddress: v.optional(v.string()),
+});
+
+const bridgeHostValidator = v.object({
+  macAddress: v.string(),
+  interfaceName: v.string(),
 });
 
 const dhcpLeaseValidator = v.object({
@@ -227,6 +233,7 @@ export const ingestSnapshot = internalMutation({
     freeMemoryBytes: v.number(),
     interfaces: v.array(interfaceValidator),
     hotspotSessions: v.array(hotspotSessionValidator),
+    bridgeHosts: v.optional(v.array(bridgeHostValidator)),
     dhcpLeases: v.optional(v.array(dhcpLeaseValidator)),
     simpleQueues: v.optional(v.array(simpleQueueValidator)),
     ethernetPorts: v.optional(v.array(ethernetPortValidator)),
@@ -289,6 +296,21 @@ export const ingestSnapshot = internalMutation({
       .withIndex("by_router", (query) => query.eq("routerId", args.routerId))
       .collect();
     const accessPointByPort = new Map(accessPoints.filter((accessPoint) => accessPoint.archivedAt === undefined).map((accessPoint) => [accessPoint.port, accessPoint]));
+    const portByMac = new Map(
+      (args.bridgeHosts ?? [])
+        .filter((host) => host.macAddress && host.interfaceName)
+        .map((host) => [host.macAddress.toUpperCase(), host.interfaceName]),
+    );
+    const resolveAccessPointForSession = (session: { interfaceName: string; macAddress?: string }) => {
+      const byInterface = accessPointByPort.get(session.interfaceName);
+      if (byInterface) return byInterface;
+      if (session.macAddress) {
+        const port = portByMac.get(session.macAddress.toUpperCase());
+        if (port) return accessPointByPort.get(port);
+      }
+      return undefined;
+    };
+    const sessionAccessPointIds = args.hotspotSessions.map((session) => resolveAccessPointForSession(session)?._id);
     const openIncidents = await ctx.db
       .query("incidents")
       .withIndex("by_router_open", (query) => query.eq("routerId", args.routerId))
@@ -362,9 +384,7 @@ export const ingestSnapshot = internalMutation({
       const accessPointElapsedSeconds = previousAccessPointSample
         ? Math.max(1, (args.observedAt - previousAccessPointSample.timestamp) / 1000)
         : 1;
-      const connectedUserCount = args.hotspotSessions.filter(
-        (session) => session.interfaceName === item.name,
-      ).length;
+      const connectedUserCount = sessionAccessPointIds.filter((id) => id === accessPoint._id).length;
       await ctx.db.insert("accessPointSamples", {
         routerId: args.routerId,
         accessPointId: accessPoint._id,
@@ -549,7 +569,7 @@ export const ingestSnapshot = internalMutation({
         )
         .order("desc")
         .first();
-      const accessPoint = accessPointByPort.get(session.interfaceName);
+      const accessPoint = resolveAccessPointForSession(session);
       const activeSession = activeSessions.find(
         (item) => item.sessionIdentifier === session.identifier,
       );

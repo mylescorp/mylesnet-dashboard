@@ -210,8 +210,19 @@ function normalizeHotspotSessions(sessions) {
       username: stringValue(item, "user"),
       bytes: numberValue(item, "bytes-in") + numberValue(item, "bytes-out"),
       interfaceName: stringValue(item, "interface"),
+      macAddress: stringValue(item, "mac-address").toUpperCase() || undefined,
     }))
     .filter((session) => session.identifier && session.username);
+}
+
+/** Maps each learned client MAC to the bridge port it was seen on. Used to attribute bridged hotspot sessions to access points. */
+function normalizeBridgeHosts(hosts) {
+  return hosts
+    .map((item) => ({
+      macAddress: stringValue(item, "mac-address").toUpperCase(),
+      interfaceName: stringValue(item, "interface") || stringValue(item, "on-interface"),
+    }))
+    .filter((host) => host.macAddress && host.interfaceName);
 }
 
 function normalizeDhcpLeases(leases) {
@@ -331,6 +342,7 @@ async function readExtendedGroup(partials) {
     firewallRules: "/ip/firewall/filter",
     ethernet: "/interface/ethernet",
     ipAddresses: "/ip/address",
+    bridgeHosts: "/interface/bridge/host",
   };
   const extended = {};
   for (const [key, path] of Object.entries(extendedCalls)) {
@@ -405,6 +417,7 @@ async function collectSnapshot() {
     freeMemoryBytes: numberValue(resource, "free-memory"),
     interfaces: normalizeInterfaces(interfaces),
     hotspotSessions: normalizeHotspotSessions(hotspotSessions),
+    bridgeHosts: normalizeBridgeHosts(extended.bridgeHosts),
     dhcpLeases: normalizeDhcpLeases(extended.dhcpLeases),
     simpleQueues: normalizeSimpleQueues(extended.simpleQueues),
     ethernetPorts: normalizeEthernetPorts(extended.ethernet),
