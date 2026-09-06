@@ -278,16 +278,34 @@ export async function addWorkosOrganizationMembership(
   workosUserId: string,
   roleSlug?: string,
 ): Promise<string | null> {
-  const body: Record<string, string> = {
-    organization_id: organizationId,
-    user_id: workosUserId,
-  };
-  if (roleSlug) body.role_slug = roleSlug;
-  const payload = (await workosFetch("/user_management/organization_memberships", {
-    method: "POST",
-    body: JSON.stringify(body),
-  })) as { id?: unknown };
-  return typeof payload.id === "string" ? payload.id : null;
+  try {
+    // Get the role ID if a role slug is provided
+    let roleId: string | undefined;
+    if (roleSlug) {
+      const roles = await getWorkosEnvironmentRoles();
+      const role = roles.find((r) => r.slug === roleSlug);
+      if (role) {
+        roleId = role.id;
+      }
+    }
+
+    // Use the correct WorkOS API format for AuthKit
+    const body: Record<string, string> = {
+      organization_id: organizationId,
+      userland_user_id: workosUserId,
+    };
+    if (roleId) body.role_id = roleId;
+    
+    const payload = (await workosFetch("/user_management/organization_memberships", {
+      method: "POST",
+      body: JSON.stringify(body),
+    })) as { id?: unknown };
+    return typeof payload.id === "string" ? payload.id : null;
+  } catch (error) {
+    console.error("Failed to add user to organization:", error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to add user to organization: ${errorMessage}`);
+  }
 }
 
 /**
