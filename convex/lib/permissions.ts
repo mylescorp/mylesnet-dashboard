@@ -128,6 +128,17 @@ export const SYSTEM_ROLES: SystemRoleDefinition[] = [
     syncToWorkos: true,
   },
   {
+    key: "member",
+    name: "Member",
+    slug: "member",
+    description: "Default organization member with basic dashboard access.",
+    isSystem: true,
+    isPlatform: true,
+    rank: 50,
+    permissions: ["dashboard:access", "business_events:read", "compliance:access"],
+    syncToWorkos: true,
+  },
+  {
     key: "ops_manager",
     name: "Operations Manager",
     slug: "ops_manager",
@@ -357,6 +368,7 @@ export const SYSTEM_ROLES: SystemRoleDefinition[] = [
 export const SYSTEM_ROLE_SLUGS: Record<string, string> = {
   owner: "platform_owner",
   admin: "platform_admin",
+  member: "member",
   ops_manager: "ops_manager",
   finance_manager: "finance_manager",
   market_manager: "market_manager",
@@ -371,6 +383,7 @@ export const PLATFORM_ROLE_TO_SYSTEM_SLUG: Record<string, string> = {
   platform_owner: "platform_owner",
   platform_admin: "platform_admin",
   platform_support: "platform_support",
+  member: "member",
   agent: "agent",
 };
 

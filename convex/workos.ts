@@ -284,9 +284,12 @@ export async function addWorkosOrganizationMembership(
     if (roleSlug) {
       const roles = await getWorkosEnvironmentRoles();
       const role = roles.find((r) => r.slug === roleSlug);
-      if (role) {
-        roleId = role.id;
+      if (!role) {
+        console.error(`Role ${roleSlug} not found in environment roles. Available roles:`, roles.map(r => r.slug));
+        throw new Error(`Role ${roleSlug} not found in environment`);
       }
+      roleId = role.id;
+      console.log(`Resolved role ${roleSlug} to ID ${roleId}`);
     }
 
     // Use the correct WorkOS API format for AuthKit
@@ -295,12 +298,18 @@ export async function addWorkosOrganizationMembership(
       userland_user_id: workosUserId,
     };
     if (roleId) body.role_id = roleId;
-    
+
+    console.log("Adding user to organization:", { organizationId, workosUserId, roleId, roleSlug });
+
     const payload = (await workosFetch("/user_management/organization_memberships", {
       method: "POST",
       body: JSON.stringify(body),
     })) as { id?: unknown };
-    return typeof payload.id === "string" ? payload.id : null;
+    if (typeof payload.id !== "string") {
+      throw new Error("WorkOS did not return a membership id");
+    }
+    console.log("Successfully added user to organization, membership ID:", payload.id);
+    return payload.id;
   } catch (error) {
     console.error("Failed to add user to organization:", error);
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -376,12 +385,23 @@ export const ensureOrgMembership = action({
         await addWorkosOrganizationMembership(
           platformOrganizationId(),
           identity.subject,
-          "platform_support" // Default role for new users
+          "member" // Default role for new users
         );
-        console.log("ensureOrgMembership: Successfully added to organization");
+        console.log("ensureOrgMembership: Successfully added to organization with member role");
       } catch (orgError) {
-        console.error("ensureOrgMembership: Failed to add to organization", orgError);
-        throw orgError;
+        console.error("ensureOrgMembership: Failed to add to organization with member role, trying without role", orgError);
+        // Fallback: try adding without a specific role (uses org default)
+        try {
+          await addWorkosOrganizationMembership(
+            platformOrganizationId(),
+            identity.subject,
+            undefined // Use organization default role
+          );
+          console.log("ensureOrgMembership: Successfully added to organization with default role");
+        } catch (fallbackError) {
+          console.error("ensureOrgMembership: Failed to add to organization even with default role", fallbackError);
+          throw new Error(`Failed to add user to organization: ${orgError instanceof Error ? orgError.message : String(orgError)}`);
+        }
       }
 
       // Sync their identity after adding to organization
