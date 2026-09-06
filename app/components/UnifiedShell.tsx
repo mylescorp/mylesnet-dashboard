@@ -63,7 +63,7 @@ function UnifiedShellContent({ children }: { children: ReactNode }) {
   const isSignin = pathname === "/signin";
   const isNoAccess = pathname === "/no-access";
 
-  const { user } = useUserProfile();
+  const { user, isLoading: userLoading } = useUserProfile();
   const claimStatus = useQuery(api.bootstrap.ownerClaimStatus, {});
   const [delayed, setDelayed] = useState(false);
 
@@ -72,12 +72,12 @@ function UnifiedShellContent({ children }: { children: ReactNode }) {
     return () => clearTimeout(t);
   }, []);
 
-  // Redirect to signin if unauthenticated
+  // Redirect to signin if unauthenticated (but wait for user profile to load)
   useEffect(() => {
-    if (!isSignin && !isNoAccess && delayed && user === null) {
+    if (!isSignin && !isNoAccess && delayed && !userLoading && user === null) {
       router.replace("/signin");
     }
-  }, [isSignin, isNoAccess, delayed, user, router]);
+  }, [isSignin, isNoAccess, delayed, userLoading, user, router]);
 
   const profileReady = user !== undefined;
   const entry = findNavEntry(pathname);
@@ -85,17 +85,34 @@ function UnifiedShellContent({ children }: { children: ReactNode }) {
 
   // Handle role-gated route access (fail closed, friendly redirect)
   useEffect(() => {
-    if (!isSignin && !isNoAccess && denied) {
+    if (!isSignin && !isNoAccess && profileReady && denied) {
       router.replace("/no-access");
     }
-  }, [isSignin, isNoAccess, denied, router]);
+  }, [isSignin, isNoAccess, profileReady, denied, router]);
 
   const canClaimFirstOwner =
-    user && !user.isPlatform && pathname === "/dashboard" && claimStatus && !claimStatus.ownerExists;
+    !userLoading && user && !user.isPlatform && pathname === "/dashboard" && claimStatus && !claimStatus.ownerExists;
 
   // Render children directly on sign-in page
   if (isSignin) {
     return <>{children}</>;
+  }
+
+  // Show loading state while user profile is being synced
+  if (userLoading) {
+    return (
+      <div className="app-shell">
+        <div className="app-content">
+          <main className="app-main">
+            <div className="workspace-page">
+              <div className="loading-panel workspace-card">
+                <p>Loading your profile…</p>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    );
   }
 
   // Handle owner claim screen for first owner
