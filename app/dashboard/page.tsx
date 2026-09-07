@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@/app/lib/convex";
+import { useConvexAuth, useQuery } from "@/app/lib/convex";
 import { Activity, AlertTriangle, ArrowUpRight, BarChart3, Boxes, CircleDollarSign, FileDiff, Gauge, RadioTower, SlidersHorizontal, Spline, Timer, Users, Wifi, Edit, Plus, Settings, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -39,15 +39,16 @@ function isCollectorFresh(observedAt: number | undefined): boolean {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const kpis = useQuery(api.operations.getKpis, {});
-  const summaries = useQuery(api.operations.getRouterSummaries, {});
+  const { isAuthenticated } = useConvexAuth();
+  const kpis = useQuery(api.operations.getKpis, isAuthenticated ? {} : "skip");
+  const summaries = useQuery(api.operations.getRouterSummaries, isAuthenticated ? {} : "skip");
   const { user, isLoading: userLoading } = useUserProfile();
   const isPlatformUser = user?.isPlatform === true;
   const [selectedRouterId, setSelectedRouterId] = useState<Id<"routers"> | null>(null);
   const [selectedAccessPoint, setSelectedAccessPoint] = useState<{ id: Id<"accessPoints">; name: string } | null>(null);
   const [detailRouterId, setDetailRouterId] = useState<Id<"routers"> | null>(null);
   const [compact, setCompact] = useState(false);
-  const accessPointUsers = useQuery(api.operations.getAccessPointUsers, selectedAccessPoint?.id ? { accessPointId: selectedAccessPoint.id } : "skip");
+  const accessPointUsers = useQuery(api.operations.getAccessPointUsers, isAuthenticated && selectedAccessPoint?.id ? { accessPointId: selectedAccessPoint.id } : "skip");
 
   // Handle user not found or loading
   if (userLoading) return <div className="workspace-page"><div className="loading-panel workspace-card"><Activity aria-hidden="true" size={22} />Loading your profile…</div></div>;

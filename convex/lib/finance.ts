@@ -18,6 +18,7 @@ export async function localToUsd(
   currency: string,
   forDate?: string,
 ): Promise<number> {
+  void forDate;
   if (amountLocal === 0) return 0;
   let rate: number | undefined;
   try {

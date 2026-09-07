@@ -64,6 +64,7 @@ export class Healthguard {
   }
 
   status(now = Date.now()) {
+    void now;
     return {
       enabled: this.enabled,
       lastRunAt: this.lastRunAt,

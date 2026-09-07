@@ -1,6 +1,6 @@
 "use client";
 
-import { useAction, useMutation, useQuery } from "@/app/lib/convex";
+import { useAction, useConvexAuth, useMutation, useQuery } from "@/app/lib/convex";
 import Link from "next/link";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
@@ -141,6 +141,7 @@ const describeEvent = (event: RecentEventShape) => {
 
 export default function CentipidSettingsPage() {
   const { user } = useUserProfile();
+  const { isAuthenticated } = useConvexAuth();
   const isAdmin = user?.permissions?.includes("centipid:manage") ?? false;
 
   const tzOffsetMinutes = useMemo(() => -new Date().getTimezoneOffset(), []);
@@ -148,7 +149,7 @@ export default function CentipidSettingsPage() {
   const deliveryLogs = useQuery(api.centipid.getWebhookDeliveryLogs, { limit: 30 });
   const summary = useQuery(api.centipid.getCentipidBusinessSummary, { tzOffsetMinutes });
   const recentEvents = useQuery(api.centipid.getRecentAllEvents, { limit: 8 });
-  const operationsKpis = useQuery(api.operations.getKpis, {});
+  const operationsKpis = useQuery(api.operations.getKpis, isAuthenticated ? {} : "skip");
 
   const saveCredentials = useMutation(api.centipid.saveCentipidCredentials);
   const removeCredentials = useMutation(api.centipid.removeCentipidCredentials);

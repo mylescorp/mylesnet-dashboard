@@ -16,7 +16,6 @@ export default function SimpleBars({ data, formatTick, tone = "primary" }: Simpl
     <div className="chart-bars" aria-label="Trend chart">
       <svg viewBox={`0 0 ${width} ${height}`} role="img" style={{ width: "100%", height: "auto" }}>
         {data.map((d, i) => {
-          const h = Math.max(2, (d.value / max) * (height - 24));
           const x = pad + i * (barW + pad) + pad / 2;
           return (
             <text key={`label-${i}`} x={x + barW / 2} y={height - 4} textAnchor="middle" fontSize="10" fill="var(--muted)">
