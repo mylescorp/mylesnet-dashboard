@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { requirePlatformAdmin, requirePlatformUser } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 
@@ -131,7 +131,7 @@ export const createBroadcast = mutation({
   },
 });
 
-export const markBroadcastDeliveryStatus = mutation({
+export const markBroadcastDeliveryStatus = internalMutation({
   args: {
     deliveryLogId: v.id("broadcastDeliveryLogs"),
     status: v.union(
@@ -149,7 +149,7 @@ export const markBroadcastDeliveryStatus = mutation({
   },
 });
 
-export const markBroadcastComplete = mutation({
+export const markBroadcastComplete = internalMutation({
   args: {
     broadcastId: v.id("broadcasts"),
     deliveryStatus: v.string(),

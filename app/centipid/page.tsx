@@ -24,6 +24,7 @@ import {
   ShieldAlert,
   Signal,
   Ticket,
+  Trash2,
   UserPlus,
   Users,
   Wallet,
@@ -147,8 +148,10 @@ export default function CentipidSettingsPage() {
   const deliveryLogs = useQuery(api.centipid.getWebhookDeliveryLogs, { limit: 30 });
   const summary = useQuery(api.centipid.getCentipidBusinessSummary, { tzOffsetMinutes });
   const recentEvents = useQuery(api.centipid.getRecentAllEvents, { limit: 8 });
+  const operationsKpis = useQuery(api.operations.getKpis, {});
 
   const saveCredentials = useMutation(api.centipid.saveCentipidCredentials);
+  const removeCredentials = useMutation(api.centipid.removeCentipidCredentials);
   const setPaused = useMutation(api.centipid.setCentipidIngestionPaused);
   const verifyToken = useAction(api.centipid.verifyCentipidToken);
   const fetchHistorical = useAction(api.centipid.fetchHistoricalCentipidData);
@@ -158,6 +161,9 @@ export default function CentipidSettingsPage() {
   const [apiToken, setApiToken] = useState("");
   const [webhookSigningSecret, setWebhookSigningSecret] = useState("");
   const [saving, setSaving] = useState(false);
+  const [removingCredentials, setRemovingCredentials] = useState(false);
+  const [showRemoveCredentials, setShowRemoveCredentials] = useState(false);
+  const [removeConfirmation, setRemoveConfirmation] = useState("");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [statusIsError, setStatusIsError] = useState(false);
   const [verifyResult, setVerifyResult] = useState<string | null>(null);
@@ -206,6 +212,16 @@ export default function CentipidSettingsPage() {
   // business summary is a convenience aggregate and can briefly be served
   // with its older shape during a rolling Convex function deployment.
   const currentSnapshot = liveSnapshot?.at ? liveSnapshot : platformSnapshot;
+  // Centipid's configured MCP tools do not currently emit a live-session
+  // field. RouterOS is the authoritative source for the connected-session
+  // count, and its Convex query is live just like the MCP projection.
+  const routerSessionCount = operationsKpis?.collectorConnected ? operationsKpis.totalUsers : undefined;
+  const subscribersOnline = currentSnapshot?.subscribersOnline ?? routerSessionCount;
+  const subscribersOnlineSource = currentSnapshot?.subscribersOnline !== null && currentSnapshot?.subscribersOnline !== undefined
+    ? "Current network presence from Centipid"
+    : operationsKpis?.collectorConnected
+      ? "Current hotspot sessions from RouterOS"
+      : "Awaiting RouterOS collector connectivity";
 
   const showStatus = (message: string, isError = false) => {
     setStatusMessage(message);
@@ -252,6 +268,26 @@ export default function CentipidSettingsPage() {
       showStatus(error instanceof Error ? error.message : "Could not change ingestion state.", true);
     } finally {
       setWorking(false);
+    }
+  };
+
+  const handleRemoveCredentials = async () => {
+    if (removeConfirmation !== "REMOVE") return;
+    setRemovingCredentials(true);
+    setStatusMessage(null);
+    try {
+      const result = await removeCredentials({ confirmation: removeConfirmation });
+      if (result.removed) {
+        setApiToken("");
+        setWebhookSigningSecret("");
+        setRemoveConfirmation("");
+        setShowRemoveCredentials(false);
+        showStatus("Centipid credentials removed. Historical events are retained; add new credentials to reconnect.");
+      }
+    } catch (error) {
+      showStatus(error instanceof Error ? error.message : "Could not remove Centipid credentials.", true);
+    } finally {
+      setRemovingCredentials(false);
     }
   };
 
@@ -509,8 +545,8 @@ export default function CentipidSettingsPage() {
           <div className="operations-kpi">
             <span><Signal aria-hidden="true" size={17} /></span>
             <p>Subscribers online</p>
-            <strong>{currentSnapshot?.subscribersOnline?.toLocaleString() ?? "—"}</strong>
-            <small>Current network presence from Centipid</small>
+            <strong>{subscribersOnline?.toLocaleString() ?? "—"}</strong>
+            <small>{subscribersOnlineSource}</small>
           </div>
           <div className="operations-kpi">
             <span><Clock3 aria-hidden="true" size={17} /></span>
@@ -568,8 +604,8 @@ export default function CentipidSettingsPage() {
                 <div className="operations-kpi">
                   <span><Signal aria-hidden="true" size={17} /></span>
                   <p>Subscribers online</p>
-                  <strong>{liveSnapshot.subscribersOnline?.toLocaleString() ?? "—"}</strong>
-                  <small>Currently on the network, per Centipid</small>
+                  <strong>{subscribersOnline?.toLocaleString() ?? "—"}</strong>
+                  <small>{subscribersOnlineSource}</small>
                 </div>
                 <div className="operations-kpi">
                   <span><Radio aria-hidden="true" size={17} /></span>
@@ -834,6 +870,9 @@ export default function CentipidSettingsPage() {
                   ? "Leave a field blank to keep its current value — handy for rotating one key without retyping the other."
                   : "Both fields are required for the first-time setup."}
               </p>
+              {settings?.hasCredentials && settings.credentialUpdatedAt && (
+                <p className="pf-hint">Current credentials were last changed {new Date(settings.credentialUpdatedAt).toLocaleString()}.</p>
+              )}
               <form
                 className="pf-form-stack"
                 onSubmit={(event) => {
@@ -869,7 +908,7 @@ export default function CentipidSettingsPage() {
                 </div>
                 <div className="pf-actions">
                   <button type="submit" className="primary-button" disabled={saving || working}>
-                    {saving ? "Saving…" : "Save credentials"}
+                    {saving ? "Saving…" : settings?.hasCredentials ? "Update credentials" : "Connect Centipid"}
                   </button>
                 </div>
               </form>
@@ -891,7 +930,26 @@ export default function CentipidSettingsPage() {
                       <Download size={16} />
                       Fetch snapshot
                     </button>
+                    <button type="button" className="secondary-button access-danger-button" onClick={() => setShowRemoveCredentials(true)} disabled={working || removingCredentials}>
+                      <Trash2 size={16} />
+                      Remove credentials
+                    </button>
                   </div>
+                  {showRemoveCredentials && (
+                    <div className="modal-section" role="alert">
+                      <div className="modal-section-head">
+                        <div>
+                          <p className="pf-label">Remove Centipid credentials</p>
+                          <p className="pf-hint">This stops MCP reads and webhook verification immediately. Historical events and audit history remain. Type <code>REMOVE</code> to confirm.</p>
+                        </div>
+                      </div>
+                      <input className="pf-input" value={removeConfirmation} onChange={(event) => setRemoveConfirmation(event.target.value)} aria-label="Confirm credential removal" placeholder="Type REMOVE" autoComplete="off" />
+                      <div className="pf-actions">
+                        <button type="button" className="secondary-button" onClick={() => { setShowRemoveCredentials(false); setRemoveConfirmation(""); }} disabled={removingCredentials}>Cancel</button>
+                        <button type="button" className="danger-button" onClick={handleRemoveCredentials} disabled={removingCredentials || removeConfirmation !== "REMOVE"}>{removingCredentials ? "Removing…" : "Permanently remove credentials"}</button>
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
 

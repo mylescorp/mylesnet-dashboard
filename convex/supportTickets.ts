@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { requirePlatformAdmin, requirePlatformUser } from "./lib/auth";
+import { requireMarketAccess, requirePermission } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 
 export const listSupportTickets = query({
@@ -18,7 +18,8 @@ export const listSupportTickets = query({
     agentId: v.optional(v.id("agents")),
   },
   handler: async (ctx, args) => {
-    await requirePlatformUser(ctx);
+    await requirePermission(ctx, "tickets:read");
+    if (args.marketId) await requireMarketAccess(ctx, args.marketId, "viewer");
     let tickets = await ctx.db.query("supportTickets").collect();
 
     if (args.ticketStatus) {
@@ -37,8 +38,10 @@ export const listSupportTickets = query({
 export const getSupportTicket = query({
   args: { ticketId: v.id("supportTickets") },
   handler: async (ctx, args) => {
-    await requirePlatformUser(ctx);
-    return await ctx.db.get(args.ticketId);
+    await requirePermission(ctx, "tickets:read");
+    const ticket = await ctx.db.get(args.ticketId);
+    if (ticket?.marketId) await requireMarketAccess(ctx, ticket.marketId, "viewer");
+    return ticket;
   },
 });
 
@@ -56,7 +59,8 @@ export const createSupportTicket = mutation({
     agentId: v.optional(v.id("agents")),
   },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "tickets:manage");
+    if (args.marketId) await requireMarketAccess(ctx, args.marketId, "operator");
     const now = Date.now();
     const ticketId = await ctx.db.insert("supportTickets", {
       subject: args.subject,
@@ -104,9 +108,10 @@ export const updateSupportTicket = mutation({
     assignedTo: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "tickets:manage");
     const ticket = await ctx.db.get(args.ticketId);
     if (!ticket) throw new Error("Ticket not found");
+    if (ticket.marketId) await requireMarketAccess(ctx, ticket.marketId, "operator");
 
     const patch: Record<string, unknown> = { updatedAt: Date.now() };
     if (args.ticketStatus !== undefined) {
@@ -136,9 +141,10 @@ export const softDeleteTicket = mutation({
     reason: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "tickets:manage");
     const ticket = await ctx.db.get(args.ticketId);
     if (!ticket) throw new Error("Ticket not found");
+    if (ticket.marketId) await requireMarketAccess(ctx, ticket.marketId, "operator");
 
     await ctx.db.patch(args.ticketId, {
       deletedAt: Date.now(),
@@ -158,9 +164,10 @@ export const softDeleteTicket = mutation({
 export const restoreTicket = mutation({
   args: { ticketId: v.id("supportTickets") },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "tickets:manage");
     const ticket = await ctx.db.get(args.ticketId);
     if (!ticket) throw new Error("Ticket not found");
+    if (ticket.marketId) await requireMarketAccess(ctx, ticket.marketId, "operator");
 
     await ctx.db.patch(args.ticketId, {
       deletedAt: undefined,

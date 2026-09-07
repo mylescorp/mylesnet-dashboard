@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
-import { requireFinanceOrAbove, requirePermission, requirePlatformOwner, requirePlatformUser } from "./lib/auth";
+import { requirePermission, requirePlatformOwner, requirePlatformUser } from "./lib/auth";
 import { localToUsd } from "./lib/finance";
 import { logAudit } from "./lib/auditLog";
 
@@ -192,7 +192,7 @@ export const getPayout = query({
 
 export const payoutApprovalSummary = query({
   args: {},
-  handler: async (ctx, args) => {
+  handler: async (ctx) => {
     await requirePermission(ctx, "payouts:read");
     const all = await ctx.db.query("payouts").collect();
     const pendingAgent = all.filter((p) => p.status === "pending_approval" && p.payeeType === "agent");

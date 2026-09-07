@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { requirePermission, requirePlatformUser } from "./lib/auth";
+import { requirePermission } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 
 /**
@@ -26,7 +26,7 @@ export const listTeams = query({
 export const getTeam = query({
   args: { teamId: v.id("teams") },
   handler: async (ctx, args) => {
-    await requirePlatformUser(ctx);
+    await requirePermission(ctx, "teams:read");
     const team = await ctx.db.get(args.teamId);
     if (!team) throw new Error("Team not found");
     const members = await ctx.db.query("teamMembers").withIndex("by_team", (q) => q.eq("teamId", args.teamId)).collect();
@@ -53,9 +53,10 @@ export const updateTeam = mutation({
   args: { teamId: v.id("teams"), name: v.optional(v.string()), leaderAgentId: v.optional(v.id("agents")) },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "teams:manage");
-    const { teamId: _teamId, ...patch } = args;
-    await ctx.db.patch(args.teamId, patch);
-    await logAudit(ctx, { action: "team.update", entityTable: "teams", entityId: args.teamId, changedBy: user._id, after: patch });
+    const patch = { name: args.name, leaderAgentId: args.leaderAgentId };
+    const cleaned = Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined));
+    await ctx.db.patch(args.teamId, cleaned);
+    await logAudit(ctx, { action: "team.update", entityTable: "teams", entityId: args.teamId, changedBy: user._id, after: cleaned });
   },
 });
 

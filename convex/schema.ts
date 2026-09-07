@@ -492,6 +492,7 @@ export default defineSchema({
     liveSnapshotLastAttemptOk: v.optional(v.boolean()),
     liveSnapshotLastAttemptError: v.optional(v.string()),
     createdAt: v.number(),
+    updatedAt: v.optional(v.number()),
   }).index("by_createdAt", ["createdAt"]),
 
   subscriberEvents: defineTable({

@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { requirePlatformAdmin, requirePlatformUser } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 
@@ -79,7 +79,7 @@ export const createInvitation = mutation({
   },
 });
 
-export const markInvitationAccepted = mutation({
+export const markInvitationAccepted = internalMutation({
   args: { invitationId: v.id("agentInvitations") },
   handler: async (ctx, args) => {
     const invitation = await ctx.db.get(args.invitationId);

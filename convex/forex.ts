@@ -1,6 +1,7 @@
 import { v } from "convex/values";
-import { action, internalAction, internalMutation, internalQuery, query } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery, query } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { requirePermission } from "./lib/auth";
 
 /**
  * FX provider (spec §28). Primary: open.er-api.com/v6/latest/USD (free, no key).
@@ -114,6 +115,7 @@ export const getRate = internalQuery({
 export const listExchangeRates = query({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
+    await requirePermission(ctx, "financials:read");
     return (await ctx.db.query("exchangeRates").order("desc").take(args.limit ?? 30)).sort((a, b) => a.date.localeCompare(b.date));
   },
 });

@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
-import { requireNetworkOperator, requirePlatformAdmin, requirePlatformOwner } from "./lib/auth";
+import { requirePermission, requirePlatformOwner } from "./lib/auth";
 import { encryptRouterCredential, isEncryptedRouterCredential } from "./lib/routerCredentials";
 import { logAudit } from "./lib/auditLog";
 
@@ -28,7 +28,7 @@ function validatedThresholds(warning: number | undefined, critical: number | und
 // List routers WITHOUT credentials (safe for client queries)
 export const listRouters = query({
   handler: async (ctx) => {
-    await requireNetworkOperator(ctx);
+    await requirePermission(ctx, "routers:read");
     const routers = (await ctx.db.query("routers").order("desc").collect()).filter((router) => router.archivedAt === undefined);
     
     // Check which routers have credentials set (without exposing them)
@@ -53,7 +53,7 @@ export const listRouters = query({
 export const getOnboardingStatuses = query({
   args: {},
   handler: async (ctx) => {
-    await requireNetworkOperator(ctx);
+    await requirePermission(ctx, "routers:read");
     const routers = (await ctx.db.query("routers").collect()).filter((router) => router.archivedAt === undefined);
     return Promise.all(routers.map(async (router) => {
       const [credentials, collectorRun, health] = await Promise.all([
@@ -189,7 +189,7 @@ export const addRouter = mutation({
     cpuCriticalThreshold: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "routers:manage");
     const name = cleanText(args.name, "router name");
     const location = cleanText(args.location, "location");
     const username = cleanText(args.username, "RouterOS username", 128);
@@ -232,7 +232,7 @@ export const updateRouter = mutation({
     cpuCriticalThreshold: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "routers:manage");
     const { routerId, ...updates } = args;
     const router = await ctx.db.get(routerId);
     if (!router || router.archivedAt !== undefined) throw new Error("Router not found");
@@ -251,7 +251,7 @@ export const updateRouterCredentials = mutation({
     password: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "routers:manage");
     const router = await ctx.db.get(args.routerId);
     if (!router || router.archivedAt !== undefined) throw new Error("Router not found");
     const username = cleanText(args.username, "RouterOS username", 128);
@@ -323,7 +323,7 @@ export const getRouterCredentialProtectionStatus = query({
 export const archiveRouter = mutation({
   args: { routerId: v.id("routers"), reason: v.string() },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "routers:manage");
     const router = await ctx.db.get(args.routerId);
     if (!router || router.archivedAt !== undefined) throw new Error("Router not found");
     const reason = cleanText(args.reason, "archive reason", 300);
@@ -347,7 +347,7 @@ export const archiveRouter = mutation({
 export const deleteRouter = mutation({
   args: { routerId: v.id("routers"), reason: v.string() },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "routers:manage");
     const router = await ctx.db.get(args.routerId);
     if (!router) throw new Error("Router not found");
     const reason = cleanText(args.reason, "delete reason", 300);

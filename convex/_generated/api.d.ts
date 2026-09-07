@@ -35,6 +35,7 @@ import type * as forex from "../forex.js";
 import type * as healthSamples from "../healthSamples.js";
 import type * as http from "../http.js";
 import type * as incidents from "../incidents.js";
+import type * as integrations from "../integrations.js";
 import type * as investors from "../investors.js";
 import type * as invitations from "../invitations.js";
 import type * as invitationsInternal from "../invitationsInternal.js";
@@ -119,6 +120,7 @@ declare const fullApi: ApiFromModules<{
   healthSamples: typeof healthSamples;
   http: typeof http;
   incidents: typeof incidents;
+  integrations: typeof integrations;
   investors: typeof investors;
   invitations: typeof invitations;
   invitationsInternal: typeof invitationsInternal;

@@ -99,7 +99,7 @@ export class Healthguard {
       return this.status(now);
     }
     this.lastRunAt = now;
-    const service = await this.#readService(now);
+    const service = await this.#readService();
     if (!service) {
       this.wwwSslEnabled = null;
       return this.status(now);
@@ -123,7 +123,7 @@ export class Healthguard {
     return this.status(now);
   }
 
-  async #readService(now) {
+  async #readService() {
     if (!this.connection) {
       this.lastActionMessage = "The collector has no router connection configured.";
       return null;
@@ -190,7 +190,7 @@ export class Healthguard {
       this.lastActionMessage = `Re-enabling www-ssl failed (HTTP ${response.status}).`;
       return;
     }
-    const verified = await this.#readService(now);
+    const verified = await this.#readService();
     if (verified && !serviceDisabled(verified)) {
       this.wwwSslEnabled = true;
       this.lastAction = "reenabled_www_ssl";

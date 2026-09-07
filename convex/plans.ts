@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { requirePermission, requirePlatformUser } from "./lib/auth";
+import { requireMarketAccess, requirePermission } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 
 /**
@@ -11,7 +11,8 @@ import { logAudit } from "./lib/auditLog";
 export const listPlans = query({
   args: { marketId: v.optional(v.id("markets")), includeInactive: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
-    await requirePlatformUser(ctx);
+    await requirePermission(ctx, "plans:read");
+    if (args.marketId) await requireMarketAccess(ctx, args.marketId, "viewer");
     const base = args.marketId
       ? await ctx.db.query("plans").withIndex("by_market", (q) => q.eq("marketId", args.marketId)).collect()
       : await ctx.db.query("plans").collect();
@@ -32,6 +33,7 @@ export const createPlan = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "plans:manage");
+    if (args.marketId) await requireMarketAccess(ctx, args.marketId, "manager");
     const existing = await ctx.db.query("plans").withIndex("by_code", (q) => q.eq("code", args.code)).first();
     if (existing && existing.status === "active") throw new Error("A plan with this code already exists");
 
@@ -71,14 +73,16 @@ export const updatePlan = mutation({
     const user = await requirePermission(ctx, "plans:manage");
     const plan = await ctx.db.get(args.planId);
     if (!plan) throw new Error("Plan not found");
-    const { planId: _planId, ...patch } = args;
-    await ctx.db.patch(args.planId, patch);
+    if (plan.marketId) await requireMarketAccess(ctx, plan.marketId, "manager");
+    const patch = { name: args.name, priceLocal: args.priceLocal, currency: args.currency, durationLabel: args.durationLabel, status: args.status };
+    const cleaned = Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined));
+    await ctx.db.patch(args.planId, cleaned);
     await logAudit(ctx, {
       action: "plan.update",
       entityTable: "plans",
       entityId: args.planId,
       changedBy: user._id,
-      after: patch,
+      after: cleaned,
     });
   },
 });

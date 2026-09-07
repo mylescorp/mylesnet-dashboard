@@ -13,13 +13,6 @@ import type { Id } from "./_generated/dataModel";
  * same action.
  */
 
-function frequencyDue(frequency: "daily" | "weekly" | "monthly", now: Date): boolean {
-  const day = now.getDay(); // 0 Sun .. 6 Sat
-  if (frequency === "daily") return true;
-  if (frequency === "weekly") return day === 6; // every Saturday
-  return now.getDate() === 1;
-}
-
 export type ReportDataset = "revenue" | "subscribers" | "devices" | "financials";
 
 export const listScheduledReports = query({
@@ -78,9 +71,10 @@ export const updateScheduledReport = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "reports:generate");
-    const { reportId: _reportId, ...patch } = args;
-    await ctx.db.patch(args.reportId, patch);
-    await logAudit(ctx, { action: "report.update", entityTable: "scheduledReports", entityId: args.reportId, changedBy: user._id, after: patch });
+    const patch = { name: args.name, recipients: args.recipients, frequency: args.frequency, scopeFilter: args.scopeFilter, format: args.format, enabled: args.enabled };
+    const cleaned = Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined));
+    await ctx.db.patch(args.reportId, cleaned);
+    await logAudit(ctx, { action: "report.update", entityTable: "scheduledReports", entityId: args.reportId, changedBy: user._id, after: cleaned });
   },
 });
 

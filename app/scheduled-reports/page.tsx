@@ -25,7 +25,6 @@ export default function ScheduledReportsPage() {
   if (reports === undefined || exports === undefined) return <Loading />;
 
   const enabled = reports.filter((r) => r.enabled);
-  const dueSoon = reports.filter((r) => r.enabled).length;
 
   async function onCreate() {
     if (!name.trim() || !recipients.trim()) {

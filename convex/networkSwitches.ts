@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query, internalQuery } from "./_generated/server";
-import { requireNetworkOperator, requirePlatformAdmin } from "./lib/auth";
+import { requireMarketAccess, requirePermission } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 
 function cleanText(value: string, label: string, maxLength = 160): string {
@@ -43,8 +43,10 @@ function validatePortCount(value: number | undefined): number | undefined {
 export const listSwitches = query({
   args: { routerId: v.optional(v.id("routers")) },
   handler: async (ctx, args) => {
-    await requireNetworkOperator(ctx);
+    await requirePermission(ctx, "routers:read");
     if (!args.routerId) return (await ctx.db.query("networkSwitches").collect()).filter((entry) => entry.archivedAt === undefined);
+    const router = await ctx.db.get(args.routerId);
+    if (router?.marketId) await requireMarketAccess(ctx, router.marketId, "viewer");
     return (await ctx.db.query("networkSwitches").withIndex("by_router", (q) => q.eq("routerId", args.routerId!)).collect()).filter((entry) => entry.archivedAt === undefined);
   },
 });
@@ -71,7 +73,7 @@ export const addSwitch = mutation({
     note: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "routers:manage");
     const router = await ctx.db.get(args.routerId);
     if (!router || router.archivedAt !== undefined) throw new Error("Router not found");
     const name = cleanText(args.name, "switch name");
@@ -108,7 +110,7 @@ export const updateSwitch = mutation({
     note: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "routers:manage");
     const { switchId, ...updates } = args;
     const existing = await ctx.db.get(switchId);
     if (!existing || existing.archivedAt !== undefined) throw new Error("Switch not found");
@@ -133,7 +135,7 @@ export const updateSwitch = mutation({
 export const archiveSwitch = mutation({
   args: { switchId: v.id("networkSwitches"), reason: v.string() },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "routers:manage");
     const existing = await ctx.db.get(args.switchId);
     if (!existing || existing.archivedAt !== undefined) throw new Error("Switch not found");
     const reason = cleanText(args.reason, "archive reason", 300);
@@ -146,7 +148,7 @@ export const archiveSwitch = mutation({
 export const deleteSwitch = mutation({
   args: { switchId: v.id("networkSwitches"), reason: v.string() },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "routers:manage");
     const existing = await ctx.db.get(args.switchId);
     if (!existing) throw new Error("Switch not found");
     const reason = cleanText(args.reason, "delete reason", 300);

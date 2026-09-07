@@ -1,5 +1,6 @@
 import { v } from "convex/values";
-import { internalMutation, mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query, type MutationCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { requireInvestorViewer, requirePermission, requirePlatformUser } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 import { dayOf } from "./lib/finance";
@@ -70,74 +71,52 @@ export const updateInvestor = mutation({
     const user = await requirePermission(ctx, "investors:manage");
     const investor = await ctx.db.get(args.investorId);
     if (!investor) throw new Error("Investor not found");
-    const { investorId: _investorId, ...patch } = args;
-    await ctx.db.patch(args.investorId, { ...patch, updatedAt: Date.now() });
+    const patch = { name: args.name, email: args.email, instrumentType: args.instrumentType, reportFrequency: args.reportFrequency, status: args.status, notes: args.notes };
+    const cleaned = Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined));
+    await ctx.db.patch(args.investorId, { ...cleaned, updatedAt: Date.now() });
     await logAudit(ctx, {
       action: "investor.update",
       entityTable: "investors",
       entityId: args.investorId,
       changedBy: user._id,
-      after: patch,
+      after: cleaned,
     });
   },
 });
 
 /** Frozen snapshot of the portfolio (spec §31). Idempotent per investor+period. */
+async function generateInvestorReportRecord(ctx: MutationCtx, args: { investorId: Id<"investors">; period: string }) {
+  const investor = await ctx.db.get(args.investorId);
+  if (!investor || investor.status !== "active") throw new Error("Investor not active");
+
+  const financials = await ctx.db.query("marketFinancials").withIndex("by_month", (q) => q.eq("month", args.period)).collect();
+  const snapshots = (await ctx.db.query("dailySnapshots").collect()).filter((s) => s.date.startsWith(args.period));
+  const snapshot = {
+    generatedAt: Date.now(),
+    investor: { name: investor.name, instrumentType: investor.instrumentType, investmentAmountUSD: investor.investmentAmountUSD, equityPercent: investor.equityPercent, reportFrequency: investor.reportFrequency },
+    period: args.period,
+    markets: financials.map((f) => ({ marketId: f.marketId, revenueLocal: f.revenueLocal, revenueUSD: f.revenueUSD, netContributionLocal: f.netContributionLocal, breakEvenStatus: f.breakEvenStatus, currency: f.currency })),
+    dailyPoints: snapshots.map((s) => ({ marketId: s.marketId, date: s.date, revenueLocal: s.revenueLocal, netContributionLocal: s.netContributionLocal })).slice(0, 31),
+  };
+  const existing = await ctx.db.query("investorReports").withIndex("by_investor", (q) => q.eq("investorId", args.investorId)).filter((q) => q.eq(q.field("period"), args.period)).first();
+  if (existing) {
+    await ctx.db.replace(existing._id, { investorId: args.investorId, period: args.period, snapshot, generatedAt: Date.now(), sentAt: undefined, viewedAt: existing.viewedAt });
+    return { updated: true, id: existing._id };
+  }
+  const id = await ctx.db.insert("investorReports", { investorId: args.investorId, period: args.period, snapshot, generatedAt: Date.now() });
+  return { updated: false, id };
+}
+
 export const generateInvestorReport = internalMutation({
   args: { investorId: v.id("investors"), period: v.string() },
+  handler: generateInvestorReportRecord,
+});
+
+export const generateInvestorReportForAdmin = mutation({
+  args: { investorId: v.id("investors"), period: v.string() },
   handler: async (ctx, args) => {
-    const investor = await ctx.db.get(args.investorId);
-    if (!investor || investor.status !== "active") throw new Error("Investor not active");
-
-    const financials = await ctx.db.query("marketFinancials").withIndex("by_month", (q) => q.eq("month", args.period)).collect();
-    const snapshots = (await ctx.db.query("dailySnapshots").collect()).filter((s) => s.date.startsWith(args.period));
-
-    const snapshot = {
-      generatedAt: Date.now(),
-      investor: {
-        name: investor.name,
-        instrumentType: investor.instrumentType,
-        investmentAmountUSD: investor.investmentAmountUSD,
-        equityPercent: investor.equityPercent,
-        reportFrequency: investor.reportFrequency,
-      },
-      period: args.period,
-      markets: financials.map((f) => ({
-        marketId: f.marketId,
-        revenueLocal: f.revenueLocal,
-        revenueUSD: f.revenueUSD,
-        netContributionLocal: f.netContributionLocal,
-        breakEvenStatus: f.breakEvenStatus,
-        currency: f.currency,
-      })),
-      dailyPoints: snapshots
-        .map((s) => ({ marketId: s.marketId, date: s.date, revenueLocal: s.revenueLocal, netContributionLocal: s.netContributionLocal }))
-        .slice(0, 31),
-    };
-
-    const existing = await ctx.db
-      .query("investorReports")
-      .withIndex("by_investor", (q) => q.eq("investorId", args.investorId))
-      .filter((q) => q.eq(q.field("period"), args.period))
-      .first();
-    if (existing) {
-      await ctx.db.replace(existing._id, {
-        investorId: args.investorId,
-        period: args.period,
-        snapshot,
-        generatedAt: Date.now(),
-        sentAt: undefined,
-        viewedAt: existing.viewedAt,
-      });
-      return { updated: true, id: existing._id };
-    }
-    const id = await ctx.db.insert("investorReports", {
-      investorId: args.investorId,
-      period: args.period,
-      snapshot,
-      generatedAt: Date.now(),
-    });
-    return { updated: false, id };
+    await requirePermission(ctx, "investors:manage");
+    return generateInvestorReportRecord(ctx, args);
   },
 });
 

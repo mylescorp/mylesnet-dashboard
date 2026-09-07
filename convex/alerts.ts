@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { requirePlatformAdmin, requirePlatformUser } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
@@ -12,7 +12,7 @@ import { notifyUser } from "./lib/notify";
  * never N separate notifications. Devices in "maintenance" lifecycle state
  * never fire alerts at all, checked before anything else.
  */
-export const raiseDeviceOfflineAlert = mutation({
+export const raiseDeviceOfflineAlert = internalMutation({
   args: { deviceId: v.id("devices") },
   handler: async (ctx, args) => {
     const device = await ctx.db.get(args.deviceId);

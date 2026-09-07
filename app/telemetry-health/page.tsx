@@ -20,6 +20,10 @@ const typeLabels: Record<string, string> = {
   dropped: "Event dropped",
   collector_backoff: "Collector backoff",
   partial_telemetry: "Partial telemetry",
+  self_heal_action: "Self-heal action",
+  self_heal_failed: "Self-heal failed",
+  chronic_self_heal: "Chronic self-heal",
+  healthguard_stale: "Healthguard stale",
 };
 
 type Event = NonNullable<NonNullable<ReturnType<typeof useQuery<typeof api.operations.getRecentSystemEvents>>>>[number];

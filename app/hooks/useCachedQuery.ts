@@ -20,7 +20,7 @@ export function useCachedQuery<Query extends FunctionReference<"query">>(
   args: Query["_args"],
   options: CachedQueryOptions = {}
 ): Query["_returnType"] | undefined {
-  const { cacheTime = 60000, enabled = true } = options;
+  const { enabled = true } = options;
 
   const freshData = useQuery(queryFunction, args);
   const gated = enabled ? freshData : undefined;

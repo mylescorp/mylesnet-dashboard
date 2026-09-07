@@ -54,12 +54,14 @@ export interface NavItem {
 
 export interface NavSection {
   title: string;
+  icon: LucideIcon;
   items: NavItem[];
 }
 
 export const navSections: NavSection[] = [
   {
     title: "Overview",
+    icon: LayoutDashboard,
     items: [
       {
         href: "/dashboard",
@@ -77,6 +79,7 @@ export const navSections: NavSection[] = [
   },
   {
     title: "Network & infrastructure",
+    icon: RadioTower,
     items: [
       {
         href: "/markets",
@@ -124,6 +127,7 @@ export const navSections: NavSection[] = [
   },
   {
     title: "Service operations",
+    icon: Wrench,
     items: [
       {
         href: "/incidents",
@@ -153,6 +157,7 @@ export const navSections: NavSection[] = [
   },
   {
     title: "Centipid & billing",
+    icon: CircleDollarSign,
     items: [
       {
         href: "/business-activity",
@@ -206,6 +211,7 @@ export const navSections: NavSection[] = [
   },
   {
     title: "Growth & performance",
+    icon: TrendingUp,
     items: [
       {
         href: "/analytics",
@@ -241,6 +247,7 @@ export const navSections: NavSection[] = [
   },
   {
     title: "People",
+    icon: Users,
     items: [
       {
         href: "/agents",
@@ -270,6 +277,7 @@ export const navSections: NavSection[] = [
   },
   {
     title: "Finance",
+    icon: HandCoins,
     items: [
       {
         href: "/payouts",
@@ -311,6 +319,7 @@ export const navSections: NavSection[] = [
   },
   {
     title: "Reporting",
+    icon: FileBarChart,
     items: [
       {
         href: "/daily-digest",
@@ -334,6 +343,7 @@ export const navSections: NavSection[] = [
   },
   {
     title: "Administration",
+    icon: Settings2,
     items: [
       {
         href: "/site-kit",

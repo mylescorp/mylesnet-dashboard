@@ -19,7 +19,6 @@ export async function localToUsd(
   forDate?: string,
 ): Promise<number> {
   if (amountLocal === 0) return 0;
-  const date = forDate ?? isoDate(new Date());
   let rate: number | undefined;
   try {
     const row = await ctx.runQuery(internal.forex.getRate, { currency });

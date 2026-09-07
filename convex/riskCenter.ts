@@ -1,4 +1,3 @@
-import { v } from "convex/values";
 import { query } from "./_generated/server";
 import { requirePermission } from "./lib/auth";
 import { dayOf } from "./lib/finance";

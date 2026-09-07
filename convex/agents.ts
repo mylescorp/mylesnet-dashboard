@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query, internalQuery } from "./_generated/server";
-import { requirePlatformAdmin, requirePlatformUser } from "./lib/auth";
+import { requirePermission } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 
 export const getAgentInternal = internalQuery({
@@ -13,7 +13,7 @@ export const getAgentInternal = internalQuery({
 export const listAgents = query({
   args: {},
   handler: async (ctx) => {
-    await requirePlatformUser(ctx);
+    await requirePermission(ctx, "agents:read");
     return await ctx.db
       .query("agents")
       .filter((q) => q.neq(q.field("status"), "deleted"))
@@ -24,7 +24,7 @@ export const listAgents = query({
 export const getAgent = query({
   args: { agentId: v.id("agents") },
   handler: async (ctx, args) => {
-    await requirePlatformUser(ctx);
+    await requirePermission(ctx, "agents:read");
     return await ctx.db.get(args.agentId);
   },
 });
@@ -33,7 +33,7 @@ export const getAgent = query({
 export const getAgentAssignmentHistory = query({
   args: { agentId: v.id("agents") },
   handler: async (ctx, args) => {
-    await requirePlatformUser(ctx);
+    await requirePermission(ctx, "agents:read");
     const rows = await ctx.db
       .query("agentMarketAssignments")
       .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
@@ -45,7 +45,7 @@ export const getAgentAssignmentHistory = query({
 export const createAgent = mutation({
   args: { name: v.string(), phone: v.string(), email: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "agents:manage");
     const now = Date.now();
     const agentId = await ctx.db.insert("agents", {
       name: args.name,
@@ -93,7 +93,7 @@ export const assignAgentToMarket = mutation({
     ),
   },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "agents:manage");
     const now = Date.now();
 
     if (args.endPreviousAssignmentId) {
@@ -131,7 +131,7 @@ export const assignAgentToMarket = mutation({
 export const suspendAgent = mutation({
   args: { agentId: v.id("agents"), reason: v.string() },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "agents:manage");
     const agent = await ctx.db.get(args.agentId);
     if (!agent) throw new Error("Agent not found");
 
@@ -154,7 +154,7 @@ export const suspendAgent = mutation({
 export const reactivateAgent = mutation({
   args: { agentId: v.id("agents") },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "agents:manage");
     const agent = await ctx.db.get(args.agentId);
     if (!agent) throw new Error("Agent not found");
 
@@ -184,7 +184,7 @@ export const reactivateAgent = mutation({
 export const offboardAgentStep1CloseAssignments = mutation({
   args: { agentId: v.id("agents") },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "agents:manage");
     const now = Date.now();
 
     const activeAssignments = await ctx.db
@@ -218,7 +218,7 @@ export const offboardAgentStep1CloseAssignments = mutation({
 export const getAgentUnsoldVouchersForOffboarding = query({
   args: { agentId: v.id("agents") },
   handler: async (ctx, args) => {
-    await requirePlatformAdmin(ctx);
+    await requirePermission(ctx, "agents:manage");
     return await ctx.db
       .query("vouchers")
       .withIndex("by_owner", (q) => q.eq("ownerAgentId", args.agentId))
@@ -240,7 +240,7 @@ export const disposeOffboardingVoucher = mutation({
     newOwnerAgentId: v.optional(v.id("agents")),
   },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "agents:manage");
     if (args.disposition === "reassign" && !args.newOwnerAgentId) {
       throw new Error("newOwnerAgentId is required when reassigning");
     }
@@ -273,7 +273,7 @@ export const offboardAgentFinalize = mutation({
     marketId: v.id("markets"),
   },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "agents:manage");
     const agent = await ctx.db.get(args.agentId);
     if (!agent) throw new Error("Agent not found");
 
@@ -319,7 +319,7 @@ export const offboardAgentFinalize = mutation({
 export const restoreAgent = mutation({
   args: { agentId: v.id("agents") },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "agents:manage");
     const agent = await ctx.db.get(args.agentId);
     if (!agent) throw new Error("Agent not found");
 

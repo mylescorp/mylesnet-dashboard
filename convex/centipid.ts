@@ -9,6 +9,7 @@ import {
   type MutationCtx,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { logAudit } from "./lib/auditLog";
 import { permissionsOf as collectPermissions, requireAuthenticatedUser, requirePermission, resolveRoles, resolveUserByIdentity } from "./lib/auth";
 import {
   decryptCentipidSecret,
@@ -88,6 +89,7 @@ export const getCentipidSettingsView = query({
     ]);
     return {
       hasCredentials: !!creds,
+      credentialUpdatedAt: creds?.updatedAt ?? creds?.createdAt ?? null,
       ingestionPaused: creds?.ingestionPaused === true,
       webhookUrl: webhookUrlFromSite(),
       encryptionConfigured: !!process.env.CENTIPID_CREDENTIALS_ENCRYPTION_KEY,
@@ -106,7 +108,7 @@ export const saveCentipidCredentials = mutation({
     ingestionPaused: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "centipid:manage");
+    const user = await requirePermission(ctx, "centipid:manage");
     const token = args.apiToken?.trim() ?? "";
     const secret = args.webhookSigningSecret?.trim() ?? "";
 
@@ -119,22 +121,39 @@ export const saveCentipidCredentials = mutation({
         webhookSigningSecret: await encryptCentipidSecret(secret),
         ingestionPaused: args.ingestionPaused ?? false,
         createdAt: Date.now(),
+        updatedAt: Date.now(),
       });
+      await logAudit(ctx, { action: "centipid.credentials.create", entityTable: "centipidCredentials", entityId: "active", changedBy: user._id, after: { hasApiToken: true, hasWebhookSigningSecret: true } });
       await ctx.scheduler.runAfter(0, internal.centipid.syncCentipidLiveData, {});
-      return { saved: true };
+      return { saved: true, created: true };
     }
 
     if (!token && !secret) {
       throw new Error("Enter a new API token, a new webhook signing secret, or both to update credentials.");
     }
 
-    const patch: { apiToken?: string; webhookSigningSecret?: string; ingestionPaused?: boolean } = {};
+    const patch: { apiToken?: string; webhookSigningSecret?: string; ingestionPaused?: boolean; updatedAt: number } = { updatedAt: Date.now() };
     if (token) patch.apiToken = await encryptCentipidSecret(token);
     if (secret) patch.webhookSigningSecret = await encryptCentipidSecret(secret);
     if (args.ingestionPaused !== undefined) patch.ingestionPaused = args.ingestionPaused;
     await ctx.db.patch(existing._id, patch);
+    await logAudit(ctx, { action: "centipid.credentials.rotate", entityTable: "centipidCredentials", entityId: existing._id, changedBy: user._id, before: { configured: true }, after: { apiTokenRotated: !!token, webhookSigningSecretRotated: !!secret } });
     await ctx.scheduler.runAfter(0, internal.centipid.syncCentipidLiveData, {});
-    return { saved: true };
+    return { saved: true, created: false };
+  },
+});
+
+/** Removes the active connection but retains historical business events and audit history. */
+export const removeCentipidCredentials = mutation({
+  args: { confirmation: v.string() },
+  handler: async (ctx, args) => {
+    const user = await requirePermission(ctx, "centipid:manage");
+    if (args.confirmation !== "REMOVE") throw new Error('Type REMOVE to delete the stored Centipid credentials.');
+    const credentials = await ctx.db.query("centipidCredentials").collect();
+    if (credentials.length === 0) return { removed: false };
+    for (const credential of credentials) await ctx.db.delete(credential._id);
+    await logAudit(ctx, { action: "centipid.credentials.remove", entityTable: "centipidCredentials", entityId: "active", changedBy: user._id, before: { configured: true, recordsRemoved: credentials.length }, after: { configured: false, historicalEventsRetained: true } });
+    return { removed: true };
   },
 });
 

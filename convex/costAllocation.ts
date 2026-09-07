@@ -26,7 +26,6 @@ export const getCostAllocation = query({
         currency: string;
       }
     >();
-    let totalRevenueLocal = 0;
     const totalsByCurrency = new Map<string, number>();
 
     for (const row of expenses) {
@@ -54,7 +53,6 @@ export const getCostAllocation = query({
       entry.revenueLocal = fin.revenueLocal;
       entry.currency = fin.currency;
       byMarket.set(fin.marketId, entry);
-      totalRevenueLocal += fin.revenueLocal;
       totalsByCurrency.set(fin.currency, (totalsByCurrency.get(fin.currency) ?? 0) + fin.revenueLocal);
     }
 

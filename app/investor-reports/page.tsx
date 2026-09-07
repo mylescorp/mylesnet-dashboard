@@ -1,11 +1,14 @@
 "use client";
 
-import { useQuery } from "@/app/lib/convex";
+import { useState } from "react";
+import { useMutation, useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import { Banknote, TrendingUp, Users, FileBarChart } from "lucide-react";
 import MetricCard from "@/app/components/MetricCard";
 import SimpleBars from "@/app/components/SimpleBars";
-import { EmptyState, Loading, Select, StatusPill, formatDateTime } from "@/app/components/ui";
+import { EmptyState, ErrorNote, Loading, Select, StatusPill, TextInput, formatDateTime } from "@/app/components/ui";
+import { useUserProfile } from "@/app/components/UserProfileContext";
 
 const n = (v: number, d = 2) => v.toLocaleString("en", { minimumFractionDigits: d, maximumFractionDigits: d });
 
@@ -14,6 +17,15 @@ export default function InvestorReportsPage() {
   const overview = useQuery(api.investors.getInvestorOverview, {});
   const investors = useQuery(api.investors.listInvestors, {});
   const reports = useQuery(api.investors.listInvestorReports, {});
+  const createInvestor = useMutation(api.investors.createInvestor);
+  const updateInvestor = useMutation(api.investors.updateInvestor);
+  const generateReport = useMutation(api.investors.generateInvestorReportForAdmin);
+  const { user } = useUserProfile();
+  const canManage = user?.permissions?.includes("investors:manage") === true;
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingId, setEditingId] = useState<Id<"investors"> | null>(null);
+  const [form, setForm] = useState({ name: "", email: "", amount: "", date: new Date().toISOString().slice(0, 10), instrumentType: "equity" as "equity" | "safe" | "loan" | "revenue_share", reportFrequency: "monthly" as "weekly" | "monthly", notes: "" });
+  const [error, setError] = useState<string | null>(null);
 
   if (markets === undefined || overview === undefined || investors === undefined || reports === undefined) return <Loading />;
 
@@ -26,6 +38,23 @@ export default function InvestorReportsPage() {
     if (!rep || !rep.snapshot) return null;
     const snap = rep.snapshot as { totalMonthlyRevenueUSD?: number; totalNetContributionLocal?: number; revenueUSD?: number; netContributionLocal?: number };
     return snap;
+  };
+
+  const resetForm = () => {
+    setFormOpen(false);
+    setEditingId(null);
+    setForm({ name: "", email: "", amount: "", date: new Date().toISOString().slice(0, 10), instrumentType: "equity", reportFrequency: "monthly", notes: "" });
+    setError(null);
+  };
+
+  const saveInvestor = async () => {
+    setError(null);
+    try {
+      if (!form.name.trim() || !form.email.trim() || Number(form.amount) < 0) throw new Error("Name, email and a non-negative investment amount are required");
+      if (editingId) await updateInvestor({ investorId: editingId, name: form.name.trim(), email: form.email.trim(), instrumentType: form.instrumentType, reportFrequency: form.reportFrequency, notes: form.notes || undefined });
+      else await createInvestor({ name: form.name.trim(), email: form.email.trim(), investmentAmountUSD: Number(form.amount), investmentDate: form.date, instrumentType: form.instrumentType, reportFrequency: form.reportFrequency, notes: form.notes || undefined });
+      resetForm();
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not save investor"); }
   };
 
   return (
@@ -77,7 +106,24 @@ export default function InvestorReportsPage() {
       <div className="section-block">
         <div className="section-heading">
           <div><p className="eyebrow">Capital</p><h2>Investors</h2></div>
+          {canManage && <button className="pf-button pf-button-primary" onClick={() => { resetForm(); setFormOpen(true); }}><span aria-hidden="true">+</span> Add investor</button>}
         </div>
+        {canManage && (formOpen || editingId) && (
+          <div className="pf-panel" style={{ marginBottom: 16 }}>
+            <div className="section-heading"><div><p className="eyebrow">{editingId ? "Update" : "Create"}</p><h2>{editingId ? "Edit investor" : "New investor"}</h2></div></div>
+            {error && <ErrorNote>{error}</ErrorNote>}
+            <div className="pf-form-grid">
+              <label className="pf-field"><span className="pf-label">Name *</span><TextInput value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label>
+              <label className="pf-field"><span className="pf-label">Email *</span><TextInput type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></label>
+              <label className="pf-field"><span className="pf-label">Investment USD *</span><TextInput type="number" min="0" disabled={Boolean(editingId)} value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} /></label>
+              <label className="pf-field"><span className="pf-label">Investment date</span><TextInput type="date" disabled={Boolean(editingId)} value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} /></label>
+              <label className="pf-field"><span className="pf-label">Instrument</span><Select value={form.instrumentType} onChange={(event) => setForm({ ...form, instrumentType: event.target.value as typeof form.instrumentType })}><option value="equity">Equity</option><option value="safe">SAFE</option><option value="loan">Loan</option><option value="revenue_share">Revenue share</option></Select></label>
+              <label className="pf-field"><span className="pf-label">Report cadence</span><Select value={form.reportFrequency} onChange={(event) => setForm({ ...form, reportFrequency: event.target.value as typeof form.reportFrequency })}><option value="monthly">Monthly</option><option value="weekly">Weekly</option></Select></label>
+              <label className="pf-field" style={{ gridColumn: "span 2" }}><span className="pf-label">Notes</span><TextInput value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} /></label>
+            </div>
+            <div className="pf-form-actions"><button className="secondary-button" onClick={resetForm}>Cancel</button><button className="primary-button" onClick={saveInvestor}>Save investor</button></div>
+          </div>
+        )}
         <div className="pf-panel">
           {investors.length === 0 ? (
             <EmptyState title="No investors on book" body="Investors appear once added." />
@@ -85,7 +131,7 @@ export default function InvestorReportsPage() {
             <div className="pf-table-wrap">
               <table className="pf-table">
                 <thead>
-                  <tr><th>Investor</th><th className="pf-hide-sm">Instrument</th><th>Investment</th><th className="pf-hide-sm">Equity</th><th className="pf-hide-sm">Report cadence</th><th>Status</th></tr>
+                  <tr><th>Investor</th><th className="pf-hide-sm">Instrument</th><th>Investment</th><th className="pf-hide-sm">Equity</th><th className="pf-hide-sm">Report cadence</th><th>Status</th>{canManage && <th>Actions</th>}</tr>
                 </thead>
                 <tbody>
                   {investors.map((inv) => (
@@ -96,6 +142,7 @@ export default function InvestorReportsPage() {
                       <td className="pf-hide-sm">{inv.equityPercent ? `${inv.equityPercent}%` : "—"}</td>
                       <td className="pf-hide-sm">{inv.reportFrequency}</td>
                       <td><StatusPill tone={inv.status === "active" ? "success" : "neutral"}>{inv.status}</StatusPill></td>
+                      {canManage && <td><button className="pf-button pf-button-compact" onClick={() => { setEditingId(inv._id); setFormOpen(true); setForm({ name: inv.name, email: inv.email, amount: String(inv.investmentAmountUSD), date: inv.investmentDate, instrumentType: inv.instrumentType, reportFrequency: inv.reportFrequency, notes: inv.notes ?? "" }); }}>Edit</button>{inv.status === "active" && <button className="pf-button pf-button-compact" onClick={() => updateInvestor({ investorId: inv._id, status: "exited" })}>Exit</button>}</td>}
                     </tr>
                   ))}
                 </tbody>
@@ -116,7 +163,7 @@ export default function InvestorReportsPage() {
             <div className="pf-table-wrap">
               <table className="pf-table">
                 <thead>
-                  <tr><th>Period</th><th>Investor</th><th className="pf-hide-sm">Monthly revenue</th><th className="pf-hide-sm">Net contribution</th><th>Generated</th></tr>
+                  <tr><th>Period</th><th>Investor</th><th className="pf-hide-sm">Monthly revenue</th><th className="pf-hide-sm">Net contribution</th><th>Generated</th>{canManage && <th>Actions</th>}</tr>
                 </thead>
                 <tbody>
                   {reports.slice(0, 50).map((r) => {
@@ -129,6 +176,7 @@ export default function InvestorReportsPage() {
                         <td className="pf-hide-sm">{snap?.totalMonthlyRevenueUSD !== undefined ? `$${n(snap.totalMonthlyRevenueUSD)}` : snap?.revenueUSD !== undefined ? `$${n(snap.revenueUSD)}` : "—"}</td>
                         <td className="pf-hide-sm">{snap?.totalNetContributionLocal !== undefined ? n(snap.totalNetContributionLocal) : snap?.netContributionLocal !== undefined ? n(snap.netContributionLocal) : "—"}</td>
                         <td className="pf-hide-sm">{formatDateTime(r.generatedAt)}</td>
+                        {canManage && <td>{r.investorId ? <button className="pf-button pf-button-compact" onClick={() => generateReport({ investorId: r.investorId!, period: r.period })}>Regenerate</button> : "—"}</td>}
                       </tr>
                     );
                   })}

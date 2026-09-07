@@ -1,12 +1,12 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { requirePlatformAdmin, requirePlatformUser } from "./lib/auth";
+import { requirePermission } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 
 export const listDevices = query({
   args: { marketId: v.optional(v.id("markets")) },
   handler: async (ctx, args) => {
-    await requirePlatformUser(ctx);
+    await requirePermission(ctx, "devices:read");
     const rows = args.marketId
       ? await ctx.db
           .query("devices")
@@ -24,7 +24,7 @@ export const listDevices = query({
 export const getDevice = query({
   args: { deviceId: v.id("devices") },
   handler: async (ctx, args) => {
-    await requirePlatformUser(ctx);
+    await requirePermission(ctx, "devices:read");
     return await ctx.db.get(args.deviceId);
   },
 });
@@ -32,7 +32,7 @@ export const getDevice = query({
 export const listDeviceReplacementEvents = query({
   args: { deviceId: v.id("devices") },
   handler: async (ctx, args) => {
-    await requirePlatformUser(ctx);
+    await requirePermission(ctx, "devices:read");
     return await ctx.db
       .query("deviceReplacementEvents")
       .withIndex("by_device", (q) => q.eq("deviceId", args.deviceId))
@@ -55,7 +55,7 @@ export const createDevice = mutation({
     serialOrMac: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "devices:manage");
     const now = Date.now();
     const deviceId = await ctx.db.insert("devices", {
       marketId: args.marketId,
@@ -91,7 +91,7 @@ export const logDeviceReplacement = mutation({
     reason: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "devices:manage");
     const device = await ctx.db.get(args.deviceId);
     if (!device) throw new Error("Device not found");
 
@@ -124,7 +124,7 @@ export const logDeviceReplacement = mutation({
 export const setDeviceMaintenance = mutation({
   args: { deviceId: v.id("devices"), inMaintenance: v.boolean() },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "devices:manage");
     const device = await ctx.db.get(args.deviceId);
     if (!device) throw new Error("Device not found");
 
@@ -147,7 +147,7 @@ export const setDeviceMaintenance = mutation({
 export const softDeleteDevice = mutation({
   args: { deviceId: v.id("devices"), deleteReason: v.string() },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "devices:manage");
     const device = await ctx.db.get(args.deviceId);
     if (!device) throw new Error("Device not found");
 
@@ -188,7 +188,7 @@ export const softDeleteDevice = mutation({
 export const restoreDevice = mutation({
   args: { deviceId: v.id("devices") },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "devices:manage");
     const device = await ctx.db.get(args.deviceId);
     if (!device) throw new Error("Device not found");
 

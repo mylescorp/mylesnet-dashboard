@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { internalQuery, mutation, query } from "./_generated/server";
-import { requirePermission, requirePlatformUser } from "./lib/auth";
+import { requirePermission } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 
 /**
@@ -95,7 +95,7 @@ export const verifyMarketSiteKey = internalQuery({
 export const listSiteKitConfigs = query({
   args: {},
   handler: async (ctx) => {
-    await requirePlatformUser(ctx);
+    await requirePermission(ctx, "site_kit:read");
     return (await ctx.db.query("standardSiteKit").collect()).sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
   },
 });
@@ -138,5 +138,53 @@ export const saveSiteKitConfig = mutation({
       after: args,
     });
     return id;
+  },
+});
+
+export const updateSiteKitConfig = mutation({
+  args: {
+    configId: v.id("standardSiteKit"),
+    approvedModel: v.optional(v.string()),
+    approvedFirmwareVersion: v.optional(v.string()),
+    requiresUps: v.optional(v.boolean()),
+    snmpProfile: v.optional(v.string()),
+    effectiveFrom: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requirePermission(ctx, "site_kit:manage");
+    const config = await ctx.db.get(args.configId);
+    if (!config) throw new Error("Site kit configuration not found");
+    const patch = {
+      approvedModel: args.approvedModel,
+      approvedFirmwareVersion: args.approvedFirmwareVersion,
+      requiresUps: args.requiresUps,
+      snmpProfile: args.snmpProfile,
+      effectiveFrom: args.effectiveFrom,
+    };
+    const cleaned = Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined));
+    await ctx.db.patch(args.configId, { ...cleaned, updatedAt: Date.now() });
+    await logAudit(ctx, {
+      action: "siteKit.update",
+      entityTable: "standardSiteKit",
+      entityId: args.configId,
+      changedBy: user._id,
+      after: cleaned,
+    });
+  },
+});
+
+export const archiveSiteKitConfig = mutation({
+  args: { configId: v.id("standardSiteKit") },
+  handler: async (ctx, args) => {
+    const user = await requirePermission(ctx, "site_kit:manage");
+    const config = await ctx.db.get(args.configId);
+    if (!config) throw new Error("Site kit configuration not found");
+    await ctx.db.patch(args.configId, { status: "superseded", updatedAt: Date.now() });
+    await logAudit(ctx, {
+      action: "siteKit.archive",
+      entityTable: "standardSiteKit",
+      entityId: args.configId,
+      changedBy: user._id,
+    });
   },
 });

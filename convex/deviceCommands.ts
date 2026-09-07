@@ -4,7 +4,7 @@ import type { Id } from "./_generated/dataModel";
 import { requirePermission } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 import { getHealthguardEnabled } from "./systemSettings";
-import { nextCommandStatus } from "./lib/deviceCommandCore";
+import { nextCommandStatus, type DeviceCommandStatus } from "./lib/deviceCommandCore";
 
 /**
  * Operator command queue executed by a router's local collector.
@@ -222,8 +222,8 @@ export async function applyCommandReport(
   const command = await ctx.db.get(report.commandId);
   if (!command || command.routerId !== report.routerId) return;
   const next = nextCommandStatus(command.status, report.transition);
-  if (next === null) return;
-  const patch: { status: "acknowledged" | "completed" | "failed"; acknowledgedAt?: number; completedAt?: number; failedAt?: number; errorMessage?: string } = {
+  if (next !== "acknowledged" && next !== "completed" && next !== "failed") return;
+  const patch: { status: Exclude<DeviceCommandStatus, "pending" | "superseded">; acknowledgedAt?: number; completedAt?: number; failedAt?: number; errorMessage?: string } = {
     status: next,
   };
   if (next === "acknowledged") patch.acknowledgedAt = report.observedAt;

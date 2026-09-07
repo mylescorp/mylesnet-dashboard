@@ -16,6 +16,8 @@ function makeRouter(records) {
     calls.push({ url: url.toString(), path: url.pathname, method: init.method ?? "GET", body: init.body ?? null });
     if (init.method === "PATCH") {
       patchTargets.push(url.pathname);
+      const service = records.find((record) => record && record.name === "www-ssl");
+      if (service) service.disabled = false;
       return {
         ok: true,
         status: 200,
@@ -92,12 +94,10 @@ test("a disabled www-ssl is re-enabled with a PATCH and verified", async () => {
 });
 
 test("a repeat re-enable is throttled by the retry cooldown", async () => {
-  const { router, guard } = guardWith([
-    serviceRecord({ disabled: true }),
-    serviceRecord({ disabled: true }),
-  ]);
+  const { router, guard } = guardWith([serviceRecord({ disabled: true })]);
   const first = await guard.runNow(1_000_000);
   assert.equal(first.lastAction, "reenabled_www_ssl");
+  router.records[0].disabled = true;
   const second = await guard.runNow(1_000_000 + 30_000);
   assert.equal(second.lastAction, "flagged_disabled");
   assert.equal(router.patchTargets.length, 1, "the second attempt stays inside the cooldown");
@@ -113,7 +113,7 @@ test("shouldRun gates on interval but runs immediately when brand new", async ()
 });
 
 test("a rejected PATCH is reported as reenable_failed", async () => {
-  const { guard } = guardWith([serviceRecord({ disabled: true })], {}, async (input, init = {}) => {
+  const { guard } = guardWith([serviceRecord({ disabled: true })], {}, async (input) => {
     const url = new URL(String(input));
     if (url.pathname === "/rest/ip/service") {
       return { ok: true, status: 200, async json() { return [serviceRecord({ disabled: true })]; } };
@@ -127,7 +127,13 @@ test("a rejected PATCH is reported as reenable_failed", async () => {
 });
 
 test("a PATCH that does not stick is reported as reenable_failed", async () => {
-  const { guard } = guardWith([serviceRecord({ disabled: true })]);
+  const { guard } = guardWith([serviceRecord({ disabled: true })], {}, async (input) => {
+    const url = new URL(String(input));
+    if (url.pathname === "/rest/ip/service") {
+      return { ok: true, status: 200, async json() { return [serviceRecord({ disabled: true })]; } };
+    }
+    return { ok: true, status: 200, async json() { return serviceRecord({ disabled: true }); } };
+  });
   const status = await guard.run(1_000_000);
   assert.equal(status.lastAction, "reenable_failed");
   assert.equal(status.wwwSslEnabled, false);

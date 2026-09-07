@@ -28,12 +28,13 @@ export const seedLocalSystemRoles = internalMutation({
         .withIndex("by_slug", (q) => q.eq("slug", definition.slug))
         .first();
       if (existing) {
+        // System roles are seeded as a baseline, not a recurring overwrite.
+        // Administrators may now tailor their name, description and permission
+        // set through the role editor. Keep their immutable identity fields and
+        // WorkOS linkage intact when repairing a missing link.
         await ctx.db.patch(existing._id, {
-          name: definition.name,
-          description: definition.description,
           isPlatform: definition.isPlatform,
           rank: definition.rank,
-          permissions: definition.permissions,
           updatedAt: now,
           deletedAt: undefined,
           workosRoleSlug: definition.syncToWorkos ? definition.slug : undefined,
@@ -290,7 +291,6 @@ export const updateRole = action({
     const actor = await ctx.runQuery(internal.rolesInternal.authorize, { permission: "roles:manage" });
     const role = await ctx.runQuery(internal.rolesInternal.getRoleById, { roleId: args.roleId });
     if (!role) throw new Error("Role not found.");
-    if (role.isSystem) throw new Error("System roles cannot be edited.");
 
     const name = args.name !== undefined ? args.name.trim() : role.name;
     if (!name) throw new Error("A role name is required.");
@@ -300,17 +300,18 @@ export const updateRole = action({
       if (!permissionInCatalog(permission)) throw new Error(`Unknown permission: ${permission}`);
     }
 
-    const organizationId = platformOrganizationIdForRoleSync();
-    const workosSlug = role.workosRoleSlug ?? workosSlugForRole(role);
-    try {
-      await updateWorkosOrganizationRole(organizationId, workosSlug, name, description);
+    // Custom roles are organization-scoped in WorkOS. System roles are
+    // environment roles, so their WorkOS identity remains stable while Convex
+    // applies the edited permission set authoritatively at every request.
+    if (!role.isSystem) {
+      const organizationId = platformOrganizationIdForRoleSync();
+      const workosSlug = role.workosRoleSlug ?? workosSlugForRole(role);
       try {
+        await updateWorkosOrganizationRole(organizationId, workosSlug, name, description);
         await setWorkosOrganizationRolePermissions(organizationId, workosSlug, [WORKOS_AUTHKIT_BASELINE_PERMISSION]);
       } catch {
-        // best-effort
+        // Convex remains authoritative if an organization role was removed in WorkOS.
       }
-    } catch {
-      // Role may have been deleted in WorkOS; keep the local mirror consistent.
     }
 
     await ctx.runMutation(internal.rolesAdmin.updateRoleLocal, {
@@ -324,7 +325,7 @@ export const updateRole = action({
       action: "role.update",
       roleId: args.roleId,
       actorUserId: actor.userId,
-      after: { name, permissions },
+      after: { name, permissions, systemRole: role.isSystem },
     });
     return args.roleId;
   },
@@ -354,7 +355,7 @@ export const deleteRole = action({
     const actor = await ctx.runQuery(internal.rolesInternal.authorize, { permission: "roles:manage" });
     const role = await ctx.runQuery(internal.rolesInternal.getRoleById, { roleId: args.roleId });
     if (!role) throw new Error("Role not found.");
-    if (role.isSystem) throw new Error("System roles cannot be deleted.");
+    if (role.isSystem) throw new Error("System roles are protected from deletion. Edit their permissions instead.");
 
     const assignedCount = await ctx.runQuery(internal.rolesInternal.countRoleAssignments, { roleId: args.roleId });
     if (assignedCount > 0) {

@@ -37,6 +37,7 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { ApEditor, RouterEditor, SwitchEditor, errorText, type AccessPointRow, type RouterRow, type SwitchRow } from "@/app/components/router/RouterEditors";
 import { ConfigWatchPanel } from "@/app/components/router/ConfigWatchPanel";
+import { HealthGuardPanel } from "@/app/components/router/HealthGuardPanel";
 
 const bytes = (value: number) => value < 1024 ? `${Math.round(value)} B` : value < 1024 ** 2 ? `${(value / 1024).toFixed(1)} KB` : value < 1024 ** 3 ? `${(value / 1024 ** 2).toFixed(1)} MB` : `${(value / 1024 ** 3).toFixed(2)} GB`;
 const rate = (value: number) => `${bytes(value)}/s`;
@@ -163,7 +164,7 @@ export default function RouterConsolePage() {
       {tabs.map((item) => { const Icon = item.icon; return <button key={item.id} type="button" className={`console-tab ${tab === item.id ? "console-tab-active" : ""}`} onClick={() => setTab(item.id)}><Icon aria-hidden="true" size={16} />{item.label}</button>; })}
     </nav>
 
-    {tab === "overview" ? <OverviewTab live={live} telemetry={telemetry} runHistory={runHistory ?? []} incidents={incidents ?? []} events={routerEvents} onboardingState={onboardingState} /> : null}
+    {tab === "overview" ? <OverviewTab routerId={routerId} live={live} telemetry={telemetry} runHistory={runHistory ?? []} incidents={incidents ?? []} events={routerEvents} onboardingState={onboardingState} /> : null}
     {tab === "setup" ? <SetupTab router={router} markets={markets} onboardingState={onboardingState} onEdit={() => setRouterEditor(router)} onArchive={async () => { const reason = window.prompt(`Archive ${router.name}? Monitoring history will be kept. Enter a short reason:`); if (!reason?.trim()) return; setBusy("archive"); try { await archiveRouter({ routerId, reason }); setMessage("Router archived. Historical data was preserved."); nav.push("/routers"); } catch (caught) { setMessage(errorText(caught)); } finally { setBusy(null); } }} busy={busy === "archive"} /> : null}
     {tab === "access" ? <AccessTab aps={aps ?? []} live={live} switches={switches} onAdd={() => setApEditor({ routerId })} onEdit={(item) => setApEditor({ routerId, item })} onArchive={async (item) => { const reason = window.prompt(`Archive ${item.name}? Historical data will be preserved. Enter a short reason:`); if (!reason?.trim()) return; setBusy(item._id); try { await archiveAp({ accessPointId: item._id, reason }); setMessage("Access point archived. Historical data was preserved."); } catch (caught) { setMessage(errorText(caught)); } finally { setBusy(null); } }} busy={busy} /> : null}
     {tab === "switches" ? <SwitchesTab switches={switches} aps={aps ?? []} onAdd={() => setSwitchEditor({})} onEdit={(item) => setSwitchEditor({ item })} onArchive={async (item) => { const reason = window.prompt(`Archive switch ${item.name}? Access points linked to it will keep their records but the switch link is cleared. Enter a short reason:`); if (!reason?.trim()) return; setBusy(item._id); try { await archiveSwitch({ switchId: item._id, reason }); setMessage("Switch archived. Its access-point links are preserved on the AP records."); } catch (caught) { setMessage(errorText(caught)); } finally { setBusy(null); } }} busy={busy} /> : null}
@@ -193,10 +194,9 @@ type Queues = NonNullable<NonNullable<ReturnType<typeof useQuery<typeof api.oper
 type PoolOverview = NonNullable<NonNullable<ReturnType<typeof useQuery<typeof api.operations.getDhcpPoolOverview>>>>;
 type ThresholdsRow = NonNullable<NonNullable<ReturnType<typeof useQuery<typeof api.thresholds.getRouterMonitorThresholds>>>>;
 
-function OverviewTab({ live, telemetry, runHistory, incidents, events, onboardingState }: { live: LiveRouter | null | undefined; telemetry: TelemetryRow | null | undefined; runHistory: RunHistory; incidents: IncidentRow; events: EventRow; onboardingState: OnboardingRow[number] | undefined }) {
+function OverviewTab({ routerId, live, telemetry, runHistory, incidents, events, onboardingState }: { routerId: Id<"routers">; live: LiveRouter | null | undefined; telemetry: TelemetryRow | null | undefined; runHistory: RunHistory; incidents: IncidentRow; events: EventRow; onboardingState: OnboardingRow[number] | undefined }) {
   const latestRun = runHistory[0];
-  const routerId = live?.router._id;
-  return <div className="console-grid">
+  return <div className="console-grid"><HealthGuardPanel routerId={routerId} />
     <section className="section-block console-col">
       <Card eyebrow="Collector health" title="Latest runs">
         {latestRun ? <dl className="access-point-stats"><div><dt>Last run</dt><dd>{relativeTime(latestRun.observedAt)}</dd></div><div><dt>Status</dt><dd>{latestRun.status}</dd></div><div><dt>Round-trip</dt><dd>{latestRun.latencyMs !== undefined ? `${Math.round(latestRun.latencyMs)} ms` : "—"}</dd></div><div><dt>Consecutive failures</dt><dd>{latestRun.consecutiveFailures ?? 0}</dd></div><div><dt>Process uptime</dt><dd>{latestRun.processUptimeMs !== undefined ? uptimeLabel(latestRun.processUptimeMs) : "—"}</dd></div></dl> : <p className="dialog-message">No collector runs have been recorded for this router. Start the local collector and copy the router ID (top-right) into its configuration.</p>}

@@ -1,100 +1,34 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@/app/lib/convex";
+import { useMutation, useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
-import { Package, Radio, Tv, Home, CheckSquare } from "lucide-react";
-import MetricCard from "@/app/components/MetricCard";
-import { EmptyState, Loading, Select, StatusPill } from "@/app/components/ui";
 import type { Id } from "@/convex/_generated/dataModel";
+import { CheckSquare, Home, Package, Pencil, Plus, Radio, Tv } from "lucide-react";
+import MetricCard from "@/app/components/MetricCard";
+import { EmptyState, ErrorNote, Loading, Select, StatusPill, TextInput } from "@/app/components/ui";
+import { useUserProfile } from "@/app/components/UserProfileContext";
 
-const categoryIcon = { data: Radio, tv: Tv, home_bundle: Home };
-
-const n = (v: number) => v.toLocaleString("en");
+type Category = "data" | "tv" | "home_bundle";
+const categoryIcon: Record<Category, typeof Radio> = { data: Radio, tv: Tv, home_bundle: Home };
 
 export default function PlansPage() {
   const markets = useQuery(api.markets.listMarkets, {});
   const [marketId, setMarketId] = useState("");
   const [includeInactive, setIncludeInactive] = useState(false);
-  const plans = useQuery(
-    api.plans.listPlans,
-    marketId ? { marketId: marketId as Id<"markets">, includeInactive } : { includeInactive },
-  );
-
+  const plans = useQuery(api.plans.listPlans, marketId ? { marketId: marketId as Id<"markets">, includeInactive } : { includeInactive });
+  const createPlan = useMutation(api.plans.createPlan);
+  const updatePlan = useMutation(api.plans.updatePlan);
+  const { user } = useUserProfile();
+  const canManage = user?.permissions?.includes("plans:manage") === true;
+  const [editing, setEditing] = useState<Id<"plans"> | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [form, setForm] = useState({ marketId: "", code: "", name: "", category: "data" as Category, priceLocal: "", currency: "UGX", durationLabel: "" });
+  const [error, setError] = useState<string | null>(null);
   if (markets === undefined || plans === undefined) return <Loading />;
-
-  const active = plans.filter((p) => p.status === "active");
-  const data = plans.filter((p) => p.category === "data").length;
-
-  return (
-    <div className="workspace-page">
-      <div className="page-heading">
-        <div>
-          <p className="eyebrow">Business</p>
-          <h1 className="page-title">Plans</h1>
-          <p className="page-subtitle">The package catalogue across markets — data, TV and home bundles.</p>
-        </div>
-        <div style={{ minWidth: 220 }}>
-          <Select value={marketId} onChange={(e) => setMarketId(e.target.value)} aria-label="Filter by market">
-            <option value="">All markets</option>
-            {markets.map((m) => (
-              <option key={m._id} value={m._id}>{m.name}</option>
-            ))}
-          </Select>
-        </div>
-      </div>
-
-      <div className="metric-grid">
-        <MetricCard icon={Package} label="Plans" value={plans.length} tone="primary" detail="In catalogue" />
-        <MetricCard icon={CheckSquare} label="Active" value={active.length} tone="success" detail="On sale now" />
-        <MetricCard icon={Radio} label="Data plans" value={data} tone="accent" detail="Internet packages" />
-      </div>
-
-      <label className="access-role-check" style={{ marginTop: 4 }}>
-        <input type="checkbox" checked={includeInactive} onChange={(e) => setIncludeInactive(e.target.checked)} />
-        <span>Show inactive plans</span>
-      </label>
-
-      <div className="section-block">
-        <div className="section-heading">
-          <div><p className="eyebrow">Catalogue</p><h2>Plans</h2></div>
-        </div>
-        <div className="pf-panel">
-          {plans.length === 0 ? (
-            <EmptyState title="No plans yet" body="Plans appear here once created for a market." />
-          ) : (
-            <div className="pf-table-wrap">
-              <table className="pf-table">
-                <thead>
-                  <tr>
-                    <th>Plan</th>
-                    <th className="pf-hide-sm">Code</th>
-                    <th>Category</th>
-                    <th>Market</th>
-                    <th>Price</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {plans.map((p) => {
-                    const Icon = categoryIcon[p.category] ?? Package;
-                    return (
-                      <tr key={p._id}>
-                        <td><strong>{p.name}</strong></td>
-                        <td className="pf-hide-sm"><code>{p.code}</code></td>
-                        <td><StatusPill tone="neutral"><Icon size={13} style={{ verticalAlign: -2 }} /> {p.category}</StatusPill></td>
-                        <td>{markets.find((m) => m._id === p.marketId)?.name ?? "National"}</td>
-                        <td>{n(p.priceLocal)} {p.currency}{p.durationLabel ? ` / ${p.durationLabel}` : ""}</td>
-                        <td><StatusPill tone={p.status === "active" ? "success" : "warning"}>{p.status}</StatusPill></td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+  const active = plans.filter((plan) => plan.status === "active");
+  const data = plans.filter((plan) => plan.category === "data").length;
+  const reset = () => { setEditing(null); setFormOpen(false); setForm({ marketId: "", code: "", name: "", category: "data", priceLocal: "", currency: "UGX", durationLabel: "" }); setError(null); };
+  const save = async () => { setError(null); try { if (!form.code.trim() || !form.name.trim() || Number(form.priceLocal) < 0) throw new Error("Code, name and a non-negative price are required"); if (editing) await updatePlan({ planId: editing, name: form.name.trim(), priceLocal: Number(form.priceLocal), currency: form.currency.trim(), durationLabel: form.durationLabel || undefined, status: "active" }); else await createPlan({ marketId: form.marketId ? form.marketId as Id<"markets"> : undefined, code: form.code.trim(), name: form.name.trim(), category: form.category, priceLocal: Number(form.priceLocal), currency: form.currency.trim(), durationLabel: form.durationLabel || undefined }); reset(); } catch (err) { setError(err instanceof Error ? err.message : "Could not save plan"); } };
+  return <div className="workspace-page"><div className="page-heading"><div><p className="eyebrow">Business</p><h1 className="page-title">Plans</h1><p className="page-subtitle">The package catalogue across markets with permissioned lifecycle controls.</p></div>{canManage && <button className="pf-button pf-button-primary" onClick={() => { setEditing(null); setFormOpen(true); setForm({ marketId: "", code: "", name: "", category: "data", priceLocal: "", currency: "UGX", durationLabel: "" }); }}><Plus size={15} /> Add plan</button>}<div style={{ minWidth: 220 }}><Select value={marketId} onChange={(event) => setMarketId(event.target.value)} aria-label="Filter by market"><option value="">All markets</option>{markets.map((market) => <option key={market._id} value={market._id}>{market.name}</option>)}</Select></div></div><div className="metric-grid"><MetricCard icon={Package} label="Plans" value={plans.length} tone="primary" detail="In catalogue" /><MetricCard icon={CheckSquare} label="Active" value={active.length} tone="success" detail="On sale now" /><MetricCard icon={Radio} label="Data plans" value={data} tone="accent" detail="Internet packages" /></div>{canManage && (formOpen || editing !== null) && <div className="section-block"><div className="pf-panel"><div className="section-heading"><div><p className="eyebrow">{editing ? "Update" : "Create"}</p><h2>{editing ? "Edit plan" : "New plan"}</h2></div></div>{error && <ErrorNote>{error}</ErrorNote>}<div className="grid gap-4 sm:grid-cols-2"><label className="pf-field"><span className="pf-label">Name *</span><TextInput value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label><label className="pf-field"><span className="pf-label">Code *</span><TextInput disabled={editing !== null} value={form.code} onChange={(event) => setForm({ ...form, code: event.target.value })} /></label><label className="pf-field"><span className="pf-label">Market</span><Select disabled={editing !== null} value={form.marketId} onChange={(event) => setForm({ ...form, marketId: event.target.value })}><option value="">National</option>{markets.map((market) => <option key={market._id} value={market._id}>{market.name}</option>)}</Select></label><label className="pf-field"><span className="pf-label">Category</span><Select disabled={editing !== null} value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value as Category })}><option value="data">Data</option><option value="tv">TV</option><option value="home_bundle">Home bundle</option></Select></label><label className="pf-field"><span className="pf-label">Price *</span><TextInput type="number" min="0" value={form.priceLocal} onChange={(event) => setForm({ ...form, priceLocal: event.target.value })} /></label><label className="pf-field"><span className="pf-label">Currency</span><TextInput value={form.currency} onChange={(event) => setForm({ ...form, currency: event.target.value })} /></label><label className="pf-field"><span className="pf-label">Duration</span><TextInput value={form.durationLabel} onChange={(event) => setForm({ ...form, durationLabel: event.target.value })} /></label></div><div className="flex justify-end gap-3"><button className="pf-button" onClick={reset}>Cancel</button><button className="pf-button pf-button-primary" onClick={save}>Save plan</button></div></div></div>}<label className="access-role-check" style={{ marginTop: 4 }}><input type="checkbox" checked={includeInactive} onChange={(event) => setIncludeInactive(event.target.checked)} /><span>Show inactive plans</span></label><div className="section-block"><div className="section-heading"><div><p className="eyebrow">Catalogue</p><h2>Plans</h2></div></div><div className="pf-panel">{plans.length === 0 ? <EmptyState title="No plans yet" body="Plans appear here once created for a market." /> : <div className="pf-table-wrap"><table className="pf-table"><thead><tr><th>Plan</th><th className="pf-hide-sm">Code</th><th>Category</th><th>Market</th><th>Price</th><th>Status</th>{canManage && <th>Actions</th>}</tr></thead><tbody>{plans.map((plan) => { const Icon = categoryIcon[plan.category]; return <tr key={plan._id}><td><strong>{plan.name}</strong></td><td className="pf-hide-sm"><code>{plan.code}</code></td><td><StatusPill tone="neutral"><Icon size={13} style={{ verticalAlign: -2 }} /> {plan.category}</StatusPill></td><td>{markets.find((market) => market._id === plan.marketId)?.name ?? "National"}</td><td>{plan.priceLocal.toLocaleString("en")} {plan.currency}{plan.durationLabel ? ` / ${plan.durationLabel}` : ""}</td><td><StatusPill tone={plan.status === "active" ? "success" : "warning"}>{plan.status}</StatusPill></td>{canManage && <td><button className="pf-button pf-button-compact" title="Edit" onClick={() => { setEditing(plan._id); setFormOpen(true); setForm({ marketId: plan.marketId ?? "", code: plan.code, name: plan.name, category: plan.category, priceLocal: String(plan.priceLocal), currency: plan.currency, durationLabel: plan.durationLabel ?? "" }); }}><Pencil size={14} /></button>{plan.status === "active" && <button className="pf-button pf-button-compact" onClick={() => updatePlan({ planId: plan._id, status: "inactive" })}>Deactivate</button>}</td>}</tr>; })}</tbody></table></div>}</div></div></div>;
 }

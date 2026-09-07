@@ -1,12 +1,12 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { requirePlatformAdmin, requirePlatformUser } from "./lib/auth";
+import { requirePermission } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 
 export const listMarkets = query({
   args: {},
   handler: async (ctx) => {
-    await requirePlatformUser(ctx);
+    await requirePermission(ctx, "markets:read");
     return await ctx.db
       .query("markets")
       .filter((q) => q.neq(q.field("status"), "deleted"))
@@ -17,7 +17,7 @@ export const listMarkets = query({
 export const getMarket = query({
   args: { marketId: v.id("markets") },
   handler: async (ctx, args) => {
-    await requirePlatformUser(ctx);
+    await requirePermission(ctx, "markets:read");
     return await ctx.db.get(args.marketId);
   },
 });
@@ -29,7 +29,7 @@ export const createMarket = mutation({
     currency: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "markets:manage");
     const now = Date.now();
     const marketId = await ctx.db.insert("markets", {
       name: args.name,
@@ -62,7 +62,7 @@ export const updateMarketLifecycleStatus = mutation({
     ),
   },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "markets:manage");
     const market = await ctx.db.get(args.marketId);
     if (!market) throw new Error("Market not found");
 
@@ -96,7 +96,7 @@ export const softDeleteMarket = mutation({
     forceCascade: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "markets:manage");
     const market = await ctx.db.get(args.marketId);
     if (!market) throw new Error("Market not found");
 
@@ -162,7 +162,7 @@ export const softDeleteMarket = mutation({
 export const restoreMarket = mutation({
   args: { marketId: v.id("markets") },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "markets:manage");
     const market = await ctx.db.get(args.marketId);
     if (!market) throw new Error("Market not found");
 
@@ -197,7 +197,7 @@ export const reportOperatingCost = mutation({
     currency: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "markets:manage");
     const existing = await ctx.db
       .query("marketOperatingCosts")
       .withIndex("by_market_month", (q) =>
@@ -247,6 +247,7 @@ export const reportOperatingCost = mutation({
 export const listOperatingCosts = query({
   args: { marketId: v.id("markets") },
   handler: async (ctx, args) => {
+    await requirePermission(ctx, "markets:read");
     const rows = await ctx.db
       .query("marketOperatingCosts")
       .withIndex("by_market_month", (q) => q.eq("marketId", args.marketId))
@@ -259,7 +260,7 @@ export const listOperatingCosts = query({
 export const listMarketsMissingCostEntry = query({
   args: { yearMonth: v.string() },
   handler: async (ctx, args) => {
-    await requirePlatformUser(ctx);
+    await requirePermission(ctx, "markets:read");
     const markets = await ctx.db
       .query("markets")
       .filter((q) => q.eq(q.field("lifecycleStatus"), "active"))
@@ -283,7 +284,7 @@ export const listMarketsMissingCostEntry = query({
 export const getMarketStaffingStatus = query({
   args: { marketId: v.id("markets") },
   handler: async (ctx, args) => {
-    await requirePlatformUser(ctx);
+    await requirePermission(ctx, "markets:read");
     const assignments = await ctx.db
       .query("agentMarketAssignments")
       .withIndex("by_market", (q) => q.eq("marketId", args.marketId))

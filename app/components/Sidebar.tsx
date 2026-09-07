@@ -36,11 +36,11 @@ export default function Sidebar({ isMobile = false, onCloseMobile }: SidebarProp
   const { user } = useUserProfile();
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+  const [hoveredSection, setHoveredSection] = useState<string | null>(null);
 
-  const permissions = user?.permissions ?? [];
   const effectiveCollapsed = isMobile ? false : collapsed;
 
-  const ability = useMemo(() => new Set(permissions), [permissions]);
+  const ability = useMemo(() => new Set(user?.permissions ?? []), [user?.permissions]);
 
   const showIncidentBadge = ability.has("incidents:read");
   const showDeviceBadge = ability.has("devices:read");
@@ -55,9 +55,12 @@ export default function Sidebar({ isMobile = false, onCloseMobile }: SidebarProp
     return map;
   }, [openIncidents, deviceRows]);
 
-  const visibleSections = navSections
-    .map((section) => ({ ...section, items: section.items.filter((item) => canAccess(ability, item)) }))
-    .filter((section) => section.items.length > 0);
+  const visibleSections = useMemo(
+    () => navSections
+      .map((section) => ({ ...section, items: section.items.filter((item) => canAccess(ability, item)) }))
+      .filter((section) => section.items.length > 0),
+    [ability],
+  );
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -78,7 +81,7 @@ export default function Sidebar({ isMobile = false, onCloseMobile }: SidebarProp
       }
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [pathname, visibleSections.length]);
+  }, [pathname, visibleSections]);
 
   const toggleSection = (title: string) => {
     setOpenSections((prev) => {
@@ -156,6 +159,69 @@ export default function Sidebar({ isMobile = false, onCloseMobile }: SidebarProp
         {visibleSections.map((section) => {
           const isOpen = effectiveCollapsed ? true : openSections[section.title] !== false;
           const activeSection = section.items.some((item) => isItemActive(item));
+          const SectionIcon = section.icon;
+
+          if (effectiveCollapsed) {
+            const flyoutOpen = hoveredSection === section.title;
+            return (
+              <div
+                key={section.title}
+                className="sidebar-rail-group"
+                onMouseEnter={() => setHoveredSection(section.title)}
+                onMouseLeave={() => setHoveredSection(null)}
+                onFocusCapture={() => setHoveredSection(section.title)}
+                onBlurCapture={(event) => {
+                  const nextFocus = event.relatedTarget;
+                  if (!(nextFocus instanceof Node) || !event.currentTarget.contains(nextFocus)) setHoveredSection(null);
+                }}
+              >
+                <button
+                  type="button"
+                  className={`sidebar-rail-trigger ${activeSection ? "sidebar-rail-trigger-active" : ""}`}
+                  onClick={() => setHoveredSection(section.title)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      event.preventDefault();
+                      setHoveredSection(null);
+                    }
+                  }}
+                  aria-expanded={flyoutOpen}
+                  aria-label={`${section.title} navigation group`}
+                  title={section.title}
+                >
+                  <SectionIcon aria-hidden="true" size={19} strokeWidth={1.8} />
+                  <span className="sr-only">{section.title}</span>
+                </button>
+                {flyoutOpen ? (
+                  <div className="sidebar-group-flyout" aria-label={`${section.title} pages`}>
+                    <div className="sidebar-group-flyout-head"><span>{section.title}</span><small>{section.items.length}</small></div>
+                    <div className="sidebar-group-flyout-items">
+                      {section.items.map((item) => {
+                        const Icon = item.icon;
+                        const active = isItemActive(item);
+                        const badge = badges[item.href];
+                        return (
+                          <Link
+                            key={item.href}
+                            href={item.href}
+                            className={`sidebar-group-flyout-link ${active ? "sidebar-group-flyout-link-active" : ""}`}
+                            aria-current={active ? "page" : undefined}
+                            onClick={() => setHoveredSection(null)}
+                          >
+                            <Icon aria-hidden="true" size={16} strokeWidth={1.9} />
+                            <span>{item.label}</span>
+                            {badge !== undefined && badge > 0 ? <b>{badge}</b> : null}
+                            {item.planned ? <em>soon</em> : null}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            );
+          }
+
           return (
             <div key={section.title} className="sidebar-section">
               <button

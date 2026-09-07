@@ -43,12 +43,14 @@ function Modal({
   onClose,
   children,
   actions,
+  fullScreen = false,
 }: {
   title: string;
   eyebrow?: string;
   onClose: () => void;
   children: React.ReactNode;
   actions?: React.ReactNode;
+  fullScreen?: boolean;
 }) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -68,7 +70,7 @@ function Modal({
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      <div className="profile-modal-dialog">
+      <div className={`profile-modal-dialog${fullScreen ? " profile-modal-dialog-fullscreen" : ""}`}>
         <header className="profile-modal-header">
           <div>
             {eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
@@ -724,28 +726,24 @@ function RolesTab() {
                 </div>
               </dl>
               <footer className="role-card-actions">
-                {role.isSystem ? (
-                  <span className="pf-hint">Built-in role — edit disabled</span>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      onClick={() => { setError(null); setNotice(null); setEditingRole(role); }}
-                      disabled={working}
-                    >
-                      <Pencil size={14} aria-hidden="true" />Edit
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      onClick={() => void remove(role)}
-                      disabled={working || role.assignedCount > 0}
-                      title={role.assignedCount > 0 ? "Reassign users before deleting" : "Delete role"}
-                    >
-                      <Trash2 size={14} aria-hidden="true" />Delete
-                    </button>
-                  </>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => { setError(null); setNotice(null); setEditingRole(role); }}
+                  disabled={working}
+                >
+                  <Pencil size={14} aria-hidden="true" />{role.isSystem ? "View & edit" : "Edit"}
+                </button>
+                {!role.isSystem && (
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => void remove(role)}
+                    disabled={working || role.assignedCount > 0}
+                    title={role.assignedCount > 0 ? "Reassign users before deleting" : "Delete role"}
+                  >
+                    <Trash2 size={14} aria-hidden="true" />Delete
+                  </button>
                 )}
               </footer>
             </article>
@@ -791,6 +789,7 @@ function RoleEditorModal({
   const [description, setDescription] = useState(role?.description ?? "");
   const [permissions, setPermissions] = useState<string[]>(role?.permissions ?? []);
   const [permissionFilter, setPermissionFilter] = useState("");
+  const [activeGroup, setActiveGroup] = useState("All permissions");
   const [working, setWorking] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
@@ -798,17 +797,31 @@ function RoleEditorModal({
     const query = permissionFilter.trim().toLowerCase();
     const map = new Map<string, CatalogPermission[]>();
     for (const permission of catalogPermissions) {
+      if (activeGroup !== "All permissions" && permission.group !== activeGroup) continue;
       if (query && !`${permission.name} ${permission.slug}`.toLowerCase().includes(query)) continue;
       const list = map.get(permission.group) ?? [];
       list.push(permission);
       map.set(permission.group, list);
     }
     return Array.from(map.entries());
-  }, [catalogPermissions, permissionFilter]);
+  }, [activeGroup, catalogPermissions, permissionFilter]);
 
   const togglePermission = (item: string) => {
     setPermissions((current) => (current.includes(item) ? current.filter((value) => value !== item) : [...current, item]));
   };
+
+  const toggleGroup = (items: readonly CatalogPermission[]) => {
+    const slugs = items.map((item) => item.slug);
+    const everySelected = slugs.every((slug) => permissions.includes(slug));
+    setPermissions((current) => everySelected
+      ? current.filter((slug) => !slugs.includes(slug as CatalogPermission["slug"]))
+      : Array.from(new Set([...current, ...slugs])));
+  };
+
+  const catalogGroups = useMemo(
+    () => Array.from(new Set(catalogPermissions.map((permission) => permission.group))),
+    [catalogPermissions],
+  );
 
   const save = async () => {
     setWorking(true);
@@ -835,6 +848,7 @@ function RoleEditorModal({
       title={role ? `Edit ${role.name}` : "Create a custom role"}
       eyebrow="Role editor"
       onClose={onClose}
+      fullScreen={!!role}
       actions={
         <>
           <button type="button" className="secondary-button" onClick={onClose} disabled={working}>Cancel</button>
@@ -846,53 +860,77 @@ function RoleEditorModal({
     >
       {localError ? <Notice message={localError} tone="error" /> : null}
 
-      <div className="form-grid">
-        <label className="pf-field">
-          <span className="pf-label">Name</span>
-          <input className="pf-input" value={name} onChange={(event) => setName(event.target.value)} placeholder="Field supervisor" maxLength={60} />
-        </label>
-        {!role ? (
-          <label className="pf-field">
-            <span className="pf-label">Slug</span>
-            <input className="pf-input" value={slug} onChange={(event) => setSlug(event.target.value)} placeholder="field-supervisor" maxLength={50} />
-            <small className="pf-hint">Lowercase letters, digits, hyphens and underscores.</small>
-          </label>
-        ) : null}
-        <label className="pf-field" style={{ gridColumn: "1 / -1" }}>
-          <span className="pf-label">Description</span>
-          <input className="pf-input" value={description} onChange={(event) => setDescription(event.target.value)} maxLength={200} placeholder="What this role is for" />
-        </label>
-      </div>
-
-      <section className="modal-section">
-        <div className="modal-section-head">
-          <div>
-            <p className="pf-label">Permissions</p>
-            <p className="pf-hint">{permissions.length} selected · synced to WorkOS for new custom roles.</p>
+      <div className="role-editor-workspace">
+        <aside className="role-editor-sidebar" aria-label="Role configuration">
+          <div className="role-editor-summary">
+            <span className="role-editor-kicker">Access profile</span>
+            <strong>{role?.isSystem ? "System role" : role ? "Custom role" : "New role"}</strong>
+            <p>{role?.isSystem ? "Identity and rank are protected. You can tailor access grants safely." : "Define exactly what this role can view and manage."}</p>
           </div>
-          <label className="access-search" style={{ minWidth: 220 }}>
-            <Search size={15} aria-hidden="true" />
-            <span className="sr-only">Filter permissions</span>
-            <input value={permissionFilter} onChange={(event) => setPermissionFilter(event.target.value)} placeholder="Filter permissions…" />
-          </label>
-        </div>
-        <div className="perm-groups">
-          {groups.map(([group, items]) => (
-            <div key={group} className="perm-group">
-              <p className="perm-group-title">{group}</p>
-              <div className="role-permission-grid">
-                {items.map((permission) => (
-                  <label key={permission.slug} className="role-permission-option">
-                    <input type="checkbox" checked={permissions.includes(permission.slug)} onChange={() => togglePermission(permission.slug)} />
-                    <span><strong>{permission.name}</strong><small>{permission.slug}</small></span>
-                  </label>
-                ))}
-              </div>
+          <div className="role-editor-stat"><strong>{permissions.length}</strong><span>permissions selected</span></div>
+          <nav className="role-group-nav" aria-label="Permission categories">
+            <button type="button" className={activeGroup === "All permissions" ? "role-group-nav-active" : ""} onClick={() => setActiveGroup("All permissions")}>
+              <span>All permissions</span><b>{catalogPermissions.length}</b>
+            </button>
+            {catalogGroups.map((group) => {
+              const total = catalogPermissions.filter((permission) => permission.group === group);
+              const selected = total.filter((permission) => permissions.includes(permission.slug)).length;
+              return <button key={group} type="button" className={activeGroup === group ? "role-group-nav-active" : ""} onClick={() => setActiveGroup(group)}><span>{group}</span><b>{selected}/{total.length}</b></button>;
+            })}
+          </nav>
+        </aside>
+
+        <div className="role-editor-content">
+          <div className="role-editor-details form-grid">
+            <label className="pf-field">
+              <span className="pf-label">Role name</span>
+              <input className="pf-input" value={name} onChange={(event) => setName(event.target.value)} placeholder="Field supervisor" maxLength={60} />
+            </label>
+            {!role ? (
+              <label className="pf-field">
+                <span className="pf-label">Role slug</span>
+                <input className="pf-input" value={slug} onChange={(event) => setSlug(event.target.value)} placeholder="field-supervisor" maxLength={50} />
+                <small className="pf-hint">Lowercase letters, digits, hyphens and underscores.</small>
+              </label>
+            ) : (
+              <div className="role-identity-field"><span className="pf-label">Protected identity</span><code>{role.slug} · rank {role.rank}</code></div>
+            )}
+            <label className="pf-field" style={{ gridColumn: "1 / -1" }}>
+              <span className="pf-label">Description</span>
+              <input className="pf-input" value={description} onChange={(event) => setDescription(event.target.value)} maxLength={200} placeholder="What this role is for" />
+            </label>
+          </div>
+
+          <section className="role-permissions-panel" aria-label="Role permissions">
+            <header className="role-permissions-toolbar">
+              <div><p className="pf-label">{activeGroup}</p><p className="pf-hint">Choose the capabilities this role should have. Changes take effect immediately after saving.</p></div>
+              <label className="access-search">
+                <Search size={15} aria-hidden="true" /><span className="sr-only">Filter permissions</span>
+                <input value={permissionFilter} onChange={(event) => setPermissionFilter(event.target.value)} placeholder="Search permissions…" />
+              </label>
+            </header>
+            <div className="perm-groups">
+              {groups.map(([group, items]) => {
+                const everySelected = items.every((permission) => permissions.includes(permission.slug));
+                return (
+                  <div key={group} className="perm-group">
+                    <header className="perm-group-heading"><div><p className="perm-group-title">{group}</p><span>{items.filter((permission) => permissions.includes(permission.slug)).length} of {items.length} enabled</span></div><button type="button" className="permission-bulk-button" onClick={() => toggleGroup(items)}>{everySelected ? "Clear group" : "Enable group"}</button></header>
+                    <div className="role-permission-grid">
+                      {items.map((permission) => (
+                        <label key={permission.slug} className={`role-permission-option${permissions.includes(permission.slug) ? " role-permission-option-selected" : ""}`}>
+                          <input type="checkbox" checked={permissions.includes(permission.slug)} onChange={() => togglePermission(permission.slug)} />
+                          <span><strong>{permission.name}</strong><small>{permission.slug}</small></span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+              {groups.length === 0 ? <p className="pf-muted">No permissions match this search.</p> : null}
             </div>
-          ))}
-          {groups.length === 0 ? <p className="pf-muted">No permissions match the filter.</p> : null}
+          </section>
         </div>
-      </section>
+      </div>
     </Modal>
   );
 }
@@ -1043,39 +1081,31 @@ function OrganizationTab() {
     );
   }
 
-  return (
-    <div className="metric-grid">
-      <div className="metric-card workspace-card">
-        <div className="metric-icon"><ShieldCheck aria-hidden="true" size={20} /></div>
-        <p>Organization</p>
-        <strong>{overview.displayName}</strong>
-        <small>{overview.organizationId}</small>
-      </div>
-      <div className="metric-card workspace-card">
-        <div className="metric-icon"><UsersRound aria-hidden="true" size={20} /></div>
-        <p>Members</p>
-        <strong>{overview.activeMemberships}</strong>
-        <small>{overview.totalMemberships} total · {overview.pendingMemberships} pending · {overview.inactiveMemberships} inactive</small>
-      </div>
-      <div className="metric-card workspace-card">
-        <div className="metric-icon"><KeyRound aria-hidden="true" size={20} /></div>
-        <p>Your roles</p>
-        <strong>{overview.currentUserRoles.length}</strong>
-        <small>{overview.currentUserRoles.map((role) => role.name).join(", ") || "none"}</small>
-      </div>
+  const membershipHealth = overview.pendingMemberships + overview.inactiveMemberships === 0 ? "Healthy" : "Needs review";
+  const largestRoleCount = Math.max(...overview.roleDistribution.map((entry) => entry.count), 1);
 
-      <section className="workspace-card" style={{ gridColumn: "1 / -1" }}>
-        <p className="eyebrow">Role distribution</p>
-        {overview.roleDistribution.length === 0 ? (
-          <p className="pf-muted">No memberships recorded yet.</p>
-        ) : (
-          <div className="access-role-checklist">
-            {overview.roleDistribution.map((entry) => (
-              <div key={entry.slug} className="access-role-check">
-                <span><strong>{entry.name}</strong><small>{entry.slug}</small></span>
-                <span className="status-pill">{entry.count} member{entry.count === 1 ? "" : "s"}</span>
-              </div>
-            ))}
+  return (
+    <div className="organization-overview">
+      <section className="organization-hero workspace-card">
+        <div className="organization-hero-mark"><Building2 aria-hidden="true" size={24} /></div>
+        <div className="organization-hero-copy"><p className="eyebrow">Platform organization</p><h2>{overview.displayName}</h2><p>Central access profile for memberships, roles, and secure sign-in governance.</p><code title={overview.organizationId}>{overview.organizationId}</code></div>
+        <div className={`organization-health organization-health-${membershipHealth === "Healthy" ? "ok" : "review"}`}><span></span><div><strong>{membershipHealth}</strong><small>{membershipHealth === "Healthy" ? "No pending or inactive memberships" : "Pending or inactive memberships need attention"}</small></div></div>
+      </section>
+
+      <section className="organization-stat-grid" aria-label="Organization membership summary">
+        <article className="organization-stat workspace-card"><span className="organization-stat-icon"><UsersRound aria-hidden="true" size={18} /></span><p>Active members</p><strong>{overview.activeMemberships}</strong><small>of {overview.totalMemberships} total memberships</small></article>
+        <article className="organization-stat workspace-card"><span className="organization-stat-icon"><ShieldCheck aria-hidden="true" size={18} /></span><p>Access review</p><strong>{overview.pendingMemberships + overview.inactiveMemberships}</strong><small>{overview.pendingMemberships} pending · {overview.inactiveMemberships} inactive</small></article>
+        <article className="organization-stat workspace-card"><span className="organization-stat-icon"><KeyRound aria-hidden="true" size={18} /></span><p>Your access</p><strong>{overview.currentUserRoles.length}</strong><small>{overview.currentUserRoles.map((role) => role.name).join(", ") || "No role assigned"}</small></article>
+      </section>
+
+      <section className="organization-distribution workspace-card">
+        <header className="organization-distribution-head"><div><p className="eyebrow">Access coverage</p><h2>Role distribution</h2><p>Where platform responsibility is currently assigned.</p></div><span className="organization-distribution-total">{overview.totalMemberships} memberships</span></header>
+        {overview.roleDistribution.length === 0 ? <p className="pf-muted">No memberships recorded yet.</p> : (
+          <div className="organization-role-list">
+            {overview.roleDistribution.map((entry) => {
+              const share = Math.round((entry.count / largestRoleCount) * 100);
+              return <article key={entry.slug} className="organization-role-row"><div className="organization-role-copy"><strong>{entry.name}</strong><code>{entry.slug}</code></div><div className="organization-role-meter" aria-label={`${entry.count} members assigned`}><span style={{ width: `${share}%` }} /></div><div className="organization-role-count"><strong>{entry.count}</strong><span>member{entry.count === 1 ? "" : "s"}</span></div></article>;
+            })}
           </div>
         )}
       </section>

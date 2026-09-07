@@ -1,6 +1,6 @@
 import { v } from "convex/values";
-import { internalMutation, mutation, query } from "./_generated/server";
-import { requirePlatformAdmin, requirePlatformUser } from "./lib/auth";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { requireMarketAccess, requirePermission } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 import { insertActivityLedger } from "./agentActivity";
 
@@ -33,7 +33,8 @@ const EXPIRY_WINDOW_MS = {
 export const listBatches = query({
   args: { marketId: v.optional(v.id("markets")) },
   handler: async (ctx, args) => {
-    await requirePlatformUser(ctx);
+    await requirePermission(ctx, "vouchers:read");
+    if (args.marketId) await requireMarketAccess(ctx, args.marketId, "viewer");
     const rows = args.marketId
       ? await ctx.db
           .query("voucherBatches")
@@ -47,7 +48,10 @@ export const listBatches = query({
 export const listVouchersForBatch = query({
   args: { batchId: v.id("voucherBatches") },
   handler: async (ctx, args) => {
-    await requirePlatformUser(ctx);
+    await requirePermission(ctx, "vouchers:read");
+    const batch = await ctx.db.get(args.batchId);
+    if (!batch) return [];
+    await requireMarketAccess(ctx, batch.marketId, "viewer");
     return await ctx.db
       .query("vouchers")
       .withIndex("by_batch", (q) => q.eq("batchId", args.batchId))
@@ -70,7 +74,8 @@ export const generateVoucherBatch = mutation({
     priceEach: v.number(),
   },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "vouchers:manage");
+    await requireMarketAccess(ctx, args.marketId, "operator");
     const now = Date.now();
 
     const batchId = await ctx.db.insert("voucherBatches", {
@@ -110,7 +115,7 @@ export const generateVoucherBatch = mutation({
 });
 
 /** Reject a voucher code whose checksum doesn't match — guessed/tampered codes never validate. */
-export const validateVoucherCode = query({
+export const validateVoucherCode = internalQuery({
   args: { code: v.string(), checksum: v.string() },
   handler: async (ctx, args) => {
     const expected = computeChecksum(args.code);
@@ -129,7 +134,10 @@ export const validateVoucherCode = query({
 export const allocateVoucherToAgent = mutation({
   args: { voucherId: v.id("vouchers"), agentId: v.id("agents") },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "vouchers:manage");
+    const voucher = await ctx.db.get(args.voucherId);
+    if (!voucher) throw new Error("Voucher not found");
+    await requireMarketAccess(ctx, voucher.marketId, "operator");
     await ctx.db.patch(args.voucherId, {
       ownerAgentId: args.agentId,
       voucherStatus: "owned",
@@ -149,9 +157,10 @@ const DISPUTE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 export const markVoucherSold = mutation({
   args: { voucherId: v.id("vouchers") },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "vouchers:manage");
     const voucher = await ctx.db.get(args.voucherId);
     if (!voucher) throw new Error("Voucher not found");
+    await requireMarketAccess(ctx, voucher.marketId, "operator");
 
     const now = Date.now();
     await ctx.db.patch(args.voucherId, {
@@ -228,9 +237,10 @@ export const redeemVoucher = mutation({
     customerPhoneAtRedemption: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const user = await requirePlatformUser(ctx);
+    const user = await requirePermission(ctx, "vouchers:redeem");
     const voucher = await ctx.db.get(args.voucherId);
     if (!voucher) throw new Error("Voucher not found");
+    await requireMarketAccess(ctx, voucher.marketId, "operator");
     if (voucher.voucherStatus === "redeemed") {
       throw new Error("Voucher already redeemed");
     }
@@ -299,7 +309,7 @@ export const sweepExpiredVouchers = internalMutation({
 export const listVouchersForAgent = query({
   args: { agentId: v.id("agents") },
   handler: async (ctx, args) => {
-    await requirePlatformUser(ctx);
+    await requirePermission(ctx, "vouchers:read");
     return await ctx.db
       .query("vouchers")
       .withIndex("by_owner", (q) => q.eq("ownerAgentId", args.agentId))

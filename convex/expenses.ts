@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
-import { requireFinanceOrAbove, requirePermission, requirePlatformUser } from "./lib/auth";
+import { requireFinanceOrAbove, requirePermission } from "./lib/auth";
 import { localToUsd, monthOf } from "./lib/finance";
 import { logAudit } from "./lib/auditLog";
 import type { Id } from "./_generated/dataModel";

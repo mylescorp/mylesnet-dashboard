@@ -17,11 +17,6 @@ const FALLBACK_RATE_TO_USD: Record<string, number> = {
   KSH: 1 / 129,
 };
 
-function monthOf(timestamp: number): string {
-  const d = new Date(timestamp);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
 function todayIso(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;

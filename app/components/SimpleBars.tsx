@@ -18,7 +18,6 @@ export default function SimpleBars({ data, formatTick, tone = "primary" }: Simpl
         {data.map((d, i) => {
           const h = Math.max(2, (d.value / max) * (height - 24));
           const x = pad + i * (barW + pad) + pad / 2;
-          const y = height - h;
           return (
             <text key={`label-${i}`} x={x + barW / 2} y={height - 4} textAnchor="middle" fontSize="10" fill="var(--muted)">
               {i % labelEvery === 0 ? d.label : ""}
@@ -29,7 +28,7 @@ export default function SimpleBars({ data, formatTick, tone = "primary" }: Simpl
           const h = Math.max(2, (d.value / max) * (height - 24));
           const x = pad + i * (barW + pad) + pad / 2;
           return (
-            <rect key={`bar-${i}`} x={x} y={height - h - 14} width={barW} height={h} rx={3} fill="var(--primary)" opacity={0.85}>
+            <rect key={`bar-${i}`} x={x} y={height - h - 14} width={barW} height={h} rx={3} fill={`var(--${tone})`} opacity={0.85}>
               <title>{`${d.label}: ${formatTick ? formatTick(d.value) : d.value}`}</title>
             </rect>
           );

@@ -67,7 +67,12 @@ export default function DashboardPage() {
       <section className="operations-kpi-strip" aria-label="Live operations status">
         <Kpi label="Collector status" value={kpis.collectorConnected ? "Connected" : kpis.collectorStatus === "failed" ? "Needs attention" : "Awaiting data"} detail={kpis.collectorStatus === "failed" ? (kpis.collectorStatusMessage ?? "The last collector run failed.") : kpis.lastObservedAt ? `Last observation ${new Date(kpis.lastObservedAt).toLocaleTimeString()}` : "No collector observation received"} icon={<Activity size={17} />} />
         <Kpi label="Network health" value={healthStatus} detail={kpis.healthScore === null ? "No router telemetry" : `${kpis.healthScore}% of routers reporting live telemetry`} icon={<Gauge size={17} />} />
-        <Kpi label="Live users" value={kpis.totalUsers} detail="Current hotspot sessions" icon={<Users size={17} />} />
+        <Kpi
+          label="Live users"
+          value={kpis.collectorConnected ? kpis.totalUsers : "—"}
+          detail={kpis.collectorConnected ? "Current hotspot sessions" : "Unavailable while the RouterOS collector is offline"}
+          icon={<Users size={17} />}
+        />
         <Kpi label="Access points" value={`${kpis.activeAccessPoints}/${kpis.totalAccessPoints}`} detail="Links currently online" icon={<Wifi size={17} />} />
         <Kpi label="Data used" value={bytes(kpis.totalDailyBytes)} detail="Observed in the last 24 hours" icon={<BarChart3 size={17} />} />
         <Kpi label="Router load" value={kpis.averageCpu === null ? "—" : `${Math.round(kpis.averageCpu)}% CPU`} detail="Average reported router CPU load" icon={<Gauge size={17} />} />

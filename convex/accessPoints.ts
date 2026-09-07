@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
-import { requireNetworkOperator, requirePlatformAdmin } from "./lib/auth";
+import { requireMarketAccess, requireNetworkOperator, requirePermission } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 
 function cleanText(value: string, label: string, maxLength = 160): string {
@@ -67,7 +67,7 @@ export const addAccessPoint = mutation({
     switchPort: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "devices:manage");
     const router = await ctx.db.get(args.routerId);
     if (!router || router.archivedAt !== undefined) throw new Error("Router not found");
     const name = cleanText(args.name, "access point name");
@@ -112,6 +112,8 @@ export const listAccessPoints = query({
       return (await ctx.db.query("accessPoints").collect()).filter((accessPoint) => accessPoint.archivedAt === undefined);
     }
     const routerId = args.routerId;
+    const router = await ctx.db.get(routerId);
+    if (router?.marketId) await requireMarketAccess(ctx, router.marketId, "viewer");
     return (await ctx.db
       .query("accessPoints")
       .withIndex("by_router", (q) => q.eq("routerId", routerId))
@@ -139,7 +141,7 @@ export const updateAccessPoint = mutation({
     switchPort: v.optional(v.union(v.string(), v.null())),
   },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "devices:manage");
     const { accessPointId, ...updates } = args;
     const accessPoint = await ctx.db.get(accessPointId);
     if (!accessPoint || accessPoint.archivedAt !== undefined) throw new Error("Access point not found");
@@ -180,7 +182,7 @@ export const updateAccessPoint = mutation({
 export const archiveAccessPoint = mutation({
   args: { accessPointId: v.id("accessPoints"), reason: v.string() },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "devices:manage");
     const accessPoint = await ctx.db.get(args.accessPointId);
     if (!accessPoint || accessPoint.archivedAt !== undefined) throw new Error("Access point not found");
     const reason = cleanText(args.reason, "archive reason", 300);
