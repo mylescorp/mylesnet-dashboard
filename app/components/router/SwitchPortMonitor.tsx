@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useQuery } from "convex/react";
+import { useQuery } from "@/app/lib/convex";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { X, RefreshCw } from "lucide-react";
@@ -58,7 +58,7 @@ export function SwitchPortMonitor({ switchId, routerId, onClose }: SwitchPortMon
           portNumber,
           status: apHealth?.health?.linkState ? "up" : "down",
           connectedTo: linkedAP.name,
-          lastSeen: apHealth?.health?.observedAt,
+          lastSeen: apHealth?.health?.timestamp,
         });
       } else {
         portStatuses.push({
@@ -171,3 +171,4 @@ export function SwitchPortMonitor({ switchId, routerId, onClose }: SwitchPortMon
     </div>
   );
 }
+

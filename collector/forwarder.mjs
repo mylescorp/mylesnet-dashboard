@@ -1,4 +1,7 @@
 import process from "node:process";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { Healthguard, parseHealthguardEnv } from "./healthguard.mjs";
 
 const runOnceMode = process.argv.includes("--once");
 
@@ -121,6 +124,126 @@ let lastConfigFetchAt = 0;
 let consecutiveFailures = 0;
 let timer = null;
 let shuttingDown = false;
+
+// Health guard runs beside the forwarder and reports through the telemetry
+// payload. The dashboard's global kill switch folds in via setServerEnabled.
+const healthguard = new Healthguard({ config: parseHealthguardEnv() });
+const pendingAckCommandIds = new Set();
+let restartPendingAfterForward = false;
+
+const executedStateFile =
+  process.env.MYLESNET_COLLECTOR_STATE_FILE ??
+  fileURLToPath(new URL("./.executed-commands.json", import.meta.url));
+
+/**
+ * Durable record of commands this collector executed. Guards against double
+ * execution after a crash between "acknowledged" and "reported completed".
+ */
+function loadExecutedState() {
+  try {
+    if (!existsSync(executedStateFile)) return [];
+    const parsed = JSON.parse(readFileSync(executedStateFile, "utf8"));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveExecutedState(entries) {
+  try {
+    writeFileSync(executedStateFile, JSON.stringify(entries, null, 2), "utf8");
+  } catch {
+    // The collector must keep running even if its state file is unwritable.
+  }
+}
+
+function executedOutcomeOf(commandId) {
+  const entry = loadExecutedState().find((item) => item.commandId === commandId);
+  return entry ? entry.outcome : null;
+}
+
+function recordExecuted(command) {
+  const state = loadExecutedState();
+  const remaining = state.filter((item) => item.commandId !== command.commandId);
+  saveExecutedState([...remaining, { commandId: command.commandId, type: command.type, outcome: command.outcome, executedAt: command.executedAt, errorMessage: command.errorMessage }]);
+}
+
+/**
+ * Executes a command the server has durably acknowledged (ack is recorded
+ * before this runs). Router-affecting command types are idempotent.
+ */
+async function executeCommand(command, now) {
+  const entry = { commandId: command.commandId, type: command.type, outcome: "executing", executedAt: now };
+  recordExecuted(entry);
+  let outcome = "failed";
+  let errorMessage;
+  try {
+    if (command.type === "reenable_www_ssl") {
+      if (!healthguard.enabled) {
+        errorMessage = "Healthguard is disabled on the collector, so www-ssl could not be re-enabled.";
+      } else {
+        healthguard.lastAttemptAt = 0; // The operator's explicit action bypasses the retry cooldown.
+        await healthguard.runNow(now);
+        outcome = healthguard.wwwSslEnabled === true ? "completed" : "failed";
+        errorMessage = outcome === "failed" ? (healthguard.lastActionMessage ?? "www-ssl could not be re-enabled.") : undefined;
+      }
+    } else if (command.type === "run_full_healthcheck") {
+      if (!healthguard.enabled) {
+        errorMessage = "Healthguard is disabled on the collector.";
+      } else {
+        await healthguard.runNow(now);
+        outcome = "completed";
+      }
+    } else if (command.type === "restart_collector") {
+      if (String(process.env.MYLESNET_COLLECTOR_SUPERVISED ?? "") !== "1") {
+        errorMessage = "restart_collector requires a supervised collector (MYLESNET_COLLECTOR_SUPERVISED=1).";
+      } else {
+        outcome = "completed";
+        restartPendingAfterForward = true;
+      }
+    } else {
+      errorMessage = `Unknown command type: ${command.type}`;
+    }
+  } catch (error) {
+    outcome = "failed";
+    errorMessage = error instanceof Error ? error.message : "The command failed.";
+  }
+  recordExecuted({ commandId: command.commandId, type: command.type, outcome, executedAt: now, errorMessage });
+  return outcome;
+}
+
+function commandTtlMs() {
+  const parsed = Number(process.env.MYLESNET_DEVICE_COMMAND_TTL_MS ?? 5 * 60 * 1000);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 5 * 60 * 1000;
+}
+
+/** Reports from previous executions plus acks for pending commands ride the next telemetry payload. */
+function buildCommandReports(now) {
+  const cutoff = now - commandTtlMs();
+  const entries = loadExecutedState().filter((entry) => entry.executedAt >= cutoff);
+  if (entries.length !== loadExecutedState().length) saveExecutedState(entries);
+  const reports = [];
+  for (const entry of entries) {
+    if (entry.outcome === "executing") continue; // crashed mid-write; a fresh attempt begins when the command is seen acknowledged again.
+    reports.push({
+      commandId: entry.commandId,
+      transition: entry.outcome === "completed" ? "completed" : "failed",
+      observedAt: entry.executedAt ?? now,
+      errorMessage: entry.errorMessage,
+    });
+  }
+  for (const commandId of pendingAckCommandIds) {
+    reports.push({ commandId, transition: "acknowledged", observedAt: now });
+  }
+  pendingAckCommandIds.clear();
+  return reports;
+}
+
+function pruneReportedCommands(reportedCommandIds) {
+  if (reportedCommandIds.length === 0) return;
+  const reported = new Set(reportedCommandIds);
+  saveExecutedState(loadExecutedState().filter((entry) => !reported.has(entry.commandId)));
+}
 
 if (String(process.env.MYLESNET_COLLECTOR_TLS_SKIP_VERIFY ?? "") === "1") {
   // RouterOS www-ssl commonly ships a self-signed certificate. Opt into skipping
@@ -443,7 +566,17 @@ async function forwardSnapshot(snapshot) {
   if (!response.ok) {
     throw new Error("The dashboard did not accept the collector snapshot.");
   }
-  return partials;
+  let body = {};
+  try {
+    body = await response.json();
+  } catch {
+    body = {};
+  }
+  return {
+    partials,
+    healthguardEnabled: typeof body?.healthguardEnabled === "boolean" ? body.healthguardEnabled : undefined,
+    pendingCommands: Array.isArray(body?.pendingCommands) ? body.pendingCommands : [],
+  };
 }
 
 async function reportStatus({ status, message, partialTelemetry, latencyMs }) {
@@ -481,24 +614,70 @@ async function runOnce() {
   const startedAt = Date.now();
   try {
     await loadConnection();
+    healthguard.connect(connection);
     let snapshot;
     try {
       snapshot = await collectSnapshot();
     } catch (error) {
       if (error && (error.statusCode === 401 || error.statusCode === 403)) {
         await loadConnection({ force: true });
+        healthguard.connect(connection);
         snapshot = await collectSnapshot();
       } else {
         throw error;
       }
     }
     snapshot.latencyMs = Math.max(snapshot.latencyMs ?? 0, Date.now() - startedAt);
-    const partials = await forwardSnapshot(snapshot);
+
+    // Self-heal pass before the telemetry push so the report reflects reality.
+    if (healthguard.shouldRun()) {
+      await healthguard.run();
+    }
+
+    const now = Date.now();
+    const commandReports = buildCommandReports(now);
+    const reportCommandIds = commandReports.map((report) => report.commandId);
+    const snapshotWithGuard = {
+      ...snapshot,
+      healthguard: healthguard.status(now),
+    };
+    if (commandReports.length > 0) {
+      snapshotWithGuard.commandReports = commandReports;
+    }
+    const forwarded = await forwardSnapshot(snapshotWithGuard);
     consecutiveFailures = 0;
-    const message = partials.length
-      ? `Some extended telemetry was skipped: ${partials.join(", ")}.`
+
+    pruneReportedCommands(reportCommandIds);
+
+    const message = forwarded.partials.length
+      ? `Some extended telemetry was skipped: ${forwarded.partials.join(", ")}.`
       : null;
-    await reportStatus({ status: "connected", message, partialTelemetry: partials, latencyMs: snapshot.latencyMs });
+    await reportStatus({ status: "connected", message, partialTelemetry: forwarded.partials, latencyMs: snapshot.latencyMs });
+
+    if (typeof forwarded.healthguardEnabled === "boolean") {
+      healthguard.setServerEnabled(forwarded.healthguardEnabled);
+    }
+
+    // Execute commands the server durably acknowledged. The ack is always
+    // recorded (either in this same ingest that just returned, or a previous
+    // one) before any router write happens.
+    for (const command of forwarded.pendingCommands) {
+      if (!command || typeof command.commandId !== "string") continue;
+      if (command.status === "pending") {
+        pendingAckCommandIds.add(command.commandId);
+      } else if (command.status === "acknowledged") {
+        const outcome = executedOutcomeOf(command.commandId);
+        if (outcome === null || outcome === "executing") {
+          await executeCommand(command, now);
+        }
+      }
+    }
+
+    if (restartPendingAfterForward) {
+      restartPendingAfterForward = false;
+      shutdown();
+      return { status: "connected", message };
+    }
     return { status: "connected", message };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Collector run failed.";

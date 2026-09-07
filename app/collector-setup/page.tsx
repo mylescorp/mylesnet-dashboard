@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { useQuery } from "@/app/lib/convex";
 import { Activity, Cog } from "lucide-react";
 import Link from "next/link";
 import { api } from "@/convex/_generated/api";

@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import { useAction, useConvexAuth, useQuery } from "convex/react";
+import { useAction, useConvexAuth, useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
 import Sidebar from "./Sidebar";
 import { UnifiedTopbar } from "./UnifiedTopbar";
@@ -151,3 +151,4 @@ export function UnifiedShell({ children }: { children: ReactNode }) {
     </UserProfileProvider>
   );
 }
+

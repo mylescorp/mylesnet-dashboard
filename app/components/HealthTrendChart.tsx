@@ -1,7 +1,7 @@
 "use client";
 
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
-import { useQuery } from "convex/react";
+import { useQuery } from "@/app/lib/convex";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 
@@ -93,3 +93,4 @@ export function HealthTrendChart({ routerId }: HealthTrendChartProps) {
     </div>
   );
 }
+

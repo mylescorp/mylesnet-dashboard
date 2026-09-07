@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useAction, useQuery } from "convex/react";
+import { useAction, useQuery } from "@/app/lib/convex";
 import {
   Building2,
   KeyRound,

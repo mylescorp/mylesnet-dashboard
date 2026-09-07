@@ -15,8 +15,11 @@ import {
   encryptCentipidSecret,
 } from "./lib/centipidCredentials";
 import {
+  collectEntityRecords,
   extractEventType,
   mcpTextContents,
+  parseAmountDisplay,
+  parseCentipidTimestamp,
   parseMcpResponse,
   pickString,
 } from "./lib/centipidVerify";
@@ -453,39 +456,48 @@ async function alreadyStoredSourceEvent(
   return rows.some((row) => row.eventType === eventType);
 }
 
+/** First non-empty string value across the payload's envelope records. */
+function pickNested(payload: unknown, keys: string[]): string {
+  for (const record of collectEntityRecords(payload)) {
+    const value = pickString(record, keys);
+    if (value) return value;
+  }
+  return "";
+}
+
+/** Webhook timestamp to epoch ms; falls back to the delivery time. */
+function resolveEventTimestamp(value: unknown): number {
+  const resolved = parseCentipidTimestamp(value);
+  return resolved ?? Date.now();
+}
+
+/** Amount from a numeric field or a formatted display string such as "UGX 1,000.00". */
+function eventAmountField(value: unknown): number {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  return parseAmountDisplay(value).amount;
+}
+
 export const handleSubscriberEvent = internalMutation({
   args: { payload: v.any(), webhookEventId: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const eventType = extractEventType(args.payload) ?? "subscriber.unknown";
     if (await alreadyProcessed(ctx, "subscriberEvents", args.webhookEventId)) return { inserted: false };
-    const p = args.payload as Record<string, unknown>;
     const subscriberId =
-      pickString(p, ["subscriber_id", "subscriberId", "id", "account", "username"]) ||
-      pickString(p.data as Record<string, unknown>, ["subscriber_id", "subscriberId", "id", "account"]) ||
+      pickNested(args.payload, ["subscriber_id", "subscriberId", "id", "account", "username"]) ||
       "";
     if (await alreadyStoredSourceEvent(ctx, "subscriberEvents", subscriberId, eventType)) return { inserted: false };
-    const phone =
-      pickString(p, ["phone", "mobile", "msisdn"]) ||
-      pickString(p.data as Record<string, unknown>, ["phone", "mobile", "msisdn"]) ||
-      "";
 
     const row = {
       centipidSubscriberId: subscriberId,
       eventType,
-      phone,
-      name:
-        pickString(p, ["name", "customer_name", "full_name"]) ||
-        pickString(p.data as Record<string, unknown>, ["name", "customer_name", "full_name"]) || undefined,
-      packageName:
-        pickString(p, ["package_name", "packageName", "package"]) ||
-        pickString(p.data as Record<string, unknown>, ["package_name", "packageName", "package"]) ||
-        "",
-      timestamp:
-        typeof p.timestamp === "number"
-          ? p.timestamp
-          : typeof p.timestamp === "string"
-            ? Date.parse(p.timestamp) || Date.now()
-            : Date.now(),
+      phone: pickNested(args.payload, ["phone", "mobile", "msisdn"]),
+      name: pickNested(args.payload, ["name", "customer_name", "full_name"]) || undefined,
+      packageName: pickNested(args.payload, ["package_name", "packageName", "package"]),
+      timestamp: resolveEventTimestamp(
+        (args.payload as Record<string, unknown>).timestamp ??
+        (args.payload as Record<string, unknown>).created_at ??
+        (args.payload as Record<string, unknown>).occurred_at,
+      ),
       rawPayloadRef: JSON.stringify(args.payload).slice(0, 500),
       webhookEventId: args.webhookEventId,
     };
@@ -525,36 +537,31 @@ export const handlePaymentEvent = internalMutation({
   handler: async (ctx, args) => {
     const eventType = extractEventType(args.payload) ?? "payment.unknown";
     if (await alreadyProcessed(ctx, "paymentEvents", args.webhookEventId)) return { inserted: false };
-    const p = args.payload as Record<string, unknown>;
     const paymentId =
-      pickString(p, ["payment_id", "paymentId", "id", "reference", "transaction_id"]) ||
-      pickString(p.data as Record<string, unknown>, ["payment_id", "paymentId", "id", "reference"]) ||
+      pickNested(args.payload, ["payment_id", "paymentId", "id", "reference", "receipt", "transaction_id"]) ||
       "";
     if (await alreadyStoredSourceEvent(ctx, "paymentEvents", paymentId, eventType)) return { inserted: false };
-    const rawAmount = p.amount ?? (p.data as Record<string, unknown> | null)?.["amount"];
-    const amount = Number(rawAmount);
+    const rawAmount =
+      (args.payload as Record<string, unknown>).amount ??
+      (args.payload as Record<string, unknown>).value ??
+      (args.payload as Record<string, unknown>).total;
+    const displayAmount = parseAmountDisplay(rawAmount);
+    const explicitCurrency =
+      pickNested(args.payload, ["currency", "ccy"]) ||
+      (displayAmount.currency !== "UGX" ? displayAmount.currency : "");
     await ctx.db.insert("paymentEvents", {
       centipidPaymentId: paymentId,
       eventType,
-      amount: Number.isFinite(amount) ? amount : 0,
-      currency:
-        pickString(p, ["currency", "ccy"]) ||
-        pickString(p.data as Record<string, unknown>, ["currency", "ccy"]) ||
-        "UGX",
-      method:
-        pickString(p, ["method", "channel", "payment_method"]) ||
-        pickString(p.data as Record<string, unknown>, ["method", "channel", "payment_method"]) ||
-        "unknown",
-      subscriberPhone:
-        pickString(p, ["subscriber_phone", "subscriberPhone", "phone", "mobile"]) ||
-        pickString(p.data as Record<string, unknown>, ["subscriber_phone", "subscriberPhone", "phone", "mobile"]) ||
-        "",
-      timestamp:
-        typeof p.timestamp === "number"
-          ? p.timestamp
-          : typeof p.timestamp === "string"
-            ? Date.parse(p.timestamp) || Date.now()
-            : Date.now(),
+      amount: eventAmountField(rawAmount),
+      currency: explicitCurrency || displayAmount.currency || "UGX",
+      method: pickNested(args.payload, ["method", "channel", "payment_method"]) || "unknown",
+      subscriberPhone: pickNested(args.payload, ["subscriber_phone", "subscriberPhone", "phone", "mobile"]),
+      timestamp: resolveEventTimestamp(
+        (args.payload as Record<string, unknown>).timestamp ??
+        (args.payload as Record<string, unknown>).at ??
+        (args.payload as Record<string, unknown>).occurred_at ??
+        (args.payload as Record<string, unknown>).paid_at,
+      ),
       webhookEventId: args.webhookEventId,
     });
     return { inserted: true };
@@ -566,29 +573,22 @@ export const handleVoucherEvent = internalMutation({
   handler: async (ctx, args) => {
     const eventType = extractEventType(args.payload) ?? "voucher.unknown";
     if (await alreadyProcessed(ctx, "voucherEvents", args.webhookEventId)) return { inserted: false };
-    const p = args.payload as Record<string, unknown>;
     const voucherId =
-      pickString(p, ["voucher_id", "voucherId", "id", "code"]) ||
-      pickString(p.data as Record<string, unknown>, ["voucher_id", "voucherId", "id", "code"]) ||
+      pickNested(args.payload, ["voucher_id", "voucherId", "id", "code"]) ||
       "";
     if (await alreadyStoredSourceEvent(ctx, "voucherEvents", voucherId, eventType)) return { inserted: false };
     const phone =
-      pickString(p, ["phone", "mobile", "customer_phone", "customerPhone"]) ||
-      pickString(p.data as Record<string, unknown>, ["phone", "mobile", "customer_phone", "customerPhone"]) ||
+      pickNested(args.payload, ["phone", "mobile", "customer_phone", "customerPhone"]) ||
       undefined;
     await ctx.db.insert("voucherEvents", {
       centipidVoucherId: voucherId,
       eventType,
-      packageName:
-        pickString(p, ["package_name", "packageName", "package"]) ||
-        pickString(p.data as Record<string, unknown>, ["package_name", "packageName", "package"]) ||
-        "",
-      timestamp:
-        typeof p.timestamp === "number"
-          ? p.timestamp
-          : typeof p.timestamp === "string"
-            ? Date.parse(p.timestamp) || Date.now()
-            : Date.now(),
+      packageName: pickNested(args.payload, ["package_name", "packageName", "package"]),
+      timestamp: resolveEventTimestamp(
+        (args.payload as Record<string, unknown>).timestamp ??
+        (args.payload as Record<string, unknown>).redeemed_at ??
+        (args.payload as Record<string, unknown>).occurred_at,
+      ),
       webhookEventId: args.webhookEventId,
       customerPhone: phone,
     });
@@ -601,22 +601,16 @@ export const handleTicketEvent = internalMutation({
   handler: async (ctx, args) => {
     const eventType = extractEventType(args.payload) ?? "ticket.unknown";
     if (await alreadyProcessed(ctx, "ticketEvents", args.webhookEventId)) return { inserted: false };
-    const p = args.payload as Record<string, unknown>;
     const ticketId =
-      pickString(p, ["ticket_id", "ticketId", "id"]) ||
-      pickString(p.data as Record<string, unknown>, ["ticket_id", "ticketId", "id"]) ||
+      pickNested(args.payload, ["ticket_id", "ticketId", "id"]) ||
       "";
     if (await alreadyStoredSourceEvent(ctx, "ticketEvents", ticketId, eventType)) return { inserted: false };
-    const subject =
-      pickString(p, ["subject", "title"]) ||
-      pickString(p.data as Record<string, unknown>, ["subject", "title"]) ||
-      "";
-    const timestamp =
-      typeof p.timestamp === "number"
-        ? p.timestamp
-        : typeof p.timestamp === "string"
-          ? Date.parse(p.timestamp) || Date.now()
-          : Date.now();
+    const subject = pickNested(args.payload, ["subject", "title"]);
+    const timestamp = resolveEventTimestamp(
+      (args.payload as Record<string, unknown>).timestamp ??
+      (args.payload as Record<string, unknown>).opened_at ??
+      (args.payload as Record<string, unknown>).occurred_at,
+    );
 
     await ctx.db.insert("ticketEvents", {
       centipidTicketId: ticketId,
@@ -745,36 +739,6 @@ function parseMcpToolItems(content: string): Array<Record<string, unknown>> {
     if (rows.length > 0) return rows;
   }
   return [];
-}
-
-function parseAmountDisplay(value: unknown): { amount: number; currency: string } {
-  const text = String(value ?? "").trim();
-  const match = text.match(/^([A-Za-z]{2,4})\s*([\d,]+(?:\.\d+)?)$/);
-  if (match) {
-    const amount = Number(match[2].replace(/,/g, ""));
-    return { amount: Number.isFinite(amount) ? amount : 0, currency: match[1].toUpperCase() };
-  }
-  const amount = Number(text.replace(/[^\d.-]/g, ""));
-  return { amount: Number.isFinite(amount) ? amount : 0, currency: "UGX" };
-}
-
-function parseCentipidTimestamp(value: unknown): number | undefined {
-  const text = String(value ?? "").trim();
-  if (!text) return undefined;
-  const dateMatch = text.match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?/);
-  if (dateMatch) {
-    const stamped = new Date(
-      Number(dateMatch[1]),
-      Number(dateMatch[2]) - 1,
-      Number(dateMatch[3]),
-      Number(dateMatch[4]),
-      Number(dateMatch[5]),
-      Number(dateMatch[6] ?? 0),
-    ).getTime();
-    return Number.isFinite(stamped) ? stamped : undefined;
-  }
-  const iso = Date.parse(text);
-  return Number.isFinite(iso) ? iso : undefined;
 }
 
 type RevenueSummarySnapshot = {
@@ -1109,9 +1073,12 @@ export const enrichCentipidLiveSnapshot = internalMutation({
  */
 export const syncCentipidLiveData = internalAction({
   args: {},
-  handler: async (ctx) => {
+  handler: async (ctx): Promise<{
+    overview: ({ ok: true; at: number } & RevenueSummarySnapshot) | { ok: false; error: string };
+    report: { tool: string; inserted: number; error?: string }[];
+  }> => {
     const overview = await ctx.runAction(internal.centipid.refreshCentipidLiveSnapshot, {});
-    if (!overview.ok) return { overview, report: [] as { tool: string; inserted: number; error?: string }[] };
+    if (!overview.ok) return { overview, report: [] };
     const { report } = await ctx.runAction(internal.centipid.runCentipidSnapshot, {});
     return { overview, report };
   },

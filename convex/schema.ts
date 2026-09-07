@@ -379,6 +379,10 @@ export default defineSchema({
       v.literal("collector_backoff"),
       v.literal("partial_telemetry"),
       v.literal("notification"),
+      v.literal("self_heal_action"),
+      v.literal("self_heal_failed"),
+      v.literal("chronic_self_heal"),
+      v.literal("healthguard_stale"),
     ),
     severity: v.union(v.literal("info"), v.literal("warning"), v.literal("critical")),
     title: v.string(),
@@ -388,6 +392,80 @@ export default defineSchema({
     .index("by_occurredAt", ["occurredAt"])
     .index("by_router", ["routerId"])
     .index("by_type", ["type"]),
+
+  // ==========================================================================
+  // COLLECTOR SELF-HEAL & OPERATOR COMMAND QUEUE
+  // ==========================================================================
+
+  /**
+   * Global operator settings served to collectors. Missing rows mean the
+   * built-in default (e.g. collectors treat a missing healthguardEnabled row
+   * as enabled). One row per key.
+   */
+  system_settings: defineTable({
+    key: v.string(),
+    valueJson: v.string(),
+    updatedAt: v.number(),
+    updatedBy: v.optional(v.id("users")),
+  }).index("by_key", ["key"]),
+
+  /**
+   * Operator-queued actions executed by the local collector on its next
+   * check-in. The collector acknowledges a command, the server records that
+   * durable clear, and only then does the collector act — so a router write
+   * never happens around an un-acked command.
+   */
+  device_commands: defineTable({
+    routerId: v.id("routers"),
+    type: v.union(
+      v.literal("reenable_www_ssl"),
+      v.literal("restart_collector"),
+      v.literal("run_full_healthcheck"),
+    ),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("acknowledged"),
+      v.literal("completed"),
+      v.literal("failed"),
+      v.literal("superseded"),
+    ),
+    requestedBy: v.id("users"),
+    requestedAt: v.number(),
+    acknowledgedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    failedAt: v.optional(v.number()),
+    supersededAt: v.optional(v.number()),
+    supersededByCommandId: v.optional(v.id("device_commands")),
+    errorMessage: v.optional(v.string()),
+    attempts: v.number(),
+    expiresAt: v.number(),
+  })
+    .index("by_router_status", ["routerId", "status"])
+    .index("by_router_type_status", ["routerId", "type", "status"])
+    .index("by_status_expiresAt", ["status", "expiresAt"]),
+
+  /**
+   * Latest healthguard observation per router. One row per router; the
+   * collector's telemetry upserts it on every push.
+   */
+  healthguardStates: defineTable({
+    routerId: v.id("routers"),
+    lastRunAt: v.optional(v.number()),
+    wwwSslEnabled: v.optional(v.boolean()),
+    lastAction: v.optional(
+      v.union(
+        v.literal("none"),
+        v.literal("reenabled_www_ssl"),
+        v.literal("reenable_failed"),
+        v.literal("flagged_disabled"),
+      )
+    ),
+    lastActionAt: v.optional(v.number()),
+    lastActionMessage: v.optional(v.string()),
+    reenableTimestamps24h: v.optional(v.array(v.number())),
+    chronicAlertedAt: v.optional(v.number()),
+    staleAlertedAt: v.optional(v.number()),
+  }).index("by_router", ["routerId"]),
 
   // ==========================================================================
   // CENTIPID INTEGRATION

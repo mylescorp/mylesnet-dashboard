@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, type ReactNode } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
 import type { PlatformUser } from "./UserProfileDropdown";
 
@@ -45,3 +45,4 @@ export function useUserProfile() {
   }
   return context;
 }
+

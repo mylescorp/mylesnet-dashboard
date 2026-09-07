@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "@/app/lib/convex";
 import { useState, type FormEvent, type ReactNode } from "react";
 import {
   Activity,

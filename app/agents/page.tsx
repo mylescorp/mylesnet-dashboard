@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
 import { Plus } from "lucide-react";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -186,3 +186,4 @@ export default function AgentsPage() {
     </div>
   );
 }
+

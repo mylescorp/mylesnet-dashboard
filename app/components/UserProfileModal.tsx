@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useAction } from "convex/react";
+import { useAction } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
 import { useUserProfile } from "./UserProfileContext";
 import { Check, ImagePlus, ShieldCheck, Trash2, User, X } from "lucide-react";

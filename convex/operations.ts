@@ -257,13 +257,50 @@ export const getLiveRouter = query({
       .query("networkSwitches")
       .withIndex("by_router", (q) => q.eq("routerId", router._id))
       .collect()).filter((entry) => entry.archivedAt === undefined);
-    const switchesWithLinks = await Promise.all(switches.map(async (entry) => ({
-      _switch: entry,
-      linkedAccessPoints: (await ctx.db
+    const switchesWithLinks = await Promise.all(switches.map(async (entry) => {
+      const linkedAccessPoints = (await ctx.db
         .query("accessPoints")
         .withIndex("by_router", (q) => q.eq("routerId", router._id))
-        .collect()).filter((accessPoint) => accessPoint.archivedAt === undefined && accessPoint.switchId === entry._id),
-    })));
+        .collect()).filter((accessPoint) => accessPoint.archivedAt === undefined && accessPoint.switchId === entry._id);
+
+      // Calculate aggregate metrics from linked access points
+      let totalUsers = 0;
+      let totalDailyBytes = 0;
+      let totalRxBytesPerSec = 0;
+      let totalTxBytesPerSec = 0;
+      let totalErrors = 0;
+      let totalDrops = 0;
+      let totalCapacity = 0;
+      let allApsHealthy = true;
+
+      for (const ap of linkedAccessPoints) {
+        const apSummary = await accessPointLiveSummary(ctx, ap, router._id);
+        totalUsers += apSummary.activeUserCount;
+        totalDailyBytes += apSummary.dailyBytes;
+        totalRxBytesPerSec += apSummary.health?.rxBytesPerSec ?? 0;
+        totalTxBytesPerSec += apSummary.health?.txBytesPerSec ?? 0;
+        totalErrors += apSummary.health?.errorCount ?? 0;
+        totalDrops += apSummary.health?.queueDrops ?? 0;
+        totalCapacity += ap.capacity ?? 0;
+        if (!apSummary.health?.linkState) {
+          allApsHealthy = false;
+        }
+      }
+
+      return {
+        _switch: entry,
+        linkedAccessPoints,
+        metrics: {
+          totalUsers,
+          totalDailyBytes,
+          currentSpeed: { rx: totalRxBytesPerSec, tx: totalTxBytesPerSec },
+          totalErrors,
+          totalDrops,
+          totalCapacity,
+          allApsHealthy,
+        },
+      };
+    }));
 
     return {
       router,

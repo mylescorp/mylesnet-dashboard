@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { useQuery } from "@/app/lib/convex";
 import { useMemo, useState } from "react";
 import { Activity, ListChecks, RadioTower } from "lucide-react";
 import Link from "next/link";

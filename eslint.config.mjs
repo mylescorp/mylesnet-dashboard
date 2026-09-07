@@ -15,6 +15,13 @@ const eslintConfig = defineConfig([
     "convex/_generated/**",
     // Local HTTPS dev-proxy helper script (CommonJS, not app code).
     "https-dev.js",
+    // Test files have different linting rules
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.test.js",
+    "**/*.test.jsx",
+    "jest.config.js",
+    "jest.setup.js",
   ]),
 ]);
 

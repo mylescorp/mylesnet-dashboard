@@ -1,7 +1,7 @@
 "use client";
 
-import { useConvexAuth } from "convex/react";
-import { useAction } from "convex/react";
+import { useConvexAuth } from "@/app/lib/convex";
+import { useAction } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
 import { useEffect, useRef, useState } from "react";
 import { Activity } from "lucide-react";
@@ -94,3 +94,4 @@ export function OrgGuard() {
 
   return null;
 }
+

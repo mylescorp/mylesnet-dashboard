@@ -1,11 +1,13 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { decryptCentipidSecret } from "./lib/centipidCredentials";
 import {
   classifyEvent,
   extractEventType,
   extractWebhookEventId,
+  inferCentipidEvent,
   verifyWebhookSignature,
 } from "./lib/centipidVerify";
 import { extractWorkosEvent, verifyWorkosWebhook } from "./lib/workosVerify";
@@ -50,8 +52,24 @@ http.route({
     }
 
     try {
-      await ctx.runMutation(internal.collector.ingestSnapshot, await request.json());
-      return Response.json({ success: true });
+      const body = await request.json();
+      await ctx.runMutation(internal.collector.ingestSnapshot, body);
+      // Best-effort round-trip: tell the collector whether the global guard is
+      // on and hand it the commands queued for its router. A failure here never
+      // rejects the saved snapshot.
+      try {
+        const routerId = typeof body?.routerId === "string" ? body.routerId : undefined;
+        if (!routerId) return Response.json({ success: true });
+        const [healthguardEnabled, pendingCommands] = await Promise.all([
+          ctx.runQuery(internal.systemSettings.getHealthguardEnabledInternal, {}),
+          ctx.runQuery(internal.deviceCommands.listActiveCommands, {
+            routerId: routerId as Id<"routers">,
+          }),
+        ]);
+        return Response.json({ success: true, healthguardEnabled, pendingCommands });
+      } catch {
+        return Response.json({ success: true });
+      }
     } catch {
       return Response.json(
         { success: false, message: "The collector data could not be saved." },
@@ -242,7 +260,14 @@ http.route({
       return Response.json({ success: false, message: "The webhook signature is invalid." }, { status: 401 });
     }
 
-    const { category, eventType: typedEventType } = classifyEvent(payload);
+    let { category, eventType: typedEventType } = classifyEvent(payload);
+    if (!category || !typedEventType) {
+      const inferred = inferCentipidEvent(payload);
+      if (inferred) {
+        category = inferred.category;
+        typedEventType = inferred.eventType;
+      }
+    }
     if (!category || !typedEventType) {
       await ctx.runMutation(internal.centipid.logWebhookDelivery, {
         eventType: capturedEventType,

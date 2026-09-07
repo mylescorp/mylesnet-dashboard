@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation } from "@/app/lib/convex";
 import { useState } from "react";
 import { Plus, TriangleAlert } from "lucide-react";
 import type { Id } from "@/convex/_generated/dataModel";

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery } from "@/app/lib/convex";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { X, Save, ChevronDown, ChevronUp } from "lucide-react";
@@ -76,12 +76,12 @@ export function SwitchPortManager({ switchId, routerId, onClose, onSuccess }: Sw
         const linkedAP = accessPoints.find(ap => 
           ap.switchId === switchId && ap.switchPort === port.portNumber
         );
-        return {
+return {
           ...port,
           isConfigured: !!linkedAP,
           status: linkedAP ? "up" : "down",
           connectedTo: linkedAP?.name,
-        };
+        } as PortState;
       });
       setPorts(updatedPorts);
     }

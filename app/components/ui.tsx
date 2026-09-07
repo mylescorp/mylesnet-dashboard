@@ -7,14 +7,16 @@ export function Field({
   label,
   children,
   hint,
+  required,
 }: {
   label: string;
   children: ReactNode;
   hint?: string;
+  required?: boolean;
 }) {
   return (
     <label className="pf-field">
-      <span className="pf-label">{label}</span>
+      <span className="pf-label">{label}{required ? <span className="pf-required" aria-hidden="true"> *</span> : null}</span>
       {children}
       {hint && <span className="pf-hint">{hint}</span>}
     </label>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { Field, Select, TextArea, StatusPill, EmptyState, Loading, ErrorNote, formatDateTime } from "@/app/components/ui";
@@ -175,3 +175,4 @@ export default function CommsPage() {
     </div>
   );
 }
+

@@ -2,6 +2,8 @@ import { v } from "convex/values";
 import { internalMutation, query, type MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requireAuthenticatedUser } from "./lib/auth";
+import { applyCommandReport } from "./deviceCommands";
+import { countReenablesInWindow, isChronic, pruneReenableWindow } from "./lib/deviceCommandCore";
 
 /** Recent collector run history for a router (desc by observed time). */
 export const getCollectorRunHistory = query({
@@ -85,13 +87,37 @@ const systemHealthValidator = v.union(
   }),
 );
 
+const healthguardValidator = v.union(
+  v.null(),
+  v.object({
+    enabled: v.boolean(),
+    lastRunAt: v.union(v.number(), v.null()),
+    wwwSslEnabled: v.union(v.boolean(), v.null()),
+    lastAction: v.union(
+      v.literal("none"),
+      v.literal("reenabled_www_ssl"),
+      v.literal("reenable_failed"),
+      v.literal("flagged_disabled"),
+    ),
+    lastActionAt: v.union(v.number(), v.null()),
+    lastActionMessage: v.union(v.string(), v.null()),
+  }),
+);
+
+const commandReportValidator = v.object({
+  commandId: v.id("device_commands"),
+  transition: v.union(v.literal("acknowledged"), v.literal("completed"), v.literal("failed")),
+  observedAt: v.number(),
+  errorMessage: v.optional(v.string()),
+});
+
 const collectorStatusValidator = v.union(v.literal("connected"), v.literal("failed"));
 
 async function logSystemEvent(
   ctx: { db: MutationCtx["db"] },
   event: {
     routerId?: Id<"routers">;
-    type: "ingest_latency" | "rate_limited" | "dropped" | "collector_backoff" | "partial_telemetry";
+    type: "ingest_latency" | "rate_limited" | "dropped" | "collector_backoff" | "partial_telemetry" | "self_heal_action" | "self_heal_failed" | "chronic_self_heal";
     severity: "info" | "warning" | "critical";
     title: string;
     details?: string;
@@ -243,6 +269,8 @@ export const ingestSnapshot = internalMutation({
     identity: v.optional(v.union(v.string(), v.null())),
     configurationSnapshotJson: v.string(),
     latencyMs: v.optional(v.number()),
+    healthguard: v.optional(healthguardValidator),
+    commandReports: v.optional(v.array(commandReportValidator)),
   },
   handler: async (ctx, args) => {
     const router = await ctx.db.get(args.routerId);
@@ -636,5 +664,118 @@ export const ingestSnapshot = internalMutation({
         snapshotJson: args.configurationSnapshotJson,
       });
     }
+
+    // Operator command reports: ack / completed / failed transitions.
+    if (args.commandReports && args.commandReports.length > 0) {
+      for (const report of args.commandReports) {
+        await applyCommandReport(ctx, {
+          commandId: report.commandId,
+          routerId: args.routerId,
+          transition: report.transition,
+          observedAt: report.observedAt,
+          errorMessage: report.errorMessage,
+        });
+      }
+    }
+
+    // Healthguard self-heal status — upsert the per-router observation and
+    // raise self-heal events when the guard acted.
+    if (args.healthguard && args.healthguard.lastRunAt) {
+      await applyHealthguardReport(ctx, {
+        routerId: args.routerId,
+        observedAt: now,
+        enabled: args.healthguard.enabled,
+        lastRunAt: args.healthguard.lastRunAt,
+        wwwSslEnabled: args.healthguard.wwwSslEnabled,
+        lastAction: args.healthguard.lastAction,
+        lastActionAt: args.healthguard.lastActionAt,
+        lastActionMessage: args.healthguard.lastActionMessage,
+      });
+    }
   },
 });
+
+const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+const HEALTHGUARD_CHRONIC_MAX_RECORDS = 30;
+
+/** Records the collector's healthguard observation and raises self-heal events. */
+async function applyHealthguardReport(
+  ctx: { db: MutationCtx["db"] },
+  report: {
+    routerId: Id<"routers">;
+    observedAt: number;
+    enabled: boolean;
+    lastRunAt: number;
+    wwwSslEnabled: boolean | null;
+    lastAction: "none" | "reenabled_www_ssl" | "reenable_failed" | "flagged_disabled";
+    lastActionAt: number | null;
+    lastActionMessage: string | null;
+  },
+): Promise<void> {
+  const existing = await ctx.db
+    .query("healthguardStates")
+    .withIndex("by_router", (q) => q.eq("routerId", report.routerId))
+    .first();
+  const now = report.observedAt;
+  const isNewAction = typeof report.lastActionAt === "number" && report.lastActionAt !== existing?.lastActionAt;
+
+  const { reenableTimestamps: reenableWindow, count: reenableCount } = countReenablesInWindow(
+    existing?.reenableTimestamps24h ?? [],
+    isNewAction && report.lastAction === "reenabled_www_ssl" && typeof report.lastActionAt === "number" ? report.lastActionAt : undefined,
+    now,
+    TWENTY_FOUR_HOURS_MS,
+    HEALTHGUARD_CHRONIC_MAX_RECORDS,
+  );
+
+  if (isNewAction && report.lastAction === "reenabled_www_ssl") {
+    await logSystemEvent(ctx, {
+      routerId: report.routerId,
+      type: "self_heal_action",
+      severity: "info",
+      title: "Healthguard re-enabled the www-ssl service.",
+      details: report.lastActionMessage ?? undefined,
+    });
+  }
+  if (isNewAction && report.lastAction === "reenable_failed") {
+    await logSystemEvent(ctx, {
+      routerId: report.routerId,
+      type: "self_heal_failed",
+      severity: "warning",
+      title: "Healthguard could not re-enable the www-ssl service.",
+      details: report.lastActionMessage ?? "The guard reached the router but the re-enable write did not succeed.",
+    });
+  }
+
+  const chronicThreshold = Number(process.env.MYLESNET_HEALTHGUARD_CHRONIC_THRESHOLD ?? 3);
+  let chronicAlertedAt = existing?.chronicAlertedAt;
+  if (isChronic(reenableCount, chronicThreshold)) {
+    const chronicCooldownMs = Number(process.env.MYLESNET_HEALTHGUARD_CHRONIC_ALERT_MIN_MS ?? 60) * 60 * 1000;
+    if (chronicAlertedAt === undefined || now - chronicAlertedAt >= chronicCooldownMs) {
+      chronicAlertedAt = now;
+      await logSystemEvent(ctx, {
+        routerId: report.routerId,
+        type: "chronic_self_heal",
+        severity: "warning",
+        title: "www-ssl keeps falling disabled; the guard keeps re-enabling it.",
+        details: `${reenableCount} re-enables in the last 24h. Something keeps overriding the guard.`,
+      });
+    }
+  }
+
+  const patch = {
+    routerId: report.routerId,
+    lastRunAt: report.lastRunAt,
+    wwwSslEnabled: report.wwwSslEnabled ?? undefined,
+    lastAction: report.lastAction,
+    lastActionAt: report.lastActionAt ?? undefined,
+    lastActionMessage: report.lastActionMessage ?? undefined,
+    reenableTimestamps24h: pruneReenableWindow(reenableWindow, now, TWENTY_FOUR_HOURS_MS),
+    chronicAlertedAt,
+    staleAlertedAt: undefined,
+  };
+  if (existing) {
+    await ctx.db.patch(existing._id, patch);
+  } else {
+    await ctx.db.insert("healthguardStates", patch);
+  }
+}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useQuery } from "convex/react";
+import { useQuery } from "@/app/lib/convex";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Activity, AlertTriangle, CheckCircle, X, Clock } from "lucide-react";
@@ -58,7 +58,7 @@ export function SwitchHealthMonitor({ switchId, routerId, onClose }: SwitchHealt
       return {
         name: ap.name,
         healthy: health?.health?.linkState ?? false,
-        lastSeen: health?.health?.observedAt,
+        lastSeen: health?.health?.timestamp,
       };
     });
 
@@ -202,3 +202,4 @@ export function SwitchHealthMonitor({ switchId, routerId, onClose }: SwitchHealt
     </div>
   );
 }
+

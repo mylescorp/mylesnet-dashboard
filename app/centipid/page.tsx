@@ -1,6 +1,6 @@
 "use client";
 
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "@/app/lib/convex";
 import Link from "next/link";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
@@ -164,6 +164,7 @@ export default function CentipidSettingsPage() {
   const [backfillResult, setBackfillResult] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
   const [expandedDelivery, setExpandedDelivery] = useState<string | null>(null);
+  const [deliveryFilter, setDeliveryFilter] = useState<"centipid" | "all">("centipid");
   const [autoSyncingLive, setAutoSyncingLive] = useState(false);
   const lastAutoSyncAt = useRef(0);
   const [now, setNow] = useState(() => Date.now());
@@ -187,6 +188,11 @@ export default function CentipidSettingsPage() {
   const lastDelivery = deliveryLogs && deliveryLogs.length > 0 ? deliveryLogs[0].receivedAt : null;
   const latestDeliveryAt = settings?.latestDeliveryAt ?? lastDelivery;
   const lastDeliveryAge = latestDeliveryAt === null ? null : now - latestDeliveryAt;
+  const isWorkosRow = (delivery: WebhookDeliveryShape) => delivery.eventType.startsWith("workos.");
+  const visibleDeliveries = useMemo(
+    () => (deliveryLogs ?? []).filter((delivery: WebhookDeliveryShape) => deliveryFilter === "all" || !isWorkosRow(delivery)),
+    [deliveryLogs, deliveryFilter],
+  );
   const stale = settings !== undefined
     && settings.hasCredentials
     && !settings.ingestionPaused
@@ -672,8 +678,28 @@ export default function CentipidSettingsPage() {
             </p>
           </div>
           <div className="centipid-section-head-right">
-            {deliveryLogs && deliveryLogs.length > 0 && (
-              <span className="status-chip status-chip-neutral">{deliveryLogs.length} logged</span>
+            <div className="filter-tabs" role="tablist" aria-label="Filter deliveries">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={deliveryFilter === "centipid"}
+                onClick={() => setDeliveryFilter("centipid")}
+                className={`filter-tab ${deliveryFilter === "centipid" ? "filter-tab-active" : ""}`}
+              >
+                Centipid
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={deliveryFilter === "all"}
+                onClick={() => setDeliveryFilter("all")}
+                className={`filter-tab ${deliveryFilter === "all" ? "filter-tab-active" : ""}`}
+              >
+                All
+              </button>
+            </div>
+            {visibleDeliveries.length > 0 && (
+              <span className="status-chip status-chip-neutral">{visibleDeliveries.length} logged</span>
             )}
           </div>
         </div>
@@ -681,11 +707,18 @@ export default function CentipidSettingsPage() {
         <div className="pf-panel">
           {deliveryLogs === undefined ? (
             <p className="pf-hint" style={{ margin: "12px 0 0" }}>Loading delivery records…</p>
-          ) : deliveryLogs.length === 0 ? (
-            <div className="empty-state">
-              <h3>No deliveries yet</h3>
-              <p>When Centipid sends its first webhook, it will appear here with its raw signature preview.</p>
-            </div>
+          ) : visibleDeliveries.length === 0 ? (
+            deliveryLogs.length === 0 ? (
+              <div className="empty-state">
+                <h3>No deliveries yet</h3>
+                <p>When Centipid sends its first webhook, it will appear here with its raw signature preview.</p>
+              </div>
+            ) : (
+              <div className="empty-state">
+                <h3>No Centipid deliveries in the recent log</h3>
+                <p>Switch to “All” to inspect deliveries from other receivers (for example WorkOS).</p>
+              </div>
+            )
           ) : (
             <>
               <div className="pf-table-wrap" style={{ marginTop: 12 }}>
@@ -700,7 +733,7 @@ export default function CentipidSettingsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {deliveryLogs.map((delivery: WebhookDeliveryShape) => {
+                    {visibleDeliveries.map((delivery: WebhookDeliveryShape) => {
                       const signatureHeader = delivery.signatureHeader;
                       const rawBody = delivery.rawBodyPreview;
                       const expanded = expandedDelivery === delivery._id;
@@ -929,3 +962,4 @@ export default function CentipidSettingsPage() {
     </main>
   );
 }
+

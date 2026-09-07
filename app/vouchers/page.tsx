@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
 import { Plus, ChevronRight, ChevronDown } from "lucide-react";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
@@ -291,3 +291,4 @@ function BatchVouchers({ batchId, agents }: { batchId: string; agents: Doc<"agen
     </div>
   );
 }
+

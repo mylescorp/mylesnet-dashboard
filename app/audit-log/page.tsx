@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "convex/react";
+import { useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
 import { Field, Select, Loading, EmptyState, formatDateTime } from "@/app/components/ui";
 
@@ -90,3 +90,4 @@ export default function AuditLogPage() {
     </div>
   );
 }
+

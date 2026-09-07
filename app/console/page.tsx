@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
-import { useQuery } from "convex/react";
+import { useQuery } from "@/app/lib/convex";
 import { Activity, Boxes, Monitor, RadioTower, Router, Users, Wifi } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 

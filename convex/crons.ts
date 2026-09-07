@@ -154,4 +154,13 @@ crons.hourly(
   {},
 );
 
+// Device command queue: TTL-fail commands the collectors never picked up and
+// raise `healthguard_stale` alerts for guards that stopped reporting.
+crons.interval(
+  "sweep device commands and healthguard staleness",
+  { seconds: 300 },
+  internal.deviceCommands.sweepExpiredCommands,
+  {},
+);
+
 export default crons;

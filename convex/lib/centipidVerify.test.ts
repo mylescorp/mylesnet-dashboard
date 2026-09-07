@@ -1,11 +1,15 @@
 import {
   bytesConstantTimeEqual,
   classifyEvent,
+  collectEntityRecords,
   extractEventType,
   extractSignatureValue,
   extractWebhookEventId,
   hmacSha256Hex,
+  inferCentipidEvent,
   mcpTextContents,
+  parseAmountDisplay,
+  parseCentipidTimestamp,
   parseMcpResponse,
   pickString,
   verifyWebhookSignature,
@@ -107,4 +111,74 @@ test("mcpTextContents extracts text from tools/call content items", () => {
   };
   assert.deepEqual(mcpTextContents(parsed), ["row one", "row two"]);
   assert.deepEqual(mcpTextContents(null), []);
+});
+
+test("parseAmountDisplay parses numeric, formatted, and currency-prefixed strings", () => {
+  assert.deepEqual(parseAmountDisplay(5000), { amount: 5000, currency: "UGX" });
+  assert.deepEqual(parseAmountDisplay("UGX 1,000.00"), { amount: 1000, currency: "UGX" });
+  assert.deepEqual(parseAmountDisplay("KES 2,500"), { amount: 2500, currency: "KES" });
+  assert.deepEqual(parseAmountDisplay("3,200"), { amount: 3200, currency: "UGX" });
+  assert.deepEqual(parseAmountDisplay(""), { amount: 0, currency: "UGX" });
+});
+
+test("parseCentipidTimestamp resolves ISO, epoch and space-separated timestamps", () => {
+  const iso = Date.parse("2026-09-04T19:19:56.000Z");
+  assert.equal(parseCentipidTimestamp("2026-09-04T19:19:56.000Z"), iso);
+  assert.equal(parseCentipidTimestamp(iso), iso);
+  const spaceSplit = new Date(2026, 8, 6, 8, 17, 10).getTime();
+  assert.equal(parseCentipidTimestamp("2026-09-06 08:17:10"), spaceSplit);
+  const batchSplit = new Date(2026, 8, 4, 19, 44, 0).getTime();
+  assert.equal(parseCentipidTimestamp("Vouchers 2026-09-04 19:44"), batchSplit);
+  assert.equal(parseCentipidTimestamp(""), undefined);
+  assert.equal(parseCentipidTimestamp("not-a-date"), undefined);
+});
+
+test("collectEntityRecords walks data, payload, event and object containers", () => {
+  const payload = {
+    event: "voucher.redeemed",
+    timestamp: "2026-09-06 08:17:10",
+    data: { code: "RT2XKZ" },
+    payload: { package_name: "Half Day" },
+  };
+  const records = collectEntityRecords(payload);
+  assert.equal(records[0], payload);
+  assert.deepEqual(records[1], { code: "RT2XKZ" });
+  assert.deepEqual(records[2], { package_name: "Half Day" });
+  assert.equal(records.length, 3);
+  assert.deepEqual(collectEntityRecords(null), []);
+  assert.deepEqual(collectEntityRecords("text"), []);
+});
+
+test("extractEventType reads event types from nested envelopes", () => {
+  assert.equal(extractEventType({ payload: { event_type: "subscriber.created" } }), "subscriber.created");
+  assert.equal(extractEventType({ event: { event: "payment.refunded" } }), "payment.refunded");
+  assert.equal(extractEventType({ object: { type: "ticket.opened" } }), "ticket.opened");
+  assert.equal(extractEventType({ data: { name: "voucher.redeemed" } }), "voucher.redeemed");
+});
+
+test("extractWebhookEventId reads ids from nested envelopes", () => {
+  assert.equal(extractWebhookEventId({ payload: { event_id: "wh_9" } }), "wh_9");
+  assert.equal(extractWebhookEventId({ event: { id: "wh_8" } }), "wh_8");
+  assert.equal(extractWebhookEventId({ object: { uuid: "wh_7" } }), "wh_7");
+});
+
+test("inferCentipidEvent classifies recognisable entities without an event type", () => {
+  assert.deepEqual(
+    inferCentipidEvent({ data: { amount: "UGX 1,000.00", method: "MTN", phone: "256700" } }),
+    { category: "payment", eventType: "payment.unknown" },
+  );
+  assert.deepEqual(
+    inferCentipidEvent({ payload: { code: "RT2XKZ", package: "Half Day", redeemed_at: "2026-09-06 08:17:10" } }),
+    { category: "voucher", eventType: "voucher.unknown" },
+  );
+  assert.deepEqual(
+    inferCentipidEvent({ data: { subject: "No internet", priority: "high", ticket_id: "T-42" } }),
+    { category: "ticket", eventType: "ticket.unknown" },
+  );
+  assert.deepEqual(
+    inferCentipidEvent({ username: "pppoe-9", phone: "256700000000", plan: "Monthly 30GB" }),
+    { category: "subscriber", eventType: "subscriber.unknown" },
+  );
+  assert.equal(inferCentipidEvent({ name: "Yesterday" }), null);
+  assert.equal(inferCentipidEvent(null), null);
 });

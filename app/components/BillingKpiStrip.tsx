@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { useQuery } from "@/app/lib/convex";
 import { useMemo } from "react";
 import {
   ArrowDownToLine,
@@ -90,3 +90,4 @@ export default function BillingKpiStrip() {
     </section>
   );
 }
+

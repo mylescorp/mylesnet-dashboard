@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { useQuery } from "@/app/lib/convex";
 import { api } from "../../convex/_generated/api";
 import {
   CircleDollarSign,

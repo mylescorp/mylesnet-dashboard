@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { useQuery } from "@/app/lib/convex";
 import { Activity, AlertTriangle, ArrowUpRight, BarChart3, Boxes, CircleDollarSign, FileDiff, Gauge, RadioTower, SlidersHorizontal, Spline, Timer, Users, Wifi, Edit, Plus, Settings, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -220,7 +220,7 @@ function RouterSection({ routerId, showChart, onOpenDetail, onViewUsers }: { rou
   </section>;
 }
 
-function SwitchSection({ switches, routerName, editingSwitchId, setEditingSwitchId, managingPortsSwitchId, setManagingPortsSwitchId, monitoringPortsSwitchId, setMonitoringPortsSwitchId, monitoringHealthSwitchId, setMonitoringHealthSwitchId, viewingHistorySwitchId, setViewingHistorySwitchId }: { switches: { _switch: { _id: string; name: string; model?: string; managed?: boolean; routerPort?: string; portCount?: number; ipAddress?: string; macAddress?: string }; linkedAccessPoints: { _id: string; name: string; port: string; deviceType: string }[] }[]; routerName: string; editingSwitchId: Id<"networkSwitches"> | null; setEditingSwitchId: (id: Id<"networkSwitches"> | null) => void; managingPortsSwitchId: Id<"networkSwitches"> | null; setManagingPortsSwitchId: (id: Id<"networkSwitches"> | null) => void; monitoringPortsSwitchId: Id<"networkSwitches"> | null; setMonitoringPortsSwitchId: (id: Id<"networkSwitches"> | null) => void; monitoringHealthSwitchId: Id<"networkSwitches"> | null; setMonitoringHealthSwitchId: (id: Id<"networkSwitches"> | null) => void; viewingHistorySwitchId: Id<"networkSwitches"> | null; setViewingHistorySwitchId: (id: Id<"networkSwitches"> | null) => void }) {
+function SwitchSection({ switches, routerName, editingSwitchId, setEditingSwitchId, managingPortsSwitchId, setManagingPortsSwitchId, monitoringPortsSwitchId, setMonitoringPortsSwitchId, monitoringHealthSwitchId, setMonitoringHealthSwitchId, viewingHistorySwitchId, setViewingHistorySwitchId }: { switches: { _switch: { _id: string; name: string; model?: string; managed?: boolean; routerPort?: string; portCount?: number; ipAddress?: string; macAddress?: string }; linkedAccessPoints: { _id: string; name: string; port: string; deviceType: string }[]; metrics: { totalUsers: number; totalDailyBytes: number; currentSpeed: { rx: number; tx: number }; totalErrors: number; totalDrops: number; totalCapacity: number; allApsHealthy: boolean } }[]; routerName: string; editingSwitchId: Id<"networkSwitches"> | null; setEditingSwitchId: (id: Id<"networkSwitches"> | null) => void; managingPortsSwitchId: Id<"networkSwitches"> | null; setManagingPortsSwitchId: (id: Id<"networkSwitches"> | null) => void; monitoringPortsSwitchId: Id<"networkSwitches"> | null; setMonitoringPortsSwitchId: (id: Id<"networkSwitches"> | null) => void; monitoringHealthSwitchId: Id<"networkSwitches"> | null; setMonitoringHealthSwitchId: (id: Id<"networkSwitches"> | null) => void; viewingHistorySwitchId: Id<"networkSwitches"> | null; setViewingHistorySwitchId: (id: Id<"networkSwitches"> | null) => void }) {
   // Mark parameters as used to avoid lint warnings
   void editingSwitchId;
   void managingPortsSwitchId;
@@ -295,29 +295,25 @@ function SwitchSection({ switches, routerName, editingSwitchId, setEditingSwitch
                   </button>
                 </div>
               </div>
-              <dl className="access-point-stats">
-                <div><dt>Model</dt><dd>{entry._switch.model ?? "Not configured"}</dd></div>
-                <div><dt>Port count</dt><dd>{entry._switch.portCount ?? "Not configured"}</dd></div>
-                <div><dt>Management IP</dt><dd>{entry._switch.ipAddress ?? "—"}</dd></div>
-                <div><dt>MAC</dt><dd>{entry._switch.macAddress ?? "—"}</dd></div>
-              </dl>
+              <div className="ap-user-row"><span><Users aria-hidden="true" size={15} />Users</span><strong>{entry.metrics.totalUsers}</strong></div>
+              <div className="ap-traffic"><span>Current speed</span><strong>↓ {rate(entry.metrics.currentSpeed.rx)} · ↑ {rate(entry.metrics.currentSpeed.tx)}</strong></div>
+              <dl className="access-point-stats"><div><dt>Health</dt><dd>{entry.metrics.allApsHealthy ? "Good" : "Attention needed"}</dd></div><div><dt>Model</dt><dd>{entry._switch.model ?? "—"}</dd></div><div><dt>Ports</dt><dd>{entry._switch.portCount ?? "—"}</dd></div><div><dt>Data used</dt><dd>{bytes(entry.metrics.totalDailyBytes)}</dd></div><div><dt>Errors / drops</dt><dd>{entry.metrics.totalErrors + entry.metrics.totalDrops}</dd></div></dl>
+              <div className="ap-capacity"><div><span>Capacity</span><strong>{entry.metrics.totalCapacity > 0 ? `${entry.metrics.totalUsers} / ${entry.metrics.totalCapacity} users` : "Not configured"}</strong></div>{entry.metrics.totalCapacity > 0 ? <i><b style={{ width: `${Math.min(100, (entry.metrics.totalUsers / entry.metrics.totalCapacity) * 100)}%` }} /></i> : null}</div>
               <div className="switch-links">
                 {entry.linkedAccessPoints.length ? (
-                  <>
-                    <span>Linked access points</span>
+                  <div className="switch-link-compact">
+                    <span>{entry.linkedAccessPoints.length} linked AP{entry.linkedAccessPoints.length !== 1 ? "s" : ""}</span>
                     <div className="switch-link-list">
-                      {entry.linkedAccessPoints.map((ap) => (
-                        <span key={ap._id} className="switch-link-chip">{ap.name} · {ap.port}</span>
+                      {entry.linkedAccessPoints.slice(0, 3).map((ap) => (
+                        <span key={ap._id} className="switch-link-chip">{ap.name}</span>
                       ))}
+                      {entry.linkedAccessPoints.length > 3 && <span className="switch-link-chip">+{entry.linkedAccessPoints.length - 3} more</span>}
                     </div>
-                  </>
+                  </div>
                 ) : (
-                  <p className="console-note">No access points registered as connected to this switch.</p>
+                  <p className="console-note">No access points connected</p>
                 )}
               </div>
-              {!entry.linkedAccessPoints.length ? (
-                <p className="console-note">Enter the switch details (model, port count, IP, MAC) from Router settings to complete this record.</p>
-              ) : null}
             </article>
           ))}
         </div>

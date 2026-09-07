@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@workos-inc/authkit-nextjs/components";
-import { useQuery } from "convex/react";
+import { useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
 import { ChevronDown, ChevronLeft, ChevronRight, LogOut, X } from "lucide-react";
 import { useSidebarState } from "./useSidebarState";
@@ -219,3 +219,4 @@ export default function Sidebar({ isMobile = false, onCloseMobile }: SidebarProp
     </aside>
   );
 }
+

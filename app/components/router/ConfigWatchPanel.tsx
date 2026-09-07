@@ -1,6 +1,6 @@
 "use client";
 
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "@/app/lib/convex";
 import { useState } from "react";
 import { FileDiff, Fingerprint, Trash2 } from "lucide-react";
 import { api } from "@/convex/_generated/api";

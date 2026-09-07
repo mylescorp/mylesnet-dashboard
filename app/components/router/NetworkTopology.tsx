@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { useQuery } from "@/app/lib/convex";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { RadioTower, Boxes, Wifi, X } from "lucide-react";
@@ -129,3 +129,4 @@ export function NetworkTopology({ routerId, onClose }: NetworkTopologyProps) {
     </div>
   );
 }
+

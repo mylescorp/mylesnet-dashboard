@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { useQuery } from "convex/react";
+import { useQuery } from "@/app/lib/convex";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { X } from "lucide-react";
@@ -124,3 +124,4 @@ export function SwitchHistory({ switchId, routerId, onClose }: SwitchHistoryProp
     </div>
   );
 }
+

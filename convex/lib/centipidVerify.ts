@@ -118,16 +118,69 @@ export function pickString(payload: unknown, keys: string[]): string {
   return "";
 }
 
+/**
+ * The envelope records of an incoming payload in lookup order: the top-level
+ * object first, then the common nested containers providers use (`data`,
+ * `payload`, `event`, `object`). Duplicate containers are skipped.
+ */
+export function collectEntityRecords(payload: unknown): Array<Record<string, unknown>> {
+  const direct = asRecord(payload);
+  if (!direct) return [];
+  const records: Array<Record<string, unknown>> = [direct];
+  const seen = new Set<Record<string, unknown>>([direct]);
+  for (const key of ["data", "payload", "event", "object"]) {
+    const nested = asRecord(direct[key]);
+    if (nested && !seen.has(nested)) {
+      seen.add(nested);
+      records.push(nested);
+    }
+  }
+  return records;
+}
+
 /** Best-effort extraction of the Centipid event type from an unknown payload. */
 export function extractEventType(payload: unknown): string | null {
-  const direct = asRecord(payload);
-  if (!direct) return null;
-  const candidate =
-    pickString(direct, ["event_type", "eventType", "event", "type", "name"]) ||
-    pickString(asRecord(direct.data), ["event_type", "eventType", "event", "type", "name"]);
+  const candidate = collectEntityRecords(payload)
+    .map((record) => pickString(record, ["event_type", "eventType", "event", "type", "name"]))
+    .find((value) => value.length > 0);
   if (!candidate) return null;
   const normalized = candidate.trim();
   return KNOWN_PREFIXES.some((prefix) => normalized.startsWith(prefix)) ? normalized : null;
+}
+
+/**
+ * Content-based fallback for deliveries whose event type is absent or outside
+ * the known namespaces. Classifies a payload by its distinctive fields so an
+ * unrecognized-but-recognizable change still lands in the activity stream as
+ * `{category}.unknown` instead of being ignored. Returns null when the payload
+ * matches nothing.
+ */
+export function inferCentipidEvent(
+  payload: unknown,
+): { category: CentipidEventCategory; eventType: string } | null {
+  const records = collectEntityRecords(payload);
+  const get = (...keys: string[]) =>
+    records.map((record) => pickString(record, keys)).find((value) => value.length > 0) ?? "";
+
+  const amount = get("amount", "value", "price", "total");
+  const method = get("method", "channel", "payment_method", "receipt", "reference", "transaction_id", "transactionId", "payment_id");
+  if (amount && method) return { category: "payment", eventType: "payment.unknown" };
+
+  const voucherCode = get("code", "voucher_code", "voucherCode", "voucher_id", "batch_id");
+  const packageName = get("package_name", "packageName", "package", "plan");
+  if (voucherCode && packageName) return { category: "voucher", eventType: "voucher.unknown" };
+
+  const subject = get("subject", "title");
+  const ticketSignal = get("status", "priority", "category", "ticket_id");
+  if (subject && (ticketSignal || records.length > 1)) {
+    return { category: "ticket", eventType: "ticket.unknown" };
+  }
+
+  const phone = get("phone", "mobile", "msisdn");
+  const subscriberSignal = get("subscriber_id", "subscriberId", "username", "account", "expiry", "expires_at", "expiry_date", "package_name", "packageName", "package", "plan");
+  if (phone || subscriberSignal) return { category: "subscriber", eventType: "subscriber.unknown" };
+
+  return null;
 }
 
 export function classifyEvent(
@@ -145,13 +198,60 @@ export function classifyEvent(
 
 /** Best-effort extraction of a webhook event id used for idempotent delivery. */
 export function extractWebhookEventId(payload: unknown): string | null {
-  const direct = asRecord(payload);
-  if (!direct) return null;
-  return (
-    pickString(direct, ["webhook_event_id", "webhookEventId", "event_id", "eventId", "uuid", "id"]) ||
-    pickString(asRecord(direct.data), ["event_id", "eventId", "uuid", "id"]) ||
-    null
-  );
+  const candidate = collectEntityRecords(payload)
+    .map((record) => pickString(record, ["webhook_event_id", "webhookEventId", "event_id", "eventId", "uuid", "id"]))
+    .find((value) => value.length > 0);
+  return candidate || null;
+}
+
+/**
+ * Parse a monetized string such as "UGX 1,000.00" or "5000" into a numeric
+ * amount plus its currency. Numeric values pass through unchanged.
+ */
+export function parseAmountDisplay(value: unknown): { amount: number; currency: string } {
+  if (typeof value === "number") {
+    return { amount: Number.isFinite(value) ? value : 0, currency: "UGX" };
+  }
+  const text = String(value ?? "").trim();
+  const match = text.match(/^([A-Za-z]{2,4})\s*([\d,]+(?:\.\d+)?)$/);
+  if (match) {
+    const amount = Number(match[2].replace(/,/g, ""));
+    return { amount: Number.isFinite(amount) ? amount : 0, currency: match[1].toUpperCase() };
+  }
+  const amount = Number(text.replace(/[^\d.-]/g, ""));
+  return { amount: Number.isFinite(amount) ? amount : 0, currency: "UGX" };
+}
+
+/**
+ * Resolve a Centipid timestamp to epoch milliseconds. Accepts epoch numbers,
+ * ISO-8601 strings, and the space-separated "YYYY-MM-DD HH:MM:SS" format the
+ * platform emits. Returns undefined when nothing can be parsed.
+ */
+export function parseCentipidTimestamp(value: unknown): number | undefined {
+  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  const text = String(value ?? "").trim();
+  if (!text) return undefined;
+  // Strings carrying an explicit zone indicator (Z or ±HH:MM) are exact; let
+  // Date.parse resolve them. Naive "YYYY-MM-DD[ T]HH:MM(:SS)" strings are the
+  // platform's local-workspace time, so construct them in the server's zone.
+  if (/[zZ]|[+-]\d{1,2}:?\d{2}$/.test(text)) {
+    const zoned = Date.parse(text);
+    return Number.isFinite(zoned) ? zoned : undefined;
+  }
+  const dateMatch = text.match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (dateMatch) {
+    const stamped = new Date(
+      Number(dateMatch[1]),
+      Number(dateMatch[2]) - 1,
+      Number(dateMatch[3]),
+      Number(dateMatch[4]),
+      Number(dateMatch[5]),
+      Number(dateMatch[6] ?? 0),
+    ).getTime();
+    return Number.isFinite(stamped) ? stamped : undefined;
+  }
+  const iso = Date.parse(text);
+  return Number.isFinite(iso) ? iso : undefined;
 }
 
 /**
