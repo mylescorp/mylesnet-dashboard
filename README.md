@@ -1,6 +1,6 @@
 # MylesNet Network Operations Dashboard
 
-A network operations dashboard for monitoring multiple MikroTik routers. This tool provides read-only monitoring of WiFi hotspot operations, router health, access point status, and usage statistics.
+A network operations and ISP business dashboard. It monitors multiple MikroTik routers (hotspot sessions, router health, access points, switches, DHCP, queues, usage) through a local collector, and layers the business on top — Centipid events, markets, agents, vouchers, commissions, payouts and role-based access for every part of the operation.
 
 ## Security Architecture
 
@@ -18,53 +18,60 @@ Run the collector on a device in the same private network as the router.
 1. Copy `collector/.env.example` to `collector/.env.local` on the collector device. The start command loads this uncommitted file automatically.
 2. Set `MYLESNET_COLLECTOR_INGEST_URL` to the deployed Convex Site endpoint ending in `/collector/ingest`.
 3. Set the same strong `MYLESNET_COLLECTOR_SHARED_SECRET` in the collector environment and the Convex deployment environment.
-4. Set `MYLESNET_COLLECTOR_ROUTER_ID` to the router identifier shown in the dashboard. The collector securely obtains that router's saved read-only connection on each collection cycle.
+4. Set `MYLESNET_COLLECTOR_ROUTER_ID` to the router identifier shown in the dashboard. The collector securely obtains that router's saved connection on each collection cycle.
 5. Run `npm run collector:check` once. It exits successfully only after the router read and dashboard delivery both succeed.
 6. Start continuous collection with `npm run collector:start`.
 
 For this local operations workstation, use `npm run collector:local:check` and then `npm run collector:local`. These commands obtain the signing secret from the protected production configuration at runtime rather than storing it in `collector/.env.local`.
 
-The collector reads `/system/resource`, `/interface`, `/ip/hotspot/active`, `/ip/pool`, `/ip/dns`, and `/ip/route`. It does not issue RouterOS write requests or external traffic tests.
+The collector reads the RouterOS REST endpoints listed under "RouterOS REST API Paths Used" below. It issues no external traffic tests, and its only write operation is a single scoped self-heal correction: re-enabling the `www-ssl` service when a router's REST API has stopped (see HealthGuard below).
 
 ## Features
 
 - **Multi-Router Support**: Monitor multiple routers/markets from a single dashboard
 - **Live Dashboard**: Real-time view of connected users, router health, and access point status
-- **Service Assurance**: Automatic health sampling every 30 seconds (CPU, memory, link state, traffic, errors)
+- **Service Assurance**: Continuous health sampling via the local collector (CPU, memory, link state, traffic, errors)
+- **Switch Monitoring**: Registry and live health of managed/unmanaged access switches behind each router
+- **HealthGuard Self-Healing**: The collector watches the RouterOS `www-ssl` REST service and re-enables it if it stops — the only RouterOS write in the system (opt-out via `MYLESNET_HEALTHGUARD_ENABLED=0`)
+- **Router Console**: Per-router tabs for Overview, Setup, Access points, Switches, DHCP & queues, Live inspection, Configuration watch and Thresholds
 - **Incident Tracking**: Automatic incident creation for link failures, high CPU, and router unreachability
 - **Shift Notes**: Operator notes for handover and operational context
 - **Usage Reporting**: Per-user and per-access-point usage statistics with CSV export
 - **Configuration Watch**: Baseline configuration tracking to detect unexpected changes
-- **Read-Only Operations**: Zero RouterOS write actions - monitoring only, no configuration changes
 - **Centipid Integration**: Real-time business event tracking (subscribers, payments, vouchers, tickets) via webhooks
 - **Business Activity Feed**: Live feed of billing events from Centipid with filtering capabilities
 - **Connected User Count**: Real-time hotspot session tracking from RouterOS
+- **Business Operations**: Markets, agents and vouchers, commissions and payouts, expenses and operating costs, investor reports
+- **Role-Based Access**: Data-driven permission catalog (10 system roles) enforced server-side on every query, mutation and action
 
 ## Access Roles
 
-One unified dashboard (`/dashboard`) serves every role; the sidebar shows only
-what the signed-in role can reach. The Convex backend remains the security
-authority on every query, mutation and action.
+One unified dashboard serves every role; the sidebar shows only what the signed-in
+role can reach. Access is a permission catalog (`convex/lib/permissions.ts`) applied
+in the Convex backend as the security authority on every query, mutation and action.
+System roles live in a data-driven `roles` table and are mirrored to the WorkOS
+environment (with baseline access permission `dashboard:access`); `network_operator`
+is a local-only role and is not mirrored to WorkOS.
 
-- **Owner** – everything, including access management, audit log, trash and
-  irreversible actions
-- **Admin** – day-to-day operations (markets, agents, vouchers, commissions,
-  comms, Centipid) but no access management
-- **Support** – read-only business views plus support tickets, the incident &
-  alert desk and monitoring
-- **Operator** – network operations (router estate, desk, shift handover,
-  config watch, collector setup, telemetry, usage)
-- **Agent** – dashboard and business events (revenue figures hidden) plus
-  support tickets and compliance
+- **platform_owner** – full control, including role management and irreversible actions
+- **platform_admin** – day-to-day operations: invite users, manage access, run the business (cannot manage roles)
+- **member** – default organization member with basic dashboard access
+- **ops_manager** – network operations lead: estate, alerts, maintenance, teams and site kit
+- **finance_manager** – owns money: expenses, payouts, financials, plans, reports and investor ops
+- **market_manager** – runs one to several markets end-to-end, scoped by market membership
+- **platform_support** – read-only operational visibility plus ticket handling
+- **agent** – client-facing field role; dashboard entry only (revenue hidden)
+- **investor_viewer** – read-only financial reporting for investors
+- **network_operator** – internal network operations role; not mirrored to WorkOS
 
 Legacy `/platform/*` URLs permanently redirect to their flattened equivalents
 (see `next.config.ts`).
 
 ## Tech Stack
 
-- **Frontend**: Next.js 16.3 with TypeScript and Tailwind CSS v4
+- **Frontend**: Next.js 16.3 with TypeScript, React 19 and Tailwind CSS v4
 - **Backend**: Convex (database, scheduled functions, server-side actions)
-- **Authentication**: Convex Auth with Password provider (email + password only)
+- **Authentication**: WorkOS AuthKit SSO (redirect-based sign-in with custom JWT verified by Convex) - no username/password provider
 - **Hosting**: Vercel (frontend) + Convex (backend)
 
 ## Router Onboarding Guide
@@ -79,9 +86,9 @@ On your MikroTik router, enable the REST API service:
 4. Set the port to `8443` (or your preferred HTTPS port)
 5. Ensure the service is accessible from the local collector device. Do not expose the router REST service to the public internet.
 
-### Step 2: Create Dedicated Read-Only Account
+### Step 2: Create Dedicated RouterOS Account
 
-**RECOMMENDED**: Create a dedicated RouterOS account with only `read` and `rest-api` permissions:
+**RECOMMENDED**: Create a dedicated RouterOS account for the collector:
 
 ```routeros
 # Create a dedicated monitoring user
@@ -92,10 +99,16 @@ On your MikroTik router, enable the REST API service:
 ```
 
 **IMPORTANT**: This account should have:
-- `read` permission only (no write access)
+- `read` permission for all monitored endpoints
 - `rest-api` access enabled
 - A strong, unique password
 - No access to sensitive configuration changes
+
+> **HealthGuard write permission.** If you want the collector's HealthGuard self-heal
+> to re-enable the `www-ssl` service when it stops, the account also needs write access
+> to RouterOS services (e.g. the `write` policy or a group that can modify `/ip/service`).
+> If you prefer a strictly read-only account, set `MYLESNET_HEALTHGUARD_ENABLED=0` on
+> the collector to disable the self-heal write; the rest of monitoring stays read-only.
 
 ### Step 3: Configure TLS Certificate
 
@@ -139,7 +152,7 @@ After setup:
 3. Verify that:
    - Router health data is being collected (CPU, memory, connected users)
    - Access points show correct link status
-   - Health samples are being written every 30 seconds
+   - Health samples are being written on each collector cycle (collector interval defaults to 15 seconds)
    - Connected user count is being tracked from hotspot sessions
 
 ## Centipid Integration Guide
@@ -241,18 +254,30 @@ When first connecting a router or after webhook delivery issues:
 
 ## RouterOS REST API Paths Used
 
-The dashboard only calls these read-only RouterOS REST endpoints:
+The dashboard backend only issues read-only RouterOS REST calls. The collector reads
+the following endpoints on each cycle:
 
-- `/ip/hotspot/active` - Active hotspot sessions
-- `/interface/bridge/host` - Bridge host information (MAC-to-port mapping)
 - `/system/resource` - System resources (CPU, memory)
-- `/interface` - Interface information
+- `/system/health` - Temperatures, voltages, fan state (where supported)
+- `/system/identity` - Router identity/name
+- `/interface` - Interface list
+- `/interface/bridge/host` - Bridge host information (MAC-to-port mapping)
+- `/interface/ethernet` - Ethernet link state and counters
+- `/interface/wifi` - WiFi registration (falls back to `/interface/wireless`)
+- `/ip/hotspot/active` - Active hotspot sessions
 - `/ip/pool` - IP pool configuration
-- `/ip/pool/used` - IP pool usage
+- `/ip/dhcp-server/lease` - DHCP leases
+- `/ip/address` - Configured addresses
 - `/ip/route` - Routing table
 - `/ip/dns` - DNS resolver configuration
+- `/queue/simple` - Simple queues
+- `/ip/firewall/filter` - Firewall filter rules
 
-**IMPORTANT**: The dashboard never calls any write operations or configuration-changing endpoints.
+**HealthGuard self-heal (the only RouterOS write):** HealthGuard periodically reads
+`/rest/ip/service` and, if it detects the `www-ssl` REST service has gone down,
+re-enables it with a single scoped `PATCH /rest/ip/service/{id}`. This is opt-out via
+`MYLESNET_HEALTHGUARD_ENABLED=0` and rate-limited. The dashboard itself never writes
+to RouterOS.
 
 ## Deployment
 
@@ -264,15 +289,30 @@ Create a `.env.local` file in the project root:
 # Convex
 NEXT_PUBLIC_CONVEX_URL=your_convex_url
 CONVEX_DEPLOY_KEY=your_convex_deploy_key
-
-# Convex Auth
-AUTH_SECRET=your_auth_secret
 CONVEX_SITE_URL=your_site_url
 
-# Centipid Integration
-CENTIPID_CREDENTIALS_ENCRYPTION_KEY=your_base64_32_byte_key
-CENTIPID_MCP_TOKEN=12|your_mcp_token
+# WorkOS AuthKit SSO
+WORKOS_CLIENT_ID=client_your_client_id_here
+WORKOS_API_KEY=sk_test_your_api_key_here
+WORKOS_COOKIE_PASSWORD=your_secure_password_here_must_be_at_least_32_characters_long
+NEXT_PUBLIC_WORKOS_REDIRECT_URI=http://localhost:3001/auth/callback
+MYLESNET_PLATFORM_ORG_ID=org_your_platform_org_id_here
+MYLESNET_BOOTSTRAP_OWNER_EMAILS=owner@example.com,second_owner@example.com
+# Signing secret of the WorkOS webhook endpoint that syncs identity events into Convex.
+WORKOS_WEBHOOK_SECRET=your_workos_webhook_signing_secret
+
+# Base64-encoded 32-byte AES-256 keys (deployment environment only, never in source control)
+ROUTER_CREDENTIALS_ENCRYPTION_KEY=
+CENTIPID_CREDENTIALS_ENCRYPTION_KEY=
+
+# Collector signing secret (shared with the local collector)
+MYLESNET_COLLECTOR_SHARED_SECRET=
 ```
+
+The Centipid MCP token and webhook signing secret are entered in the Centipid Settings
+page and encrypted at rest; only `CENTIPID_CREDENTIALS_ENCRYPTION_KEY` is an env var.
+The MCP token (`12|…`) is used solely by the operator's local opencode MCP client and
+must never be set as an app env var or committed.
 
 ### Deploy to Vercel
 
@@ -286,7 +326,12 @@ CENTIPID_MCP_TOKEN=12|your_mcp_token
 
 1. Run: `npx convex deploy`
 2. Verify deployment in Convex dashboard
-3. Set up cron jobs for health and usage collection
+
+Scheduled jobs (usage retention, voucher expiry sweep, Centipid reconciliation,
+leaderboards, PII purge, telemetry rollups, healthguard staleness sweep, etc.) are
+all code-defined in `convex/crons.ts` and are deployed and registered automatically
+by `npx convex deploy`; there is no manual cron setup step. Health and usage sampling
+itself is driven by the local collectors, not by cron.
 
 ## Development
 
@@ -299,32 +344,44 @@ CENTIPID_MCP_TOKEN=12|your_mcp_token
 
 ### Database Schema
 
-The Convex schema includes:
+The Convex schema includes (representative, non-exhaustive):
 
 **Network Operations:**
-- `users` - Managed by Convex Auth
+- `users` - User registry (sourced from WorkOS identity sync)
 - `routers` - Router configuration
 - `routerCredentials` - Encrypted credentials (server-side only)
 - `accessPoints` - Access point registry
-- `healthSamples` - Health monitoring data (30-second intervals)
-- `usageSamples` - Usage statistics (60-second intervals, 180-day retention)
+- `networkSwitches` - Switch registry behind each router
+- `healthSamples` / `accessPointSamples` - Health monitoring data (per collector cycle)
+- `usageSamples` - Usage statistics (180-day retention)
+- `routerTelemetry` / `telemetryHourly` / `telemetryDaily` / `dailySnapshots` - Rolled-up telemetry
 - `incidents` - Incident tracking
 - `shiftNotes` - Operator notes
-- `configWatchBaselines` - Configuration baselines
+- `healthguardStates` / `device_commands` - Self-heal state and queued collector commands
+- `configWatchBaselines` / `routerConfigurationSnapshots` - Configuration baselines and snapshots
+- `dhcpLeases` / `simpleQueues` - Synced lease and queue state
+- `activeHotspotSessions` - Current hotspot sessions
+
+**Business & Platform:**
+- `markets` / `agents` / `teams` - Operational structure
+- `vouchers` / `voucherBatches` - Voucher tracking
+- `commissions` / `payouts` / `expenses` - Money movement
+- `marketFinancials` / `subscriberSnapshots` / `leaderboardSnapshots` - Reporting snapshots
+- `auditLog` / `roles` - Audit trail and permission roles
+- `supportTickets` / `scheduledReports` / `maintenanceWindows` - Operations
 
 **Centipid Integration:**
 - `centipidCredentials` - API token and webhook signing secret (server-side only)
-- `subscriberEvents` - Subscriber lifecycle events
-- `paymentEvents` - Payment events
-- `voucherEvents` - Voucher events
-- `ticketEvents` - Support ticket events
+- `subscriberEvents` / `paymentEvents` / `voucherEvents` / `ticketEvents` - Billing events
+- `latestSubscriberState` / `ticketStatus` - Derived current state
 - `webhookDeliveryLog` - Webhook delivery tracking (30-day retention)
 
 ## Security Notes
 
 - RouterOS credentials are stored server-side and never exposed to clients
 - All router communication happens via Convex server-side actions
-- The dashboard is read-only - no RouterOS write operations
+- The dashboard backend is read-only against RouterOS; the only RouterOS write in the
+  system is the collector's HealthGuard self-heal (scoped `www-ssl` re-enable, opt-out)
 - Authentication is required for all dashboard access
 - Shift notes must not contain customer PII or payment information
 - Usage data is retained for 180 days only
@@ -347,9 +404,9 @@ If the dashboard shows "Router unreachable":
 ### No Health Data
 
 If health data isn't being collected:
-1. Verify cron jobs are running in Convex dashboard
+1. Verify the collector is running for that router (`npm run collector:check` or the collector process)
 2. Check router credentials are properly configured
-3. Review Convex function logs for errors
+3. Review the collector process logs and Convex function logs for errors
 4. Ensure access points are registered with correct port names
 
 ### Certificate Validation Errors
@@ -363,15 +420,15 @@ If collection fails during TLS validation:
 
 If webhooks aren't being received:
 1. Verify the webhook URL in Centipid matches the URL shown in the dashboard
-2. Check the webhook signing secret matches between Centipid and the dashboard
-3. Verify CENTIPID_WEBHOOK_SECRET environment variable is set in Convex
-4. Check the "Recent Webhook Deliveries" section in Centipid Settings for errors
-5. Ensure the webhook is enabled for the correct event types in Centipid
+2. Verify the webhook signing secret matches between Centipid and the dashboard
+   (both are saved in the Centipid Settings page; there is no Centipid env var)
+3. Check the "Recent Webhook Deliveries" section in Centipid Settings for errors
+4. Ensure the webhook is enabled for the correct event types in Centipid
 
 ### Centipid Historical Data Fails
 
 If historical data backfill fails:
-1. Verify CENTIPID_API_TOKEN environment variable is set in Convex
+1. Verify the API token entered in the Centipid Settings page is valid (there is no Centipid env var)
 2. Check the API token has the necessary permissions
 3. Review Convex function logs for API errors
 4. Verify the Centipid API is accessible from Convex deployment
