@@ -1,6 +1,5 @@
 import { v } from "convex/values";
 import { internalQuery, internalMutation, query, type QueryCtx } from "./_generated/server";
-import { internal } from "./_generated/api";
 import { requireAuthenticatedUser } from "./lib/auth";
 import type { Doc, Id } from "./_generated/dataModel";
 
@@ -383,20 +382,18 @@ export const getDhcpLeases = query({
 });
 
 /** DHCP pool usage derived from the latest collector configuration snapshot. */
-export const getDhcpPoolOverviewForRouter = internalQuery({
-  args: { routerId: v.id("routers") },
-  handler: async (ctx, args) => {
-    const snapshot = await ctx.db
-      .query("routerConfigurationSnapshots")
-      .withIndex("by_router_timestamp", (q) => q.eq("routerId", args.routerId))
-      .order("desc")
-      .first();
-    const leases = await ctx.db
-      .query("dhcpLeases")
-      .withIndex("by_router", (q) => q.eq("routerId", args.routerId))
-      .collect();
+async function computeDhcpPoolOverview(ctx: Pick<QueryCtx, "db">, routerId: Id<"routers">): Promise<DhcpPoolOverview> {
+  const snapshot = await ctx.db
+    .query("routerConfigurationSnapshots")
+    .withIndex("by_router_timestamp", (q) => q.eq("routerId", routerId))
+    .order("desc")
+    .first();
+  const leases = await ctx.db
+    .query("dhcpLeases")
+    .withIndex("by_router", (q) => q.eq("routerId", routerId))
+    .collect();
 
-    const capacityOf = (ranges: string): number => {
+  const capacityOf = (ranges: string): number => {
       if (!ranges) return 0;
       let total = 0;
       for (const range of ranges.split(",")) {
@@ -461,8 +458,13 @@ export const getDhcpPoolOverviewForRouter = internalQuery({
       totalUsed,
       utilization: totalCapacity > 0 ? Math.min(100, (totalUsed / totalCapacity) * 100) : 0,
       observedAt: snapshot?.observedAt ?? null,
-    } satisfies DhcpPoolOverview;
-  },
+  } satisfies DhcpPoolOverview;
+}
+
+/** Internal aggregate used by authenticated dashboard indicator queries. */
+export const getDhcpPoolOverviewForRouter = internalQuery({
+  args: { routerId: v.id("routers") },
+  handler: (ctx, args) => computeDhcpPoolOverview(ctx, args.routerId),
 });
 
 /** Public view over the internal pool overview; guards authentication for browser callers. */
@@ -470,7 +472,7 @@ export const getDhcpPoolOverview = query({
   args: { routerId: v.id("routers") },
   handler: async (ctx, args) => {
     await requireAuthenticatedUser(ctx);
-    return ctx.runQuery(internal.operations.getDhcpPoolOverviewForRouter, { routerId: args.routerId });
+    return computeDhcpPoolOverview(ctx, args.routerId);
   },
 });
 
