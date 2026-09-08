@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test \"convex/lib/*.test.ts\"",
+    "test": "node --test convex/lib/*.test.ts",
     "test:ui": "jest",
     "test:collector": "node --test collector/*.test.mjs",
     "collector:start": "node --env-file-if-exists=collector/.env.local collector/forwarder.mjs",
