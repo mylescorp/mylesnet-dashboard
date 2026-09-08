@@ -6,22 +6,32 @@ import type { Doc, Id } from "./_generated/dataModel";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const COLLECTOR_FRESHNESS_MS = 60_000;
 const COLLECTOR_HEALTH_MS = 90_000;
+// The collector writes one usage sample per session per poll (as often as every
+// ~15s). Reading every row in a 24h window for every router/AP blows Convex's
+// query resource limits and the dashboard header dies with a generic
+// "Server Error". Bound the scan to the most recent samples and derive the KPI
+// from that.
+const MAX_USAGE_SAMPLES_PER_ROUTER = 25_000;
+const MAX_USAGE_SAMPLES_PER_ACCESS_POINT = 10_000;
+const MAX_HOTSPOT_SESSIONS_PER_ROUTER = 10_000;
 
 async function dailyBytesForRouter(ctx: Pick<QueryCtx, "db">, routerId: Id<"routers">): Promise<number> {
   const cutoff = Date.now() - DAY_MS;
   const samples = await ctx.db
     .query("usageSamples")
     .withIndex("by_router_timestamp", (q) => q.eq("routerId", routerId))
-    .filter((q) => q.gte(q.field("timestamp"), cutoff))
-    .collect();
-  return samples.reduce((sum, sample) => sum + sample.byteDelta, 0);
+    .order("desc")
+    .take(MAX_USAGE_SAMPLES_PER_ROUTER);
+  return samples
+    .filter((sample) => sample.timestamp >= cutoff)
+    .reduce((sum, sample) => sum + sample.byteDelta, 0);
 }
 
 async function hotspotSessionCount(ctx: Pick<QueryCtx, "db">, routerId: Id<"routers">): Promise<number> {
   const sessions = await ctx.db
     .query("activeHotspotSessions")
     .withIndex("by_router", (q) => q.eq("routerId", routerId))
-    .collect();
+    .take(MAX_HOTSPOT_SESSIONS_PER_ROUTER);
   return sessions.length;
 }
 
@@ -34,9 +44,20 @@ async function dailyBytesForAccessPoint(ctx: Pick<QueryCtx, "db">, accessPointId
   const samples = await ctx.db
     .query("usageSamples")
     .withIndex("by_access_point_timestamp", (q) => q.eq("accessPointId", accessPointId))
-    .filter((q) => q.gte(q.field("timestamp"), cutoff))
-    .collect();
-  return samples.reduce((sum, sample) => sum + sample.byteDelta, 0);
+    .order("desc")
+    .take(MAX_USAGE_SAMPLES_PER_ACCESS_POINT);
+  return samples
+    .filter((sample) => sample.timestamp >= cutoff)
+    .reduce((sum, sample) => sum + sample.byteDelta, 0);
+}
+
+async function accessPointLiveStatus(ctx: Pick<QueryCtx, "db">, accessPointId: Id<"accessPoints">) {
+  const health = await ctx.db
+    .query("accessPointSamples")
+    .withIndex("by_access_point_timestamp", (q) => q.eq("accessPointId", accessPointId))
+    .order("desc")
+    .first();
+  return Boolean(health?.linkState);
 }
 
 async function accessPointLiveSummary(ctx: Pick<QueryCtx, "db">, accessPoint: Doc<"accessPoints">, routerId: Id<"routers">) {
@@ -145,8 +166,7 @@ export const getKpis = query({
 
       for (const accessPoint of accessPoints) {
         totalAccessPoints++;
-        const summary = await accessPointLiveSummary(ctx, accessPoint, router._id);
-        if (summary.health?.linkState) activeAccessPoints++;
+        if (await accessPointLiveStatus(ctx, accessPoint._id)) activeAccessPoints++;
       }
     }
 
