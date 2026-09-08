@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import { useUserProfile } from "./UserProfileContext";
+import Kpi from "./Kpi";
 
 const formatMarks = (value: number | null | undefined) =>
   value === null || value === undefined ? "—" : `UGX ${Math.round(value).toLocaleString()}`;
@@ -35,58 +36,45 @@ export default function BillingKpiStrip() {
     ?? summary?.platformSnapshot?.revenueToday
     ?? summary?.today.net;
 
-  return (
+return (
     <section className="operations-kpi-strip" aria-label="Billing and business summary">
-      <div className="operations-kpi">
-        <span><CreditCard aria-hidden="true" size={16} /></span>
-        <p>Payments today</p>
-        <strong>{summary?.today.paymentCount ?? "—"}</strong>
-        <small>{summary ? `7d: ${summary.last7d.paymentCount}` : "Waiting for data."}</small>
-      </div>
-      <div className="operations-kpi">
-        <span><ArrowDownToLine aria-hidden="true" size={16} /></span>
-        <p>Collected today</p>
-        <strong>{summary?.revenueVisible ? formatMarks(collectedToday) : "—"}</strong>
-        <small>
-          {summary && !summary.revenueVisible
-            ? "Visible to admins only."
-            : summary
-              ? `Net of refunds · 7d: ${formatMarks(summary.last7d.net)}`
-              : "Waiting for data."}
-        </small>
-      </div>
-      <div className="operations-kpi">
-        <span><Ticket aria-hidden="true" size={16} /></span>
-        <p>Vouchers redeemed</p>
-        <strong>{summary?.today.vouchersRedeemed ?? "—"}</strong>
-        <small>
-          {summary
-            ? `Generated: ${summary.today.vouchersGenerated} · redemption ${formatPct(summary.today.redemptionRate)}`
+      <Kpi label="Payments today" value={summary?.today.paymentCount ?? "—"} detail={summary ? `7d: ${summary.last7d.paymentCount}` : "Waiting for data."} icon={<CreditCard aria-hidden="true" size={16} />} />
+      <Kpi
+        label="Collected today"
+        value={summary?.revenueVisible ? formatMarks(collectedToday) : "—"}
+        detail={summary && !summary.revenueVisible
+          ? "Visible to admins only."
+          : summary
+            ? `Net of refunds · 7d: ${formatMarks(summary.last7d.net)}`
             : "Waiting for data."}
-        </small>
-      </div>
-      <div className="operations-kpi">
-        <span><Users aria-hidden="true" size={16} /></span>
-        <p>New subscribers</p>
-        <strong>{summary?.today.subscriberCreated ?? "—"}</strong>
-        <small>{summary ? `Paused: ${summary.today.subscriberPaused} · Resumed: ${summary.today.subscriberResumed}` : "Waiting for data."}</small>
-      </div>
-      <div className="operations-kpi">
-        <span><RefreshCw aria-hidden="true" size={16} /></span>
-        <p>Paused right now</p>
-        <strong>{summary?.live.pausedSubscribers ?? "—"}</strong>
-        <small>Subscribers with an active pause</small>
-      </div>
-      <div className="operations-kpi">
-        <span><Wrench aria-hidden="true" size={16} /></span>
-        <p>Open tickets</p>
-        <strong>{summary?.live.openTickets ?? "—"}</strong>
-        <small>
-          {summary
-            ? `Opened today: ${summary.today.ticketsOpened} · Resolved: ${summary.today.ticketsResolved}`
-            : "Waiting for data."}
-        </small>
-      </div>
+        icon={<ArrowDownToLine aria-hidden="true" size={16} />}
+      />
+      <Kpi
+        label="Vouchers redeemed"
+        value={summary?.today.vouchersRedeemed ?? "—"}
+        detail={summary ? `Generated: ${summary.today.vouchersGenerated} · redemption ${formatPct(summary.today.redemptionRate)}` : "Waiting for data."}
+        icon={<Ticket aria-hidden="true" size={16} />}
+      />
+      <Kpi
+        label="New subscribers"
+        value={summary?.today.subscriberCreated ?? "—"}
+        detail={summary ? `Paused: ${summary.today.subscriberPaused} · Resumed: ${summary.today.subscriberResumed}` : "Waiting for data."}
+        icon={<Users aria-hidden="true" size={16} />}
+      />
+      <Kpi
+        label="Paused right now"
+        tone={(summary?.live.pausedSubscribers ?? 0) > 0 ? "warn" : "ok"}
+        value={summary?.live.pausedSubscribers ?? "—"}
+        detail="Subscribers with an active pause"
+        icon={<RefreshCw aria-hidden="true" size={16} />}
+      />
+      <Kpi
+        label="Open tickets"
+        tone={(summary?.live.openTickets ?? 0) > 0 ? "danger" : "ok"}
+        value={summary?.live.openTickets ?? "—"}
+        detail={summary ? `Opened today: ${summary.today.ticketsOpened} · Resolved: ${summary.today.ticketsResolved}` : "Waiting for data."}
+        icon={<Wrench aria-hidden="true" size={16} />}
+      />
     </section>
   );
 }

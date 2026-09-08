@@ -1,14 +1,17 @@
 "use client";
 
 import { useConvexAuth, useQuery } from "@/app/lib/convex";
-import { Activity, AlertTriangle, ArrowUpRight, BarChart3, Boxes, CircleDollarSign, FileDiff, Gauge, RadioTower, SlidersHorizontal, Spline, Timer, Users, Wifi, Edit, Plus, Settings, TrendingUp } from "lucide-react";
+import { Activity, AlertTriangle, ArrowUpRight, BarChart3, Boxes, CircleDollarSign, CreditCard, Database, FileDiff, Gauge, RadioTower, SlidersHorizontal, Spline, Timer, Users, Wifi, Edit, Plus, Settings, TrendingUp, Wrench } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { HealthTrendChart } from "../components/HealthTrendChart";
 import BillingKpiStrip from "../components/BillingKpiStrip";
+import Kpi from "../components/Kpi";
+import IndicatorGauge from "../components/IndicatorGauge";
+import AlertSummaryStrip from "../components/AlertSummaryStrip";
 import { useUserProfile } from "../components/UserProfileContext";
 import { SwitchEditor } from "../components/router/SwitchEditor";
 import { AccessPointEditor } from "../components/router/AccessPointEditor";
@@ -44,6 +47,14 @@ export default function DashboardPage() {
   const summaries = useQuery(api.operations.getRouterSummaries, isAuthenticated ? {} : "skip");
   const { user, isLoading: userLoading } = useUserProfile();
   const isPlatformUser = user?.isPlatform === true;
+  const tzOffsetMinutes = useMemo(() => -new Date().getTimezoneOffset(), []);
+  const summary = useQuery(api.centipid.getCentipidBusinessSummary, isAuthenticated ? { tzOffsetMinutes } : "skip");
+  const indicators = useQuery(api.indicators.getDashboardIndicators, isAuthenticated ? {} : "skip");
+  const canReadCentipidSnapshot = user?.permissions?.includes("centipid:manage") ?? false;
+  const liveSnapshot = useQuery(
+    api.centipid.getCentipidLiveSnapshot,
+    canReadCentipidSnapshot ? {} : "skip",
+  );
   const [selectedRouterId, setSelectedRouterId] = useState<Id<"routers"> | null>(null);
   const [selectedAccessPoint, setSelectedAccessPoint] = useState<{ id: Id<"accessPoints">; name: string } | null>(null);
   const [detailRouterId, setDetailRouterId] = useState<Id<"routers"> | null>(null);
@@ -58,6 +69,28 @@ export default function DashboardPage() {
   const visibleRouters = summaries.filter((entry) => !selectedRouterId || entry._id === selectedRouterId);
   const detailRouter = summaries.find((entry) => entry._id === detailRouterId) ?? null;
   const healthStatus = kpis.healthScore === null ? "Awaiting telemetry" : kpis.healthScore === 100 ? "Healthy" : "Needs attention";
+  const collectorTone: "ok" | "warn" | "danger" | "neutral" = kpis.collectorConnected ? "ok" : kpis.collectorStatus === "failed" ? "danger" : kpis.collectorStatus === "connected" ? "warn" : "neutral";
+  const healthTone = kpis.healthScore === null ? "neutral" : kpis.healthScore === 100 ? "ok" : kpis.healthScore >= 50 ? "warn" : "danger";
+  const accessPointTone = kpis.totalAccessPoints === 0 ? "neutral" : kpis.activeAccessPoints === kpis.totalAccessPoints ? "ok" : "warn";
+  const cpuTone = kpis.averageCpu === null ? "neutral" : kpis.averageCpu <= 75 ? "ok" : kpis.averageCpu <= 85 ? "warn" : "danger";
+
+  const subscribersOnline = liveSnapshot?.subscribersOnline ?? summary?.platformSnapshot?.subscribersOnline ?? null;
+  const activeSubscriptions = liveSnapshot?.activeSubscriptions ?? summary?.platformSnapshot?.activeSubscriptions ?? null;
+  const expiring24h = liveSnapshot?.expiring24h ?? summary?.platformSnapshot?.expiring24h ?? null;
+  const unreconciledPayments = liveSnapshot?.unreconciledPayments ?? summary?.platformSnapshot?.unreconciledPayments ?? null;
+  const revenueVisible = !!summary?.revenueVisible;
+  const collectedToday = liveSnapshot?.revenueToday ?? summary?.platformSnapshot?.revenueToday ?? (revenueVisible ? summary?.today.net ?? null : null);
+  const revenueYesterday = liveSnapshot?.revenueYesterday ?? null;
+  const revenuePct = revenueYesterday !== null && revenueYesterday > 0 ? (collectedToday ?? 0) / revenueYesterday * 100 : (collectedToday ?? 0) > 0 ? 100 : 0;
+  const marks = (value: number | null | undefined) => (value === null || value === undefined ? "—" : `UGX ${Math.round(value).toLocaleString()}`);
+  const dhcpUtilization = indicators?.dhcp.utilization;
+  const apUtilization = indicators?.apCapacity.utilization;
+  const utilizationTone = (pct: number | undefined, warnAt = 70, dangerAt = 90) => pct === undefined ? "neutral" : pct >= dangerAt ? "danger" : pct >= warnAt ? "warn" : "ok";
+  const gaugeTone = (pct: number | undefined, boundA: number, boundB: number, goodIsHigh = false): "ok" | "warn" | "danger" => {
+    if (pct === undefined) return "ok";
+    if (goodIsHigh) return pct >= boundA ? "ok" : pct >= boundB ? "warn" : "danger";
+    return pct < boundA ? "ok" : pct < boundB ? "warn" : "danger";
+  };
 
   return <div className={`workspace-page dashboard-page ${compact ? "dashboard-compact" : ""}`}>
       <header className="page-heading">
@@ -66,22 +99,58 @@ export default function DashboardPage() {
       </header>
 
       <section className="operations-kpi-strip" aria-label="Live operations status">
-        <Kpi label="Collector status" value={kpis.collectorConnected ? "Connected" : kpis.collectorStatus === "failed" ? "Needs attention" : "Awaiting data"} detail={kpis.collectorStatus === "failed" ? (kpis.collectorStatusMessage ?? "The last collector run failed.") : kpis.lastObservedAt ? `Last observation ${new Date(kpis.lastObservedAt).toLocaleTimeString()}` : "No collector observation received"} icon={<Activity size={17} />} />
-        <Kpi label="Network health" value={healthStatus} detail={kpis.healthScore === null ? "No router telemetry" : `${kpis.healthScore}% of routers reporting live telemetry`} icon={<Gauge size={17} />} />
+        <Kpi label="Collector status" tone={collectorTone} value={kpis.collectorConnected ? "Connected" : kpis.collectorStatus === "failed" ? "Needs attention" : "Awaiting data"} detail={kpis.collectorStatus === "failed" ? (kpis.collectorStatusMessage ?? "The last collector run failed.") : kpis.lastObservedAt ? `Last observation ${new Date(kpis.lastObservedAt).toLocaleTimeString()}` : "No collector observation received"} icon={<Activity size={17} />} />
+        <Kpi label="Network health" tone={healthTone} value={healthStatus} detail={kpis.healthScore === null ? "No router telemetry" : `${kpis.healthScore}% of routers reporting live telemetry`} icon={<Gauge size={17} />} />
         <Kpi
           label="Live users"
           value={kpis.collectorConnected ? kpis.totalUsers : "—"}
           detail={kpis.collectorConnected ? "Current hotspot sessions" : "Unavailable while the RouterOS collector is offline"}
           icon={<Users size={17} />}
         />
-        <Kpi label="Access points" value={`${kpis.activeAccessPoints}/${kpis.totalAccessPoints}`} detail="Links currently online" icon={<Wifi size={17} />} />
+        <Kpi label="Access points" tone={accessPointTone} value={`${kpis.activeAccessPoints}/${kpis.totalAccessPoints}`} detail="Links currently online" icon={<Wifi size={17} />} />
         <Kpi label="Data used" value={bytes(kpis.totalDailyBytes)} detail="Observed in the last 24 hours" icon={<BarChart3 size={17} />} />
-        <Kpi label="Router load" value={kpis.averageCpu === null ? "—" : `${Math.round(kpis.averageCpu)}% CPU`} detail="Average reported router CPU load" icon={<Gauge size={17} />} />
+        <Kpi label="Router load" tone={cpuTone} value={kpis.averageCpu === null ? "—" : `${Math.round(kpis.averageCpu)}% CPU`} detail="Average reported router CPU load" icon={<Gauge size={17} />} />
       </section>
 
       <section className="section-block" aria-label="Billing and business summary">
         <div className="section-heading"><div><p className="eyebrow">Billing &amp; business</p><h2>Centipid activity</h2></div><div className="page-action-group"><Link href="/business-activity" className="secondary-button"><BarChart3 aria-hidden="true" size={15} />Full activity feed</Link></div></div>
         <BillingKpiStrip />
+      </section>
+
+      <AlertSummaryStrip />
+
+      <section className="section-block" aria-label="Estate capacity and revenue indicators">
+        <div className="section-heading"><div><p className="eyebrow">Live indicators</p><h2>Capacity &amp; revenue</h2></div><div className="page-action-group"><Link href="/analytics" className="secondary-button"><BarChart3 aria-hidden="true" size={15} />Analytics</Link></div></div>
+        <div className="operations-kpi-strip">
+          <Kpi label="Subscribers online" value={subscribersOnline ?? "—"} detail="Live on the Centipid platform" icon={<RadioTower size={17} />} />
+          <Kpi label="Active subscriptions" value={activeSubscriptions ?? "—"} detail="Paid-up subscription base" icon={<Users size={17} />} />
+          <Kpi label="Expiring in 24h" tone={expiring24h !== null && expiring24h > 0 ? "danger" : "ok"} value={expiring24h ?? "—"} detail="Renewals due in the next day" icon={<Timer size={17} />} />
+          <Kpi label="Unreconciled payments" tone={unreconciledPayments !== null && unreconciledPayments > 0 ? "danger" : "ok"} value={unreconciledPayments ?? "—"} detail="Payments awaiting reconciliation" icon={<Wrench size={17} />} />
+          {revenueVisible ? <Kpi label="Average payment" value={marks(summary?.today.averagePayment)} detail="Mean payment received today" icon={<CreditCard size={17} />} /> : null}
+          <Kpi label="DHCP pool utilisation" tone={utilizationTone(dhcpUtilization)} value={dhcpUtilization !== undefined ? `${dhcpUtilization}%` : "—"} detail="Aggregate address use across routers" icon={<Database size={17} />} />
+        </div>
+        <div className="indicator-gauge-grid">
+          {revenueVisible && collectedToday !== null ? (
+            <GaugeCard
+              label="Collected today"
+              value={<span className={`gauge-value-${gaugeTone(revenuePct, 100, 60, true)}`}>{marks(collectedToday)}</span>}
+              detail={revenueYesterday ? `vs yesterday ${marks(revenueYesterday)}` : "Waiting for the daily baseline"}
+              gauge={<IndicatorGauge tone={gaugeTone(revenuePct, 100, 60, true)} value={revenuePct} unit="%" label="Revenue vs yesterday" />}
+            />
+          ) : null}
+          <GaugeCard
+            label="Access point capacity"
+            value={<span className={`gauge-value-${gaugeTone(apUtilization, 80, 100)}`}>{apUtilization !== undefined ? `${apUtilization}%` : "—"}</span>}
+            detail={indicators ? `${indicators.apCapacity.totalUsed} of ${indicators.apCapacity.totalCapacity} seats in use` : "Loading capacity data…"}
+            gauge={<IndicatorGauge value={apUtilization ?? 0} warnAt={80} dangerAt={100} label="AP capacity" />}
+          />
+          <GaugeCard
+            label="Estate health"
+            value={<span className={`gauge-value-${gaugeTone(kpis.healthScore ?? 0, 90, 50, true)}`}>{kpis.healthScore === null ? "—" : `${kpis.healthScore}%`}</span>}
+            detail="Routers reporting live telemetry"
+            gauge={<IndicatorGauge value={kpis.healthScore ?? 0} tone={gaugeTone(kpis.healthScore ?? 0, 90, 50, true)} label="Health" />}
+          />
+        </div>
       </section>
 
       <section className="dashboard-toolbar workspace-card">
@@ -101,7 +170,9 @@ export default function DashboardPage() {
     </div>;
 }
 
-function Kpi({ label, value, detail, icon }: { label: string; value: string | number; detail: string; icon: React.ReactNode }) { return <article className="operations-kpi"><span>{icon}</span><p>{label}</p><strong>{value}</strong><small>{detail}</small></article>; }
+function GaugeCard({ label, value, detail, gauge }: { label: string; value: React.ReactNode; detail: string; gauge: React.ReactNode }) { return <div className="indicator-gauge-card">{gauge}<div><h3>{label}</h3><strong>{value}</strong><small>{detail}</small></div></div>; }
+
+function loadTone(pct: number, warnAt = 75, dangerAt = 85): "ok" | "warn" | "danger" { return pct >= dangerAt ? "danger" : pct >= warnAt ? "warn" : "ok"; }
 function Sparkline({ points }: { points: number[] }) { const max = Math.max(...points, 1); const coordinates = points.length < 2 ? "0,34 100,34" : points.map((point, index) => `${(index / (points.length - 1)) * 100},${34 - (point / max) * 28}`).join(" "); return <svg viewBox="0 0 100 36" preserveAspectRatio="none" aria-label="Recent traffic trend" role="img"><polyline points={coordinates} /></svg>; }
 function Empty({ title, detail, action, label }: { title: string; detail: string; action: () => void; label: string }) { return <div className="empty-state workspace-card"><h3>{title}</h3><p>{detail}</p><button type="button" className="primary-button" onClick={action}>{label}</button></div>; }
 function AccessPointUsersDialog({ title, users, onClose }: { title: string; users: { _id: Id<"activeHotspotSessions">; subscriberIdentifier: string; observedAt: number; observedBytes: number }[] | undefined; onClose: () => void }) { return <div className="operations-modal" role="dialog" aria-modal="true" aria-label={`${title} users`}><div className="operations-dialog workspace-card"><div className="section-heading"><div><p className="eyebrow">Live hotspot users</p><h2>{title}</h2></div><button type="button" className="secondary-button" onClick={onClose}>Close</button></div>{users === undefined ? <p className="dialog-message">Loading current hotspot sessions…</p> : users.length === 0 ? <p className="dialog-message">No active hotspot sessions are currently mapped to this access point.</p> : <div className="session-list">{users.map((user) => <div key={user._id}><strong>{user.subscriberIdentifier}</strong><span>Observed {new Date(user.observedAt).toLocaleTimeString()} · {bytes(user.observedBytes)}</span></div>)}</div>}</div></div>; }
@@ -159,7 +230,7 @@ function RouterSection({ routerId, showChart, onOpenDetail, onViewUsers }: { rou
         <div className="ap-user-row"><span><Users aria-hidden="true" size={15} />Users</span><strong>{activeUserCount}</strong></div>
         <div className="ap-traffic"><span>Current speed</span><strong>↓ {rate(health?.rxBytesPerSec ?? 0)} · ↑ {rate(health?.txBytesPerSec ?? 0)}</strong><Sparkline points={trafficTrend.map((point) => point.bytesPerSecond)} /></div>
         <dl className="access-point-stats"><div><dt>Health</dt><dd>{health?.linkState ? "Good" : "Pending"}</dd></div><div><dt>Rate limit</dt><dd>{accessPoint.rateLimitReference ?? "Not configured"}</dd></div><div><dt>Data used</dt><dd>{bytes(dailyBytes)}</dd></div><div><dt>Errors / drops</dt><dd>{(health?.errorCount ?? 0) + (health?.queueDrops ?? 0)}</dd></div></dl>
-        <div className="ap-capacity"><div><span>Capacity</span><strong>{capacity ? `${activeUserCount} / ${capacity} users` : "Not configured"}</strong></div>{capacityPercent !== null ? <i><b style={{ width: `${capacityPercent}%` }} /></i> : null}</div>
+        <div className="ap-capacity"><div><span>Capacity</span><strong>{capacity ? `${activeUserCount} / ${capacity} users` : "Not configured"}</strong>{capacityPercent !== null ? <IndicatorGauge value={capacityPercent} warnAt={80} dangerAt={100} size={46} label="AP capacity" /> : null}</div>{capacityPercent !== null ? <i><b style={{ width: `${capacityPercent}%` }} /></i> : null}</div>
         <div className="access-point-actions"><button type="button" className="secondary-button" onClick={() => onViewUsers({ id: accessPoint._id, name: accessPoint.name })}>View users</button><button type="button" className="primary-button" onClick={onOpenDetail}>Details</button></div>
       </article>;
     }) }</div> : <><RouterLivePanel live={live} /><div className="access-point-actions"><button type="button" className="secondary-button" onClick={() => nav.push("/routers")}>Register access points</button><span className="console-note">Router telemetry shows live data even before access point records are registered. Add records from Router settings to map users and traffic per link.</span></div></>}
@@ -304,7 +375,7 @@ function SwitchSection({ switches, routerName, editingSwitchId, setEditingSwitch
               <div className="ap-user-row"><span><Users aria-hidden="true" size={15} />Users</span><strong>{entry.metrics.totalUsers}</strong></div>
               <div className="ap-traffic"><span>Current speed</span><strong>↓ {rate(entry.metrics.currentSpeed.rx)} · ↑ {rate(entry.metrics.currentSpeed.tx)}</strong></div>
               <dl className="access-point-stats"><div><dt>Health</dt><dd>{entry.metrics.allApsHealthy ? "Good" : "Attention needed"}</dd></div><div><dt>Model</dt><dd>{entry._switch.model ?? "—"}</dd></div><div><dt>Ports</dt><dd>{entry._switch.portCount ?? "—"}</dd></div><div><dt>Data used</dt><dd>{bytes(entry.metrics.totalDailyBytes)}</dd></div><div><dt>Errors / drops</dt><dd>{entry.metrics.totalErrors + entry.metrics.totalDrops}</dd></div></dl>
-              <div className="ap-capacity"><div><span>Capacity</span><strong>{entry.metrics.totalCapacity > 0 ? `${entry.metrics.totalUsers} / ${entry.metrics.totalCapacity} users` : "Not configured"}</strong></div>{entry.metrics.totalCapacity > 0 ? <i><b style={{ width: `${Math.min(100, (entry.metrics.totalUsers / entry.metrics.totalCapacity) * 100)}%` }} /></i> : null}</div>
+              <div className="ap-capacity"><div><span>Capacity</span><strong>{entry.metrics.totalCapacity > 0 ? `${entry.metrics.totalUsers} / ${entry.metrics.totalCapacity} users` : "Not configured"}</strong>{entry.metrics.totalCapacity > 0 ? <IndicatorGauge value={Math.min(100, (entry.metrics.totalUsers / entry.metrics.totalCapacity) * 100)} warnAt={80} dangerAt={100} size={46} label="AP capacity" /> : null}</div>{entry.metrics.totalCapacity > 0 ? <i><b style={{ width: `${Math.min(100, (entry.metrics.totalUsers / entry.metrics.totalCapacity) * 100)}%` }} /></i> : null}</div>
               <div className="switch-links">
                 {entry.linkedAccessPoints.length ? (
                   <div className="switch-link-compact">
@@ -350,9 +421,17 @@ function RouterLivePanel({ live }: { live: { hotspotSessions: { subscriberIdenti
     </article>
     <article className="access-point-card workspace-card">
       <div className="access-point-head"><div><h3>Router in numbers</h3><p>Latest collector snapshot</p></div><span className={`status-pill ${live.latestHealth ? "status-pill-success" : "status-pill-warning"}`}>{live.latestHealth ? "Live" : "Awaiting telemetry"}</span></div>
+      <div className="router-health-gauges">
+        <div className="indicator-gauge-card">
+          <IndicatorGauge value={live.latestHealth?.cpuPercent ?? 0} warnAt={75} dangerAt={85} label="CPU" />
+          <div><h3>CPU</h3><strong className={`gauge-value-${loadTone(live.latestHealth?.cpuPercent ?? 0)}`}>{live.latestHealth ? `${Math.round(live.latestHealth.cpuPercent)}%` : "—"}</strong><small>latest snapshot</small></div>
+        </div>
+        <div className="indicator-gauge-card">
+          <IndicatorGauge value={live.latestHealth?.memoryPercent ?? 0} warnAt={80} dangerAt={90} label="Memory" />
+          <div><h3>Memory</h3><strong className={`gauge-value-${loadTone(live.latestHealth?.memoryPercent ?? 0, 80, 90)}`}>{live.latestHealth ? `${Math.round(live.latestHealth.memoryPercent)}%` : "—"}</strong><small>latest snapshot</small></div>
+        </div>
+      </div>
       <dl className="access-point-stats">
-        <div><dt>CPU</dt><dd>{live.latestHealth ? `${Math.round(live.latestHealth.cpuPercent)}%` : "—"}</dd></div>
-        <div><dt>Memory</dt><dd>{live.latestHealth ? `${Math.round(live.latestHealth.memoryPercent)}%` : "—"}</dd></div>
         <div><dt>Throughput</dt><dd>↓ {rate(live.latestHealth?.rxBytesPerSec ?? 0)} · ↑ {rate(live.latestHealth?.txBytesPerSec ?? 0)}</dd></div>
         <div><dt>DHCP leases</dt><dd>{live.leaseCount}</dd></div>
         <div><dt>Simple queues</dt><dd>{live.queueCount}</dd></div>
@@ -366,10 +445,13 @@ function RouterDetailDialog({ routerId, routerName, onClose }: { routerId: Id<"r
   const leases = useQuery(api.operations.getDhcpLeases, { routerId });
   const queues = useQuery(api.operations.getSimpleQueues, { routerId });
   const telemetry = useQuery(api.operations.getRouterTelemetryLatest, { routerId });
+  const pools = useQuery(api.operations.getDhcpPoolOverview, { routerId });
   return <div className="operations-modal" role="dialog" aria-modal="true" aria-label={`${routerName} telemetry`}>
     <div className="operations-dialog operations-dialog-wide workspace-card">
       <div className="section-heading"><div><p className="eyebrow">Router detail</p><h2>{routerName}</h2></div><button type="button" className="secondary-button" onClick={onClose}>Close</button></div>
       {telemetry ? <dl className="access-point-stats"><div><dt>Identity</dt><dd>{telemetry.identity ?? "—"}</dd></div><div><dt>Temperature</dt><dd>{telemetry.systemHealth?.temperature !== undefined ? `${telemetry.systemHealth.temperature}${telemetry.systemHealth.temperatureUnit ?? "°"}` : "—"}</dd></div><div><dt>Voltage</dt><dd>{telemetry.systemHealth?.voltage !== undefined ? `${telemetry.systemHealth.voltage} V` : "—"}</dd></div><div><dt>Observed</dt><dd>{new Date(telemetry.observedAt).toLocaleTimeString()}</dd></div></dl> : <p className="dialog-message">No device telemetry has been received yet.</p>}
+
+      {pools !== undefined ? <div className="indicator-gauge-card detail-pool-gauge"><IndicatorGauge value={pools.utilization} warnAt={70} dangerAt={90} label="Pool utilisation" /><div><h3>DHCP pool utilisation</h3><strong className={`gauge-value-${loadTone(pools.utilization, 70, 90)}`}>{pools.utilization}%</strong><small>{pools.totalCapacity > 0 ? `${pools.totalUsed} of ${pools.totalCapacity} addresses in use` : "No DHCP ranges configured"}</small></div></div> : null}
 
       <h3 className="detail-section-title">DHCP leases {leases !== undefined ? `(${leases.length})` : ""}</h3>
       {leases === undefined ? <p className="dialog-message">Loading leases…</p> : leases.length === 0 ? <p className="dialog-message">No DHCP leases have been collected for this router.</p> : <div className="detail-list">{leases.map((lease) => <div key={lease._id} className="detail-row"><strong>{lease.ipAddress}</strong><span>{lease.macAddress} · {lease.hostname ?? "—"} · {lease.status ?? "bound"}</span><small>{lease.expiresAt ? `expires ${relativeTime(lease.expiresAt)}` : ""}</small></div>)}</div>}

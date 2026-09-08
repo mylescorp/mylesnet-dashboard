@@ -5,6 +5,8 @@ import { useMemo } from "react";
 import { useQuery } from "@/app/lib/convex";
 import { Activity, Boxes, Monitor, RadioTower, Router, Users, Wifi } from "lucide-react";
 import { api } from "@/convex/_generated/api";
+import Kpi from "@/app/components/Kpi";
+import { HealthGuardQuickActions } from "@/app/components/router/HealthGuardQuickActions";
 
 type DashboardRow = NonNullable<ReturnType<typeof useQuery<typeof api.dashboard.getRouterDashboard>>>[number];
 
@@ -33,22 +35,29 @@ function UtilizationBar({ percent }: { percent: number }) {
   return <div className={`utilization-bar ${tone}`}><i style={{ width: `${Math.min(100, percent)}%` }} /></div>;
 }
 
-function CardKpi({ icon, label, value, detail }: { icon: React.ReactNode; label: string; value: React.ReactNode; detail: string }) {
-  return <article className="workspace-card operations-kpi"><span>{icon}</span><p>{label}</p><strong>{value}</strong><small>{detail}</small></article>;
+function CardKpi({ icon, label, value, detail, tone }: { icon: React.ReactNode; label: string; value: React.ReactNode; detail: string; tone?: "ok" | "warn" | "danger" | "neutral" }) {
+  return <Kpi className="workspace-card" tone={tone} icon={icon} label={label} value={value} detail={detail} />;
 }
 
 export default function ConsolePage() {
-  const currentUser = useQuery(api.platform.getCurrentPlatformUser, {});
+const currentUser = useQuery(api.platform.getCurrentPlatformUser, {});
   const rows = useQuery(api.dashboard.getRouterDashboard, {});
   const onboarding = useQuery(api.routers.getOnboardingStatuses, {});
   const aps = useQuery(api.accessPoints.listAccessPoints, {});
   const switches = useQuery(api.networkSwitches.listSwitches, {});
+  const healthguardStates = useQuery(api.deviceCommands.listAllRouterHealthguardStates, {});
 
   const liveCount = useMemo(() => countFreshRows((rows ?? []) as DashboardRow[]), [rows]);
 
   const totalUsers = useMemo(() => ((rows ?? []) as DashboardRow[]).reduce((sum, row) => sum + (row.health?.connectedUserCount ?? 0), 0), [rows]);
 
-  if (currentUser === undefined || rows === undefined || rows === null || onboarding === undefined || aps === undefined || switches === undefined) {
+  const healthguardByRouter = useMemo(() => {
+    const map = new Map<string, NonNullable<typeof healthguardStates>[number]>();
+    for (const state of (healthguardStates ?? []) as NonNullable<typeof healthguardStates>) map.set(state.routerId, state);
+    return map;
+  }, [healthguardStates]);
+
+  if (currentUser === undefined || rows === undefined || rows === null || onboarding === undefined || aps === undefined || switches === undefined || healthguardStates === undefined) {
     return <div className="workspace-page"><div className="loading-panel workspace-card"><Activity aria-hidden="true" size={22} />Loading console…</div></div>;
   }
   const allRows = rows as DashboardRow[];
@@ -65,12 +74,12 @@ export default function ConsolePage() {
       </div>
     </header>
 
-    <section className="router-console-kpis">
-      <CardKpi icon={<Router size={17} />} label="Routers" value={allRows.length} detail={`${liveCount} reporting live now`} />
-      <CardKpi icon={<Users size={17} />} label="Online users" value={totalUsers} detail="Active hotspot sessions" />
+<section className="router-console-kpis">
+      <CardKpi tone={allRows.length === 0 ? "neutral" : liveCount === allRows.length ? "ok" : liveCount === 0 ? "danger" : "warn"} icon={<Router size={17} />} label="Routers" value={allRows.length} detail={`${liveCount} reporting live now`} />
+      <CardKpi tone={totalUsers > 0 ? "ok" : "neutral"} icon={<Users size={17} />} label="Online users" value={totalUsers} detail="Active hotspot sessions" />
       <CardKpi icon={<Wifi size={17} />} label="Access points" value={aps.length} detail="Registered across routers" />
       <CardKpi icon={<Boxes size={17} />} label="Switches" value={switches.length} detail="Linked to router ports" />
-      <CardKpi icon={<RadioTower size={17} />} label="Collector reach" value={freshRowsLabel(allRows)} detail="Healthy in the last 2 minutes" />
+      <CardKpi tone={allRows.length === 0 ? "neutral" : liveCount === allRows.length ? "ok" : liveCount === 0 ? "danger" : "warn"} icon={<RadioTower size={17} />} label="Collector reach" value={freshRowsLabel(allRows)} detail="Healthy in the last 2 minutes" />
     </section>
 
     {allRows.length === 0 ? <section className="workspace-card p-8 text-center"><h2 className="font-semibold">No routers registered</h2><p className="mt-1 text-sm text-slate-600">Add the first router from the Router estate page to start monitoring.</p><Link className="primary-button mt-4 inline-flex" href="/routers"><Router size={16} />Open router estate</Link></section> : <section className="grid gap-4 lg:grid-cols-2">{allRows.map((row) => {
@@ -78,9 +87,11 @@ export default function ConsolePage() {
       const state = onboarding.find((entry) => entry.routerId === router._id);
       const status = state?.status === "live" ? "status-pill-success" : state?.status === "collector_failed" ? "status-pill-danger" : "status-pill-warning";
       const statusLabel = state?.status === "live" ? "Live" : state?.status === "collector_failed" ? "Collector blocked" : "Onboarding";
-      const routerSwitches = switches.filter((entry) => entry.routerId === router._id);
+const routerSwitches = switches.filter((entry) => entry.routerId === router._id);
       const routerAps = (row.accessPoints ?? []).filter((entry) => entry.accessPoint.archivedAt === undefined);
       const liveAps = routerAps.filter((entry) => entry.health?.linkState).length;
+      const canManage = currentUser?.permissions?.includes("routers:manage") ?? false;
+      const healthguard = healthguardByRouter.get(router._id);
       return <article key={router._id} className="workspace-card console-card">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -98,6 +109,7 @@ export default function ConsolePage() {
           <div><span className="block text-xs uppercase tracking-wide text-slate-500">Access points</span><strong>{liveAps}/{routerAps.length}</strong></div>
           <div><span className="block text-xs uppercase tracking-wide text-slate-500">Switches</span><strong>{routerSwitches.length}</strong></div>
         </div>
+        <div className="console-card-footer"><HealthGuardQuickActions routerId={router._id} state={healthguard} canManage={canManage} /></div>
       </article>;
     })}</section>}
   </div>;

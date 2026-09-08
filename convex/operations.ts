@@ -1,5 +1,6 @@
 import { v } from "convex/values";
-import { internalMutation, query, type QueryCtx } from "./_generated/server";
+import { internalQuery, internalMutation, query, type QueryCtx } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { requireAuthenticatedUser } from "./lib/auth";
 import type { Doc, Id } from "./_generated/dataModel";
 
@@ -14,6 +15,15 @@ const COLLECTOR_HEALTH_MS = 90_000;
 const MAX_USAGE_SAMPLES_PER_ROUTER = 25_000;
 const MAX_USAGE_SAMPLES_PER_ACCESS_POINT = 10_000;
 const MAX_HOTSPOT_SESSIONS_PER_ROUTER = 10_000;
+
+export type DhcpPoolOverviewRow = { name?: string; ranges?: string; capacity: number; used: number; utilization: number };
+export type DhcpPoolOverview = {
+  pools: DhcpPoolOverviewRow[];
+  totalCapacity: number;
+  totalUsed: number;
+  utilization: number;
+  observedAt: number | null;
+};
 
 async function dailyBytesForRouter(ctx: Pick<QueryCtx, "db">, routerId: Id<"routers">): Promise<number> {
   const cutoff = Date.now() - DAY_MS;
@@ -373,10 +383,9 @@ export const getDhcpLeases = query({
 });
 
 /** DHCP pool usage derived from the latest collector configuration snapshot. */
-export const getDhcpPoolOverview = query({
+export const getDhcpPoolOverviewForRouter = internalQuery({
   args: { routerId: v.id("routers") },
   handler: async (ctx, args) => {
-    await requireAuthenticatedUser(ctx);
     const snapshot = await ctx.db
       .query("routerConfigurationSnapshots")
       .withIndex("by_router_timestamp", (q) => q.eq("routerId", args.routerId))
@@ -452,7 +461,16 @@ export const getDhcpPoolOverview = query({
       totalUsed,
       utilization: totalCapacity > 0 ? Math.min(100, (totalUsed / totalCapacity) * 100) : 0,
       observedAt: snapshot?.observedAt ?? null,
-    };
+    } satisfies DhcpPoolOverview;
+  },
+});
+
+/** Public view over the internal pool overview; guards authentication for browser callers. */
+export const getDhcpPoolOverview = query({
+  args: { routerId: v.id("routers") },
+  handler: async (ctx, args) => {
+    await requireAuthenticatedUser(ctx);
+    return ctx.runQuery(internal.operations.getDhcpPoolOverviewForRouter, { routerId: args.routerId });
   },
 });
 

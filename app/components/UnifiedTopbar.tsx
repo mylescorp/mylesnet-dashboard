@@ -3,6 +3,8 @@
 import { usePathname } from "next/navigation";
 import { Bell, ChevronRight, CircleDot, Menu, RadioTower } from "lucide-react";
 import { useState } from "react";
+import { useQuery } from "@/app/lib/convex";
+import { api } from "@/convex/_generated/api";
 import { ThemeToggle } from "./ThemeToggle";
 import { UserProfileDropdown } from "./UserProfileDropdown";
 import { useUserProfile } from "./UserProfileContext";
@@ -14,6 +16,8 @@ export function UnifiedTopbar() {
   const { user } = useUserProfile();
   const entry = findNavEntry(pathname);
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
+  const alerts = useQuery(api.indicators.getDashboardAlerts, {});
+  const alertTotal = alerts?.total ?? 0;
 
   const section = entry?.section.title ?? "MylesNet";
   let page = entry?.item.label ?? "Overview";
@@ -61,7 +65,7 @@ export function UnifiedTopbar() {
           title="Notifications"
         >
           <Bell aria-hidden="true" size={18} />
-          <span className="notification-dot" />
+          {alertTotal > 0 ? <span className="topbar-alert-count">{alertTotal > 99 ? "99+" : alertTotal}</span> : <span className="notification-dot" />}
         </button>
 
         <ThemeToggle />

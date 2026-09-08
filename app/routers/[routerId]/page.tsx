@@ -38,6 +38,8 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { ApEditor, RouterEditor, SwitchEditor, errorText, type AccessPointRow, type RouterRow, type SwitchRow } from "@/app/components/router/RouterEditors";
 import { ConfigWatchPanel } from "@/app/components/router/ConfigWatchPanel";
 import { HealthGuardPanel } from "@/app/components/router/HealthGuardPanel";
+import Kpi from "@/app/components/Kpi";
+import IndicatorGauge from "@/app/components/IndicatorGauge";
 
 const bytes = (value: number) => value < 1024 ? `${Math.round(value)} B` : value < 1024 ** 2 ? `${(value / 1024).toFixed(1)} KB` : value < 1024 ** 3 ? `${(value / 1024 ** 2).toFixed(1)} MB` : `${(value / 1024 ** 3).toFixed(2)} GB`;
 const rate = (value: number) => `${bytes(value)}/s`;
@@ -137,15 +139,25 @@ export default function RouterConsolePage() {
     return <div className="workspace-page"><header className="page-heading"><div><p className="eyebrow">Network operations</p><h1 className="page-title">Router not found</h1><p className="page-subtitle">This router does not exist or has been archived.</p></div><button type="button" className="secondary-button" onClick={() => nav.push("/routers")}><ArrowLeft size={16} />Back to inventory</button></header></div>;
   }
 
-  const statusTone = onboardingState?.status === "live" ? "success" : onboardingState?.status === "collector_failed" ? "danger" : "warning";
+const statusTone = onboardingState?.status === "live" ? "success" : onboardingState?.status === "collector_failed" ? "danger" : "warning";
   const statusLabel = onboardingState?.status === "live" ? "Live" : onboardingState?.status === "collector_failed" ? "Collector blocked" : "Onboarding";
   const collectorFresh = isFresh(runHistory?.[0]?.observedAt);
+  const cpuPercent = health?.cpuPercent;
+  const memoryPercent = health?.memoryPercent;
+  const cpuTone: "success" | "warning" | "danger" | undefined = cpuPercent === undefined ? undefined : cpuPercent >= (thresholds?.cpuCriticalThreshold ?? 90) ? "danger" : cpuPercent >= (thresholds?.cpuWarningThreshold ?? 75) ? "warning" : "success";
+  const memoryTone: "success" | "warning" | "danger" | undefined = memoryPercent === undefined ? undefined : memoryPercent >= (thresholds?.memoryCriticalThreshold ?? 90) ? "danger" : memoryPercent >= (thresholds?.memoryWarningThreshold ?? 80) ? "warning" : "success";
+  const kpiTone = (tone?: "success" | "warning" | "danger"): "ok" | "warn" | "danger" | "neutral" | undefined => tone === "success" ? "ok" : tone === "warning" ? "warn" : tone === "danger" ? "danger" : undefined;
+  const poolUtilization = pools?.totalCapacity ? pools.utilization : undefined;
 
   return <div className="workspace-page"><header className="page-heading">
     <div>
       <p className="eyebrow">Network operations · Router console</p>
-      <h1 className="page-title">{router.name}</h1>
-      <div className="page-subtitle"><Pill tone={statusTone}>{statusLabel}</Pill><span>{router.location}{market ? ` · ${market.name}` : " · No market assigned"}{onboardingState?.lastTelemetryAt ? ` · Last telemetry ${relativeTime(onboardingState.lastTelemetryAt)}` : ""}</span></div>
+      <div className="router-title-row"><span className="router-title-tile" aria-hidden="true">{router.name.trim().charAt(0).toUpperCase() || "R"}</span>
+        <div>
+          <h1 className="page-title">{router.name}</h1>
+          <div className="page-subtitle router-meta-line"><Pill tone={statusTone}>{statusLabel}</Pill><span className="router-meta-location">{router.location}{market ? ` · ${market.name}` : " · No market assigned"}</span>{onboardingState?.lastTelemetryAt ? <span className="router-meta-last">Last telemetry {relativeTime(onboardingState.lastTelemetryAt)}</span> : null}</div>
+        </div>
+      </div>
     </div>
     <div className="page-action-group"><button type="button" className="secondary-button" onClick={() => nav.push("/routers")}><ArrowLeft size={16} />Inventory</button><button type="button" className="secondary-button" onClick={() => navigator.clipboard.writeText(router._id).then(() => setMessage("Collector router identifier copied.")).catch(() => setMessage("Copy failed; select the identifier manually."))}><Clipboard size={16} />Copy ID</button><button type="button" className="primary-button" onClick={() => setRouterEditor(router)}><Settings2 size={17} />Edit settings</button></div>
   </header>
@@ -153,11 +165,26 @@ export default function RouterConsolePage() {
     {message ? <p className="platform-claim-message ok" role="status">{message}</p> : null}
 
     <section className="router-console-kpis">
-      <CardKpi icon={<RadioTower size={17} />} label="Collector" value={statusLabel} detail={collectorFresh ? "Telemetry is current" : onboardingState?.collectorMessage ?? "Waiting for the local collector"} />
-      <CardKpi icon={<Gauge size={17} />} label="CPU" value={health?.cpuPercent !== undefined ? `${Math.round(health.cpuPercent)}%` : "—"} detail={thresholds ? `alert > ${thresholds.cpuWarningThreshold}%` : "awaiting thresholds"} />
-      <CardKpi icon={<MemoryStick size={17} />} label="Memory" value={health?.memoryPercent !== undefined ? `${Math.round(health.memoryPercent)}%` : "—"} detail={thresholds ? `alert > ${thresholds.memoryWarningThreshold}%` : "awaiting thresholds"} />
-      <CardKpi icon={<Users size={17} />} label="Live users" value={health?.connectedUserCount ?? 0} detail="Active hotspot sessions" />
+      <CardKpi tone={kpiTone(statusTone)} icon={<RadioTower size={17} />} label="Collector" value={statusLabel} detail={collectorFresh ? "Telemetry is current" : onboardingState?.collectorMessage ?? "Waiting for the local collector"} />
+      <CardKpi tone={kpiTone(cpuTone)} icon={<Gauge size={17} />} label="CPU" value={cpuPercent !== undefined ? `${Math.round(cpuPercent)}%` : "—"} detail={thresholds ? `alert > ${thresholds.cpuWarningThreshold}%` : "awaiting thresholds"} />
+      <CardKpi tone={kpiTone(memoryTone)} icon={<MemoryStick size={17} />} label="Memory" value={memoryPercent !== undefined ? `${Math.round(memoryPercent)}%` : "—"} detail={thresholds ? `alert > ${thresholds.memoryWarningThreshold}%` : "awaiting thresholds"} />
+      <CardKpi tone={health?.connectedUserCount ? "ok" : undefined} icon={<Users size={17} />} label="Live users" value={health?.connectedUserCount ?? 0} detail="Active hotspot sessions" />
       <CardKpi icon={<Timer size={17} />} label="Round-trip" value={runHistory?.[0]?.latencyMs !== undefined ? `${Math.round(runHistory[0].latencyMs)} ms` : "—"} detail={runHistory?.[0]?.status === "connected" ? "Collector connected" : "Awaiting collector run"} />
+    </section>
+
+    <section className="indicator-gauge-grid" aria-label="Router performance gauges">
+      <div className="indicator-gauge-card">
+        <IndicatorGauge value={cpuPercent ?? 0} warnAt={thresholds?.cpuWarningThreshold ?? 75} dangerAt={thresholds?.cpuCriticalThreshold ?? 90} label="CPU" />
+        <div><h3>CPU</h3><strong className={`gauge-value-${kpiTone(cpuTone) ?? "ok"}`}>{cpuPercent !== undefined ? `${Math.round(cpuPercent)}%` : "—"}</strong><small>current load</small></div>
+      </div>
+      <div className="indicator-gauge-card">
+        <IndicatorGauge value={memoryPercent ?? 0} warnAt={thresholds?.memoryWarningThreshold ?? 80} dangerAt={thresholds?.memoryCriticalThreshold ?? 90} label="Memory" />
+        <div><h3>Memory</h3><strong className={`gauge-value-${kpiTone(memoryTone) ?? "ok"}`}>{memoryPercent !== undefined ? `${Math.round(memoryPercent)}%` : "—"}</strong><small>current usage</small></div>
+      </div>
+      <div className="indicator-gauge-card">
+        <IndicatorGauge value={poolUtilization ?? 0} warnAt={70} dangerAt={90} label="DHCP pool" />
+        <div><h3>DHCP pool</h3><strong className={`gauge-value-${poolUtilization === undefined ? "ok" : poolUtilization >= 90 ? "danger" : poolUtilization >= 70 ? "warn" : "ok"}`}>{poolUtilization !== undefined ? `${poolUtilization}%` : "—"}</strong><small>{pools ? `${pools.totalUsed} of ${pools.totalCapacity} addresses` : "awaiting snapshot"}</small></div>
+      </div>
     </section>
 
     <nav className="console-tabs" aria-label="Router console sections">
@@ -179,8 +206,8 @@ export default function RouterConsolePage() {
   </div>;
 }
 
-function CardKpi({ icon, label, value, detail }: { icon: ReactNode; label: string; value: ReactNode; detail: string }) {
-  return <article className="workspace-card operations-kpi"><span>{icon}</span><p>{label}</p><strong>{value}</strong><small>{detail}</small></article>;
+function CardKpi({ icon, label, value, detail, tone }: { icon: ReactNode; label: string; value: ReactNode; detail: string; tone?: "ok" | "warn" | "danger" | "neutral" }) {
+  return <Kpi className="workspace-card" icon={icon} label={label} value={value} detail={detail} tone={tone} />;
 }
 
 type RunHistory = NonNullable<NonNullable<ReturnType<typeof useQuery<typeof api.collector.getCollectorRunHistory>>>>;
@@ -196,32 +223,40 @@ type ThresholdsRow = NonNullable<NonNullable<ReturnType<typeof useQuery<typeof a
 
 function OverviewTab({ routerId, live, telemetry, runHistory, incidents, events, onboardingState }: { routerId: Id<"routers">; live: LiveRouter | null | undefined; telemetry: TelemetryRow | null | undefined; runHistory: RunHistory; incidents: IncidentRow; events: EventRow; onboardingState: OnboardingRow[number] | undefined }) {
   const latestRun = runHistory[0];
-  return <div className="console-grid"><HealthGuardPanel routerId={routerId} />
-    <section className="section-block console-col">
-      <Card eyebrow="Collector health" title="Latest runs">
+  return <div className="overview-grid">
+    <div className="overview-stack">
+      <HealthGuardPanel routerId={routerId} />
+
+      <section className="workspace-card console-card">
+        <div className="section-heading"><div><p className="eyebrow">Telemetry</p><h2>{telemetry?.identity ?? "Device identity"}</h2></div></div>
+        {telemetry ? <dl className="access-point-stats"><div><dt>Observed</dt><dd>{relativeTime(telemetry.observedAt)}</dd></div><div><dt>Temperature</dt><dd>{telemetry.systemHealth?.temperature !== undefined ? `${telemetry.systemHealth.temperature}${telemetry.systemHealth.temperatureUnit ?? "°"}` : "—"}</dd></div><div><dt>Voltage</dt><dd>{telemetry.systemHealth?.voltage !== undefined ? `${telemetry.systemHealth.voltage} V` : "—"}</dd></div><div><dt>Ethernet up</dt><dd>{telemetry.ethernetPorts?.filter((port) => port.running).length ?? 0}/{telemetry.ethernetPorts?.length ?? 0}</dd></div><div><dt>WiFi radios</dt><dd>{telemetry.wifiRadios?.filter((radio) => radio.state === "running").length ?? 0}/{telemetry.wifiRadios?.length ?? 0}</dd></div></dl> : <p className="dialog-message">Identity and hardware telemetry arrive once extended reads are enabled on the collector.</p>}
+      </section>
+
+      <section className="workspace-card console-card">
+        <div className="section-heading"><div><p className="eyebrow">Recent activity</p><h2>Events for this router</h2></div></div>
+        {events.length === 0 ? <p className="dialog-message">No telemetry service events recorded for this router.</p> : <div className="detail-list">{[...events.slice(0, 6)].map((event) => <div key={event._id} className="detail-row"><span><strong>{event.title}</strong> {event.details ? `· ${event.details}` : ""}</span><span style={{ whiteSpace: "nowrap" }}>{relativeTime(event.occurredAt)}</span></div>)}</div>}
+      </section>
+    </div>
+
+    <div className="overview-stack">
+      <section className="workspace-card console-card">
+        <div className="section-heading"><div><p className="eyebrow">Collector health</p><h2>Latest runs</h2></div></div>
         {latestRun ? <dl className="access-point-stats"><div><dt>Last run</dt><dd>{relativeTime(latestRun.observedAt)}</dd></div><div><dt>Status</dt><dd>{latestRun.status}</dd></div><div><dt>Round-trip</dt><dd>{latestRun.latencyMs !== undefined ? `${Math.round(latestRun.latencyMs)} ms` : "—"}</dd></div><div><dt>Consecutive failures</dt><dd>{latestRun.consecutiveFailures ?? 0}</dd></div><div><dt>Process uptime</dt><dd>{latestRun.processUptimeMs !== undefined ? uptimeLabel(latestRun.processUptimeMs) : "—"}</dd></div></dl> : <p className="dialog-message">No collector runs have been recorded for this router. Start the local collector and copy the router ID (top-right) into its configuration.</p>}
         {latestRun?.message ? <p className="collector-card-message">{latestRun.message}</p> : null}
         {latestRun && !isFresh(latestRun.observedAt) ? <p className="dialog-message">Latest observed {relativeTime(latestRun.observedAt)} — the collector may not be running ({onboardingState?.collectorMessage ?? "no message recorded"}).</p> : null}
-      </Card>
+      </section>
 
-      <Card eyebrow="Telemetry" title={telemetry?.identity ?? "Device identity"}>
-        {telemetry ? <dl className="access-point-stats"><div><dt>Observed</dt><dd>{relativeTime(telemetry.observedAt)}</dd></div><div><dt>Temperature</dt><dd>{telemetry.systemHealth?.temperature !== undefined ? `${telemetry.systemHealth.temperature}${telemetry.systemHealth.temperatureUnit ?? "°"}` : "—"}</dd></div><div><dt>Voltage</dt><dd>{telemetry.systemHealth?.voltage !== undefined ? `${telemetry.systemHealth.voltage} V` : "—"}</dd></div><div><dt>Ethernet up</dt><dd>{telemetry.ethernetPorts?.filter((port) => port.running).length ?? 0}/{telemetry.ethernetPorts?.length ?? 0}</dd></div><div><dt>WiFi radios</dt><dd>{telemetry.wifiRadios?.filter((radio) => radio.state === "running").length ?? 0}/{telemetry.wifiRadios?.length ?? 0}</dd></div></dl> : <p className="dialog-message">Identity and hardware telemetry arrive once extended reads are enabled on the collector.</p>}
-      </Card>
+      {live ? <section className="workspace-card console-card"><div className="section-heading"><div><p className="eyebrow">Upstream</p><h2>Route observation</h2></div></div><div className="upstream-list"><div><span className={`status-dot ${live.upstream.configured ? "status-dot-online" : "status-dot-warning"}`} /><p><strong>{live.upstream.configured ? "Default route present" : "No default-route observation"}</strong><small>{live.upstream.configured ? "The most recent collector snapshot contains a default route." : "Wait for a collector snapshot, or review the Configuration tab."}</small></p></div></div></section> : <section className="workspace-card console-card"><div className="section-heading"><div><p className="eyebrow">Upstream</p><h2>Route observation</h2></div></div><p className="dialog-message">Live telemetry has not arrived yet — upstream status appears once the collector reports.</p></section>}
 
-      <Card eyebrow="Recent activity" title="Events for this router">
-        {events.length === 0 ? <p className="dialog-message">No telemetry service events recorded for this router.</p> : <div className="detail-list">{[...events.slice(0, 6)].map((event) => <div key={event._id} className="detail-row"><span><strong>{event.title}</strong> {event.details ? `· ${event.details}` : ""}</span><span style={{ whiteSpace: "nowrap" }}>{relativeTime(event.occurredAt)}</span></div>)}</div>}
-      </Card>
-    </section>
-
-    <section className="section-block console-col">
-      {live ? <Card eyebrow="Live estate" title={`${live.accessPoints.length} access points`}><div className="access-point-grid access-point-grid-rich">{live.accessPoints.map((entry) => <article key={entry.accessPoint._id} className="access-point-card workspace-card"><div className="access-point-head"><div><h3>{entry.accessPoint.name}</h3><p>{entry.accessPoint.port}</p></div><span className={`status-pill ${entry.health?.linkState ? "status-pill-success" : "status-pill-warning"}`}>{entry.health?.linkState ? "Running" : "Pending"}</span></div><div className="ap-user-row"><span><Users size={15} />Users</span><strong>{entry.activeUserCount}</strong></div><dl className="access-point-stats"><div><dt>Capacity</dt><dd>{entry.accessPoint.capacity ? `${entry.activeUserCount}/${entry.accessPoint.capacity}` : "Not configured"}</dd></div><div><dt>Speed</dt><dd>↓ {rate(entry.health?.rxBytesPerSec ?? 0)} · ↑ {rate(entry.health?.txBytesPerSec ?? 0)}</dd></div><div><dt>Data (24h)</dt><dd>{bytes(entry.dailyBytes)}</dd></div></dl></article>)}</div></Card> : <div className="loading-panel workspace-card"><Activity aria-hidden="true" size={20} />Loading live telemetry…</div>}
-
-      {live ? <Card eyebrow="Upstream" title="Route observation"><div className="upstream-list"><div><span className={`status-dot ${live.upstream.configured ? "status-dot-online" : "status-dot-warning"}`} /><p><strong>{live.upstream.configured ? "Default route present" : "No default-route observation"}</strong><small>{live.upstream.configured ? "The most recent collector snapshot contains a default route." : "Wait for a collector snapshot, or review the Configuration tab."}</small></p></div></div></Card> : null}
-
-      <Card eyebrow="Incidents" title="Open and recent" actions={routerId ? <a className="secondary-button" href="/incidents">Incident desk</a> : undefined}>
+      <section className="workspace-card console-card">
+        <div className="section-heading"><div><p className="eyebrow">Incidents</p><h2>Open and recent</h2></div><div className="page-action-group"><a className="secondary-button" href="/incidents">Incident desk</a></div></div>
         {incidents.length === 0 ? <p className="dialog-message">No incidents recorded for this router.</p> : <div className="detail-list">{incidents.slice(0, 6).map((incident) => <div key={incident._id} className="detail-row"><span><strong>{incident.note}</strong>{incident.resolvedAt ? ` · resolved ${relativeTime(incident.resolvedAt)}` : ""}</span><SeverityPill severity={incident.severity} /></div>)}</div>}
-      </Card>
-    </section>
+      </section>
+    </div>
+
+    <div className="overview-full">
+      {live ? <section className="workspace-card console-card"><div className="section-heading"><div><p className="eyebrow">Live estate</p><h2>{`${live.accessPoints.length} access points`}</h2></div></div><div className="access-point-grid access-point-grid-rich">{live.accessPoints.map((entry) => <article key={entry.accessPoint._id} className="access-point-card workspace-card"><div className="access-point-head"><div><h3>{entry.accessPoint.name}</h3><p>{entry.accessPoint.port}</p></div><span className={`status-pill ${entry.health?.linkState ? "status-pill-success" : "status-pill-warning"}`}>{entry.health?.linkState ? "Running" : "Pending"}</span></div><div className="ap-user-row"><span><Users size={15} />Users</span><strong>{entry.activeUserCount}</strong></div><dl className="access-point-stats"><div><dt>Capacity</dt><dd>{entry.accessPoint.capacity ? `${entry.activeUserCount}/${entry.accessPoint.capacity}` : "Not configured"}</dd></div><div><dt>Speed</dt><dd>↓ {rate(entry.health?.rxBytesPerSec ?? 0)} · ↑ {rate(entry.health?.txBytesPerSec ?? 0)}</dd></div><div><dt>Data (24h)</dt><dd>{bytes(entry.dailyBytes)}</dd></div></dl></article>)}</div></section> : <div className="loading-panel workspace-card"><Activity aria-hidden="true" size={20} />Loading live telemetry…</div>}
+    </div>
   </div>;
 }
 

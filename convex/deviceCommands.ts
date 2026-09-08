@@ -208,6 +208,40 @@ export const getRouterHealthguardOverview = query({
   },
 });
 
+/**
+ * Console / collector-setup view: healthguard state for every registered
+ * router in a single call, so the quick-action cards never need one query per
+ * router.
+ */
+export const listAllRouterHealthguardStates = query({
+  args: {},
+  handler: async (ctx) => {
+    await requirePermission(ctx, "telemetry_health:read");
+    const states = await ctx.db.query("healthguardStates").collect();
+    const routers = await ctx.db.query("routers").collect();
+    const now = Date.now();
+    const staleAfter = healthguardStaleMs();
+    const activeRouters = routers.filter((router) => router.archivedAt === undefined);
+    const byRouter = new Map<Id<"routers">, (typeof states)[number]>();
+    for (const state of states) byRouter.set(state.routerId, state);
+    return activeRouters
+      .map((router) => {
+        const state = byRouter.get(router._id);
+        return {
+          routerId: router._id,
+          routerName: router.name,
+          lastRunAt: state?.lastRunAt ?? undefined,
+          wwwSslEnabled: state?.wwwSslEnabled ?? null,
+          lastAction: state?.lastAction ?? ("none" as const),
+          lastActionAt: state?.lastActionAt ?? undefined,
+          lastActionMessage: state?.lastActionMessage ?? undefined,
+          stale: state?.lastRunAt === undefined || now - state.lastRunAt > staleAfter,
+        };
+      })
+      .sort((left, right) => Number(left.stale) - Number(right.stale) || left.routerName.localeCompare(right.routerName));
+  },
+});
+
 /** Applies a collector command report transition (idempotent, per-router). */
 export async function applyCommandReport(
   ctx: { db: MutationCtx["db"] },
