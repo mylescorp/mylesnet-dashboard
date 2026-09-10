@@ -18,7 +18,7 @@
     "@convex-dev/workos-authkit": "^0.2.9",
     "@workos-inc/authkit-nextjs": "^4.3.1",
     "@workos-inc/authkit-react": "^0.16.2",
-    "convex": "^1.44.0",
+    "convex": "~1.44.0",
     "lucide-react": "^1.32.0",
     "next": "16.3.4",
     "react": "19.2.8",
