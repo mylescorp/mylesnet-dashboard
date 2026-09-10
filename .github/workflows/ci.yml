@@ -40,7 +40,7 @@ jobs:
       - name: Collector tests
         run: pnpm run test:collector
       - name: UI tests
-        run: pnpm run test:ui -- --runInBand
+        run: pnpm --filter @mylesnet/web run test --runInBand
       - name: Production build
         run: pnpm run build
 
