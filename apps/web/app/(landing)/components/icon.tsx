@@ -1,0 +1,57 @@
+import {
+  Users,
+  Gift,
+  CreditCard,
+  Activity,
+  LifeBuoy,
+  Store,
+  Building2,
+  Hotel,
+  Globe,
+  ShieldCheck,
+  Lock,
+  Receipt,
+  Server,
+  CheckCircle2,
+  Check,
+  ArrowRight,
+  Wifi,
+  LayoutDashboard,
+  Bell,
+  Zap,
+  TrendingUp,
+  Sparkles,
+  CircleDollarSign,
+  type LucideIcon,
+} from "lucide-react";
+
+const ICONS: Record<string, LucideIcon> = {
+  Users,
+  Gift,
+  CreditCard,
+  Activity,
+  LifeBuoy,
+  Store,
+  Building2,
+  Hotel,
+  Globe,
+  ShieldCheck,
+  Lock,
+  Receipt,
+  Server,
+  CheckCircle2,
+  Check,
+  ArrowRight,
+  Wifi,
+  LayoutDashboard,
+  Bell,
+  Zap,
+  TrendingUp,
+  Sparkles,
+  CircleDollarSign,
+};
+
+export function Icon({ name, size = 20, className }: { name: string; size?: number; className?: string }) {
+  const Component = ICONS[name] ?? Sparkles;
+  return <Component size={size} className={className} aria-hidden="true" />;
+}

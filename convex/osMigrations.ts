@@ -1,4 +1,5 @@
 import { internalMutation } from "./_generated/server";
+import { recordCheckpoint } from "./lib/migrationRunCore.ts";
 
 /**
  * Idempotent startup migrations folding legacy data into the NOC v2 tables.
@@ -27,6 +28,23 @@ export const runStartupMigrations = internalMutation({
   handler: async (ctx) => {
     const now = Date.now();
     const results = { operatingCosts: 0, plans: 0, planLinks: 0, exchangeRates: 0 };
+
+    // §B2 migration run infrastructure — track this self-healing migration as
+    // one auditable run. All steps below behave exactly as before; the run
+    // record only adds an audit trail, bounded progress, an export manifest,
+    // and a rollback checkpoint. No step is gated.
+    const migrationRunId = await ctx.db.insert("migrationRuns", {
+      runId: `startup-migrations-${now}`,
+      name: "startup-migrations",
+      tables: ["expenses", "plans", "voucherBatches", "exchangeRates"],
+      status: "running",
+      rowsProcessed: 0,
+      manifest: {},
+      requiredFlags: [],
+      failedAssertions: [],
+      startedAt: now,
+      createdAt: now,
+    });
 
     // --- 1. Fold marketOperatingCosts rows into the expenses ledger ----------
     const legacy = await ctx.db.query("marketOperatingCosts").collect();
@@ -168,6 +186,26 @@ export const runStartupMigrations = internalMutation({
         results.exchangeRates += 1;
       }
     }
+
+    // §B2 — Record the consolidated export manifest and a rollback checkpoint
+    // (rows processed) so the run is recoverable/revertible as one operation.
+    const totalRows =
+      results.operatingCosts + results.plans + results.planLinks + results.exchangeRates;
+    const checkpoint = recordCheckpoint("startup-migrations", null, totalRows, Date.now());
+    await ctx.db.patch(migrationRunId, {
+      status: "completed",
+      cursor: checkpoint.cursor ?? undefined,
+      rowsProcessed: checkpoint.rowsProcessed,
+      rollbackCursor: checkpoint.cursor ?? undefined,
+      rollbackRows: checkpoint.rowsProcessed,
+      manifest: {
+        expenses: results.operatingCosts,
+        plans: results.plans,
+        planLinks: results.planLinks,
+        exchangeRates: results.exchangeRates,
+      },
+      completedAt: checkpoint.recordedAt,
+    });
 
     return results;
   },
