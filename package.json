@@ -23,7 +23,7 @@
     "collector:local:check": "powershell -ExecutionPolicy Bypass -File collector/run-local.ps1 -Once"
   },
   "dependencies": {
-    "convex": "^1.44.0"
+    "convex": "~1.44.0"
   },
   "devDependencies": {
     "@types/node": "^20",
