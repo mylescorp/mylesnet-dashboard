@@ -8,9 +8,15 @@ importers:
 
   .:
     dependencies:
+      '@convex-dev/auth':
+        specifier: ^0.0.95
+        version: 0.0.95(@auth/core@0.41.3)(convex@1.44.0(react@19.2.8))(react@19.2.8)
       convex:
         specifier: ~1.44.0
         version: 1.44.0(react@19.2.8)
+      zod:
+        specifier: ^4.4.3
+        version: 4.6.1
     devDependencies:
       '@types/node':
         specifier: ^20

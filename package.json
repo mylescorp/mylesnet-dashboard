@@ -23,7 +23,9 @@
     "collector:local:check": "powershell -ExecutionPolicy Bypass -File collector/run-local.ps1 -Once"
   },
   "dependencies": {
-    "convex": "~1.44.0"
+    "@convex-dev/auth": "^0.0.95",
+    "convex": "~1.44.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^20",
