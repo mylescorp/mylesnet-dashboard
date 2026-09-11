@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
 import { solutions } from "../../content/pages";
-import { Icon } from "../../components/icon";
+import { Icon } from "../../components/LandingIcon";
 
 export function generateStaticParams() {
   return solutions.map((solution) => ({ slug: solution.slug }));
