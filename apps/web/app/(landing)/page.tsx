@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowRight, CheckCircle2, X } from "lucide-react";
 import ProductPreview from "./components/ProductPreview";
 import SectionHead from "./components/SectionHead";
-import { Icon } from "./components/icon";
+import { Icon } from "./components/LandingIcon";
 import { features, solutions } from "./content/pages";
 import {
   audiences,
