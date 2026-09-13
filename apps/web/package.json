@@ -1,0 +1,47 @@
+{
+  "name": "@mylesnet/web",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "dev:https": "node https-dev.js",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "tokens:check": "node ../../scripts/check-design-tokens.mjs",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@convex-dev/auth": "^0.0.95",
+    "@convex-dev/workos": "^0.0.3",
+    "@convex-dev/workos-authkit": "^0.2.9",
+    "@workos-inc/authkit-nextjs": "^4.3.1",
+    "@workos-inc/authkit-react": "^0.16.2",
+    "convex": "~1.44.0",
+    "lucide-react": "^1.32.0",
+    "next": "16.3.4",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "recharts": "^3.10.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.1",
+    "jest": "^30.5.1",
+    "jest-environment-jsdom": "^30.5.1",
+    "jsdom": "^29.1.1",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

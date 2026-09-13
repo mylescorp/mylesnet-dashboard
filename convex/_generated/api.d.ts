@@ -47,6 +47,7 @@ import type * as lib_centipidCredentials from "../lib/centipidCredentials.js";
 import type * as lib_centipidVerify from "../lib/centipidVerify.js";
 import type * as lib_deviceCommandCore from "../lib/deviceCommandCore.js";
 import type * as lib_finance from "../lib/finance.js";
+import type * as lib_migrationRunCore from "../lib/migrationRunCore.js";
 import type * as lib_notify from "../lib/notify.js";
 import type * as lib_permissions from "../lib/permissions.js";
 import type * as lib_routerCredentials from "../lib/routerCredentials.js";
@@ -133,6 +134,7 @@ declare const fullApi: ApiFromModules<{
   "lib/centipidVerify": typeof lib_centipidVerify;
   "lib/deviceCommandCore": typeof lib_deviceCommandCore;
   "lib/finance": typeof lib_finance;
+  "lib/migrationRunCore": typeof lib_migrationRunCore;
   "lib/notify": typeof lib_notify;
   "lib/permissions": typeof lib_permissions;
   "lib/routerCredentials": typeof lib_routerCredentials;

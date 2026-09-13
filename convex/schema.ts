@@ -1327,4 +1327,49 @@ export default defineSchema({
     .index("by_team", ["teamId"])
     .index("by_agent", ["agentId"])
     .index("by_team_member", ["teamId", "agentId"]),
+
+  // ==========================================================================
+  // PHASE 0 — MIGRATION RUN INFRASTRUCTURE (§B2)
+  // ==========================================================================
+
+  // Tracks each migration as one idempotent, auditable, revertible run. A run
+  // records bounded-batch progress (cursor/rowsProcessed), a rollback
+  // checkpoint, the consolidated export manifest, assertion failures, and the
+  // feature-flag gates that must be on before any enforcement checkpoint.
+  migrationRuns: defineTable({
+    // Immutable run id (e.g. "tenantid-backfill-001") shared across retries so
+    // the run is idempotent even if the internal action re-runs.
+    runId: v.string(),
+    name: v.string(),
+    tables: v.array(v.string()),
+    status: v.union(
+      v.literal("planned"),
+      v.literal("running"),
+      v.literal("completed"),
+      v.literal("rolled_back"),
+      v.literal("failed"),
+      v.literal("cancelled"),
+    ),
+    // Bounded-backfill progress: the opaque cursor and rows processed so far.
+    cursor: v.optional(v.string()),
+    rowsProcessed: v.number(),
+    // Declared rollback checkpoint for the most recent phase.
+    rollbackCursor: v.optional(v.string()),
+    rollbackRows: v.optional(v.number()),
+    // Consolidated manifest of what the run moved / wrote, per table.
+    // v.record() unavailable in Convex 1.44 — shape enforced by the runner.
+    manifest: v.any(),
+    // Feature-flag names that must be "on" before enforcement checkpoints.
+    requiredFlags: v.array(v.string()),
+    // Names of assertions that failed on the latest checkpoint (empty = green).
+    failedAssertions: v.array(v.string()),
+    error: v.optional(v.string()),
+    startedBy: v.optional(v.id("users")),
+    startedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_run_id", ["runId"])
+    .index("by_status", ["status"])
+    .index("by_created_at", ["createdAt"]),
 });
