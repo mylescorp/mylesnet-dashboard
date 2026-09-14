@@ -16,6 +16,7 @@ export type PlatformUser = {
   email?: string;
   phone?: string;
   image?: string;
+  avatarStorageId?: string | null;
   jobTitle?: string;
   platformRole: string | null;
   isPlatform: boolean;
