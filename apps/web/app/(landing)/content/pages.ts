@@ -204,9 +204,9 @@ export const features: FeaturePage[] = [
       "Fast, consistent support — with the whole customer history attached — turns complaints into loyalty and keeps renewals on track.",
     highlights: [
       {
-        title: "Multi-channel help desk",
+        title: "One help desk queue",
         description:
-          "Tickets raised from the portal, email, SMS, and WhatsApp intake, in one queue.",
+          "Tickets raised from the portal in one queue today, with email, SMS, and WhatsApp intake as those channels come online.",
       },
       {
         title: "Priority and assignment",
@@ -221,7 +221,7 @@ export const features: FeaturePage[] = [
       {
         title: "Proactive notifications",
         description:
-          "SMS, email, and in-portal messages for renewals, payments, suspensions, and maintenance.",
+          "In-portal messages for renewals, payments, suspensions, and maintenance today — SMS and email flows follow as they come online.",
       },
       {
         title: "Delivery-aware messaging",

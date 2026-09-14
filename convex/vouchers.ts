@@ -235,6 +235,8 @@ export const redeemVoucher = mutation({
   args: {
     voucherId: v.id("vouchers"),
     customerPhoneAtRedemption: v.optional(v.string()),
+    redeemedDeviceId: v.optional(v.string()),
+    redeemedIpAddress: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "vouchers:redeem");
@@ -247,11 +249,19 @@ export const redeemVoucher = mutation({
     if (voucher.voucherStatus === "expired") {
       throw new Error("Voucher has expired");
     }
+    if (args.redeemedDeviceId !== undefined && args.redeemedDeviceId.length > 80) {
+      throw new Error("redeemedDeviceId is too long");
+    }
+    if (args.redeemedIpAddress !== undefined && args.redeemedIpAddress.length > 64) {
+      throw new Error("redeemedIpAddress is too long");
+    }
 
     await ctx.db.patch(args.voucherId, {
       voucherStatus: "redeemed",
       redeemedAt: Date.now(),
       customerPhoneAtRedemption: args.customerPhoneAtRedemption,
+      redeemedDeviceId: args.redeemedDeviceId,
+      redeemedIpAddress: args.redeemedIpAddress,
     });
 
     // Activation of a service counts as a new subscription against the owning

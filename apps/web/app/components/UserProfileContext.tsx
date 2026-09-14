@@ -3,7 +3,27 @@
 import { createContext, useContext, type ReactNode } from "react";
 import { useQuery, useMutation } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
-import type { PlatformUser } from "./UserProfileDropdown";
+export interface PlatformUserRole {
+  _id?: string;
+  slug: string;
+  name: string;
+  isPlatform: boolean;
+}
+
+export type PlatformUser = {
+  _id: string;
+  name?: string;
+  email?: string;
+  phone?: string;
+  image?: string;
+  jobTitle?: string;
+  platformRole: string | null;
+  isPlatform: boolean;
+  roles: PlatformUserRole[];
+  permissions: string[];
+  primaryRole?: { slug: string; name: string; isPlatform: boolean } | null;
+  canViewRevenue: boolean;
+};
 
 interface UserProfileContextType {
   user: PlatformUser | null | undefined;

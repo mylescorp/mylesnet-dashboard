@@ -1,4 +1,4 @@
-import { MutationCtx } from "../_generated/server";
+import { MutationCtx, QueryCtx } from "../_generated/server";
 import { Id } from "../_generated/dataModel";
 
 /**
@@ -31,30 +31,22 @@ export async function logAudit(
   });
 }
 
-/** Read-only helper for the /platform/audit-log screen. */
+/** Read-only cursor helper for the audit screens. Honors `cursor` via Convex pagination. */
 export async function listAuditLog(
-  ctx: { db: MutationCtx["db"] },
+  ctx: { db: QueryCtx["db"] },
   opts: {
     entityTable?: string;
     limit?: number;
     cursor?: string | null;
   }
 ) {
-  const limit = Math.min(100, opts.limit ?? 50);
-  if (opts.entityTable) {
-    const items = await ctx.db
-      .query("auditLog")
-      .withIndex("by_entity", (q) => q.eq("entityTable", opts.entityTable!))
-      .order("desc")
-      .take(limit + 1);
-    return {
-      items: items.slice(0, limit),
-      nextCursor: items.length > limit ? (items[limit - 1]._id as string) : null,
-    };
-  }
-  const items = await ctx.db.query("auditLog").order("desc").take(limit + 1);
+  const numItems = Math.min(100, opts.limit ?? 50);
+  const base = opts.entityTable
+    ? ctx.db.query("auditLog").withIndex("by_entity", (q) => q.eq("entityTable", opts.entityTable!))
+    : ctx.db.query("auditLog");
+  const page = await base.order("desc").paginate({ numItems, cursor: opts.cursor ?? null });
   return {
-    items: items.slice(0, limit),
-    nextCursor: items.length > limit ? (items[limit - 1]._id as string) : null,
+    items: page.page,
+    nextCursor: page.isDone ? null : page.continueCursor,
   };
 }

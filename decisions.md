@@ -1,5 +1,44 @@
 # Build decisions
 
+## Landing-surface consistency correction (2026-09-13)
+
+- **Token alias repair:** shadcn/Tailwind aliases are isolated behind `--ui-*` and `--color-*` mappings. The earlier implementation overwrote semantic `--primary`, `--muted`, and `--accent` values, producing low-contrast public navigation and copy. Product semantic tokens are now never shadowed by primitive aliases.
+- **Responsive review:** desktop navigation exposes only desktop links and the primary CTA; the Sheet trigger is restricted to the mobile breakpoint. The hero grid was replaced by a constrained block flow to prevent intrinsic-content clipping on narrow screens.
+- **Shared-surface cleanup:** public cards, banners, CTAs, pricing, footer, and preview bars consume the approved token scale. Landing TSX no longer has inline presentation styles.
+
+## Landing-surface Phase 2 — Primitives and shared components (2026-09-12)
+
+- **shadcn primitives added:** Button, Sheet, Badge, Card, Select (5 primitives total). Justification: Button for CTAs, Sheet for mobile navigation (Radix focus management), Badge for status chips, Card for footer structure, Select for currency switcher.
+- **Header.tsx migrated:** Replaced custom mobile menu with Radix Sheet, added active-link state via `usePathname` and `aria-current`, imported shadcn Button and Sheet components.
+- **StatusChip.tsx migrated:** Replaced landing.css status chip classes with shadcn Badge component (default/secondary/outline variants for Available/Beta/Planned/Custom).
+- **PricingPlans.tsx migrated:** Replaced custom segmented control with shadcn Select component for currency switcher, replaced landing-cta-button with shadcn Button.
+- **Footer.tsx:** Kept as-is (Card not needed — footer structure uses existing landing.css layout).
+- **landing.css deletions:** Removed button styles (46 lines), nav-toggle/mobile-menu styles (26 lines), status chip styles (49 lines), pricing switch styles (53 lines), responsive overrides (9 lines). Total: ~183 lines deleted.
+- **landing.css retained:** .landing-cta-button kept for page-level CTA band usage (31 lines), .landing-secondary-button kept for future use, .landing-nav-link kept for desktop nav, .landing-plan-card kept for pricing cards, .landing-preview-* kept for ProductPreview.
+- **Line count delta:** landing.css reduced from 2,919 lines to 2,746 lines (173 lines deleted).
+- **Packages added:** class-variance-authority ^0.7.1 (for shadcn variant system), @radix-ui/react-sheet (Sheet primitive), @radix-ui/react-select (Select primitive).
+- **Technology stack updated:** Added class-variance-authority and @radix-ui/react-sheet to docs/technology-stack.md.
+
+## Landing-surface design contract — Network Pulse direction (2026-09-12)
+
+- **Visual direction selected:** "Network Pulse" — warm orange connectivity glow with data-driven precision, an evolution of the current orange/navy with glassmorphism elevation.
+- **Token contract extended (v2.2):** Added landing-surface tokens to `docs/design/tokens.md`:
+  - Display type scale (`--landing-display-xs` to `--landing-display-xl`) with `clamp()`-driven responsive sizing
+  - Font display token (`--landing-font-display`) for Space Grotesk
+  - Section padding tokens (`--landing-section-padding-sm/md/lg`) for vertical rhythm
+  - Container width (`--landing-container: 1140px`)
+  - Glass surface tokens (`--landing-glass`, `--landing-glass-border`) with dark-mode opacity adjustments
+  - Glow tokens (`--landing-primary-glow`, `--landing-accent-glow`) for decorative effects
+  - Surface tint (`--landing-surface-tint`) for emphasis backgrounds
+  - Connectivity line (`--landing-connectivity-line`) for gradient line motifs
+  - Data strip tokens (`--landing-data-strip-bg`, `--landing-data-strip-line`) for telemetry-style bars
+- **Dark mode plumbing for landing:** Added no-flash theme script to `app/(landing)/layout.tsx` using existing ThemeToggle mechanism (localStorage + `prefers-color-scheme`).
+- **shadcn/ui initialized:** Created `components.json` at `apps/web` with Tailwind v4 CSS-variable theming wired to MylesNet semantic tokens (no separate shadcn palette). Added `clsx` and `tailwind-merge` packages for the `cn()` utility.
+- **CSS variable mapping:** Added shadcn variable mapping in `app/globals.css` (`--background`, `--foreground`, `--card`, `--primary`, `--secondary`, `--muted`, `--accent`, `--destructive`, `--border`, `--input`, `--ring`, `--radius`) to resolve to MylesNet semantic tokens in both light and dark modes.
+- **Technology stack updated:** Added clsx and tailwind-merge to `docs/technology-stack.md` as foundation packages (2026-09-12 landing-surface design contract).
+- **Landing design record expanded:** Updated `docs/design/landing.md` with Network Pulse direction details, page archetypes, component mapping to shadcn primitives, dark mode plan, motion rules, and landing.css deprecation path.
+- **Font loading refined:** Space Grotesk font loading in `app/layout.tsx` supports both `--font-space-grotesk` (variable) and `--font-landing-display` (display usage) tokens.
+
 ## Master Admin (`/platform`) — build log
 
 > **2026-09-05 snapshot:** the two chrome surfaces described below (network-ops
@@ -344,3 +383,317 @@ counts/data did not.
 - Expected result: AP cards show active users, per-AP usage bytes, and
   per-AP user lists once the backend is deployed (`npx convex deploy`) and the
   collector restarted.
+
+# Build decisions — 2026-09-10 snapshot: captive portal (T-HOT)
+
+> **2026-09-10 snapshot:** canonical scope for the captive portal /
+> hotspot module is `docs/captive-portal/captive-portal-specification.md`
+> (byte-identical mirror of the vault `products/mylesnet/captive-portal-specification.md`).
+> Companion flows: `docs/captive-portal/captive-portal-flows.md`. Decision-log
+> authority: vault `products/mylesnet/decisions.md` (2026-09-10) plus
+> `captive-portal/ADR.md`.
+
+## Build-facing rulings (mirrored from the vault decision log)
+
+- **Single system, no separate portal app.** The portal is a route surface in
+  this repo's unified Next.js app. Screens and logic live in the `captive-portal/`
+  folder; thin stubs `app/(portal)/hotspot/**`, thin adapters `convex/portal/`;
+  `@portal/*` alias; tenant resolved by hostname. Supersedes any `apps/portal`
+  "approval-gated do-not-create" item.
+- **Tier order for auth domains**: voucher, phone + SMS OTP,
+  MAC/HTTP-cookie, IP binding in MVP; username/password, scratch cards, guest,
+  email magic link in v1.1; WhatsApp/social gated on a pre-auth provider
+  allowlist.
+- **Multi-path reconnection is mandatory** (detection ladder → manual
+  fallbacks: voucher re-entry, phone+OTP, voucher QR, credentials) with a
+  welcome-back dashboard. Never a single locked path for an active subscriber.
+- **Free trial** is one-time per device/phone with a tenant-configurable reset
+  window — `freeTrialClaims.claimedAt/reclaimableAt`.
+- **Payments are in-portal** (M-Pesa STK Push first; Airtel/cards behind the
+  adapter wall). Strict state model plus application-vs-network state
+  (`payment_confirmed / provisioning / connected / reconnection_failed`) —
+  never claim connectivity without router-verified state.
+- **Branding**: template system + color/logo/background/font/language overrides,
+  token-bound. **Splash**: terms/privacy acceptance + optional operator splash;
+  no third-party ad platform in MVP.
+- **Devices**: self-service (list/rename/remove) with per-plan limits,
+  operator-configurable.
+- **RADIUS order**: Phase 6 uses Convex-direct RouterOS API (approval-gated);
+  FreeRADIUS (N-AAA/N-ACC) is the Phase 7 upgrade path — no Phase 6↔7 wait.
+- **Schema**: additions centralized in `convex/schema.ts` under Phase 1 schema
+  governance (`captivePortalSettings`, `captivePortalSessions`,
+  `captivePortalTemplates`, `freeTrialClaims`, `portalContent`, `termsAcceptances`;
+  plus `advertisements.placement`, feedback categories, and a **planned** `sites`
+  inventory entity §18.8 — optional pointers only, formal definition with N-RT/N-IP
+  at Phase 8).
+
+## Build decisions — 2026-09-10 snapshot: public pricing contract
+
+> **2026-09-10 snapshot:** [[Jonathan Myles]] approved the MylesNet public
+> pricing contract on 2026-09-10: monthly plans **Starter KES 500 · Growth
+> KES 1,400 · Pro KES 3,500** (KES is the base/authoritative currency),
+> **14-day free trial**, and a **20% referral commission for 12 months**.
+> Decision-log authority: vault `products/mylesnet/decisions.md` (2026-09-10) +
+> Master Part C §C3 ledger row.
+
+- **Implementation (`apps/web/app/(landing)/`).** `content/rates.ts` — cached FX
+  snapshot (`asOf: 2026-09-10`, base KES, parity 28 UGX/KES + USD 130/KES) and
+  `formatPrice()` (KSh/USh integers, USD 2-dp), no runtime FX call, no new
+  dependency. `components/PricingPlans.tsx` — client component, currency state
+  seeded from the server geo default, KES/UGX/USD switcher (`aria-pressed`), 3
+  tier cards with Growth = "Most popular", shared CTA to `/get-started`.
+  `pricing/page.tsx` — server component that reads `headers()`
+  (`x-vercel-ip-country`: KE→KES, UG→UGX, else USD fallback) and renders the
+  banner, plans, shared-features checklist, trial + referral cards, cached-rate
+  note, and CTA band. Route is dynamic (ƒ) by design (uses `headers()`); the
+  currency switcher holds local `useState` so there is no hydration mismatch.
+- **Gates.** `pnpm lint` 0, `pnpm typecheck` (tsc) 0, `pnpm tokens:check` green,
+  `pnpm build` green (75 routes, `/pricing` ƒ), `pnpm test:ui` 5/5,
+  `pnpm test` 44/44. Runtime smoke (fresh dev server, port 3001): `/pricing`
+  200 with geo-fallback USD rendering $3.85 / $10.77 / $26.92 (approved
+  conversions) and the KES/UGX/USD switcher on the page with correct
+  `aria-pressed` initial state.
+- **Public copy constraints held:** no competitor names (the Centipid benchmark
+  was used only as an internal pricing signal — flat monthly vs revenue-share),
+  no invented metrics, no internal stack/provider names. Manual checks still
+  pending: 390px mobile pass + a11y keyboard pass (existing standing item).
+
+# Phase 1 tenancy (X-TEN) — build log 2026-09-11
+
+> **2026-09-11:** Phase 1 (Tenant Schema and Data Isolation) is the active
+> first-order gate. Phase 2 (Identity/RBAC) is stop-gated until Phase 1
+> acceptance evidence exists. Decision-log authority: vault
+> `products/mylesnet/decisions.md` (2026-09-11) + `convex/schema.ts` Phase 1
+> section.
+
+## Schema
+
+- `const tenantScope = { tenantId: v.optional(v.id("tenants")) } as const;`
+  added after imports in `convex/schema.ts`; `...tenantScope,` spread applied
+  to all **60 tenant-owned tables**. New tables: `tenants`
+  (indexes `by_slug`/`by_status`/`by_workosOrganizationId`),
+  `tenantMemberships` (`by_user`/`by_tenant`/`by_user_tenant`, unique
+  user+tenant), `entitlements` (`by_tenant`). 11 platform/global tables are
+  deliberately exempt (users, roles, invitations, centipidCredentials,
+  exchangeRates, marketProspects, investors, investorReports, standardSiteKit,
+  system_settings, migrationRuns).
+- Inventory + staged plan live in `convex/lib/tenantMigration.ts`
+  (`TENANT_OWNED_TABLES`, `PLATFORM_OWNED_TABLES`, `tenantMigrationPlan`,
+  feature flags `tenant.backfill|readPath|writePath|enforceRequired`,
+  `runId = tenantid-backfill-001`).
+- Review-queue resolutions (transition-inventory §9) are recorded in the vault
+  decision log; 6 signed in this push (systemEvents, auditLog,
+  notificationPreferences, organizationMemberships, marketOperatingCosts,
+  investors/investorReports), **2 pending owner confirmation** (centipidCredentials
+  = global provider credential, agents/teams = single-tenant ownership). Neither
+  pending item blocked this schema push; both are reversible.
+- by_tenant indexes on existing tenant-owned tables are **deferred** to the
+  read-path step (kept this push low-risk; recorded, not omitted).
+
+## Isolation library (pure, node:test-covered)
+
+- `convex/lib/tenantCore.ts` — TenantStatus guards, `assertNoClientOverride`,
+  `assertTenantMatch`, `decideTenantAccess`.
+- `convex/lib/tenant.ts` — Convex wrapper: `resolveTenantFromAuth` (WorkOS org
+  claim → `by_workosOrganizationId`, then `mylesnet` bootstrap slug fallback,
+  then null), `requireTenantMember` (identity + `tenantMemberships` by_user_tenant),
+  `withTenantScope`, re-exported pure guards.
+- `convex/lib/tenantContracts.ts` — `tenantAuditKey` (`ten.<tenantId>:…`),
+  `tenantStorageKey` (`ten/<tenantId>/…`), `tenantJobEnvelope`,
+  `webhookTenantId` (unknown → null = quarantine), `tenantTransferRunId`,
+  `isValidTenantIdFormat`.
+- `convex/lib/tenantIsolationCore.ts` — denial catalogue
+  (`DENIAL_CATALOGUE`, `denialReasonForTenantPair`, `expectationForScenario`).
+- `convex/tenantMigrations.ts` — `runTenantIdBackfill` **gated no-op stub**
+  (reports plan surface; NOT wired into crons; real backfill needs the review
+  queue signed off + `tenant.backfill` flag + confirmed prod deploy).
+
+## Tests + gates
+
+- New: `convex/lib/{tenantCore,tenantContracts,tenantMigration,tenantIsolationCore}.test.ts`
+  (node:test). `pnpm test` now **70/70**.
+- Gates this push: lint 0, tsc 0 (app + new convex files), `tokens:check` green,
+  `test:ui` 5/5, `test:collector` 10/10. `pnpm build` deferred —
+  an existing `next build`/dev process already held the build lock and this
+  change is convex-only.
+- Nothing pushed (standing rule); the 5 relocation commits for the Vercel
+  `main` promotion and the approved landing redesign remain uncommitted/excluded.
+
+# Auth/RBAC verification decisions — 2026-09-13
+
+- **MFA guard policy:** `platform_owner`, `platform_admin`, `ops_manager`, and
+  `finance_manager` fail closed when the WorkOS-synced MFA marker is absent.
+  Shadow mode or `off`/`partial` enforcement are explicit operational overrides
+  only; the default remains full enforcement.
+- **CSRF exchange:** `__mylesnet_csrf` stays HttpOnly. An authenticated route
+  issues the corresponding request-header token, validates it before its POST
+  mutation, rotates it after success, and clears it on a failed exchange. Do
+  not make the cookie JavaScript-readable.
+- **Tenant hostname signal:** `__mylesnet_tenant` is a hostname-derived UX hint
+  only. Convex scope stays derived from the authenticated WorkOS organization
+  and membership; a browser cookie never authorizes a tenant query.
+
+## Platform control-plane panel ? 2026-09-14
+
+- **Scope confirmed:** /platform is the full MylesCorp control plane, not a
+  thin tenant switcher. Panels spec 'docs/design/panels.md' plus Master
+  Technical Spec v3 (APP C1/APP21) are the contract.
+- **Surface shape:** second-level left rail (PlatformNav) under the shared
+  product shell, gated by requirePanelAccess('platform'); pages: Overview,
+  Tenants list, Tenant detail, Subscriptions, Access & roles, Audit log,
+  Security. Pre-existing /platform/tenant-control page moved to
+  /platform/tenants.
+- **Backend additions (Convex):**
+  - tenantControl.getTenantDetail (query) ? tenant + WorkOS org id +
+    entitlements + member roster; guard requirePlatformUser.
+  - tenantControl.setEntitlement (mutation) ? upsert entitlements table row;
+    guard requirePlatformAdmin; audit tenant.entitlementSet/Changed.
+  - tenantControl.entitlementStatus union = trial | active | expired |
+    suspended (distinct from tenant lifecycle status).
+  - platform.listAuditLogPage (query) ? real Convex cursor pagination via
+    lib/auditLog.listAuditLog .paginate(); kept the legacy listAuditLog for
+    the existing /audit-log page.
+  - platform.getPlatformSecurityOverview (query) ? tenant estate incl.
+    WorkOS identity coverage, staff MFA posture (MANDATORY_MFA_ROLES),
+    workosWebhookEvents by status, 24h webhookDeliveryLog stats, feature
+    flags.
+- **Explicit client bindings:** apps/web/lib/convex/platformPanel.ts via
+  makeFunctionReference. Generated api remains pinned (no regeneration).
+- **Explicitly deferred / not built:** tenant cancellation/offboarding data
+  retention; real SaaS invoices/billing (entitlements only - schema gap);
+  tenantId backfill execution (gated stub only); deep CRUD on Access (links
+  to full /access); retirement of legacy network-ops console surfaces.
+- **Runtime note:** the new Convex functions require a deployment boundary
+  sync before live use. Code, typecheck, lint, tests and build gates pass
+  without a live deployment.
+
+## Platform-panel reconciliation build — 2026-09-14
+
+Per the build/reconciliation directive (one Linear issue per module; result of
+skipped Linear: manual backlog). Verification was file-based re-read of every
+spec module A1–O2; **the prior audit's module-level claims were not trusted**.
+Outcome table: 0 Confirmed, 21 Partial, 14 Not present, 1 Excluded (C2 tenant
+SaaS invoices — confirmed not started, left unstarted per directive).
+
+- **RBAC foundation (built + tested, 4/4 new tests):**
+  - `platform_readonly` system role added (`convex/lib/permissions.ts`, rank
+    150, 33 read-only permissions, `syncToWorkos: true`). Rationale: no
+    existing role covered "view everything platform-wide, write nothing";
+    `investor_viewer` is financials-only. Roles seed idempotently via
+    `rolesAdmin.seedLocalSystemRoles` — no seeding-code change needed.
+  - `PLATFORM_SUB_ROLE_MAP` (spec sub-role → concrete slug list):
+    `platform_super_admin` → `platform_owner` + `platform_admin`;
+    `platform_ops` → `ops_manager`; `platform_finance` → `finance_manager`;
+    `platform_support` → `platform_support`; `platform_readonly` →
+    `platform_readonly`. `requirePlatformSubRole(ctx, allowedSubRoles)` added
+    to `convex/lib/auth.ts`, flatten+dedupe then delegates to `requireAnyRole`;
+    unknown sub-roles pass through so literal slugs also work.
+  - Mapping is the contract: `convex/lib/subRoleMapping.test.ts` asserts every
+    spec sub-role resolves to an existing system role and that
+    `platform_readonly` grants zero write permissions.
+- **A1 Tenants RBAC tiers:** `setStatus`, `setEntitlement`, and the
+  `assertProvisioner` internal bridge now require platform_super_admin +
+  platform_ops (owner, admin, ops_manager) via `requirePlatformSubRole`, not
+  flat `requirePlatformAdmin`. Reads stay `requirePlatformUser` (all platform
+  roles). Matches spec CRUD super_admin+ops(CRUD)/finance+support+readonly(R).
+- **A3 suspension cascade wired (behavior change, no schema migration):**
+  `canTenantOperate(status)` added to `tenantCore` (blocks only explicit
+  `suspended`/`cancelled`; unset status stays allowed so pre-backfill rows keep
+  working). Enforced in `requireTenantMember` and `withTenantScope` — a
+  suspended tenant now denies its members' tenant-scoped reads/writes at the
+  gate instead of only being flagged in the tenants panel. Test added.
+- **B2 Provisioning queue (built end-to-end):**
+  - New tenant-scoped table `provisioningRequests` (`convex/schema.ts`) — new
+    table, so no existing-table migration gate; fields per spec: tenantId,
+    marketId, deviceId?, requestedFirmware?, requesterId, requestedAt, status
+    (pending/approved/rejected/deployed), decidedBy/At, decisionNote;
+    indexes `by_tenant`, `by_tenant_status`, `by_market`.
+  - New permissions `provisioning:read`/`provisioning:manage`: CRUD granted to
+    owner/admin/ops_manager; read granted to support, market_manager,
+    network_operator, platform_readonly (matches spec super_admin+ops CRUD,
+    others R).
+  - `convex/provisioning.ts`: list (enriched with requester/decision names),
+    get, requestDeviceProvisioning (validates market + that a pending request
+    for the same device does not already exist), decideProvisioningRequest
+    (lane-checked via `convex/lib/provisioningCore.ts` state machine),
+    markProvisioningDeployed. Every write audit-logged; reads via
+    `provisioning:read`, writes via `provisioning:manage`.
+  - `convex/lib/provisioningCore.ts` pure state/guard logic +
+    `provisioningCore.test.ts` (5/5). Bugs fixed during tests: empty-string
+    firmware was tolerated (falsy check) — now explicitly label must trim to
+    3–80 chars.
+  - UI: `PlatformProvisioning.tsx` + route `app/(app)/platform/provisioning/`
+    + nav entry in `UnifiedShell` (ServerCog), bridged via
+    `apps/web/lib/convex/provisioning.ts` with `makeFunctionReference`
+    (generated `api` stays pinned — no regeneration).
+- **E1 Commissions RBAC fix:** `accrueCommission`,
+  `approveCommissionPayout`, `markCommissionProcessing`, `markCommissionPaid`
+  moved from `requirePlatformAdmin` to `requirePermission(ctx,
+  "commissions:manage")` (finance_manager + admin). `approveCommissionPayout`
+  keeps `assertNotSelfApproval`. E2 payouts verified already permission-based
+  (`payouts:manage`, owner for tier_3) — no change needed.
+- **Deferred with schema-gate flag (stop+report before migrating):** B1 device
+  fleet fields (firmware/uptime%/provisioning status on existing `devices`
+  table — `lastSeenAt`, `deviceType`, `routerId`, `accessPointId` already
+  exist); F1 voucher fraud monitor device/IP/velocity tracking (would extend
+  existing tenant-scoped `vouchers`); K feature flags (generic flag store);
+  L2 tamper-evident audit hash chain (would extend `auditLog`; append-only +
+  `by_entity` existing, no `prevHash` anywhere).
+- **Deferred by dependency:** B3 RADIUS fleet registry (FreeRADIUS is the
+  Phase 7 path); N impersonation + G2/G4 API keys + L3 data requests +
+  M1/M2/O2 (recorded as not present — not speculative-scaffolded).
+- **Gates:** `pnpm typecheck` 0, `pnpm test` 117/117, `pnpm lint` 0,
+  `pnpm tokens:check` green, `pnpm build` green. Nothing committed (standing
+  rule; tree stays dirty on `myles/vercel-production-redeploy`).
+- **New Convex functions require a deployment boundary sync before live use**:
+  `provisioning:listProvisioningRequests`, `getProvisioningRequest`,
+  `requestDeviceProvisioning`, `decideProvisioningRequest`,
+  `markProvisioningDeployed`. Schema adds `provisioningRequests` table + two
+  permissions.
+
+### Batch 1 (K, B1, F1) — approved & built 2026-09-14
+
+Schema additions (additive, no backfill):
+
+- **K — `featureFlags` table** (global, deliberately not tenant-scoped): `key`,
+  `valueJson`, `enabled`, `description?`, `tenantIds?`, `createdBy?`,
+  `createdAt?`, `updatedAt`, `updatedBy?`, `.index("by_key")`. Percentage
+  rollout is encoded in `valueJson` as an integer `rolloutPercent` (0-100);
+  evaluation order = `enabled` off → global off; `tenantIds` list → only those
+  tenants; `rolloutPercent` → deterministic per-(key, tenant) hash sampling;
+  otherwise global-on. `requirePlatformSubRole`: reads any platform user,
+  create/delete `platform_super_admin`, update `platform_super_admin` +
+  `platform_ops`.
+- **B1 — `devices`**: + `firmwareVersion?`, `uptimePercent?`,
+  `provisioningStatus?` (`unprovisioned|pending|provisioned|failed`),
+  `.index("by_provisioningStatus")`. Fleet registry queries join device →
+  market → tenant name with no mutation of tenant resolution rules.
+- **F1 — `vouchers`**: + `redeemedDeviceId?`, `redeemedIpAddress?`,
+  `fraudFlagStatus?` (`clean|flagged|blocked`), `fraudFlagReason?`.
+  `voucherEvents`: + `redeemedDeviceId?`, `redeemedIpAddress?`. `redeemVoucher`
+  and `centipid.handleVoucherEvent` now persist the forensic fields. Velocity
+  stays query-time derived — no counter column.
+
+New Convex functions (all added to the deployment-boundary-sync list below):
+
+- `featureFlags:listFeatureFlags`, `getFeatureFlag`, `setFeatureFlag`,
+  `removeFeatureFlag`, `evaluateFeatureFlag`
+- `fleet:listDeviceFleet`, `getDeviceFleetRow`, `updateDeviceFleetRow`
+- `voucherFraud:listRedemptionMonitor`, `flagVoucher`
+
+Routes: `/platform/feature-flags` (list + create/edit/delete),
+`/platform/feature-flags/[flag]` (detail + evaluate), `/platform/infrastructure/devices`
+(list + edit posture), `/platform/infrastructure/devices/[deviceId]` (detail),
+`/platform/vouchers/monitor`. Nav + overview cards updated.
+
+- **Tests:** new cores `featureFlagCore`, `fleetCore`, `voucherFraudCore` (pure
+  logic, node:test). Happy + rejection per function covered through the pure
+  cores; multi-tenant isolation asserted in `fleetCore` (a device never labels
+  another tenant's name) and `voucherFraudCore` (same market across distinct
+  customers is not cross-flagged). Full run 142/142.
+- **Gates (this batch):** `pnpm typecheck` 0, `pnpm lint` 0, `pnpm tokens:check`
+  green, `pnpm test` 142/142, `pnpm build` green (all five new routes emitted).
+  Nothing committed (standing rule; tree stays dirty on
+  `myles/vercel-production-redeploy`).
+- **L2 audit hash chain deferred** by authorization: starts as its own deploy
+  only after Batch 1 lands green. Option A only.

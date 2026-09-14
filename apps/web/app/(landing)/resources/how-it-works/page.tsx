@@ -1,13 +1,13 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { howItWorksSteps } from "../../content/how-it-works";
+import { pageMetadata } from "../../content/seo";
 
-export const metadata: Metadata = {
-  title: "How MylesNet works",
-  description:
-    "A plain-language walkthrough of how MylesNet brings customers, packages, payments, and network operations together.",
-};
+export const metadata = pageMetadata(
+  "How MylesNet works",
+  "A plain-language walkthrough of how MylesNet brings customers, packages, payments, and network operations together.",
+  { canonical: "/resources/how-it-works" }
+);
 
 export default function HowItWorksPage() {
   return (
@@ -40,13 +40,13 @@ export default function HowItWorksPage() {
             ))}
           </div>
 
-          <div className="landing-prose" style={{ marginTop: 44 }}>
+          <div className="landing-prose landing-prose-spaced">
             <p>
               These areas work together as <strong>one platform</strong> — not five
               separate systems bolted on. That shared record of truth is what keeps an
               operation running smoothly as it grows.
             </p>
-            <div className="landing-hero-actions" style={{ justifyContent: "flex-start" }}>
+            <div className="landing-hero-actions landing-hero-actions-start">
               <Link className="landing-cta-button" href="/get-started">
                 Get started
                 <ArrowRight size={17} aria-hidden="true" />

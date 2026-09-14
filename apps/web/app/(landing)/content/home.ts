@@ -40,7 +40,7 @@ export const heroAttributes: string[] = [
   "Prepaid & postpaid billing",
   "Voucher & QR sales",
   "MikroTik-ready operations",
-  "SMS, email & in-portal alerts",
+  "In-portal alerts — SMS & email next",
 ];
 
 export const industryStats: IndustryStat[] = [
@@ -170,12 +170,12 @@ export const faqItems: FaqItem[] = [
   {
     question: "Can we sell access through vouchers and QR codes?",
     answer:
-      "Yes. You can create voucher batches with redeemable codes and QR support, in addition to selling packages directly to accounts. This suits market hotspots, guest Wi-Fi, trials, and giveaways.",
+      "Yes. You can create voucher batches with redeemable codes and QR support, in addition to selling packages directly to accounts. Voucher redemption is live in operator pilots today, and suits market hotspots, guest Wi-Fi, trials, and giveaways.",
   },
   {
     question: "How are payments tracked?",
     answer:
-      "Prepaid and postpaid billing both work. Invoices, payments, and receipts flow through a verified end-to-end process into an append-only ledger, so you can always see daily revenue, MRR, ARPU, and overdue balances.",
+      "Prepaid and postpaid billing are both built in, running in operator pilots as they are hardened. Invoices, payments, and receipts flow through a verified end-to-end process into an append-only ledger, so you can always see daily revenue, MRR, ARPU, and overdue balances.",
   },
   {
     question: "Who is responsible for our customers' data?",
@@ -204,3 +204,107 @@ export const sourcesNote = {
     { label: "Bain & Company — subscriber economics", url: "https://www.bain.com/" },
   ],
 };
+
+export const heroPreviewCaption =
+  "Illustrative preview — the console shown is a sample interface, not live operator data.";
+
+export const problemPains: { title: string; description: string }[] = [
+  {
+    title: "Manual billing & reconciliation",
+    description:
+      "Balances rebuilt from spreadsheets and mobile-money messages, argued again at every renewal.",
+  },
+  {
+    title: "Paid, but still offline",
+    description:
+      "Customers pay, yet the service stays off — because nothing connects the money to the network.",
+  },
+  {
+    title: "Plans, credentials & policies drift",
+    description:
+      "What was sold, who holds which credentials, and what the network enforces fall out of step.",
+  },
+  {
+    title: "Customer history in fragments",
+    description:
+      "Records scattered across notebooks, call logs, chat messages, and paper receipts.",
+  },
+  {
+    title: "Blind spots in revenue & churn",
+    description:
+      "No single view of daily revenue, expiring services, overdue balances, or network health.",
+  },
+  {
+    title: "Field teams working blind",
+    description:
+      "No work-order, equipment, or installation context available when a technician is on site.",
+  },
+];
+
+export const lifecycleSteps: { step: string; title: string; description: string }[] = [
+  {
+    step: "01",
+    title: "Lead & signup",
+    description: "Capture a prospective subscriber and their service address.",
+  },
+  {
+    step: "02",
+    title: "Qualification",
+    description: "Confirm the connection is possible before promises are made.",
+  },
+  {
+    step: "03",
+    title: "Plan selection",
+    description: "Pick the package that fits — prepaid, postpaid, or voucher.",
+  },
+  {
+    step: "04",
+    title: "Payment verification",
+    description: "Confirm the payment before any service changes hands.",
+  },
+  {
+    step: "05",
+    title: "Network authorization",
+    description: "Entitlements are applied to the subscriber's network access.",
+  },
+  {
+    step: "06",
+    title: "Activation",
+    description: "The customer comes online with the correct service policy.",
+  },
+  {
+    step: "07",
+    title: "Usage & session monitoring",
+    description: "Watch usage and network health while the service runs.",
+  },
+  {
+    step: "08",
+    title: "Support & field operations",
+    description: "Resolve issues with the full customer and session history attached.",
+  },
+  {
+    step: "09",
+    title: "Renewal, suspension, reconnection",
+    description: "Renewals flow, overdue handling is predictable, reconnection is traceable.",
+  },
+  {
+    step: "10",
+    title: "Reporting & growth",
+    description: "Revenue, churn, and plan performance inform the next decision.",
+  },
+];
+
+export const lifecycleHonesty = {
+  lead: "When payment is verified, the service follows it.",
+  detail:
+    "MylesNet never claims automatic reconnection on an unconfirmed request. Entitlements move only after the money is confirmed, and automatic network reconnection is rolled out as it is verified with pilots.",
+};
+
+export const integrationHighlights: { name: string; status: "Available" | "Beta" | "Planned" | "Custom" }[] = [
+  { name: "MikroTik RouterOS", status: "Available" },
+  { name: "RADIUS AAA (FreeRADIUS)", status: "Planned" },
+  { name: "M-Pesa", status: "Planned" },
+  { name: "Airtel Money", status: "Planned" },
+  { name: "SMS & WhatsApp", status: "Planned" },
+  { name: "Enterprise SSO", status: "Available" },
+];

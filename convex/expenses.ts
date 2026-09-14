@@ -1,9 +1,10 @@
 import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
+import { Doc, Id } from "./_generated/dataModel";
 import { requireFinanceOrAbove, requirePermission } from "./lib/auth";
+import { readTenantList } from "./lib/tenant";
 import { localToUsd, monthOf } from "./lib/finance";
 import { logAudit } from "./lib/auditLog";
-import type { Id } from "./_generated/dataModel";
 
 export const EXPENSE_CATEGORIES = [
   "airtel_data",
@@ -29,7 +30,13 @@ export const listExpenses = query({
   handler: async (ctx, args) => {
     // Markets/agents can see their own market's expenses; finance sees all.
     await requireFinanceOrAbove(ctx);
-    let rows = await ctx.db.query("expenses").collect();
+    let rows = await readTenantList<Doc<"expenses">>(ctx, {
+      all: () => ctx.db.query("expenses").collect(),
+      tenant: (tenantId) =>
+        ctx.db.query("expenses").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
+      legacy: () =>
+        ctx.db.query("expenses").withIndex("by_tenant", (q) => q.eq("tenantId", undefined)).collect(),
+    });
     if (args.marketId) rows = rows.filter((e) => e.marketId === args.marketId);
     if (args.month) rows = rows.filter((e) => e.month === args.month);
     if (args.category) rows = rows.filter((e) => e.category === args.category);
@@ -183,11 +190,12 @@ export const getMarketFinancials = query({
   args: { marketId: v.id("markets"), month: v.optional(v.string()) },
   handler: async (ctx, args) => {
     await requirePermission(ctx, "financials:read");
-    const rows = await ctx.db
-      .query("marketFinancials")
-      .withIndex("by_market_month", (q) => q.eq("marketId", args.marketId))
-      .collect();
-    return rows.filter((r) => !args.month || r.month === args.month).sort((a, b) => b.month.localeCompare(a.month));
+    const rows = await readTenantList<Doc<"marketFinancials">>(ctx, {
+      all: () => ctx.db.query("marketFinancials").collect(),
+      tenant: (tenantId) => ctx.db.query("marketFinancials").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
+      legacy: () => ctx.db.query("marketFinancials").withIndex("by_tenant", (q) => q.eq("tenantId", undefined)).collect(),
+    });
+    return rows.filter((r) => r.marketId === args.marketId && (!args.month || r.month === args.month)).sort((a, b) => b.month.localeCompare(a.month));
   },
 });
 
@@ -195,7 +203,11 @@ export const listAllFinancials = query({
   args: { month: v.optional(v.string()) },
   handler: async (ctx, args) => {
     await requireFinanceOrAbove(ctx);
-    const rows = await ctx.db.query("marketFinancials").collect();
+    const rows = await readTenantList<Doc<"marketFinancials">>(ctx, {
+      all: () => ctx.db.query("marketFinancials").collect(),
+      tenant: (tenantId) => ctx.db.query("marketFinancials").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
+      legacy: () => ctx.db.query("marketFinancials").withIndex("by_tenant", (q) => q.eq("tenantId", undefined)).collect(),
+    });
     return rows.filter((r) => !args.month || r.month === args.month).sort((a, b) => b.month.localeCompare(a.month));
   },
 });

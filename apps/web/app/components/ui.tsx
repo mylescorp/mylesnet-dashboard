@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import Image from "next/image";
 
 /** Form field wrapper with label + children input. */
 export function Field({
@@ -54,12 +55,32 @@ export function EmptyState({ title, body }: { title: string; body?: string }) {
   );
 }
 
-export function Loading() {
-  return <div className="loading-panel">Loading…</div>;
+export function Loading({ label = "Loading content" }: { label?: string }) {
+  return (
+    <div className="loading-panel" role="status" aria-live="polite" aria-label={label}>
+      <Image
+        className="loading-logo"
+        src="/brand/mylesnet-logo.png"
+        alt="MylesNet"
+        width={160}
+        height={48}
+        priority
+      />
+      <span className="loading-skeleton loading-skeleton-title" />
+      <span className="loading-skeleton loading-skeleton-line" />
+      <span className="loading-skeleton loading-skeleton-line loading-skeleton-line-short" />
+      <span className="sr-only">{label}</span>
+    </div>
+  );
 }
 
-export function ErrorNote({ children }: { children: ReactNode }) {
-  return <p className="pf-error">{children}</p>;
+export function ErrorNote({ children, onRetry }: { children: ReactNode; onRetry?: () => void }) {
+  return (
+    <div className="pf-error" role="alert">
+      <span>{children}</span>
+      {onRetry ? <button type="button" className="pf-button pf-button-compact" onClick={onRetry}>Try again</button> : null}
+    </div>
+  );
 }
 
 export function formatMoney(amount: number, currency: string) {

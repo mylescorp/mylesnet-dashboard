@@ -1,11 +1,13 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { Doc } from "./_generated/dataModel";
 import {
   assertNotSelfApproval,
-  requirePlatformAdmin,
+  requirePermission,
   requirePlatformOwner,
   requirePlatformUser,
 } from "./lib/auth";
+import { readTenantList } from "./lib/tenant";
 import { logAudit } from "./lib/auditLog";
 
 const DISPUTE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000; // 30 days, matches payout timeline
@@ -19,7 +21,7 @@ export const accrueCommission = mutation({
     currency: v.union(v.literal("UGX"), v.literal("KSH")),
   },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "commissions:manage");
     const now = Date.now();
 
     const commissionId = await ctx.db.insert("commissions", {
@@ -88,7 +90,7 @@ export const requestCommissionPayout = mutation({
 export const approveCommissionPayout = mutation({
   args: { commissionId: v.id("commissions"), requestedByUserId: v.optional(v.id("users")) },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "commissions:manage");
     const commission = await ctx.db.get(args.commissionId);
     if (!commission) throw new Error("Commission not found");
     if (commission.payoutStatus !== "requested") {
@@ -116,7 +118,7 @@ export const approveCommissionPayout = mutation({
 export const markCommissionProcessing = mutation({
   args: { commissionId: v.id("commissions") },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "commissions:manage");
     const commission = await ctx.db.get(args.commissionId);
     if (!commission) throw new Error("Commission not found");
     if (commission.payoutStatus !== "approved") {
@@ -137,7 +139,7 @@ export const markCommissionProcessing = mutation({
 export const markCommissionPaid = mutation({
   args: { commissionId: v.id("commissions") },
   handler: async (ctx, args) => {
-    const user = await requirePlatformAdmin(ctx);
+    const user = await requirePermission(ctx, "commissions:manage");
     const commission = await ctx.db.get(args.commissionId);
     if (!commission) throw new Error("Commission not found");
     if (commission.payoutStatus !== "processing") {
@@ -190,13 +192,15 @@ export const listCommissionsByStatus = query({
   },
   handler: async (ctx, args) => {
     await requirePlatformUser(ctx);
-    if (args.payoutStatus) {
-      return await ctx.db
-        .query("commissions")
-        .withIndex("by_status", (q) => q.eq("payoutStatus", args.payoutStatus!))
-        .collect();
-    }
-    return await ctx.db.query("commissions").collect();
+    let rows = await readTenantList<Doc<"commissions">>(ctx, {
+      all: () => ctx.db.query("commissions").collect(),
+      tenant: (tenantId) =>
+        ctx.db.query("commissions").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
+      legacy: () =>
+        ctx.db.query("commissions").withIndex("by_tenant", (q) => q.eq("tenantId", undefined)).collect(),
+    });
+    if (args.payoutStatus) rows = rows.filter((c) => c.payoutStatus === args.payoutStatus!);
+    return rows;
   },
 });
 
@@ -204,9 +208,13 @@ export const listCommissionsForAgent = query({
   args: { agentId: v.id("agents") },
   handler: async (ctx, args) => {
     await requirePlatformUser(ctx);
-    return await ctx.db
-      .query("commissions")
-      .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
-      .collect();
+    const rows = await readTenantList<Doc<"commissions">>(ctx, {
+      all: () => ctx.db.query("commissions").collect(),
+      tenant: (tenantId) =>
+        ctx.db.query("commissions").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
+      legacy: () =>
+        ctx.db.query("commissions").withIndex("by_tenant", (q) => q.eq("tenantId", undefined)).collect(),
+    });
+    return rows.filter((c) => c.agentId === args.agentId);
   },
 });

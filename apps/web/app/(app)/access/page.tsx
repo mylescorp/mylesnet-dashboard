@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { api } from "@/convex/_generated/api";
+import { avatarFallbackUrl } from "@/app/lib/avatar";
 import type { Id } from "@/convex/_generated/dataModel";
 
 type PlatformUser = NonNullable<ReturnType<typeof useQuery<typeof api.platform.getCurrentPlatformUser>>>;
@@ -321,9 +322,9 @@ function UsersTab({ currentUser }: { currentUser: PlatformUser }) {
                       <td>
                         <div className="user-cell">
                           <span className="cell-avatar" aria-hidden="true">
-                            {user.image ? (
+                            {user.image || user._id ? (
                               // eslint-disable-next-line @next/next/no-img-element
-                              <img src={user.image} alt="" width={36} height={36} className="avatar-img-sm" />
+                              <img src={user.image || avatarFallbackUrl(user._id, user.name || user.email || "User")} alt="" width={36} height={36} className="avatar-img-sm" />
                             ) : initials}
                           </span>
                           <span className="cell-copy">

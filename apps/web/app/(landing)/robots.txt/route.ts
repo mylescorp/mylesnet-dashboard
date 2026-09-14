@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-
-const ROBOTS_TXT = `User-Agent: *
-Allow: /
-
-Sitemap: https://mylesnetisp.mylescorptech.com/sitemap.xml
-`;
+import { SITE_URL } from "../content/seo";
 
 export function GET() {
+  const ROBOTS_TXT = `User-Agent: *
+Allow: /
+
+Sitemap: ${SITE_URL}/sitemap.xml
+`;
   return new NextResponse(ROBOTS_TXT, {
     headers: {
       "content-type": "text/plain; charset=utf-8",

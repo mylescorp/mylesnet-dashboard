@@ -3,7 +3,9 @@ import { Id, Doc } from "../_generated/dataModel";
 import {
   SYSTEM_ROLE_SLUGS,
   getSystemRoleBySlug,
+  PLATFORM_SUB_ROLE_MAP,
 } from "./permissions";
+import { assertMfaCompliance as assertMfaCompliancePolicy } from "./mfa";
 
 /**
  * Platform role access is data-driven from the `roles` table via
@@ -147,6 +149,7 @@ export async function requirePlatformAdmin(ctx: QueryCtx | MutationCtx): Promise
   if (!isPlatformAdmin(roles)) {
     throw new Error("Unauthorized: admin role required");
   }
+  assertMfaCompliancePolicy(user, roles.map((role) => role.slug));
   return user;
 }
 
@@ -160,6 +163,7 @@ export async function requirePlatformOwner(ctx: QueryCtx | MutationCtx): Promise
   if (!isPlatformOwner(roles)) {
     throw new Error("Unauthorized: owner role required");
   }
+  assertMfaCompliancePolicy(user, roles.map((role) => role.slug));
   return user;
 }
 
@@ -341,5 +345,36 @@ function isActiveUser(user: Doc<"users">): boolean {
   return user.isActive !== false && user.deactivatedAt === undefined;
 }
 
+/**
+ * Require the caller to hold at least one of the specified platform sub-roles.
+ *
+ * Sub-role slugs use the spec naming convention (platform_super_admin, platform_ops,
+ * etc.) and are mapped to the actual role slugs seeded in the roles table. This
+ * helper wraps `requireAnyRole` with the mapping layer; unknown slugs pass through
+ * unchanged so literal slugs also work.
+ *
+ * The mapping is defined in lib/permissions.ts (PLATFORM_SUB_ROLE_MAP):
+ *   platform_super_admin → platform_owner, platform_admin
+ *   platform_ops         → ops_manager
+ *   platform_finance     → finance_manager
+ *   platform_support     → platform_support
+ *   platform_readonly    → platform_readonly
+ */
+export async function requirePlatformSubRole(
+  ctx: QueryCtx | MutationCtx,
+  allowedSubRoles: string[],
+): Promise<Doc<"users">> {
+  const mappedSlugs = allowedSubRoles
+    .flatMap((sub) => PLATFORM_SUB_ROLE_MAP[sub] ?? [sub])
+    .filter((slug, index, arr) => arr.indexOf(slug) === index);
+  return requireAnyRole(ctx, mappedSlugs);
+}
+
+/**
+ * Enforce the mandatory-2FA policy (lib/mfa). WorkOS owns enrollment; this is
+ * the app-side fail-closed check on the synced marker. Ops can dial it to
+ * shadow mode via env flags (RBAC shadow mode, doc 06); the default is full
+ * enforcement.
+ */
 /** Keep the system role slugs reachable from auth consumers. */
 export { SYSTEM_ROLE_SLUGS };

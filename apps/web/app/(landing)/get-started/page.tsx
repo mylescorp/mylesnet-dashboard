@@ -1,12 +1,12 @@
-import type { Metadata } from "next";
 import { CheckCircle2 } from "lucide-react";
 import { getCompanyContact } from "../content/contact";
+import { pageMetadata } from "../content/seo";
 
-export const metadata: Metadata = {
-  title: "Get started",
-  description:
-    "Tell us about your network and we will help you choose the right starting point with MylesNet.",
-};
+export const metadata = pageMetadata(
+  "Get started",
+  "Tell us about your network and we will help you choose the right starting point with MylesNet.",
+  { canonical: "/get-started" }
+);
 
 const START_STEPS: { step: string; title: string; description: string }[] = [
   {
@@ -75,7 +75,7 @@ export default function GetStartedPage() {
               channel that suits you below.
             </p>
           </div>
-          <div className="landing-grid" style={{ marginTop: 28 }}>
+          <div className="landing-grid landing-grid-spaced">
             {contact.salesEmail ? (
               <div className="landing-card">
                 <h3 className="landing-card-title">Sales enquiries</h3>
@@ -134,12 +134,12 @@ export default function GetStartedPage() {
             ) : null}
           </div>
           {!hasContact ? (
-            <p className="landing-prose" style={{ marginTop: 24, color: "var(--muted)" }}>
+            <p className="landing-prose landing-prose-note">
               Contact details are being prepared. Please check back shortly.
             </p>
           ) : (
-            <p className="landing-prose" style={{ marginTop: 24, color: "var(--muted)" }}>
-              <CheckCircle2 size={16} style={{ display: "inline", marginRight: 6, verticalAlign: "middle", color: "var(--success)" }} />
+            <p className="landing-prose landing-prose-note">
+              <CheckCircle2 className="landing-icon-inline landing-icon-success" size={16} />
               We aim to respond to every enquiry promptly.
             </p>
           )}

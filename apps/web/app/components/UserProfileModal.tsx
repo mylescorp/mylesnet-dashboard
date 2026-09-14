@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useAction } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
 import { useUserProfile } from "./UserProfileContext";
+import { avatarFallbackUrl } from "@/app/lib/avatar";
 import { Check, ImagePlus, ShieldCheck, Trash2, User, X } from "lucide-react";
 
 const ALLOWED_AVATAR_MIME_TYPES = new Set([
@@ -29,6 +30,7 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
   const [phone, setPhone] = useState(user?.phone || "");
   const [jobTitle, setJobTitle] = useState(user?.jobTitle || "");
   const [avatarPreview, setAvatarPreview] = useState<{ objectUrl: string; storageId: string } | null>(null);
+  const avatarSrc = avatarPreview?.objectUrl || (user ? user.image || avatarFallbackUrl(user._id, user.name || user.email || "User") : undefined);
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [removingAvatar, setRemovingAvatar] = useState(false);
@@ -153,10 +155,10 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
           {/* Avatar & Role Card Lockup */}
           <div className="profile-badge-card">
             <div className="profile-badge-avatar">
-              {(avatarPreview?.objectUrl || user.image) ? (
+              {avatarSrc ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={avatarPreview?.objectUrl || user.image}
+                  src={avatarSrc}
                   alt={name || "User Avatar"}
                   className="avatar-img"
                 />

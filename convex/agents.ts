@@ -1,6 +1,8 @@
 import { v } from "convex/values";
 import { mutation, query, internalQuery } from "./_generated/server";
+import { Doc } from "./_generated/dataModel";
 import { requirePermission } from "./lib/auth";
+import { readTenantList, enforceTenantOnResource } from "./lib/tenant";
 import { logAudit } from "./lib/auditLog";
 
 export const getAgentInternal = internalQuery({
@@ -14,10 +16,14 @@ export const listAgents = query({
   args: {},
   handler: async (ctx) => {
     await requirePermission(ctx, "agents:read");
-    return await ctx.db
-      .query("agents")
-      .filter((q) => q.neq(q.field("status"), "deleted"))
-      .collect();
+    const rows = await readTenantList<Doc<"agents">>(ctx, {
+      all: () => ctx.db.query("agents").collect(),
+      tenant: (tenantId) =>
+        ctx.db.query("agents").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
+      legacy: () =>
+        ctx.db.query("agents").withIndex("by_tenant", (q) => q.eq("tenantId", undefined)).collect(),
+    });
+    return rows.filter((a) => a.status !== "deleted");
   },
 });
 
@@ -25,7 +31,8 @@ export const getAgent = query({
   args: { agentId: v.id("agents") },
   handler: async (ctx, args) => {
     await requirePermission(ctx, "agents:read");
-    return await ctx.db.get(args.agentId);
+    const agent = await ctx.db.get(args.agentId);
+    return await enforceTenantOnResource(ctx, agent, "agent");
   },
 });
 
