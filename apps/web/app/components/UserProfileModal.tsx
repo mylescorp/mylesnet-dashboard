@@ -28,6 +28,16 @@ function trustedAvatarSource(url: string | undefined | null, hasStorageRecord: b
   }
 }
 
+function localAvatarObjectUrl(url: string | undefined | null): string | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "blob:" && parsed.origin === window.location.origin ? parsed.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
 interface UserProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -45,7 +55,8 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
   const [avatarPreview, setAvatarPreview] = useState<{ objectUrl: string; storageId: string } | null>(null);
   const [persistedAvatarPreview, setPersistedAvatarPreview] = useState<string | null>(null);
   const persistedAvatarSource = trustedAvatarSource(user?.image, Boolean(user?.avatarStorageId));
-  const avatarSrc = avatarPreview?.objectUrl || (persistedAvatarSource ? persistedAvatarPreview : null);
+  const avatarSrc =
+    localAvatarObjectUrl(avatarPreview?.objectUrl) ?? localAvatarObjectUrl(persistedAvatarPreview);
   const avatarFallback = user ? avatarFallbackUrl(user._id, user.name || user.email || "User") : undefined;
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
