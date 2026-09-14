@@ -1,5 +1,6 @@
 import { MutationCtx, QueryCtx } from "../_generated/server";
 import { Id } from "../_generated/dataModel";
+import { AUDIT_CHAIN_GENESIS, hashAuditChainPayload } from "./auditChainCore";
 
 /**
  * Unified audit log writer. Call this from every mutation that changes
@@ -19,15 +20,41 @@ export async function logAudit(
     ip?: string;
   }
 ) {
+  const beforeJson = params.before !== undefined ? JSON.stringify(params.before) : undefined;
+  const afterJson = params.after !== undefined ? JSON.stringify(params.after) : undefined;
+  // Convex mutations are serializable. Reading the current tail means a
+  // concurrent writer is retried before it can append a competing chain link.
+  const previous = await ctx.db.query("auditLog").withIndex("by_timestamp").order("desc").first();
+  const chainSequence = (previous?.chainSequence ?? 0) + 1;
+  // Preserve a total, deterministic order even when several mutations share a
+  // millisecond, and never place an append before an imported legacy record.
+  const timestamp = Math.max(Date.now(), (previous?.timestamp ?? 0) + 1);
+  const prevHash = previous?.hash ?? AUDIT_CHAIN_GENESIS;
+  const hash = await hashAuditChainPayload({
+    chainSequence,
+    prevHash,
+    action: params.action,
+    entityTable: params.entityTable,
+    entityId: params.entityId,
+    changedBy: params.changedBy,
+    beforeJson,
+    afterJson,
+    timestamp,
+    ip: params.ip,
+  });
+
   await ctx.db.insert("auditLog", {
     action: params.action,
     entityTable: params.entityTable,
     entityId: params.entityId,
     changedBy: params.changedBy,
-    beforeJson: params.before !== undefined ? JSON.stringify(params.before) : undefined,
-    afterJson: params.after !== undefined ? JSON.stringify(params.after) : undefined,
-    timestamp: Date.now(),
+    beforeJson,
+    afterJson,
+    timestamp,
     ip: params.ip,
+    chainSequence,
+    prevHash,
+    hash,
   });
 }
 

@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { query } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
 import { listAuditLog as readAuditLog } from "./lib/auditLog";
+import { verifyAuditChain, type SealedAuditEntry } from "./lib/auditChainCore";
 import {
   isPlatformUser,
   permissionsOf,
@@ -94,6 +95,59 @@ export const listAuditLogPage = query({
       limit: args.limit,
       cursor: args.cursor ?? null,
     });
+  },
+});
+
+/**
+ * Verify the most recent sealed audit links without exposing their payloads.
+ * The bounded window keeps this platform query predictable as the log grows;
+ * the UI labels a partial window honestly rather than claiming a full-history
+ * verification. Rows written before L2 remain readable but intentionally have
+ * no integrity hash.
+ */
+export const getAuditChainHealth = query({
+  args: {},
+  handler: async (ctx) => {
+    await requirePlatformUser(ctx);
+    const windowSize = 2_000;
+    const newestFirst = await ctx.db
+      .query("auditLog")
+      .withIndex("by_timestamp")
+      .order("desc")
+      .take(windowSize);
+    const sealed = newestFirst
+      .filter((entry) => entry.hash !== undefined && entry.prevHash !== undefined && entry.chainSequence !== undefined)
+      .reverse()
+      .map((entry): SealedAuditEntry => ({
+        hash: entry.hash!,
+        prevHash: entry.prevHash!,
+        chainSequence: entry.chainSequence!,
+        action: entry.action,
+        entityTable: entry.entityTable,
+        entityId: entry.entityId,
+        changedBy: entry.changedBy,
+        beforeJson: entry.beforeJson,
+        afterJson: entry.afterJson,
+        timestamp: entry.timestamp,
+        ip: entry.ip,
+      }));
+    const first = sealed[0];
+    const last = sealed[sealed.length - 1];
+    const verification = await verifyAuditChain(sealed, {
+      requireGenesis: first?.chainSequence === 1,
+    });
+
+    return {
+      ...verification,
+      sealedEntries: sealed.length,
+      legacyEntriesInWindow: newestFirst.length - sealed.length,
+      windowSize,
+      windowLimited: newestFirst.length === windowSize,
+      startsAt: first?.timestamp ?? null,
+      endsAt: last?.timestamp ?? null,
+      firstSequence: first?.chainSequence ?? null,
+      lastSequence: last?.chainSequence ?? null,
+    };
   },
 });
 
