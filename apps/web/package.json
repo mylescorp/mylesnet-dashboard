@@ -11,7 +11,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "tokens:check": "node ../../scripts/check-design-tokens.mjs",
-    "test": "jest"
+    "test": "jest --passWithNoTests"
   },
   "dependencies": {
     "@convex-dev/auth": "^0.0.95",

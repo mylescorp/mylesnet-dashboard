@@ -84,7 +84,10 @@ export const requestDeviceProvisioning = mutation({
       const existing = await ctx.db
         .query("provisioningRequests")
         .filter((r) =>
-          r.eq(r.field("deviceId"), args.deviceId!).and(r.eq(r.field("status"), "pending")),
+          r.and(
+            r.eq(r.field("deviceId"), args.deviceId!),
+            r.eq(r.field("status"), "pending"),
+          ),
         )
         .first();
       if (existing) throw new Error("This device already has a pending provisioning request");

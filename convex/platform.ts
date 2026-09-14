@@ -102,13 +102,13 @@ export const getPlatformSecurityOverview = query({
   args: {},
   handler: async (ctx) => {
     const actor = await requirePlatformUser(ctx);
-    const [tenants, users, roles, workosEvents, deliveries, settings] = await Promise.all([
+    const [tenants, users, roles, workosEvents, deliveries, featureFlagRows] = await Promise.all([
       ctx.db.query("tenants").collect(),
       ctx.db.query("users").collect(),
       ctx.db.query("roles").collect(),
       ctx.db.query("workosWebhookEvents").collect(),
       ctx.db.query("webhookDeliveryLog").withIndex("by_receivedAt").order("desc").take(300),
-      ctx.db.query("system_settings").collect(),
+      ctx.db.query("featureFlags").collect(),
     ]);
 
     const staff: Array<{
@@ -148,12 +148,12 @@ export const getPlatformSecurityOverview = query({
     const dayMs = 24 * 60 * 60 * 1000;
     const deliveries24h = deliveries.filter((delivery) => now - delivery.receivedAt <= dayMs);
 
-    const flagKeys = ["tenant.backfill", "tenant.readPath", "tenant.writePath", "tenant.enforceRequired", "healthguardEnabled"] as const;
-    const featureFlags: Record<string, boolean> = {};
-    for (const key of flagKeys) featureFlags[key] = false;
-    for (const row of settings) {
-      if (row.key in featureFlags) featureFlags[row.key] = row.valueJson === "true";
-    }
+    // The platform panel owns the featureFlags table. Do not read the legacy
+    // system_settings booleans here: they neither represent percentage/
+    // tenant rollouts nor reflect changes made through /platform/feature-flags.
+    const featureFlags = Object.fromEntries(
+      featureFlagRows.map((flag) => [flag.key, flag.enabled]),
+    );
 
     return {
       tenantOverview: {

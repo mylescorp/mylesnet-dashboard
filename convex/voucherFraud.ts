@@ -36,9 +36,6 @@ export const listRedemptionMonitor = query({
     if (args.marketId !== undefined) {
       redeemed = redeemed.filter((v) => v.marketId === args.marketId);
     }
-    redeemed.sort((a, b) => (b.redeemedAt ?? 0) - (a.redeemedAt ?? 0));
-    redeemed = redeemed.slice(0, cap);
-
     const marketName = new Map<string, string>();
     const marketTenant = new Map<string, string | null>();
     for (const market of await ctx.db.query("markets").collect()) {
@@ -60,12 +57,21 @@ export const listRedemptionMonitor = query({
       redeemedIpAddress: voucher.redeemedIpAddress,
     }));
 
-    const assessed = assessRedemptions(records);
+    // Assess the full filtered population before selecting the display page.
+    // Limiting first silently misses a duplicate code, shared device, or IP
+    // whose related redemption falls just outside the newest records.
+    const assessedByVoucherId = new Map(
+      assessRedemptions(records).map((assessment) => [assessment.voucherId, assessment]),
+    );
 
-    return redeemed.map((voucher, index) => {
+    redeemed.sort((a, b) => (b.redeemedAt ?? 0) - (a.redeemedAt ?? 0));
+    const displayed = redeemed.slice(0, cap);
+
+    return displayed.map((voucher) => {
       const resolvedTenantId =
         voucher.tenantId ?? marketTenant.get(voucher.marketId) ?? null;
-      const assessment = assessed[index];
+      const assessment = assessedByVoucherId.get(voucher._id);
+      if (!assessment) throw new Error("Voucher fraud assessment is missing");
       return {
         _id: voucher._id,
         code: voucher.code,

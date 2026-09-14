@@ -38,6 +38,16 @@ test("a duplicate voucher code is blocked outright", () => {
   }
 });
 
+test("an assessment remains attached to its voucher when the display order differs", () => {
+  const rows = assessRedemptions([
+    redeemed({ voucherId: "older", code: "CODE-DUP", redeemedAt: 1700000000000 }),
+    redeemed({ voucherId: "newer", code: "CODE-DUP", redeemedAt: 1700000100000 }),
+  ]);
+  const byId = new Map(rows.map((row) => [row.voucherId, row]));
+  assert.equal(byId.get("older")?.verdict, "blocked");
+  assert.equal(byId.get("newer")?.verdict, "blocked");
+});
+
 test("fast repeated redemptions by the same device exceed the velocity threshold", () => {
   const base = 1700000000000;
   const records: RedemptionRecord[] = ["A", "B", "C", "D", "E"].map((code, i) =>
