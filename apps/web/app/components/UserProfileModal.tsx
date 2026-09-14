@@ -44,7 +44,8 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
   const [jobTitle, setJobTitle] = useState(user?.jobTitle || "");
   const [avatarPreview, setAvatarPreview] = useState<{ objectUrl: string; storageId: string } | null>(null);
   const [persistedAvatarPreview, setPersistedAvatarPreview] = useState<string | null>(null);
-  const avatarSrc = avatarPreview?.objectUrl || persistedAvatarPreview;
+  const persistedAvatarSource = trustedAvatarSource(user?.image, Boolean(user?.avatarStorageId));
+  const avatarSrc = avatarPreview?.objectUrl || (persistedAvatarSource ? persistedAvatarPreview : null);
   const avatarFallback = user ? avatarFallbackUrl(user._id, user.name || user.email || "User") : undefined;
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -53,9 +54,8 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const source = trustedAvatarSource(user?.image, Boolean(user?.avatarStorageId));
+    const source = persistedAvatarSource;
     if (!source) {
-      setPersistedAvatarPreview(null);
       return;
     }
 
@@ -80,7 +80,7 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [user?.avatarStorageId, user?.image]);
+  }, [persistedAvatarSource]);
 
   if (!isOpen || !user) return null;
 
