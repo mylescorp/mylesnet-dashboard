@@ -19,7 +19,7 @@ jobs:
       NEXT_PUBLIC_CONVEX_URL: https://ci.invalid.convex.cloud
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Set up pnpm
         uses: pnpm/action-setup@v6
       - name: Set up Node.js
@@ -51,7 +51,7 @@ jobs:
       statuses: write
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Secret scanning
