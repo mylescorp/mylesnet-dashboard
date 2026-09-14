@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAction } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
 import { useUserProfile } from "./UserProfileContext";
@@ -43,13 +43,44 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
   const [phone, setPhone] = useState(user?.phone || "");
   const [jobTitle, setJobTitle] = useState(user?.jobTitle || "");
   const [avatarPreview, setAvatarPreview] = useState<{ objectUrl: string; storageId: string } | null>(null);
-  const avatarSrc = avatarPreview?.objectUrl || trustedAvatarSource(user?.image, Boolean(user?.avatarStorageId));
+  const [persistedAvatarPreview, setPersistedAvatarPreview] = useState<string | null>(null);
+  const avatarSrc = avatarPreview?.objectUrl || persistedAvatarPreview;
   const avatarFallback = user ? avatarFallbackUrl(user._id, user.name || user.email || "User") : undefined;
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [removingAvatar, setRemovingAvatar] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const source = trustedAvatarSource(user?.image, Boolean(user?.avatarStorageId));
+    if (!source) {
+      setPersistedAvatarPreview(null);
+      return;
+    }
+
+    let objectUrl: string | null = null;
+    let cancelled = false;
+    void fetch(source, { credentials: "omit" })
+      .then(async (response) => {
+        const contentType = response.headers.get("content-type") ?? "";
+        if (!response.ok || !contentType.startsWith("image/")) return null;
+        return response.blob();
+      })
+      .then((blob) => {
+        if (!blob || cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setPersistedAvatarPreview(objectUrl);
+      })
+      .catch(() => {
+        if (!cancelled) setPersistedAvatarPreview(null);
+      });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [user?.avatarStorageId, user?.image]);
 
   if (!isOpen || !user) return null;
 
