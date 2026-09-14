@@ -14,6 +14,19 @@ const ALLOWED_AVATAR_MIME_TYPES = new Set([
   "image/gif",
 ]);
 const MAX_AVATAR_SIZE_BYTES = 5 * 1024 * 1024;
+const CONVEX_STORAGE_HOST_SUFFIX = ".convex.cloud";
+
+function trustedAvatarSource(url: string | undefined | null, hasStorageRecord: boolean): string | undefined {
+  if (!url || !hasStorageRecord) return undefined;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" && parsed.hostname.endsWith(CONVEX_STORAGE_HOST_SUFFIX)
+      ? parsed.toString()
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 interface UserProfileModalProps {
   isOpen: boolean;
@@ -30,7 +43,8 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
   const [phone, setPhone] = useState(user?.phone || "");
   const [jobTitle, setJobTitle] = useState(user?.jobTitle || "");
   const [avatarPreview, setAvatarPreview] = useState<{ objectUrl: string; storageId: string } | null>(null);
-  const avatarSrc = avatarPreview?.objectUrl || (user ? user.image || avatarFallbackUrl(user._id, user.name || user.email || "User") : undefined);
+  const avatarSrc = avatarPreview?.objectUrl || trustedAvatarSource(user?.image, Boolean(user?.avatarStorageId));
+  const avatarFallback = user ? avatarFallbackUrl(user._id, user.name || user.email || "User") : undefined;
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [removingAvatar, setRemovingAvatar] = useState(false);
@@ -116,13 +130,6 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
     }
   };
 
-  const initials = (name || user.email || "User")
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-
   return (
     <div className="profile-modal-overlay" onClick={onClose} role="presentation">
       <div
@@ -163,7 +170,9 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
                   className="avatar-img"
                 />
               ) : (
-                <span>{initials}</span>
+                // DiceBear URL is generated locally from encoded identity data.
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={avatarFallback} alt="" className="avatar-img" />
               )}
             </div>
 

@@ -31,6 +31,10 @@ export const getCurrentPlatformUser = query({
       email: user.email,
       phone: user.phone,
       image: user.image,
+      // A remote image is only rendered by the client when this Convex
+      // storage reference is present. WorkOS profile image URLs are treated
+      // as untrusted display data and fall back to initials instead.
+      avatarStorageId: user.avatarStorageId ?? null,
       jobTitle: user.jobTitle,
       platformRole: user.platformRole ?? null,
       isPlatform: isPlatformUser(roles),
