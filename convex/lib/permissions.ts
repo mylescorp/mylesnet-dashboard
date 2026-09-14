@@ -17,6 +17,8 @@ export const PERMISSIONS = [
   { slug: "routers:manage", name: "Manage routers", group: "Operations" },
   { slug: "devices:read", name: "View devices", group: "Operations" },
   { slug: "devices:manage", name: "Manage devices", group: "Operations" },
+  { slug: "provisioning:read", name: "View provisioning queue", group: "Operations" },
+  { slug: "provisioning:manage", name: "Manage provisioning queue", group: "Operations" },
   { slug: "collector:manage", name: "Collector setup", group: "Operations" },
   { slug: "config_watch:manage", name: "Config watch", group: "Operations" },
   { slug: "telemetry_health:read", name: "Telemetry health", group: "Operations" },
@@ -152,6 +154,8 @@ export const SYSTEM_ROLES: SystemRoleDefinition[] = [
       "routers:manage",
       "devices:read",
       "devices:manage",
+      "provisioning:read",
+      "provisioning:manage",
       "collector:manage",
       "config_watch:manage",
       "telemetry_health:read",
@@ -239,6 +243,7 @@ export const SYSTEM_ROLES: SystemRoleDefinition[] = [
       "dashboard:access",
       "routers:read",
       "devices:read",
+      "provisioning:read",
       "telemetry_health:read",
       "alerts:read",
       "alerts:manage",
@@ -306,6 +311,7 @@ export const SYSTEM_ROLES: SystemRoleDefinition[] = [
       "dashboard:access",
       "routers:read",
       "devices:read",
+      "provisioning:read",
       "telemetry_health:read",
       "incidents:read",
       "tickets:read",
@@ -349,6 +355,7 @@ export const SYSTEM_ROLES: SystemRoleDefinition[] = [
       "routers:read",
       "routers:manage",
       "devices:read",
+      "provisioning:read",
       "alerts:read",
       "alerts:manage",
       "incidents:read",
@@ -363,6 +370,52 @@ export const SYSTEM_ROLES: SystemRoleDefinition[] = [
     ],
     syncToWorkos: false,
   },
+  {
+    key: "readonly",
+    name: "Platform Read-Only",
+    slug: "platform_readonly",
+    description: "Read-only visibility across all platform surfaces. No write access.",
+    isSystem: true,
+    isPlatform: true,
+    rank: 150,
+    permissions: [
+      "dashboard:access",
+      "routers:read",
+      "devices:read",
+      "provisioning:read",
+      "telemetry_health:read",
+      "incidents:read",
+      "capacity:read",
+      "site_kit:read",
+      "tickets:read",
+      "markets:read",
+      "prospects:read",
+      "agents:read",
+      "leaderboard:read",
+      "teams:read",
+      "subscriber_snapshots:read",
+      "business_events:read",
+      "vouchers:read",
+      "commissions:read",
+      "usage:read",
+      "revenue:view",
+      "plans:read",
+      "expenses:read",
+      "payouts:read",
+      "financials:read",
+      "analytics:read",
+      "risk_center:read",
+      "users:read",
+      "roles:read",
+      "organizations:read",
+      "audit_log:read",
+      "alerts:read",
+      "compliance:access",
+      "reports:read",
+      "investors:read",
+    ] as PermissionSlug[],
+    syncToWorkos: true,
+  },
 ];
 
 export const SYSTEM_ROLE_SLUGS: Record<string, string> = {
@@ -376,6 +429,7 @@ export const SYSTEM_ROLE_SLUGS: Record<string, string> = {
   investor_viewer: "investor_viewer",
   agent: "agent",
   operator: "network_operator",
+  readonly: "platform_readonly",
 };
 
 /** Residual platformRole mirror values that map onto system roles. */
@@ -403,3 +457,18 @@ export function workosSlugForRole(role: { isSystem: boolean; slug: string }): st
 
 /** Default rank for a new custom role (under all system roles). */
 export const CUSTOM_ROLE_DEFAULT_RANK = 60;
+
+/**
+ * Spec sub-role → concrete role slugs for `requirePlatformSubRole`.
+ *
+ * Spec convention (platform_super_admin, platform_ops, …) is mapped to the
+ * seeded system-role slugs that satisfy it. Unknown sub-roles pass through
+ * unchanged so the caller can also pass literal slugs.
+ */
+export const PLATFORM_SUB_ROLE_MAP: Record<string, string[]> = {
+  platform_super_admin: ["platform_owner", "platform_admin"],
+  platform_ops: ["ops_manager"],
+  platform_finance: ["finance_manager"],
+  platform_support: ["platform_support"],
+  platform_readonly: ["platform_readonly"],
+};

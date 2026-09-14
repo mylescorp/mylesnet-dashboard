@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { ConvexClientProvider } from "../ConvexClientProvider";
 import { AppShell } from "../components/AppShell";
-import { OrgGuard } from "../components/OrgGuard";
 
 export const metadata: Metadata = {
   title: "MylesNet Dashboard",
@@ -15,7 +14,6 @@ export default function AppLayout({
 }>) {
   return (
     <ConvexClientProvider>
-      <OrgGuard />
       <AppShell>{children}</AppShell>
     </ConvexClientProvider>
   );
