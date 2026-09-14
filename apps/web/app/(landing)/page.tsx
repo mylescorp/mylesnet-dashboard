@@ -1,19 +1,48 @@
 import Link from "next/link";
-import { ArrowRight, CheckCircle2, X } from "lucide-react";
-import ProductPreview from "./components/ProductPreview";
+import Image from "next/image";
+import { ArrowRight, CheckCircle2, ShieldCheck, X } from "lucide-react";
 import SectionHead from "./components/SectionHead";
+import StatusChip from "./components/StatusChip";
+import JsonLd from "./components/JsonLd";
 import { Icon } from "./components/LandingIcon";
+import { Button } from "@/components/ui/button";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { pageMetadata } from "./content/seo";
 import { features, solutions } from "./content/pages";
 import {
   audiences,
-  heroAttributes,
   industryStats,
   processSteps,
   comparisonRows,
   securityPillars,
   faqItems,
   sourcesNote,
+  problemPains,
+  lifecycleSteps,
+  lifecycleHonesty,
+  integrationHighlights,
 } from "./content/home";
+
+export const metadata = pageMetadata(
+  "MylesNet — ISP Operations Platform for East Africa",
+  "MylesNet is the operations platform for East African internet service providers, WISPs, estates, hospitality operators, and community networks — customers, packages, payments, and network operations in one place.",
+  { canonical: "/", absoluteTitle: true }
+);
+
+const faqJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: faqItems.map((item) => ({
+    "@type": "Question",
+    name: item.question,
+    acceptedAnswer: { "@type": "Answer", text: item.answer },
+  })),
+};
 
 const BENTO_SPANS: Record<string, string> = {
   "customer-management": "landing-bento-span-4",
@@ -27,49 +56,29 @@ export default function LandingHome() {
   return (
     <>
       {/* ============ Hero ============ */}
-      <section className="landing-hero">
-        <div className="landing-gridlines" aria-hidden="true" />
-        <div className="landing-hero-orb landing-hero-orb-a" aria-hidden="true" />
-        <div className="landing-hero-orb landing-hero-orb-b" aria-hidden="true" />
-        <div className="landing-hero-orb landing-hero-orb-c" aria-hidden="true" />
-
-        <div className="landing-hero-inner landing-container">
-          <span className="landing-hero-eyebrow">
-            <span className="landing-eyebrow-dot" />
-            Built for East African ISPs
-          </span>
-          <h1 className="landing-hero-title">
-            Run connectivity people rely on —{" "}
-            <span className="landing-title-accent">without the spreadsheet chaos</span>
-          </h1>
-          <p className="landing-hero-subtitle">
-            MylesNet brings customers, packages, payments, and network operations into
-            one place — so you can focus on connecting people well instead of juggling
-            notebooks, receipts, and manual data entry.
-          </p>
-          <div className="landing-hero-actions">
-            <Link className="landing-cta-button" href="/get-started">
+      <section className="landing-hero landing-hero-cover">
+        <h1 className="landing-hero-heading">Smarter billing for growing ISPs</h1>
+        <Image
+          src="/images/landing/hero-banner.png"
+          alt="MylesNet platform overview — automated billing and customer management, M-Pesa payment reconciliation, and real-time network monitoring in one dashboard, with a customer self-service mobile view."
+          fill
+          priority
+          sizes="100vw"
+          className="landing-hero-cover-image"
+        />
+        <div className="landing-hero-actions landing-hero-cover-actions">
+          <Button asChild variant="default" size="lg">
+            <Link href="/get-started">
               Get started
               <ArrowRight size={17} aria-hidden="true" />
             </Link>
-            <Link className="landing-secondary-button" href="/resources/how-it-works">
+          </Button>
+          <Button asChild variant="outline" size="lg">
+            <Link href="/resources/how-it-works">
               See how it works
             </Link>
-          </div>
-          <p className="landing-hero-note">
-            No technical setup experience required — we walk you through the whole launch.
-          </p>
-          <ul className="landing-hero-attributes" aria-label="Key capabilities">
-            {heroAttributes.map((attribute) => (
-              <li className="landing-attribute-chip" key={attribute}>
-                <CheckCircle2 size={15} aria-hidden="true" />
-                {attribute}
-              </li>
-            ))}
-          </ul>
+          </Button>
         </div>
-
-        <ProductPreview />
       </section>
 
       {/* ============ Audiences ============ */}
@@ -118,6 +127,25 @@ export default function LandingHome() {
         </div>
       </section>
 
+      {/* ============ Problem / pains ============ */}
+      <section className="landing-section">
+        <div className="landing-section-inner">
+          <SectionHead
+            kicker="The daily reality"
+            title="Running connectivity today can feel harder than it should"
+            subtitle="These are the operational frictions the platform is built to remove — the gaps where small networks lose money, trust, and time every week."
+          />
+          <ul className="landing-problem-grid">
+            {problemPains.map((pain) => (
+              <li className="landing-problem-item" key={pain.title}>
+                <h3>{pain.title}</h3>
+                <p>{pain.description}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
       {/* ============ Features bento ============ */}
       <section className="landing-section landing-section-alt">
         <div className="landing-section-inner">
@@ -128,10 +156,12 @@ export default function LandingHome() {
               title="Everything your network needs to run smoothly"
               subtitle="Five areas of the platform work together, so every part of your operation — from sales to support — has the right tool."
             />
-            <Link className="landing-text-link" href="/features/customer-management">
-              Explore all features
-              <ArrowRight size={16} aria-hidden="true" />
-            </Link>
+            <Button asChild variant="link" size="sm">
+              <Link href="/features/customer-management">
+                Explore all features
+                <ArrowRight size={16} aria-hidden="true" />
+              </Link>
+            </Button>
           </div>
           <div className="landing-bento">
             {features.map((feature) => (
@@ -159,6 +189,34 @@ export default function LandingHome() {
               </Link>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* ============ Lifecycle ============ */}
+      <section className="landing-section">
+        <div className="landing-section-inner">
+          <SectionHead
+            kicker="The operating loop"
+            title="From signup to renewal, one connected loop"
+            subtitle="A subscriber's journey is a single, traceable loop — every step connected to the last, never scattered across systems."
+          />
+          <div className="landing-honesty">
+            <span className="landing-honesty-icon" aria-hidden="true">
+              <ShieldCheck size={19} />
+            </span>
+            <p>
+              <strong>{lifecycleHonesty.lead}</strong> {lifecycleHonesty.detail}
+            </p>
+          </div>
+          <ol className="landing-lifecycle">
+            {lifecycleSteps.map((step) => (
+              <li className="landing-lifecycle-step" key={step.step}>
+                <span className="landing-lifecycle-num">{step.step}</span>
+                <h3>{step.title}</h3>
+                <p>{step.description}</p>
+              </li>
+            ))}
+          </ol>
         </div>
       </section>
 
@@ -192,10 +250,12 @@ export default function LandingHome() {
               title="Built for how you operate"
               subtitle="Whether you run a market hotspot, an estate network, a hotel, or a community network, MylesNet adapts to your business."
             />
-            <Link className="landing-text-link" href="/solutions/market-hotspots">
-              Explore all solutions
-              <ArrowRight size={16} aria-hidden="true" />
-            </Link>
+            <Button asChild variant="link" size="sm">
+              <Link href="/solutions/market-hotspots">
+                Explore all solutions
+                <ArrowRight size={16} aria-hidden="true" />
+              </Link>
+            </Button>
           </div>
           <div className="landing-solutions-grid">
             {solutions.map((solution) => (
@@ -297,19 +357,45 @@ export default function LandingHome() {
             title="Questions operators ask us"
             subtitle="Straight answers about hardware, data, payments, and going live — before you commit to anything."
           />
-          <div className="landing-faq">
+          <Accordion type="single" collapsible className="landing-faq">
             {faqItems.map((item) => (
-              <details key={item.question}>
-                <summary>
-                  {item.question}
-                  <span className="landing-faq-summary-icon" aria-hidden="true">
-                    +
-                  </span>
-                </summary>
-                <p className="landing-faq-answer">{item.answer}</p>
-              </details>
+              <AccordionItem key={item.question} value={item.question}>
+                <AccordionTrigger>{item.question}</AccordionTrigger>
+                <AccordionContent>
+                  <p className="landing-faq-answer">{item.answer}</p>
+                </AccordionContent>
+              </AccordionItem>
             ))}
+          </Accordion>
+          <JsonLd data={faqJsonLd} />
+        </div>
+      </section>
+
+      {/* ============ Integrations teaser ============ */}
+      <section className="landing-section landing-section-alt">
+        <div className="landing-section-inner">
+          <div className="landing-kicker-row">
+            <SectionHead
+              align="left"
+              kicker="Integrations"
+              title="Plays well with the tools you already run"
+              subtitle="Every integration is labelled honestly — available now, in pilot, on the roadmap, or scoped for your setup."
+            />
+            <Button asChild variant="link" size="sm">
+              <Link href="/integrations">
+                Explore all integrations
+                <ArrowRight size={16} aria-hidden="true" />
+              </Link>
+            </Button>
           </div>
+          <ul className="landing-int-tiles">
+            {integrationHighlights.map((item) => (
+              <li className="landing-int-tile" key={item.name}>
+                <span>{item.name}</span>
+                <StatusChip status={item.status} />
+              </li>
+            ))}
+          </ul>
         </div>
       </section>
 
@@ -323,13 +409,17 @@ export default function LandingHome() {
             point — and walk you through the launch every step of the way.
           </p>
           <div className="landing-hero-actions">
-            <Link className="landing-cta-button" href="/get-started">
-              Get started
-              <ArrowRight size={17} aria-hidden="true" />
-            </Link>
-            <Link className="landing-secondary-button" href="/pricing">
-              See pricing
-            </Link>
+            <Button asChild variant="default" size="lg">
+              <Link href="/get-started">
+                Get started
+                <ArrowRight size={17} aria-hidden="true" />
+              </Link>
+            </Button>
+            <Button asChild variant="outline" size="lg">
+              <Link href="/pricing">
+                See pricing
+              </Link>
+            </Button>
           </div>
         </div>
       </section>

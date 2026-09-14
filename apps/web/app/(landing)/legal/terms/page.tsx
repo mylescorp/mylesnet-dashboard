@@ -1,10 +1,11 @@
-import type { Metadata } from "next";
+import { CheckCircle2 } from "lucide-react";
+import { pageMetadata } from "../../content/seo";
 
-export const metadata: Metadata = {
-  title: "Terms",
-  description:
-    "The terms that apply when operators use the MylesNet platform.",
-};
+export const metadata = pageMetadata(
+  "Terms",
+  "The terms that apply when operators use the MylesNet platform.",
+  { canonical: "/legal/terms" }
+);
 
 export default function TermsPage() {
   return (
@@ -13,9 +14,23 @@ export default function TermsPage() {
         <div className="landing-page-banner-inner">
           <p className="landing-section-kicker">Legal</p>
           <h1>Terms of use</h1>
-          <p>
+          <p className="landing-banner-lead">
             These terms govern the use of the MylesNet platform by operators.
           </p>
+          <div className="landing-banner-meta">
+            <span className="landing-banner-meta-item">
+              <CheckCircle2 size={15} aria-hidden="true" />
+              Secure credentials
+            </span>
+            <span className="landing-banner-meta-item">
+              <CheckCircle2 size={15} aria-hidden="true" />
+              Accurate business information
+            </span>
+            <span className="landing-banner-meta-item">
+              <CheckCircle2 size={15} aria-hidden="true" />
+              Lawful platform use
+            </span>
+          </div>
         </div>
       </section>
 

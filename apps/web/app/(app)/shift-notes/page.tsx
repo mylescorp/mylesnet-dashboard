@@ -53,25 +53,25 @@ export default function ShiftNotesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[var(--surface-muted)]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Shift Notes</h1>
-            <p className="text-sm text-gray-600">Operator notes and handover information</p>
+            <h1 className="text-2xl font-bold text-[var(--text-strong)]">Shift Notes</h1>
+            <p className="text-sm text-[var(--muted)]">Operator notes and handover information</p>
           </div>
         </div>
-        {message ? <div className="mb-6 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="status">{message}</div> : null}
+        {message ? <div className="mb-6 rounded-md border border-[var(--danger-bg)] bg-[var(--danger-bg)] px-4 py-3 text-sm text-[var(--danger)]" role="status">{message}</div> : null}
 
         {/* Router Selection */}
         <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-[var(--text)] mb-2">
             Select Router
           </label>
           <select
             value={selectedRouter || ""}
             onChange={(e) => setSelectedRouter(e.target.value || null)}
-            className="w-full max-w-md px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+            className="w-full max-w-md px-3 py-2 border border-[var(--line)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
           >
             <option value="">Select a router</option>
             {routers?.map((router) => (
@@ -83,7 +83,7 @@ export default function ShiftNotesPage() {
         </div>
 
         {/* Warning */}
-        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-md mb-6">
+        <div className="bg-[var(--warning-bg)] border border-[var(--warning-bg)] text-[var(--warning)] px-4 py-3 rounded-md mb-6">
           <p className="text-sm">
             <strong>Important:</strong> Shift notes must never contain customer personal information,
             passwords, or payment details. This is for operational notes only.
@@ -95,7 +95,7 @@ export default function ShiftNotesPage() {
           <div className="mb-6 flex gap-3">
             <button
               onClick={() => setShowAddModal(true)}
-              className="bg-orange-600 text-white px-4 py-2 rounded-md hover:bg-orange-700"
+              className="bg-[var(--primary-action)] text-[var(--primary-action-foreground)] px-4 py-2 rounded-md hover:bg-[var(--primary-action-hover)]"
             >
               Add Shift Note
             </button>
@@ -103,7 +103,7 @@ export default function ShiftNotesPage() {
               type="button"
               onClick={() => window.print()}
               disabled={!shiftNotes || shiftNotes.length === 0}
-              className="rounded-md border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 print:hidden"
+              className="rounded-md border border-[var(--line)] px-4 py-2 text-[var(--text)] hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-50 print:hidden"
             >
               Print handover
             </button>
@@ -114,27 +114,27 @@ export default function ShiftNotesPage() {
         {selectedRouter && shiftNotes && (
           <div className="space-y-4">
             {shiftNotes.length === 0 ? (
-              <div className="bg-white rounded-lg shadow p-6 text-center text-gray-600">
+              <div className="bg-[var(--surface)] rounded-lg shadow p-6 text-center text-[var(--muted)]">
                 No shift notes for this router
               </div>
             ) : (
               shiftNotes.map((note) => (
-                <div key={note._id} className="bg-white rounded-lg shadow p-6 border-l-4 border-orange-500">
+                <div key={note._id} className="bg-[var(--surface)] rounded-lg shadow p-6 border-l-4 border-[var(--primary)]">
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
-                        <span className="text-sm text-gray-600">
+                        <span className="text-sm text-[var(--muted)]">
                           {new Date(note.timestamp).toLocaleString()}
                         </span>
-                        <span className="text-sm text-gray-600">
+                        <span className="text-sm text-[var(--muted)]">
                           by {note.authorId}
                         </span>
                       </div>
-                      <p className="text-gray-900 whitespace-pre-wrap">{note.note}</p>
+                      <p className="text-[var(--text-strong)] whitespace-pre-wrap">{note.note}</p>
                     </div>
                     <button
                       onClick={() => handleDelete(note._id)}
-                      className="text-red-600 hover:text-red-900 ml-4"
+                      className="text-[var(--danger)] hover:text-[var(--danger)] ml-4"
                     >
                       Delete
                     </button>
@@ -146,7 +146,7 @@ export default function ShiftNotesPage() {
         )}
 
         {!selectedRouter && (
-          <div className="bg-white rounded-lg shadow p-6 text-center text-gray-600">
+          <div className="bg-[var(--surface)] rounded-lg shadow p-6 text-center text-[var(--muted)]">
             Select a router to view shift notes
           </div>
         )}
@@ -154,13 +154,13 @@ export default function ShiftNotesPage() {
 
       {/* Add Note Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Add Shift Note</h2>
+        <div className="fixed inset-0 flex items-center justify-center p-4" style={{ backgroundColor: "color-mix(in srgb, var(--mn-navy-900) 50%, transparent)" }}>
+          <div className="bg-[var(--surface)] rounded-lg shadow-xl max-w-md w-full p-6">
+            <h2 className="text-xl font-bold text-[var(--text-strong)] mb-4">Add Shift Note</h2>
 
             <form onSubmit={handleAddNote} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-[var(--text)] mb-1">
                   Note
                 </label>
                 <textarea
@@ -168,10 +168,10 @@ export default function ShiftNotesPage() {
                   onChange={(e) => setNoteText(e.target.value)}
                   required
                   rows={5}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  className="w-full px-3 py-2 border border-[var(--line)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
                   placeholder="Enter your operational note..."
                 />
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-[var(--muted)] mt-1">
                   Do not include customer PII, passwords, or payment information
                 </p>
               </div>
@@ -180,14 +180,14 @@ export default function ShiftNotesPage() {
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                  className="px-4 py-2 border border-[var(--line)] rounded-md text-[var(--text)] hover:bg-[var(--surface-muted)]"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:opacity-50"
+                  className="px-4 py-2 bg-[var(--primary-action)] text-[var(--primary-action-foreground)] rounded-md hover:bg-[var(--primary-action-hover)] disabled:opacity-50"
                 >
                   {loading ? "Adding..." : "Add Note"}
                 </button>
@@ -199,4 +199,3 @@ export default function ShiftNotesPage() {
     </div>
   );
 }
-

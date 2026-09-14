@@ -1,6 +1,8 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { Doc } from "./_generated/dataModel";
 import { requirePermission } from "./lib/auth";
+import { readTenantList, enforceTenantOnResource } from "./lib/tenant";
 import { logAudit } from "./lib/auditLog";
 
 /**
@@ -11,9 +13,33 @@ export const listTeams = query({
   args: {},
   handler: async (ctx) => {
     await requirePermission(ctx, "teams:read");
-    const teams = await ctx.db.query("teams").withIndex("by_status", (q) => q.eq("status", "active")).collect();
-    const members = await ctx.db.query("teamMembers").collect();
-    const agents = new Map((await ctx.db.query("agents").collect()).map((a) => [a._id, a.name]));
+    const readTeams = () =>
+      readTenantList<Doc<"teams">>(ctx, {
+        all: () => ctx.db.query("teams").collect(),
+        tenant: (tenantId) =>
+          ctx.db.query("teams").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
+        legacy: () =>
+          ctx.db.query("teams").withIndex("by_tenant", (q) => q.eq("tenantId", undefined)).collect(),
+      });
+    const readMembers = () =>
+      readTenantList<Doc<"teamMembers">>(ctx, {
+        all: () => ctx.db.query("teamMembers").collect(),
+        tenant: (tenantId) =>
+          ctx.db.query("teamMembers").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
+        legacy: () =>
+          ctx.db.query("teamMembers").withIndex("by_tenant", (q) => q.eq("tenantId", undefined)).collect(),
+      });
+    const readAgents = () =>
+      readTenantList<Doc<"agents">>(ctx, {
+        all: () => ctx.db.query("agents").collect(),
+        tenant: (tenantId) =>
+          ctx.db.query("agents").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
+        legacy: () =>
+          ctx.db.query("agents").withIndex("by_tenant", (q) => q.eq("tenantId", undefined)).collect(),
+      });
+    const teams = (await readTeams()).filter((t) => t.status === "active");
+    const members = await readMembers();
+    const agents = new Map((await readAgents()).map((a) => [a._id, a.name]));
     return teams.map((team) => ({
       ...team,
       agents: members
@@ -27,9 +53,17 @@ export const getTeam = query({
   args: { teamId: v.id("teams") },
   handler: async (ctx, args) => {
     await requirePermission(ctx, "teams:read");
-    const team = await ctx.db.get(args.teamId);
+    const team = await enforceTenantOnResource(ctx, await ctx.db.get(args.teamId), "team");
     if (!team) throw new Error("Team not found");
-    const members = await ctx.db.query("teamMembers").withIndex("by_team", (q) => q.eq("teamId", args.teamId)).collect();
+    const members = (
+      await readTenantList<Doc<"teamMembers">>(ctx, {
+        all: () => ctx.db.query("teamMembers").collect(),
+        tenant: (tenantId) =>
+          ctx.db.query("teamMembers").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
+        legacy: () =>
+          ctx.db.query("teamMembers").withIndex("by_tenant", (q) => q.eq("tenantId", undefined)).collect(),
+      })
+    ).filter((m) => m.teamId === args.teamId);
     return { ...team, members };
   },
 });

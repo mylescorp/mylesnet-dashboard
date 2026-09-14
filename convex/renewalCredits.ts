@@ -1,7 +1,9 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { Doc } from "./_generated/dataModel";
 import { requirePlatformAdmin, requirePlatformUser } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
+import { readTenantList } from "./lib/tenant";
 
 export const listRenewalCredits = query({
   args: {
@@ -10,19 +12,8 @@ export const listRenewalCredits = query({
   },
   handler: async (ctx, args) => {
     await requirePlatformUser(ctx);
-    if (args.agentId) {
-      return await ctx.db
-        .query("renewalCredits")
-        .withIndex("by_agent", (q) => q.eq("agentId", args.agentId!))
-        .collect();
-    }
-    if (args.marketId) {
-      return await ctx.db
-        .query("renewalCredits")
-        .withIndex("by_market", (q) => q.eq("marketId", args.marketId!))
-        .collect();
-    }
-    return await ctx.db.query("renewalCredits").collect();
+    const rows = await readTenantList<Doc<"renewalCredits">>(ctx, { all: () => ctx.db.query("renewalCredits").collect(), tenant: (tenantId) => ctx.db.query("renewalCredits").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(), legacy: () => ctx.db.query("renewalCredits").withIndex("by_tenant", (q) => q.eq("tenantId", undefined)).collect() });
+    return rows.filter((row) => (!args.agentId || row.agentId === args.agentId) && (!args.marketId || row.marketId === args.marketId));
   },
 });
 

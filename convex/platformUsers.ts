@@ -5,6 +5,7 @@ import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 import { requirePermission, resolveRoles, resolveUserByIdentity } from "./lib/auth";
 import { workosSlugForRole } from "./lib/permissions";
+import { tenantMembershipStatusFromWorkos } from "./lib/tenantCore";
 import {
   addWorkosOrganizationMembership,
   createWorkosUser,
@@ -295,6 +296,8 @@ export const syncWorkosIdentity = internalMutation({
     email: v.optional(v.string()),
     name: v.optional(v.string()),
     image: v.optional(v.string()),
+    mfaEnrolled: v.optional(v.boolean()),
+    mfaEnrolledAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db
@@ -306,6 +309,8 @@ export const syncWorkosIdentity = internalMutation({
         email: args.email?.toLowerCase() ?? existing.email,
         name: args.name ?? existing.name,
         image: args.image ?? existing.image,
+        mfaEnrolled: args.mfaEnrolled !== undefined ? args.mfaEnrolled : existing.mfaEnrolled,
+        mfaEnrolledAt: args.mfaEnrolledAt ?? existing.mfaEnrolledAt,
         isActive: existing.isActive ?? true,
       });
       return existing._id;
@@ -314,7 +319,12 @@ export const syncWorkosIdentity = internalMutation({
       ? await ctx.db.query("users").withIndex("email", (q) => q.eq("email", args.email!.toLowerCase())).first()
       : null;
     if (byEmail) {
-      await ctx.db.patch(byEmail._id, { workosUserId: args.workosUserId, isActive: byEmail.isActive ?? true });
+      await ctx.db.patch(byEmail._id, {
+        workosUserId: args.workosUserId,
+        mfaEnrolled: args.mfaEnrolled !== undefined ? args.mfaEnrolled : byEmail.mfaEnrolled,
+        mfaEnrolledAt: args.mfaEnrolledAt ?? byEmail.mfaEnrolledAt,
+        isActive: byEmail.isActive ?? true,
+      });
       return byEmail._id;
     }
     return ctx.db.insert("users", {
@@ -322,6 +332,8 @@ export const syncWorkosIdentity = internalMutation({
       email: args.email?.toLowerCase(),
       name: args.name,
       image: args.image,
+      mfaEnrolled: args.mfaEnrolled,
+      mfaEnrolledAt: args.mfaEnrolledAt,
       isActive: true,
     });
   },
@@ -411,6 +423,12 @@ export const recordOrganizationMembership = internalMutation({
     name: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    // Resolve the tenant before persisting the organization cache so a
+    // tenant-org membership carries tenantId from its first write.
+    const tenant = await ctx.db
+      .query("tenants")
+      .withIndex("by_workosOrganizationId", (q) => q.eq("workosOrganizationId", args.organizationId))
+      .first();
     const existing = await ctx.db
       .query("organizationMemberships")
       .withIndex("by_membership", (q) => q.eq("workosMembershipId", args.workosMembershipId))
@@ -432,6 +450,7 @@ export const recordOrganizationMembership = internalMutation({
 
     if (existing) {
       await ctx.db.patch(existing._id, {
+        tenantId: tenant?._id,
         status: args.status,
         roleSlug: args.roleSlug,
         roleId,
@@ -442,6 +461,7 @@ export const recordOrganizationMembership = internalMutation({
         workosMembershipId: args.workosMembershipId,
         workosUserId: args.workosUserId,
         organizationId: args.organizationId,
+        tenantId: tenant?._id,
         roleSlug: args.roleSlug,
         roleId,
         status: args.status,
@@ -449,20 +469,21 @@ export const recordOrganizationMembership = internalMutation({
       });
     }
 
-    // Only manage the local user record for the configured platform org.
+    // Synchronize a local identity for known organization memberships. Tenant
+    // events may create a local identity, but never grant a platform role.
     const platformOrgId = process.env.MYLESNET_PLATFORM_ORG_ID;
-    if (platformOrgId && args.organizationId === platformOrgId) {
-      const userId = await ctx.db
-        .query("users")
-        .withIndex("by_workosUserId", (q) => q.eq("workosUserId", args.workosUserId))
-        .first();
+    let user = await ctx.db
+      .query("users")
+      .withIndex("by_workosUserId", (q) => q.eq("workosUserId", args.workosUserId))
+      .first();
 
-      // Removed accounts stay removed — membership events cannot re-activate them.
-      if (userId && userId.deletedAt !== undefined) {
-        if (args.status === "active") {
-          await ctx.db.patch(userId._id, { isActive: false, deactivatedAt: Date.now() });
-        }
-      } else if (args.status === "active") {
+    // Removed accounts stay removed — membership events cannot re-activate them.
+    if (user && user.deletedAt !== undefined) {
+      if (args.status === "active" && args.organizationId === platformOrgId) {
+        await ctx.db.patch(user._id, { isActive: false, deactivatedAt: Date.now() });
+      }
+    } else if (args.status === "active") {
+      if (args.organizationId === platformOrgId) {
         const patch: Record<string, unknown> = { isActive: true, deactivatedAt: undefined };
         if (roleId) patch.roles = [roleId];
         if (args.roleSlug && PLATFORM_MIRROR_SLUGS.has(args.roleSlug)) {
@@ -470,20 +491,56 @@ export const recordOrganizationMembership = internalMutation({
         }
         if (args.email !== undefined) patch.email = args.email.toLowerCase();
         if (args.name !== undefined) patch.name = args.name;
-        if (userId) {
-          await ctx.db.patch(userId._id, patch);
+        if (user) {
+          await ctx.db.patch(user._id, patch);
         } else {
-          await ctx.db.insert("users", {
+          const createdUserId = await ctx.db.insert("users", {
             workosUserId: args.workosUserId,
             email: args.email?.toLowerCase(),
             name: args.name,
             isActive: true,
             roles: roleId ? [roleId] : undefined,
           });
+          user = await ctx.db.get(createdUserId);
         }
-      } else if (userId) {
-        await ctx.db.patch(userId._id, { isActive: false, deactivatedAt: Date.now() });
+      } else if (!user) {
+        const createdUserId = await ctx.db.insert("users", {
+          workosUserId: args.workosUserId,
+          email: args.email?.toLowerCase(),
+          name: args.name,
+          isActive: true,
+        });
+        user = await ctx.db.get(createdUserId);
       }
+    } else if (user && args.organizationId === platformOrgId) {
+      await ctx.db.patch(user._id, { isActive: false, deactivatedAt: Date.now() });
+    }
+
+    if (!tenant || !user || user.deletedAt !== undefined) return;
+
+    const tenantStatus = tenantMembershipStatusFromWorkos(args.status);
+    const existingTenantMembership = await ctx.db
+      .query("tenantMemberships")
+      .withIndex("by_user_tenant", (q) => q.eq("userId", user!._id).eq("tenantId", tenant._id))
+      .first();
+    if (existingTenantMembership) {
+      await ctx.db.patch(existingTenantMembership._id, {
+        workosMembershipId: args.workosMembershipId,
+        role: args.roleSlug ?? existingTenantMembership.role,
+        status: tenantStatus,
+        joinedAt: tenantStatus === "active" ? existingTenantMembership.joinedAt ?? Date.now() : existingTenantMembership.joinedAt,
+        revokedAt: tenantStatus === "revoked" ? Date.now() : undefined,
+      });
+    } else {
+      await ctx.db.insert("tenantMemberships", {
+        userId: user._id,
+        tenantId: tenant._id,
+        role: args.roleSlug ?? "member",
+        status: tenantStatus,
+        workosMembershipId: args.workosMembershipId,
+        joinedAt: tenantStatus === "active" ? Date.now() : undefined,
+        revokedAt: tenantStatus === "revoked" ? Date.now() : undefined,
+      });
     }
   },
 });

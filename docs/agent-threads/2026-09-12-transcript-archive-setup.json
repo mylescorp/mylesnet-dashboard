@@ -1,0 +1,28 @@
+{
+  "id": "2026-09-12-transcript-archive-setup",
+  "date": "2026-09-12",
+  "agent": "opencode",
+  "model": "big-pickle",
+  "tool": "opencode",
+  "product": "mylesnet",
+  "topic": "Establish agent-thread archive (vault + repo mirror)",
+  "status": "recorded",
+  "outcome": "Established the convention and directories for archiving notable agent sessions (transcripts) in both the vault (products/mylesnet/agent-threads/) and the repo (docs/agent-threads/) as byte-identical mirrors. This session is the seed entry.",
+  "decisions": [
+    "Location: project-scoped mirror - vault products/mylesnet/agent-threads/ <-> repo docs/agent-threads/ (vault canonical).",
+    "Formats: each thread stored as a .md (readable transcript) and a .json structured twin for querying. One thread = one pair.",
+    "Content: verbatim transcript with outcome, decisions, files touched, and open questions as a summary block up top.",
+    "Indexing: dated files YYYY-MM-DD-<slug>.md / .json plus a README.md index (date, slug, topic, agent, status).",
+    "Coverage: notable sessions only - decisions, approvals, audits, investigations. Routine sessions are not archived.",
+    "Discovery: both root AGENTS.md files updated so the convention stays in agent context (vault products/mylesnet/AGENTS.md and repo AGENTS.md).",
+    "Mirror sync: manual copy on each change; a divergence between vault and repo is drift."
+  ],
+  "files": [
+    "vault products/mylesnet/AGENTS.md (folder map, work rules, verification)",
+    "repo AGENTS.md (new Agent threads / transcripts section)",
+    "vault products/mylesnet/agent-threads/README.md, seed .md + .json",
+    "repo docs/agent-threads/README.md, seed .md + .json (byte-identical)"
+  ],
+  "openQuestions": [],
+  "transcript": []
+}

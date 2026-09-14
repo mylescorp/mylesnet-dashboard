@@ -3,67 +3,100 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Menu, X } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { Menu } from "lucide-react";
 import logo from "../assets/logo.png";
+import { ThemeToggle } from "@/app/components/ThemeToggle";
+import { Button } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 
 const NAV_LINKS: { href: string; label: string }[] = [
-  { href: "/features/customer-management", label: "Features" },
-  { href: "/solutions/market-hotspots", label: "Solutions" },
+  { href: "/product", label: "Product" },
+  { href: "/solutions", label: "Solutions" },
   { href: "/pricing", label: "Pricing" },
-  { href: "/resources/how-it-works", label: "How it works" },
-  { href: "/company/about", label: "About" },
+  { href: "/integrations", label: "Integrations" },
+  { href: "/resources", label: "Resources" },
+  { href: "/contact", label: "Contact" },
 ];
 
 export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const pathname = usePathname();
 
   return (
     <header className="landing-header">
       <nav className="landing-nav landing-container" aria-label="Main navigation">
-        <Link className="landing-brand" href="/" onClick={() => setMenuOpen(false)}>
-          <Image className="landing-logo" src={logo} alt="MylesNet" width={170} height={113} priority />
+        <Link className="landing-brand" href="/" aria-label="MylesNet home">
+          <Image className="landing-logo" src={logo} alt="" width={48} height={48} priority />
+          <span className="landing-brand-name">MylesNet</span>
         </Link>
 
         <div className="landing-nav-links">
           {NAV_LINKS.map((link) => (
-            <Link key={link.href} className="landing-nav-link" href={link.href}>
+            <Link
+              key={link.href}
+              className="landing-nav-link"
+              href={link.href}
+              data-active={pathname === link.href || pathname.startsWith(`${link.href}/`) ? "true" : undefined}
+              aria-current={pathname === link.href ? "page" : undefined}
+            >
               {link.label}
             </Link>
           ))}
         </div>
 
         <div className="landing-nav-cta">
-          <Link className="landing-cta-button" href="/get-started">
-            Get started
-          </Link>
+          <ThemeToggle className="landing-theme-toggle" />
+          <Button asChild variant="default" size="default">
+            <Link href="/get-started">Get started</Link>
+          </Button>
         </div>
 
-        <button
-          type="button"
-          className="landing-nav-toggle"
-          aria-expanded={menuOpen}
-          aria-controls="landing-mobile-menu"
-          aria-label={menuOpen ? "Close menu" : "Open menu"}
-          onClick={() => setMenuOpen((open) => !open)}
-        >
-          {menuOpen ? <X size={22} /> : <Menu size={22} />}
-        </button>
+        <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+          <SheetTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="landing-nav-toggle"
+              aria-label="Open menu"
+            >
+              <Menu size={22} />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="right" className="w-80">
+            <SheetHeader>
+              <SheetTitle>Navigation</SheetTitle>
+            </SheetHeader>
+            <nav className="flex flex-col gap-4 mt-8" aria-label="Mobile navigation">
+              {NAV_LINKS.map((link) => (
+                <Link
+                  key={link.href}
+                  className="text-lg font-medium hover:text-primary transition-colors"
+                  href={link.href}
+                  data-active={pathname === link.href || pathname.startsWith(`${link.href}/`) ? "true" : undefined}
+                  onClick={() => setMenuOpen(false)}
+                  aria-current={pathname === link.href ? "page" : undefined}
+                >
+                  {link.label}
+                </Link>
+              ))}
+              <div className="landing-mobile-theme-row">
+                <ThemeToggle className="landing-theme-toggle" />
+                <Button asChild variant="default" className="flex-1" onClick={() => setMenuOpen(false)}>
+                  <Link href="/get-started">Get started</Link>
+                </Button>
+              </div>
+            </nav>
+          </SheetContent>
+        </Sheet>
       </nav>
-
-      {menuOpen ? (
-        <div className="landing-mobile-menu" id="landing-mobile-menu">
-          <div className="landing-mobile-menu-inner landing-container">
-            {NAV_LINKS.map((link) => (
-              <Link key={link.href} className="landing-nav-link" href={link.href} onClick={() => setMenuOpen(false)}>
-                {link.label}
-              </Link>
-            ))}
-            <Link className="landing-cta-button" href="/get-started" onClick={() => setMenuOpen(false)}>
-              Get started
-            </Link>
-          </div>
-        </div>
-      ) : null}
     </header>
   );
 }

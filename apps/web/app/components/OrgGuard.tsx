@@ -7,13 +7,13 @@ import { useEffect, useRef, useState } from "react";
 import { Activity } from "lucide-react";
 
 /**
- * Runs once after login to synchronize an already-authorized identity with
- * the local profile record. New users are automatically added to the platform
- * organization with a default role to enable dashboard access.
+ * Runs once after login to mirror the already-authorized WorkOS organization
+ * membership. Unknown organizations are denied until explicitly provisioned;
+ * the client never auto-adds a user to Platform.
  */
 export function OrgGuard() {
   const { isAuthenticated, isLoading } = useConvexAuth();
-  const ensureOrg = useAction(api.workos.ensureOrgMembership);
+  const syncOrganization = useAction(api.workos.syncActiveOrganizationMembership);
   const completed = useRef(false);
   const attempts = useRef(0);
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -43,10 +43,10 @@ export function OrgGuard() {
       setSyncError(reason);
     };
 
-    ensureOrg()
+    syncOrganization()
       .then((result) => {
         console.log("Organization membership status:", result);
-        if (result.status === "error") {
+        if (result.status === "error" || result.status === "denied") {
           retry(result.reason || "Failed to set up workspace access");
           return;
         }
@@ -66,7 +66,7 @@ export function OrgGuard() {
         retryTimer.current = null;
       }
     };
-  }, [isAuthenticated, isLoading, ensureOrg, retryNonce]);
+  }, [isAuthenticated, isLoading, syncOrganization, retryNonce]);
 
   // Show loading state while syncing organization membership
   if (isSyncing) {

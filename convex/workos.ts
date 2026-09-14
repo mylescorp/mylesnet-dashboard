@@ -75,14 +75,21 @@ function membershipRoleSlug(membership: WorkosMembership): string | undefined {
   return membership.role?.slug ?? membership.roles?.[0]?.slug;
 }
 
-async function getPlatformMembership(workosUserId: string): Promise<WorkosMembership | null> {
+export async function getWorkosOrganizationMembership(
+  organizationId: string,
+  workosUserId: string,
+): Promise<WorkosMembership | null> {
   const payload = (await workosFetch(
     `/user_management/organization_memberships` +
-      `?organization_id=${encodeURIComponent(platformOrganizationId())}` +
+      `?organization_id=${encodeURIComponent(organizationId)}` +
       `&user_id=${encodeURIComponent(workosUserId)}` +
-      `&statuses=active,inactive`,
+      `&statuses=active,inactive,pending`,
   )) as { data?: WorkosMembership[] };
   return payload.data?.[0] ?? null;
+}
+
+async function getPlatformMembership(workosUserId: string): Promise<WorkosMembership | null> {
+  return getWorkosOrganizationMembership(platformOrganizationId(), workosUserId);
 }
 
 /** Update a user's WorkOS role within the configured platform organization. */
@@ -268,6 +275,39 @@ export async function getWorkosUserByEmail(email: string): Promise<string | null
   return first && typeof first.id === "string" ? first.id : null;
 }
 
+export interface WorkosMfaEnrollment {
+  enrolled: boolean;
+  enrolledAt: number | null;
+}
+
+type OrganizationSyncResult =
+  | { status: "unauthenticated" }
+  | { status: "denied"; reason: string }
+  | { status: "synced"; organizationId: string; roleSlug: string; scope: "platform" | "network" | "tenant" }
+  | { status: "error"; reason: string };
+
+/**
+ * Read a user's WorkOS MFA enrollment state. WorkOS account authentication
+ * (AuthKit) is the enrollment point; the app mirrors the result onto the local
+ * `users` row so server guards can enforce mandatory-2FA roles cheaply.
+ */
+export async function getWorkosMfaEnrollment(
+  workosUserId: string,
+): Promise<WorkosMfaEnrollment> {
+  const payload = (await workosFetch(
+    `/user_management/users/${encodeURIComponent(workosUserId)}`,
+  )) as Record<string, unknown>;
+
+  // MFA factors are returned on the user object (`enrolled_factors` /
+  // `totp`/`sms` arrays). Absence of the key means no factors enrolled.
+  const factors = payload.enrolled_factors ?? payload.totp ?? payload.sms;
+  if (Array.isArray(factors) && factors.length > 0) {
+    const now = Date.now();
+    return { enrolled: true, enrolledAt: now };
+  }
+  return { enrolled: false, enrolledAt: null };
+}
+
 /**
  * Ensure a WorkOS user exists for the given email, creating it when missing.
  * Directory-managed users authenticate through the same AuthKit flows.
@@ -344,45 +384,56 @@ export async function setOwnWorkosRole(ctx: ActionCtx, role: WorkosRoleName | st
 }
 
 /**
- * Ensures the authenticated WorkOS user is a member of the MylesNet Platform
- * organization. Called after first login. Idempotent — safe to call repeatedly.
+ * Mirror the authenticated WorkOS organization membership into Convex.
  *
- * New non-owner users are automatically added to the MylesNet Platform org with the
- * member role as a default. This allows new users to access the dashboard
- * after authentication while maintaining security through role-based permissions.
+ * A sign-in proves identity, not authority to add a user to the Platform
+ * organization. This function never creates, reactivates, or repairs a
+ * WorkOS membership; it accepts only Platform, Network, or a persisted tenant
+ * organization mapping.
  */
-export const ensureOrgMembership = action({
+export const syncActiveOrganizationMembership = action({
   args: {},
-  handler: async (ctx) => {
+  handler: async (ctx): Promise<OrganizationSyncResult> => {
     try {
       const identity = await ctx.auth.getUserIdentity();
       if (!identity) {
-        console.log("ensureOrgMembership: Unauthenticated");
+        console.log("syncActiveOrganizationMembership: Unauthenticated");
         return { status: "unauthenticated" as const };
       }
 
-      const platformOrgId = platformOrganizationId();
-      let membership = await getPlatformMembership(identity.subject);
-      let status: "already_member" | "added_member" = "already_member";
-
-      if (!membership) {
-        membership = await addWorkosOrganizationMembership(platformOrgId, identity.subject, "member");
-        status = "added_member";
-      } else if (membership.status !== "active") {
-        await reactivateWorkosMembership(identity.subject);
-        membership = await getPlatformMembership(identity.subject);
-        if (!membership) throw new Error("WorkOS did not return the reactivated membership");
+      const organizationId = typeof identity.organizationId === "string" ? identity.organizationId : undefined;
+      if (!organizationId) {
+        return { status: "denied" as const, reason: "No active WorkOS organization claim" };
+      }
+      const scope = await ctx.runQuery(internal.tenantMigrations.getKnownOrganizationScope, {
+        organizationId,
+      });
+      if (scope.kind === "unknown") {
+        return { status: "denied" as const, reason: "WorkOS organization is not provisioned for MylesNet" };
+      }
+      const membership = await getWorkosOrganizationMembership(organizationId, identity.subject);
+      if (!membership || membership.status !== "active") {
+        return { status: "denied" as const, reason: "Active WorkOS organization membership required" };
+      }
+      const roleSlug = membershipRoleSlug(membership);
+      if (!roleSlug) {
+        return { status: "denied" as const, reason: "WorkOS organization membership has no role" };
       }
 
-      // Memberships without a role are an invalid state. Repair only the empty
-      // assignment; never downgrade a role selected by an administrator.
-      let roleSlug = membershipRoleSlug(membership);
-      if (!roleSlug) {
-        await setWorkosUserRole(identity.subject, "member");
-        membership = await getPlatformMembership(identity.subject);
-        if (!membership) throw new Error("WorkOS did not return the role-updated membership");
-        roleSlug = membershipRoleSlug(membership);
-        if (!roleSlug) throw new Error("WorkOS did not assign the default member role");
+      // Mirror MFA enrollment for the mandatory-2FA role policy (lib/mfa).
+      // Best effort: a transient WorkOS read must never block workspace access.
+      let mfaEnrolled: boolean | undefined;
+      let mfaEnrolledAt: number | undefined;
+      try {
+        const mfa = await getWorkosMfaEnrollment(identity.subject);
+        if (mfa.enrolled) {
+          mfaEnrolled = true;
+          mfaEnrolledAt = mfa.enrolledAt ?? Date.now();
+        } else {
+          mfaEnrolled = false;
+        }
+      } catch (error) {
+        console.warn("syncActiveOrganizationMembership: MFA enrollment read skipped:", error);
       }
 
       await ctx.runMutation(internal.platformUsers.syncWorkosIdentity, {
@@ -390,19 +441,21 @@ export const ensureOrgMembership = action({
         email: identity.email,
         name: typeof identity.name === "string" ? identity.name : undefined,
         image: typeof identity.picture === "string" ? identity.picture : undefined,
+        mfaEnrolled,
+        mfaEnrolledAt,
       });
       await ctx.runMutation(internal.platformUsers.recordOrganizationMembership, {
         workosMembershipId: membership.id,
         workosUserId: identity.subject,
-        organizationId: platformOrgId,
+        organizationId,
         roleSlug,
-        status: membership.status === "inactive" ? "inactive" : membership.status === "pending" ? "pending" : "active",
+        status: "active",
         email: identity.email,
         name: typeof identity.name === "string" ? identity.name : undefined,
       });
-      return { status, organizationId: platformOrgId, roleSlug };
+      return { status: "synced" as const, organizationId, roleSlug, scope: scope.kind };
     } catch (error) {
-      console.error("ensureOrgMembership: Organization membership error:", error);
+      console.error("syncActiveOrganizationMembership: Organization membership error:", error);
       const errorMessage = error instanceof Error ? error.message : String(error);
       return { status: "error" as const, reason: `Identity synchronization failed: ${errorMessage}` };
     }

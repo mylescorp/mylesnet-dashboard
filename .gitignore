@@ -55,3 +55,7 @@ yarn-error.log*
 # runtime artifacts
 landingserver.log
 collector/.executed-commands.json
+
+# agent scratch + local logs
+.zcode/
+*.log

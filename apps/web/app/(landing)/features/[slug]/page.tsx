@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
 import { features } from "../../content/pages";
+import { pageMetadata } from "../../content/seo";
 import { Icon } from "../../components/LandingIcon";
 
 export function generateStaticParams() {
@@ -13,10 +14,9 @@ export function generateMetadata({ params }: { params: Promise<{ slug: string }>
   return params.then(({ slug }) => {
     const feature = features.find((f) => f.slug === slug);
     if (!feature) return {};
-    return {
-      title: feature.title,
-      description: feature.summary,
-    };
+    return pageMetadata(feature.title, feature.summary, {
+      canonical: `/features/${feature.slug}`,
+    });
   });
 }
 

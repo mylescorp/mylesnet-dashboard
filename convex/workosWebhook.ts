@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { internalMutation } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 
 type EventPayload = Record<string, unknown>;
@@ -70,6 +70,60 @@ export const logWorkosDelivery = internalMutation({
   },
 });
 
+export const getQueuedWorkosEvent = internalQuery({
+  args: { deliveryId: v.id("workosWebhookEvents") },
+  handler: async (ctx, args) => ctx.db.get(args.deliveryId),
+});
+
+/** Persist before scheduling. Re-deliveries are harmlessly deduplicated. */
+export const enqueueWorkosEvent = internalMutation({
+  args: { eventId: v.string(), event: v.string(), data: v.any() },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("workosWebhookEvents")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .first();
+    if (existing) return { deliveryId: existing._id, duplicate: true };
+    const deliveryId = await ctx.db.insert("workosWebhookEvents", {
+      eventId: args.eventId,
+      eventType: args.event,
+      data: args.data,
+      status: "received",
+      attempts: 0,
+      receivedAt: Date.now(),
+    });
+    await ctx.scheduler.runAfter(0, internal.workosWebhook.processQueuedWorkosEvent, { deliveryId });
+    return { deliveryId, duplicate: false };
+  },
+});
+
+export const markQueuedWorkosEvent = internalMutation({
+  args: {
+    deliveryId: v.id("workosWebhookEvents"),
+    status: v.union(v.literal("completed"), v.literal("retry"), v.literal("quarantined")),
+    reason: v.optional(v.string()),
+    nextAttemptAt: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const delivery = await ctx.db.get(args.deliveryId);
+    if (!delivery) return;
+    await ctx.db.patch(args.deliveryId, {
+      status: args.status,
+      attempts: delivery.attempts + 1,
+      processedAt: args.status === "completed" || args.status === "quarantined" ? Date.now() : undefined,
+      nextAttemptAt: args.nextAttemptAt,
+      reason: args.reason,
+    });
+  },
+});
+
+async function organizationIsKnown(ctx: { db: { query: (table: "tenants") => any } }, organizationId: string): Promise<boolean> {
+  if (organizationId === process.env.MYLESNET_PLATFORM_ORG_ID || organizationId === process.env.MYLESNET_NETWORK_ORG_ID) return true;
+  return !!(await ctx.db.query("tenants")
+    .withIndex("by_workosOrganizationId", (q: any) => q.eq("workosOrganizationId", organizationId))
+    .first());
+}
+
 export const processWorkosEvent = internalMutation({
   args: {
     event: v.string(),
@@ -122,6 +176,9 @@ export const processWorkosEvent = internalMutation({
       if (!membershipId || !organizationId || !workosUserId) {
         return { handled: false, reason: "malformed_membership" };
       }
+      if (!(await organizationIsKnown(ctx, organizationId))) {
+        return { handled: false, reason: "unknown_organization" };
+      }
       await ctx.runMutation(internal.platformUsers.recordOrganizationMembership, {
         workosMembershipId: membershipId,
         workosUserId,
@@ -151,6 +208,21 @@ export const processWorkosEvent = internalMutation({
         if (user && platformOrgId && membership.organizationId === platformOrgId) {
           await ctx.db.patch(user._id, { isActive: false, deactivatedAt: Date.now() });
         }
+        // A deleted tenant-org membership must revoke the local tenant grant
+        // too; otherwise a WorkOS removal leaves a live Convex authorization.
+        const tenant = await ctx.db
+          .query("tenants")
+          .withIndex("by_workosOrganizationId", (q) => q.eq("workosOrganizationId", membership.organizationId))
+          .first();
+        if (tenant && user) {
+          const tenantMembership = await ctx.db
+            .query("tenantMemberships")
+            .withIndex("by_user_tenant", (q) => q.eq("userId", user._id).eq("tenantId", tenant._id))
+            .first();
+          if (tenantMembership) {
+            await ctx.db.patch(tenantMembership._id, { status: "revoked", revokedAt: Date.now() });
+          }
+        }
       }
       return { handled: true, event: args.event };
     }
@@ -162,6 +234,9 @@ export const processWorkosEvent = internalMutation({
       const organizationId = pickString(payload, ["organization_id", "organizationId"]);
       const roleSlug = pickString(payload, ["role_slug", "roleSlug"]);
       if (!invitationId) return { handled: false, reason: "missing_invitation_id" };
+      if (organizationId && !(await organizationIsKnown(ctx, organizationId))) {
+        return { handled: false, reason: "unknown_organization" };
+      }
       const existing = await ctx.db
         .query("invitations")
         .withIndex("by_workosId", (q) => q.eq("workosInvitationId", invitationId))
@@ -192,5 +267,44 @@ export const processWorkosEvent = internalMutation({
     }
 
     return { handled: false, reason: "unsupported_event" };
+  },
+});
+
+/** Run after the HTTP handler has durably acknowledged the WorkOS delivery. */
+export const processQueuedWorkosEvent = internalAction({
+  args: { deliveryId: v.id("workosWebhookEvents") },
+  handler: async (ctx, args) => {
+    const delivery = await ctx.runQuery(internal.workosWebhook.getQueuedWorkosEvent, args);
+    if (!delivery || delivery.status === "completed" || delivery.status === "quarantined") return;
+    try {
+      const result = await ctx.runMutation(internal.workosWebhook.processWorkosEvent, {
+        event: delivery.eventType,
+        data: delivery.data,
+      }) as { handled?: boolean; reason?: string };
+      if (result.handled) {
+        await ctx.runMutation(internal.workosWebhook.markQueuedWorkosEvent, { deliveryId: args.deliveryId, status: "completed" });
+      } else {
+        await ctx.runMutation(internal.workosWebhook.markQueuedWorkosEvent, {
+          deliveryId: args.deliveryId,
+          status: "quarantined",
+          reason: result.reason ?? "unhandled_event",
+        });
+      }
+    } catch (error) {
+      const attempts = delivery.attempts + 1;
+      const reason = error instanceof Error ? error.message.slice(0, 240) : "processing_failed";
+      if (attempts >= 5) {
+        await ctx.runMutation(internal.workosWebhook.markQueuedWorkosEvent, { deliveryId: args.deliveryId, status: "quarantined", reason });
+        return;
+      }
+      const delayMs = Math.min(60_000, 1_000 * 2 ** attempts);
+      await ctx.runMutation(internal.workosWebhook.markQueuedWorkosEvent, {
+        deliveryId: args.deliveryId,
+        status: "retry",
+        reason,
+        nextAttemptAt: Date.now() + delayMs,
+      });
+      await ctx.scheduler.runAfter(delayMs, internal.workosWebhook.processQueuedWorkosEvent, args);
+    }
   },
 });

@@ -5,8 +5,10 @@ const appRoot = join(process.cwd(), "app");
 const allowedFiles = new Set(["app/design/tokens.ts"]);
 const sourceExtensions = new Set([".ts", ".tsx"]);
 const rawColorPattern = /#[0-9a-fA-F]{3,8}\b|\b(?:rgb|rgba|hsl|hsla)\(/g;
+const tailwindPalettePattern = /(?:^|[\s"'`])(?:bg|text|border|ring|outline|fill|stroke)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|white|black)(?:-[\w/]+)?\b/g;
 const globalsCssPath = join(process.cwd(), "app", "globals.css");
-const externalVars = new Set(["--font-geist-sans", "--font-geist-mono"]);
+const externalVars = new Set(["--font-inter", "--font-jetbrains-mono", "--font-bricolage-grotesque", "--font-hanken-grotesk"]);
+const landingCssPath = join(process.cwd(), "app", "(landing)", "landing.css");
 
 async function sourceFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -21,14 +23,19 @@ async function sourceFiles(directory) {
 const violations = [];
 const report = (message) => violations.push(message);
 
-// ---- 1. Application TypeScript: no literal colour values ----
-for (const file of await sourceFiles(appRoot)) {
+// ---- 1. Application TypeScript: no literal colour values or Tailwind palette utilities ----
+const applicationRoots = [appRoot, join(process.cwd(), "components")];
+for (const root of applicationRoots) for (const file of await sourceFiles(root)) {
   const relativePath = relative(process.cwd(), file).replaceAll("\\", "/");
   if (allowedFiles.has(relativePath)) continue;
   const source = await readFile(file, "utf8");
   for (const match of source.matchAll(rawColorPattern)) {
     const line = source.slice(0, match.index).split("\n").length;
     report(`${relativePath}:${line} uses ${match[0]}`);
+  }
+  for (const match of source.matchAll(tailwindPalettePattern)) {
+    const line = source.slice(0, match.index).split("\n").length;
+    report(`${relativePath}:${line} uses raw Tailwind palette utility ${match[0].trim()}`);
   }
 }
 
@@ -71,6 +78,58 @@ for (const match of css.matchAll(varPattern)) {
   report(`globals.css:${line} references var(${name}) which is never defined`);
 }
 
+// ---- 3b. Landing CSS: raw colour values only inside `:root` token blocks ----
+async function cssFiles(directory) {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const files = await Promise.all(entries.map(async (entry) => {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) return cssFiles(path);
+    return path.endsWith(".css") ? [path] : [];
+  }));
+  return files.flat();
+}
+
+const rootTokenBlocks = (cssText) => {
+  const blocks = [];
+  const re = /:root\s*\{/g;
+  let match;
+  while ((match = re.exec(cssText))) {
+    let depth = 0;
+    let i = match.index;
+    for (; i < cssText.length; i += 1) {
+      if (cssText[i] === "{") depth += 1;
+      else if (cssText[i] === "}") {
+        depth -= 1;
+        if (depth === 0) break;
+      }
+    }
+    blocks.push([match.index, i + 1]);
+  }
+  return blocks;
+};
+
+const colorOutsideTokenBlock = (cssText) => {
+  const blocks = rootTokenBlocks(cssText);
+  const rawInRule = /#[0-9a-fA-F]{3,8}\b|\b(?:rgb|rgba|hsl|hsla)\(/g;
+  const hits = [];
+  for (const match of cssText.matchAll(rawInRule)) {
+    const abs = match.index;
+    if (blocks.some(([start, end]) => abs >= start && abs < end)) continue;
+    hits.push(match);
+  }
+  return hits;
+};
+
+const landingCssRoot = join(process.cwd(), "app", "(landing)");
+for (const file of await cssFiles(landingCssRoot)) {
+  const relativePath = relative(process.cwd(), file).replaceAll("\\", "/");
+  const landingCss = await readFile(file, "utf8");
+  for (const match of colorOutsideTokenBlock(landingCss)) {
+    const line = landingCss.slice(0, match.index).split("\n").length;
+    report(`${relativePath}:${line} uses ${match[0]} outside a :root token block`);
+  }
+}
+
 // ---- Result ----
 if (violations.length > 0) {
   console.error("Design token violations:");
@@ -78,6 +137,52 @@ if (violations.length > 0) {
   process.exitCode = 1;
 } else {
   console.log(
-    "Design token check passed: no raw colour values in application TypeScript or rule CSS, and no undefined custom properties in globals.css."
+    "Design token check passed: no raw colour values or Tailwind palette utilities in application TypeScript, no undefined custom properties in globals.css, and no raw colour values outside :root token blocks in app/(landing)/ CSS."
   );
 }
+
+// ---- 4. Landing.css demolition manifest (REPORT-ONLY) ----
+const landingCssClasses = [
+  // Phase 2: Partially migrated (retained for page-level usage)
+  "landing-cta-button",
+  // Phase 3: Slated for migration
+  "landing-card",
+  "landing-bento-card",
+  "landing-solution-card",
+  "landing-plan-card",
+  "landing-stat-card",
+  "landing-process-step",
+  "landing-trust-card",
+  "landing-attribute-chip",
+  "landing-audience-pill",
+  "landing-plan-badge",
+  "landing-section-kicker",
+  "landing-nav-link",
+  "landing-cta-band",
+  "landing-prose",
+  "landing-preview-wrap",
+  "landing-preview",
+  "landing-preview-body",
+  "landing-int-tiles",
+  "landing-legend",
+  "landing-roadmap",
+  "landing-how-steps",
+];
+
+console.log("\n=== Landing.css demolition manifest (REPORT-ONLY) ===");
+console.log("Phase 2 (MIGRATED/DELETED):");
+console.log("  - .landing-status-chip → shadcn Badge");
+console.log("  - .landing-pricing-switch → shadcn Select");
+console.log("  - .landing-nav-toggle → shadcn Sheet trigger");
+console.log("  - .landing-mobile-menu → shadcn Sheet content");
+console.log("\nPhase 2 (RETAINED for page-level usage):");
+console.log("  - .landing-cta-button (CTA band styling)");
+console.log("\nPhase 3 Batch 1 (MIGRATED/DELETED):");
+console.log("  - .landing-text-link → shadcn Button (link variant)");
+console.log("  - .landing-secondary-button → shadcn Button (outline variant)");
+console.log("  - .landing-faq → shadcn Accordion");
+console.log("\nPhase 3 (SLATED for migration):");
+for (const className of landingCssClasses) {
+  console.log(`  - .${className}`);
+}
+console.log("=== End demolition manifest ===\n");

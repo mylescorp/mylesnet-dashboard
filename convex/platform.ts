@@ -1,5 +1,7 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
+import { Id } from "./_generated/dataModel";
+import { listAuditLog as readAuditLog } from "./lib/auditLog";
 import {
   isPlatformUser,
   permissionsOf,
@@ -7,6 +9,7 @@ import {
   resolveRoles,
   resolveUserByIdentity,
 } from "./lib/auth";
+import { MANDATORY_MFA_ROLES } from "./lib/mfa";
 
 /**
  * Returns the current authenticated platform user's role, permissions and
@@ -28,6 +31,10 @@ export const getCurrentPlatformUser = query({
       email: user.email,
       phone: user.phone,
       image: user.image,
+      // A remote image is only rendered by the client when this Convex
+      // storage reference is present. WorkOS profile image URLs are treated
+      // as untrusted display data and fall back to initials instead.
+      avatarStorageId: user.avatarStorageId ?? null,
       jobTitle: user.jobTitle,
       platformRole: user.platformRole ?? null,
       isPlatform: isPlatformUser(roles),
@@ -73,96 +80,114 @@ export const listAuditLog = query({
   },
 });
 
-/** KPI cards for /platform — all driven by real Convex queries, no placeholders. */
-export const getPlatformDashboardMetrics = query({
-  args: { yearMonth: v.optional(v.string()) },
+/** Read-only, paginated audit log view for /platform/audit. */
+export const listAuditLogPage = query({
+  args: {
+    entityTable: v.optional(v.string()),
+    limit: v.optional(v.number()),
+    cursor: v.optional(v.nullable(v.string())),
+  },
   handler: async (ctx, args) => {
     await requirePlatformUser(ctx);
+    return readAuditLog(ctx, {
+      entityTable: args.entityTable,
+      limit: args.limit,
+      cursor: args.cursor ?? null,
+    });
+  },
+});
 
-    const currentYearMonth =
-      args.yearMonth ??
-      (() => {
-        const now = new Date();
-        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-      })();
-
-    const [openAlerts, activeMarkets, pendingOffboard, awaitingApproval] = await Promise.all([
-      ctx.db
-        .query("alerts")
-        .withIndex("by_status", (q) => q.eq("alertStatus", "open"))
-        .collect(),
-      ctx.db
-        .query("markets")
-        .filter((q) =>
-          q.and(
-            q.eq(q.field("lifecycleStatus"), "active"),
-            q.neq(q.field("status"), "deleted")
-          )
-        )
-        .collect(),
-      ctx.db
-        .query("agents")
-        .filter((q) =>
-          q.and(
-            q.eq(q.field("lifecycleStatus"), "terminated"),
-            q.eq(q.field("status"), "deleted"),
-            q.eq(q.field("deleteReason"), "Offboarded")
-          )
-        )
-        .collect(),
-      ctx.db
-        .query("commissions")
-        .withIndex("by_status", (q) => q.eq("payoutStatus", "requested"))
-        .collect(),
+/**
+ * Single platform-security snapshot for /platform/security: tenant identity
+ * coverage, staff MFA posture, WorkOS webhook queue + delivery health, and
+ * current feature-flag states. All counts are bounded to small reads.
+ */
+export const getPlatformSecurityOverview = query({
+  args: {},
+  handler: async (ctx) => {
+    const actor = await requirePlatformUser(ctx);
+    const [tenants, users, roles, workosEvents, deliveries, featureFlagRows] = await Promise.all([
+      ctx.db.query("tenants").collect(),
+      ctx.db.query("users").collect(),
+      ctx.db.query("roles").collect(),
+      ctx.db.query("workosWebhookEvents").collect(),
+      ctx.db.query("webhookDeliveryLog").withIndex("by_receivedAt").order("desc").take(300),
+      ctx.db.query("featureFlags").collect(),
     ]);
 
-    const missingCostMarkets: Array<{ marketId: string; name: string }> = [];
-    for (const market of activeMarkets) {
-      const costEntry = await ctx.db
-        .query("marketOperatingCosts")
-        .withIndex("by_market_month", (q) =>
-          q.eq("marketId", market._id).eq("yearMonth", currentYearMonth)
-        )
-        .first();
-      if (!costEntry) {
-        missingCostMarkets.push({ marketId: market._id, name: market.name });
-      }
+    const staff: Array<{
+      userId: Id<"users">;
+      name: string | null;
+      email: string | null;
+      roles: string[];
+      mandatoryMfa: boolean;
+      mfaEnrolled: boolean;
+      mfaEnrolledAt: number | null;
+      compliance: "compliant" | "missing_mfa" | "n/a";
+    }> = [];
+    for (const user of users) {
+      if (user.deletedAt !== undefined) continue;
+      const resolved = await resolveRoles(ctx, user);
+      if (!isPlatformUser(resolved)) continue;
+      const mandatoryMfa = resolved.some((role) => (MANDATORY_MFA_ROLES as readonly string[]).includes(role.slug));
+      const enrolled = user.mfaEnrolled === true;
+      staff.push({
+        userId: user._id,
+        name: user.name ?? null,
+        email: user.email ?? null,
+        roles: resolved.map((role) => role.slug),
+        mandatoryMfa,
+        mfaEnrolled: enrolled,
+        mfaEnrolledAt: user.mfaEnrolledAt ?? null,
+        compliance: mandatoryMfa ? (enrolled ? "compliant" : "missing_mfa") : "n/a",
+      });
     }
 
-    const unstaffedMarkets: string[] = [];
-    for (const market of activeMarkets) {
-      const hasActiveAgent = await ctx.db
-        .query("agentMarketAssignments")
-        .withIndex("by_market", (q) => q.eq("marketId", market._id))
-        .filter((q) => q.eq(q.field("assignmentStatus"), "active"))
-        .first();
-      if (!hasActiveAgent) {
-        unstaffedMarkets.push(market._id);
-      }
+    const eventStatusCounts = { received: 0, completed: 0, retry: 0, quarantined: 0 };
+    for (const event of workosEvents) {
+      if (event.status in eventStatusCounts) eventStatusCounts[event.status] += 1;
     }
 
-    const activeProspects = await ctx.db
-      .query("marketProspects")
-      .filter((q) =>
-        q.and(
-          q.neq(q.field("pipelineStatus"), "live"),
-          q.eq(q.field("deletedAt"), undefined)
-        )
-      )
-      .collect();
+    const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    const deliveries24h = deliveries.filter((delivery) => now - delivery.receivedAt <= dayMs);
+
+    // The platform panel owns the featureFlags table. Do not read the legacy
+    // system_settings booleans here: they neither represent percentage/
+    // tenant rollouts nor reflect changes made through /platform/feature-flags.
+    const featureFlags = Object.fromEntries(
+      featureFlagRows.map((flag) => [flag.key, flag.enabled]),
+    );
 
     return {
-      openAlerts: openAlerts.length,
-      activeMarkets: activeMarkets.length,
-      pendingOffboard: pendingOffboard.length,
-      awaitingApproval: awaitingApproval.length,
-      missingCostMarkets: missingCostMarkets.map((m) => ({
-        marketId: m.marketId,
-        name: m.name,
-        yearMonth: currentYearMonth,
-      })),
-      unstaffedMarkets: unstaffedMarkets.length,
-      activeProspects: activeProspects.length,
+      tenantOverview: {
+        total: tenants.length,
+        active: tenants.filter((tenant) => tenant.status === "active").length,
+        trial: tenants.filter((tenant) => tenant.status === "trial").length,
+        suspended: tenants.filter((tenant) => tenant.status === "suspended").length,
+        cancelled: tenants.filter((tenant) => tenant.status === "cancelled").length,
+        identityMapped: tenants.filter((tenant) => tenant.workosOrganizationId !== undefined).length,
+      },
+      staff,
+      staffMissingMfa: staff.filter((entry) => entry.mandatoryMfa && !entry.mfaEnrolled).length,
+      workosEvents: eventStatusCounts,
+      deliveries24h: {
+        total: deliveries24h.length,
+        processed: deliveries24h.filter((delivery) => delivery.processed).length,
+        signatureInvalid: deliveries24h.filter((delivery) => !delivery.signatureValid).length,
+      },
+      featureFlags,
+      currentUserId: actor._id,
     };
+  },
+});
+
+/** Distinct entity types present in recent audit entries, for the /platform/audit filter. Bounded to a recent sample so the filter never drifts from what writers actually emit. */
+export const listAuditEntityTables = query({
+  args: {},
+  handler: async (ctx) => {
+    await requirePlatformUser(ctx);
+    const recent = await ctx.db.query("auditLog").order("desc").take(2000);
+    return Array.from(new Set(recent.map((entry) => entry.entityTable))).sort();
   },
 });

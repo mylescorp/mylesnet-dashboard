@@ -1,154 +1,84 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import { useAction, useConvexAuth, useQuery } from "@/app/lib/convex";
-import { api } from "@/convex/_generated/api";
-import Sidebar from "./Sidebar";
-import { UnifiedTopbar } from "./UnifiedTopbar";
+import { useAuth } from "@workos-inc/authkit-nextjs/components";
+import { Activity, Building2, CreditCard, Cpu, Flag, LayoutDashboard, LogOut, Menu, ScrollText, ServerCog, ShieldCheck, TicketCheck, Users, UsersRound, X } from "lucide-react";
+import { useConvexAuth } from "@/app/lib/convex";
 import { UserProfileProvider, useUserProfile } from "./UserProfileContext";
-import { canAccess, findNavEntry } from "./nav";
-import { ShieldPlus } from "lucide-react";
+import { ThemeToggle } from "./ThemeToggle";
 
-function ClaimOwnerScreen() {
-  const claimOwner = useAction(api.bootstrap.claimPlatformOwner);
-  const [claiming, setClaiming] = useState(false);
-  const [claimMessage, setClaimMessage] = useState<string | null>(null);
+const tenantLinks = [
+  { href: "/dashboard", label: "Tenant workspace", icon: LayoutDashboard },
+  { href: "/admin", label: "Tenant admin", icon: UsersRound },
+];
 
-  const handleClaim = async () => {
-    setClaiming(true);
-    setClaimMessage(null);
-    try {
-      await claimOwner();
-      setClaimMessage("You are now the platform owner. Welcome.");
-      setTimeout(() => window.location.reload(), 1100);
-    } catch (error) {
-      setClaimMessage(error instanceof Error ? error.message : "Could not claim the owner role.");
-    } finally {
-      setClaiming(false);
-    }
-  };
+const platformLinks = [
+  { href: "/platform", label: "Overview", icon: Activity, exact: true },
+  { href: "/platform/tenants", label: "Tenants", icon: Building2 },
+  { href: "/platform/subscriptions", label: "Subscriptions", icon: CreditCard },
+  { href: "/platform/access", label: "Access & roles", icon: Users },
+  { href: "/platform/audit", label: "Audit log", icon: ScrollText },
+  { href: "/platform/security", label: "Security", icon: ShieldCheck },
+  { href: "/platform/provisioning", label: "Provisioning", icon: ServerCog },
+  { href: "/platform/infrastructure/devices", label: "Device fleet", icon: Cpu },
+  { href: "/platform/vouchers/monitor", label: "Voucher monitor", icon: TicketCheck },
+  { href: "/platform/feature-flags", label: "Feature flags", icon: Flag },
+];
+
+function isLinkActive(pathname: string, href: string, exact?: boolean) {
+  return exact ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function ProductNavigation({ onNavigate }: { onNavigate?: () => void }) {
+  const pathname = usePathname();
+  const { user } = useUserProfile();
+  const showPlatformSurface = user?.isPlatform === true;
 
   return (
-    <div className="platform-standalone">
-      <div className="platform-card">
-        <p className="eyebrow">First-time platform setup</p>
-        <h1 className="page-title">Claim the Master Admin panel</h1>
-        <p className="page-subtitle">
-          No platform owner is registered yet. Claim the owner role to unlock the Master
-          Admin panel for your account. This can only be done once.
-        </p>
-        <button type="button" className="primary-button" onClick={handleClaim} disabled={claiming}>
-          <ShieldPlus aria-hidden="true" size={18} />
-          {claiming ? "Claiming…" : "Claim owner role"}
-        </button>
-        {claimMessage && (
-          <p
-            className={`platform-claim-message ${claimMessage.startsWith("You are") ? "ok" : ""}`}
-            role="status"
-            style={{ marginTop: 16 }}
-          >
-            {claimMessage}
-          </p>
-        )}
-      </div>
-    </div>
+    <nav className="product-nav" aria-label="MylesNet product navigation">
+      <p className="product-nav-section">Core</p>
+      <Link href="/platform" className={showPlatformSurface && pathname === "/platform" ? "product-nav-link" : isLinkActive(pathname, "/platform") ? "product-nav-link product-nav-link-active" : "product-nav-link"} onClick={onNavigate}>
+        <ShieldCheck size={17} aria-hidden="true" /><span>Platform</span>
+      </Link>
+      {showPlatformSurface ? (
+        <div className="product-nav-sub" role="group" aria-label="Platform control plane">
+          {platformLinks.map(({ href, label, icon: Icon, exact }) => (
+            <Link key={href} href={href} className={isLinkActive(pathname, href, exact) ? "product-nav-sub-link product-nav-sub-link-active" : "product-nav-sub-link"} onClick={onNavigate}>
+              <Icon size={15} aria-hidden="true" /><span>{label}</span>
+            </Link>
+          ))}
+        </div>
+      ) : null}
+      <p className="product-nav-section">Tenant</p>
+      {tenantLinks.map(({ href, label, icon: Icon }) => (
+        <Link key={href} href={href} className={isLinkActive(pathname, href) ? "product-nav-link product-nav-link-active" : "product-nav-link"} onClick={onNavigate}>
+          <Icon size={17} aria-hidden="true" /><span>{label}</span>
+        </Link>
+      ))}
+    </nav>
   );
 }
 
-function UnifiedShellContent({ children }: { children: ReactNode }) {
+function ProductShellContent({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { signOut } = useAuth();
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
-
-  const isSignin = pathname === "/signin";
-  const isNoAccess = pathname === "/no-access";
-
   const { user, isLoading: userLoading } = useUserProfile();
-  const claimStatus = useQuery(api.bootstrap.ownerClaimStatus, {});
-  const [delayed, setDelayed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const isPublic = pathname === "/signin" || pathname === "/no-access";
 
   useEffect(() => {
-    const t = setTimeout(() => setDelayed(true), 300);
-    return () => clearTimeout(t);
-  }, []);
+    if (!isPublic && !authLoading && !isAuthenticated) router.replace("/signin");
+  }, [authLoading, isAuthenticated, isPublic, router]);
 
-  // A newly authenticated user has no local profile for a short time while
-  // OrgGuard creates its WorkOS membership and Convex record. Do not start a
-  // second sign-in flow during that window: it can replace the PKCE cookie
-  // needed by the callback that is still completing.
-  const profileProvisioning = !authLoading && isAuthenticated && user === null;
+  if (isPublic) return <>{children}</>;
+  if (authLoading || userLoading || !user) return <div className="product-loading"><div className="loading-panel workspace-card">Loading MylesNet workspace…</div></div>;
 
-  // Redirect only when AuthKit itself says the visitor is unauthenticated.
-  useEffect(() => {
-    if (!isSignin && !isNoAccess && delayed && !authLoading && !isAuthenticated && !userLoading && user === null) {
-      router.replace("/signin");
-    }
-  }, [isSignin, isNoAccess, delayed, authLoading, isAuthenticated, userLoading, user, router]);
-
-  const profileReady = user !== undefined;
-  const entry = findNavEntry(pathname);
-  const denied = profileReady && !!user && !!entry && !canAccess(user.permissions ?? [], entry.item);
-
-  // Handle role-gated route access (fail closed, friendly redirect)
-  useEffect(() => {
-    if (!isSignin && !isNoAccess && profileReady && denied) {
-      router.replace("/no-access");
-    }
-  }, [isSignin, isNoAccess, profileReady, denied, router]);
-
-  const canClaimFirstOwner =
-    !userLoading && user && !user.isPlatform && pathname === "/dashboard" && claimStatus && !claimStatus.ownerExists;
-
-  // Render children directly on sign-in page
-  if (isSignin) {
-    return <>{children}</>;
-  }
-
-  // Show loading state while user profile is being synced
-  if (userLoading || profileProvisioning) {
-    return (
-      <div className="app-shell">
-        <div className="app-content">
-          <main className="app-main">
-            <div className="workspace-page">
-              <div className="loading-panel workspace-card">
-                <p>{profileProvisioning ? "Setting up your workspace access…" : "Loading your profile…"}</p>
-              </div>
-            </div>
-          </main>
-        </div>
-      </div>
-    );
-  }
-
-  // Handle owner claim screen for first owner
-  if (canClaimFirstOwner) {
-    return <ClaimOwnerScreen />;
-  }
-
-  return (
-    <div className="app-shell">
-      {/* Single Main Master Sidebar */}
-      <Sidebar />
-
-      {/* Main Content Area */}
-      <div className="app-content">
-        {/* Unified Professional Topbar with User Profile Dropdown */}
-        <UnifiedTopbar />
-
-        {/* Page Content */}
-        <main className="app-main">{children}</main>
-      </div>
-    </div>
-  );
+  const leave = async () => { await signOut({ returnTo: window.location.origin }); router.replace("/signin"); };
+  return <div className="product-shell"><header className="product-header"><Link href="/dashboard" className="product-brand" aria-label="MylesNet home"><span className="product-brand-mark">M</span><span>MylesNet</span></Link><button type="button" className="product-menu-button" onClick={() => setMobileOpen(true)} aria-label="Open navigation"><Menu size={20} /></button><div className="product-header-actions"><span className="product-user-label">{user.name || user.email || "Workspace user"}</span><ThemeToggle /><button type="button" className="product-signout" onClick={() => void leave()}><LogOut size={16} aria-hidden="true" />Sign out</button></div></header><div className="product-body"><aside className="product-sidebar"><ProductNavigation /></aside><main className="product-main">{children}</main></div>{mobileOpen ? <div className="product-mobile-overlay" role="presentation" onMouseDown={() => setMobileOpen(false)}><aside className="product-mobile-panel" onMouseDown={(event) => event.stopPropagation()}><div className="product-mobile-head"><strong>MylesNet</strong><button type="button" onClick={() => setMobileOpen(false)} aria-label="Close navigation"><X size={19} /></button></div><ProductNavigation onNavigate={() => setMobileOpen(false)} /></aside></div> : null}</div>;
 }
 
-export function UnifiedShell({ children }: { children: ReactNode }) {
-  return (
-    <UserProfileProvider>
-      <UnifiedShellContent>{children}</UnifiedShellContent>
-    </UserProfileProvider>
-  );
-}
-
+export function UnifiedShell({ children }: { children: ReactNode }) { return <UserProfileProvider><ProductShellContent>{children}</ProductShellContent></UserProfileProvider>; }
