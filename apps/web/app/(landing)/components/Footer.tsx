@@ -1,15 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import logo from "../assets/logo.png";
-
-export const MYLESCORP_SOCIAL_LINKS = {
-  linkedin: "https://www.linkedin.com/company/mylescorptech",
-  facebook: "https://www.facebook.com/mylescorptech",
-  twitter: "https://www.twitter.com/mylescorptech",
-  youtube: "https://www.youtube.com/@mylescorptech",
-  instagram: "https://www.instagram.com/mylescorptech",
-  tiktok: "https://www.tiktok.com/@mylescorptech",
-} as const;
+import { MYLESCORP_SOCIAL_LINKS } from "../content/contact";
 
 const SOCIAL_ITEMS: { key: keyof typeof MYLESCORP_SOCIAL_LINKS; label: string }[] = [
   { key: "linkedin", label: "LinkedIn" },
@@ -21,15 +13,21 @@ const SOCIAL_ITEMS: { key: keyof typeof MYLESCORP_SOCIAL_LINKS; label: string }[
 ];
 
 const PLATFORM_LINKS: { href: string; label: string }[] = [
-  { href: "/features/customer-management", label: "Features" },
-  { href: "/solutions/market-hotspots", label: "Solutions" },
+  { href: "/product", label: "Product" },
+  { href: "/features", label: "Features" },
+  { href: "/solutions", label: "Solutions" },
   { href: "/pricing", label: "Pricing" },
+  { href: "/integrations", label: "Integrations" },
+  { href: "/resources", label: "Resources" },
   { href: "/resources/how-it-works", label: "How it works" },
 ];
 
 const COMPANY_LINKS: { href: string; label: string }[] = [
   { href: "/company/about", label: "About" },
+  { href: "/customers", label: "Customers" },
+  { href: "/security", label: "Security" },
   { href: "/get-started", label: "Get started" },
+  { href: "/contact", label: "Contact" },
   { href: "/legal/privacy", label: "Privacy" },
   { href: "/legal/terms", label: "Terms" },
 ];
@@ -45,6 +43,9 @@ export default function Footer() {
               The operations platform for East African internet service providers,
               estates, hotspots, and community networks — customers, packages,
               payments, and network operations in one place.
+            </p>
+            <p className="landing-footer-tagline">
+              Connecting communities, one mile at a time.
             </p>
           </div>
           <div className="landing-footer-column">
@@ -83,7 +84,7 @@ export default function Footer() {
             ))}
           </div>
           <p className="landing-footer-copy">
-            © 2026 Powered by{" "}
+            © {new Date().getFullYear()} Powered by{" "}
             <a href="https://mylescorptech.com/" target="_blank" rel="noopener noreferrer">
               MylesCorp Technologies Ltd
             </a>{" "}

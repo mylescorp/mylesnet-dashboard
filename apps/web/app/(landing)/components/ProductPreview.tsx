@@ -15,7 +15,7 @@ const KPIS: { label: string; trend: string }[] = [
   { label: "Expiring soon", trend: "renewals due" },
 ];
 
-const CHART_BARS = [42, 58, 40, 66, 52, 78, 62, 88, 70, 56, 74, 64];
+const CHART_BAR_COUNT = 12;
 
 const ROWS: { icon: React.ElementType; title: string; meta: string; chip: string }[] = [
   { icon: Wifi, title: "Network health", meta: "Routers monitored", chip: "Nominal" },
@@ -27,7 +27,7 @@ export default function ProductPreview() {
   return (
     <div className="landing-preview-wrap">
       <div className="landing-preview-glow" aria-hidden="true" />
-      <div className="landing-preview" role="img" aria-label="Sample interface of the MylesNet operations console">
+      <figure className="landing-preview" aria-labelledby="product-preview-caption">
         <div className="landing-preview-bar">
           <span className="landing-preview-dot" />
           <span className="landing-preview-dot" />
@@ -71,11 +71,10 @@ export default function ProductPreview() {
               ))}
             </div>
             <div className="landing-preview-chart" aria-hidden="true">
-              {CHART_BARS.map((height, index) => (
+              {Array.from({ length: CHART_BAR_COUNT }, (_, index) => (
                 <span
-                  className="landing-preview-bar"
+                  className={`landing-preview-chart-bar landing-preview-chart-bar-${index}`}
                   key={index}
-                  style={{ height: `${height}%`, animationDelay: `${index * 70}ms` }}
                 />
               ))}
             </div>
@@ -93,7 +92,8 @@ export default function ProductPreview() {
             </div>
           </div>
         </div>
-      </div>
+      </figure>
+      <p id="product-preview-caption" className="landing-preview-caption">Illustrative workflow view — not live customer or network data.</p>
     </div>
   );
 }

@@ -1,29 +1,15 @@
 import type { MetadataRoute } from "next";
+import { PUBLIC_PATHS } from "../../lib/public-routes";
+import { SITE_URL } from "./content/seo";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const base = "https://mylesnetisp.mylescorptech.com";
-  const staticRoutes = [
-    "",
-    "/pricing",
-    "/get-started",
-    "/resources/how-it-works",
-    "/company/about",
-    "/legal/privacy",
-    "/legal/terms",
-    "/features/customer-management",
-    "/features/packages-vouchers",
-    "/features/payments-finance",
-    "/features/network-operations",
-    "/features/support-communications",
-    "/solutions/market-hotspots",
-    "/solutions/estate-networks",
-    "/solutions/hospitality",
-    "/solutions/community-networks",
-  ];
-  return staticRoutes.map((route) => ({
-    url: `${base}${route}`,
+  const legacyRedirects = ["/landing", "/landing/get-started"];
+  return PUBLIC_PATHS.filter(
+    (route) => !legacyRedirects.includes(route)
+  ).map((route) => ({
+    url: `${SITE_URL}${route}`,
     lastModified: new Date(),
     changeFrequency: "monthly" as const,
-    priority: route === "" ? 1 : 0.8,
+    priority: route === "/" ? 1 : 0.8,
   }));
 }

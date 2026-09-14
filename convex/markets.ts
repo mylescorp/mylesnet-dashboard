@@ -1,16 +1,22 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { Doc } from "./_generated/dataModel";
 import { requirePermission } from "./lib/auth";
+import { readTenantList, enforceTenantOnResource } from "./lib/tenant";
 import { logAudit } from "./lib/auditLog";
 
 export const listMarkets = query({
   args: {},
   handler: async (ctx) => {
     await requirePermission(ctx, "markets:read");
-    return await ctx.db
-      .query("markets")
-      .filter((q) => q.neq(q.field("status"), "deleted"))
-      .collect();
+    const rows = await readTenantList<Doc<"markets">>(ctx, {
+      all: () => ctx.db.query("markets").collect(),
+      tenant: (tenantId) =>
+        ctx.db.query("markets").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
+      legacy: () =>
+        ctx.db.query("markets").withIndex("by_tenant", (q) => q.eq("tenantId", undefined)).collect(),
+    });
+    return rows.filter((m) => m.status !== "deleted");
   },
 });
 
@@ -18,7 +24,8 @@ export const getMarket = query({
   args: { marketId: v.id("markets") },
   handler: async (ctx, args) => {
     await requirePermission(ctx, "markets:read");
-    return await ctx.db.get(args.marketId);
+    const market = await ctx.db.get(args.marketId);
+    return await enforceTenantOnResource(ctx, market, "market");
   },
 });
 

@@ -1,39 +1,21 @@
-import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
-import { Icon } from "../components/LandingIcon";
+import { ArrowRight, CalendarCheck, Gift } from "lucide-react";
+import PricingPlans from "../components/PricingPlans";
+import { pageMetadata } from "../content/seo";
+import { FX_SNAPSHOT } from "../content/rates";
 
-export const metadata: Metadata = {
-  title: "Pricing",
-  description:
-    "Pricing for MylesNet is confirmed with our team based on your network size and needs.",
-};
+export const metadata = pageMetadata(
+  "Pricing",
+  "Simple monthly plans for East African ISPs — Starter, Growth, and Pro. Flat monthly pricing, 14-day free trial, and a 20% referral commission.",
+  { canonical: "/pricing" }
+);
 
-const PRICE_FACTORS: { icon: string; title: string; description: string }[] = [
-  {
-    icon: "Users",
-    title: "Network size",
-    description:
-      "The number of customers you serve today and expect to grow to. Pricing scales with what you actually run.",
-  },
-  {
-    icon: "Layers",
-    title: "Services",
-    description:
-      "Which MylesNet areas you use — from customer management and payments to network operations and support.",
-  },
-  {
-    icon: "ClipboardList",
-    title: "Setup and onboarding",
-    description:
-      "How much help you want getting configured and going live. We handle the technical details either way.",
-  },
-];
-
-const PRICE_STEPS: { step: string; title: string }[] = [
-  { step: "1", title: "Tell us what you operate" },
-  { step: "2", title: "We confirm the right starting point" },
-  { step: "3", title: "You decide before committing" },
+const SHARED_FEATURES: string[] = [
+  "Router, network, and hotspot monitoring",
+  "Invoices, payments, and an audit-safe ledger",
+  "Support tickets and in-portal notifications (SMS & email coming)",
+  "Data usage and heavy-user visibility",
+  "Package, voucher, and free-trial selling",
 ];
 
 export default function PricingPage() {
@@ -42,54 +24,100 @@ export default function PricingPage() {
       <section className="landing-page-banner">
         <div className="landing-page-banner-inner">
           <p className="landing-section-kicker">Pricing</p>
-          <h1>Pricing that fits your network</h1>
+          <h1>Simple monthly pricing for your network</h1>
           <p className="landing-banner-lead">
-            Every network has different needs, so we confirm pricing based on your
-            customer count, plan types, and the services you operate. There is no
-            one-size-fits-all price — and nothing is committed before you have a
-            clear picture.
+            Three clear plans that grow with you. A flat monthly price for your
+            whole network — no revenue share, no per-customer fees, and a
+            14-day free trial for every new operator.
           </p>
           <div className="landing-banner-meta">
-            <Link className="landing-cta-button" href="/get-started" style={{ gap: 8 }}>
-              Get a tailored price
-              <ArrowRight size={16} aria-hidden="true" />
-            </Link>
+            <span className="landing-banner-meta-item">
+              <CalendarCheck size={14} aria-hidden="true" />
+              14-day free trial
+            </span>
+            <span className="landing-banner-meta-item">
+              Flat monthly price
+            </span>
+            <span className="landing-banner-meta-item">
+              KES &middot; UGX &middot; USD
+            </span>
           </div>
         </div>
       </section>
 
       <section className="landing-section">
         <div className="landing-section-inner">
-          <div className="landing-grid">
-            {PRICE_FACTORS.map((factor) => (
-              <article className="landing-card" key={factor.title}>
-                <span className="landing-card-icon">
-                  <Icon name={factor.icon} size={19} />
-                </span>
-                <h3 className="landing-card-title">{factor.title}</h3>
-                <p className="landing-card-body">{factor.description}</p>
-              </article>
-            ))}
+          <div className="landing-section-head landing-section-head-center">
+            <p className="landing-section-kicker">Plans</p>
+            <h2 className="landing-section-title">
+              From KES 500 per month, for your whole network
+            </h2>
+            <p className="landing-section-subtitle">
+              Pick the plan that matches where your network is today. You can
+              move up as you grow.
+            </p>
           </div>
+
+          <PricingPlans />
+
+          <p className="landing-plans-footnote">
+            Prices are per month and converted from the approved KES base using
+            a reference-rate snapshot ({FX_SNAPSHOT.asOf}). Currency is chosen
+            automatically from your browser region and you can switch it any time.
+          </p>
         </div>
       </section>
 
       <section className="landing-section landing-section-alt">
         <div className="landing-section-inner">
-          <div className="landing-prose">
-            <h2>How pricing confirmation works</h2>
-            <ul>
-              {PRICE_STEPS.map((step) => (
-                <li key={step.step}>
-                  <strong>Step {step.step} — {step.title}.</strong> We move one stage
-                  at a time so you always know where you stand before the next step.
-                </li>
-              ))}
-            </ul>
-            <p>
-              We will talk through your situation and give you a clear picture before
-              you commit to anything — no surprises, no pressure.
+          <div className="landing-section-head landing-section-head-center">
+            <p className="landing-section-kicker">Included</p>
+            <h2 className="landing-section-title">Everything you get on any plan</h2>
+            <p className="landing-section-subtitle">
+              The core platform is the same on every plan — the plans differ in
+              reach, reporting, and support.
             </p>
+          </div>
+          <ul className="landing-checklist">
+            {SHARED_FEATURES.map((feature) => (
+              <li className="landing-checklist-item" key={feature}>
+                <CheckMark />
+                {feature}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      <section className="landing-section">
+        <div className="landing-section-inner">
+          <div className="landing-section-head landing-section-head-center">
+            <p className="landing-section-kicker">Start with no risk</p>
+            <h2 className="landing-section-title">
+              Try it free for 14 days — and earn 20% when you refer
+            </h2>
+          </div>
+          <div className="landing-grid">
+            <div className="landing-card">
+              <span className="landing-card-icon">
+                <Gift size={19} aria-hidden="true" />
+              </span>
+              <h3 className="landing-card-title">14-day free trial</h3>
+              <p className="landing-card-body">
+                New operators run any plan free for 14 days, with our team
+                alongside while you set up and go live. No card details.
+              </p>
+            </div>
+            <div className="landing-card">
+              <span className="landing-card-icon">
+                <ArrowRight size={19} aria-hidden="true" />
+              </span>
+              <h3 className="landing-card-title">20% referral commission</h3>
+              <p className="landing-card-body">
+                When an operator you referred takes a paid plan, you earn 20% of
+                their subscription payments for 12 months.
+              </p>
+            </div>
           </div>
         </div>
       </section>
@@ -97,16 +125,37 @@ export default function PricingPage() {
       <section className="landing-cta-band">
         <div className="landing-cta-inner">
           <p className="landing-section-kicker">Pricing</p>
-          <h2>Get a tailored price for your network</h2>
-          <p>Share what you operate and hear back from our team promptly.</p>
+          <h2>Ready to see it on your own network?</h2>
+          <p>
+            Tell us what you operate and we will help you choose the right
+            starting plan.
+          </p>
           <div className="landing-hero-actions">
             <Link className="landing-cta-button" href="/get-started">
-              Get a tailored price
+              Get started
               <ArrowRight size={17} aria-hidden="true" />
             </Link>
           </div>
         </div>
       </section>
     </>
+  );
+}
+
+function CheckMark() {
+  return (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
   );
 }

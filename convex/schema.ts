@@ -2,6 +2,21 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { authTables } from "@convex-dev/auth/server";
 
+// ==========================================================================
+// PHASE 1 — TENANCY & ISOLATION (X-TEN §B1, §B5)
+// ==========================================================================
+
+/**
+ * Shared tenant-scope field spread into every tenant-owned table (Phase 1,
+ * additive migration). Optional during the migration: existing records hold
+ * `tenantId: undefined` until the gated `tenantid-backfill-001` run; once the
+ * read/write-path enforcement and backfill land, enforcement flips it to
+ * required. Client-supplied tenant ids are never authority.
+ */
+const tenantScope = {
+  tenantId: v.optional(v.id("tenants")),
+} as const;
+
 export default defineSchema({
   ...authTables,
 
@@ -20,6 +35,11 @@ export default defineSchema({
     profileCompletedAt: v.optional(v.number()),
     isActive: v.optional(v.boolean()),
     deactivatedAt: v.optional(v.number()),
+    // MFA compliance mirror (Security Standards; WorkOS mandatory-2FA roles).
+    // Synced from WorkOS enrollment at identity reconcile time. A mandatory-2FA
+    // role without a marker is non-compliant and server guards fail closed.
+    mfaEnrolled: v.optional(v.boolean()),
+    mfaEnrolledAt: v.optional(v.number()),
     platformRole: v.optional(
       v.union(
         v.literal("platform_owner"),
@@ -96,6 +116,7 @@ export default defineSchema({
 
   /** Cache of WorkOS organization memberships for the platform org, synced by webhook. */
   organizationMemberships: defineTable({
+    ...tenantScope,
     workosMembershipId: v.string(),
     workosUserId: v.string(),
     organizationId: v.string(),
@@ -109,6 +130,7 @@ export default defineSchema({
     .index("by_org", ["organizationId"]),
 
   userMarketMemberships: defineTable({
+    ...tenantScope,
     userId: v.id("users"),
     marketId: v.id("markets"),
     role: v.union(v.literal("manager"), v.literal("operator"), v.literal("viewer")),
@@ -116,6 +138,7 @@ export default defineSchema({
     updatedAt: v.number(),
     revokedAt: v.optional(v.number()),
   })
+    .index("by_tenant", ["tenantId"])
     .index("by_user", ["userId"])
     .index("by_user_and_market", ["userId", "marketId"])
     .index("by_market", ["marketId"]),
@@ -125,6 +148,7 @@ export default defineSchema({
   // ==========================================================================
 
   routers: defineTable({
+    ...tenantScope,
     name: v.string(),
     restBaseUrl: v.string(),
     location: v.string(),
@@ -142,17 +166,21 @@ export default defineSchema({
     macAddress: v.optional(v.string()),
     lastSeenAt: v.optional(v.number()),
   })
+    .index("by_tenant", ["tenantId"])
     .index("by_location", ["location"])
     .index("by_market", ["marketId"]),
 
   routerCredentials: defineTable({
+    ...tenantScope,
     routerId: v.id("routers"),
     encryptedUsername: v.string(),
     encryptedPassword: v.string(),
     updatedAt: v.number(),
-  }).index("by_router", ["routerId"]),
+  }).index("by_tenant", ["tenantId"])
+    .index("by_router", ["routerId"]),
 
   accessPoints: defineTable({
+    ...tenantScope,
     routerId: v.id("routers"),
     name: v.string(),
     port: v.string(),
@@ -180,10 +208,12 @@ export default defineSchema({
     registeredBy: v.optional(v.union(v.literal("self"), v.id("users"))),
     lastSnapshotCcq: v.optional(v.number()),
     lastSnapshotSignalDbm: v.optional(v.number()),
-  }).index("by_router", ["routerId"]),
+  }).index("by_tenant", ["tenantId"])
+    .index("by_router", ["routerId"]),
 
   /** Layer-2 switches that sit between a router port and downstream access points. */
   networkSwitches: defineTable({
+    ...tenantScope,
     routerId: v.id("routers"),
     name: v.string(),
     model: v.optional(v.string()),
@@ -199,10 +229,12 @@ export default defineSchema({
     archivedAt: v.optional(v.number()),
     archivedBy: v.optional(v.id("users")),
     archiveReason: v.optional(v.string()),
-  }).index("by_router", ["routerId"]),
+  }).index("by_tenant", ["tenantId"])
+    .index("by_router", ["routerId"]),
 
   /** Last authenticated collector result for each router. Never stores credentials. */
   collectorRuns: defineTable({
+    ...tenantScope,
     routerId: v.id("routers"),
     observedAt: v.number(),
     status: v.union(v.literal("connected"), v.literal("failed")),
@@ -213,6 +245,7 @@ export default defineSchema({
   }).index("by_router_observedAt", ["routerId", "observedAt"]),
 
   healthSamples: defineTable({
+    ...tenantScope,
     routerId: v.id("routers"),
     accessPointId: v.optional(v.id("accessPoints")),
     timestamp: v.number(),
@@ -229,6 +262,7 @@ export default defineSchema({
   }).index("by_router_timestamp", ["routerId", "timestamp"]),
 
   accessPointSamples: defineTable({
+    ...tenantScope,
     routerId: v.id("routers"),
     accessPointId: v.id("accessPoints"),
     timestamp: v.number(),
@@ -247,6 +281,7 @@ export default defineSchema({
   }).index("by_access_point_timestamp", ["accessPointId", "timestamp"]),
 
   activeHotspotSessions: defineTable({
+    ...tenantScope,
     routerId: v.id("routers"),
     accessPointId: v.optional(v.id("accessPoints")),
     sessionIdentifier: v.string(),
@@ -259,6 +294,7 @@ export default defineSchema({
     .index("by_access_point", ["accessPointId"]),
 
   usageSamples: defineTable({
+    ...tenantScope,
     routerId: v.id("routers"),
     accessPointId: v.optional(v.id("accessPoints")),
     subscriberIdentifier: v.string(),
@@ -266,12 +302,14 @@ export default defineSchema({
     byteDelta: v.number(),
     observedBytes: v.number(),
   })
+    .index("by_tenant", ["tenantId"])
     .index("by_router_timestamp", ["routerId", "timestamp"])
     .index("by_router_subscriber_timestamp", ["routerId", "subscriberIdentifier", "timestamp"])
     .index("by_access_point_timestamp", ["accessPointId", "timestamp"])
     .index("by_timestamp", ["timestamp"]),
 
   incidents: defineTable({
+    ...tenantScope,
     routerId: v.id("routers"),
     accessPointId: v.optional(v.id("accessPoints")),
     openedAt: v.number(),
@@ -280,11 +318,13 @@ export default defineSchema({
     note: v.string(),
     severity: v.string(),
   })
+    .index("by_tenant", ["tenantId"])
     .index("by_router_open", ["routerId", "openedAt"])
     .index("by_resolved", ["resolvedAt"])
     .index("by_router_severity_resolved", ["routerId", "severity", "resolvedAt"]),
 
   shiftNotes: defineTable({
+    ...tenantScope,
     routerId: v.id("routers"),
     authorId: v.id("users"),
     timestamp: v.number(),
@@ -292,12 +332,14 @@ export default defineSchema({
   }).index("by_router_timestamp", ["routerId", "timestamp"]),
 
   configWatchBaselines: defineTable({
+    ...tenantScope,
     routerId: v.id("routers"),
     snapshotJson: v.string(),
     capturedAt: v.number(),
   }).index("by_router", ["routerId"]),
 
   routerConfigurationSnapshots: defineTable({
+    ...tenantScope,
     routerId: v.id("routers"),
     observedAt: v.number(),
     snapshotJson: v.string(),
@@ -305,6 +347,7 @@ export default defineSchema({
 
   /** Live DHCP leases observed by the collector — subscriber IP↔MAC↔host mapping. */
   dhcpLeases: defineTable({
+    ...tenantScope,
     routerId: v.id("routers"),
     ipAddress: v.string(),
     macAddress: v.string(),
@@ -319,6 +362,7 @@ export default defineSchema({
 
   /** RouterOS simple queues observed by the collector — per-subscriber rate limits. */
   simpleQueues: defineTable({
+    ...tenantScope,
     routerId: v.id("routers"),
     name: v.string(),
     target: v.optional(v.string()),
@@ -332,6 +376,7 @@ export default defineSchema({
 
   /** Latest per-router telemetry details (identity, system health, ports, wifi radios). */
   routerTelemetry: defineTable({
+    ...tenantScope,
     routerId: v.id("routers"),
     observedAt: v.number(),
     identity: v.optional(v.string()),
@@ -370,6 +415,7 @@ export default defineSchema({
 
   /** Operator-facing telemetry self-health events (ingest latency, backoff, drops). */
   systemEvents: defineTable({
+    ...tenantScope,
     routerId: v.optional(v.id("routers")),
     accessPointId: v.optional(v.id("accessPoints")),
     type: v.union(
@@ -410,12 +456,31 @@ export default defineSchema({
   }).index("by_key", ["key"]),
 
   /**
+   * Global feature-flag store (spec K). One row per key. Flags support
+   * percentage rollout (encoded in valueJson) and per-tenant overrides
+   * through tenantIds. Deliberately NOT tenant-scoped — flags are platform
+   * state, evaluated against an optional target tenant at read time.
+   */
+  featureFlags: defineTable({
+    key: v.string(),
+    valueJson: v.string(),
+    enabled: v.boolean(),
+    description: v.optional(v.string()),
+    tenantIds: v.optional(v.array(v.id("tenants"))),
+    createdBy: v.optional(v.id("users")),
+    createdAt: v.optional(v.number()),
+    updatedAt: v.number(),
+    updatedBy: v.optional(v.id("users")),
+  }).index("by_key", ["key"]),
+
+  /**
    * Operator-queued actions executed by the local collector on its next
    * check-in. The collector acknowledges a command, the server records that
    * durable clear, and only then does the collector act — so a router write
    * never happens around an un-acked command.
    */
   device_commands: defineTable({
+    ...tenantScope,
     routerId: v.id("routers"),
     type: v.union(
       v.literal("reenable_www_ssl"),
@@ -449,6 +514,7 @@ export default defineSchema({
    * collector's telemetry upserts it on every push.
    */
   healthguardStates: defineTable({
+    ...tenantScope,
     routerId: v.id("routers"),
     lastRunAt: v.optional(v.number()),
     wwwSslEnabled: v.optional(v.boolean()),
@@ -496,6 +562,7 @@ export default defineSchema({
   }).index("by_createdAt", ["createdAt"]),
 
   subscriberEvents: defineTable({
+    ...tenantScope,
     centipidSubscriberId: v.string(),
     eventType: v.string(),
     phone: v.string(),
@@ -504,11 +571,13 @@ export default defineSchema({
     timestamp: v.number(),
     rawPayloadRef: v.optional(v.string()),
     webhookEventId: v.optional(v.string()),
-  }).index("by_timestamp", ["timestamp"])
+  }).index("by_tenant", ["tenantId"])
+    .index("by_timestamp", ["timestamp"])
     .index("by_subscriber", ["centipidSubscriberId"])
     .index("by_webhookEventId", ["webhookEventId"]),
 
   paymentEvents: defineTable({
+    ...tenantScope,
     centipidPaymentId: v.string(),
     eventType: v.string(),
     amount: v.number(),
@@ -517,23 +586,30 @@ export default defineSchema({
     subscriberPhone: v.string(),
     timestamp: v.number(),
     webhookEventId: v.optional(v.string()),
-  }).index("by_timestamp", ["timestamp"])
+  }).index("by_tenant", ["tenantId"])
+    .index("by_timestamp", ["timestamp"])
     .index("by_payment", ["centipidPaymentId"])
     .index("by_webhookEventId", ["webhookEventId"]),
 
   voucherEvents: defineTable({
+    ...tenantScope,
     centipidVoucherId: v.string(),
     eventType: v.string(),
     packageName: v.string(),
     timestamp: v.number(),
     webhookEventId: v.optional(v.string()),
     customerPhone: v.optional(v.string()),
+    // Redemption forensics (spec F1): device/IP seen in the redemption event.
+    // Optional — not every payload carries them.
+    redeemedDeviceId: v.optional(v.string()),
+    redeemedIpAddress: v.optional(v.string()),
   }).index("by_timestamp", ["timestamp"])
     .index("by_voucher", ["centipidVoucherId"])
     .index("by_webhookEventId", ["webhookEventId"])
     .index("by_customerPhone", ["customerPhone"]),
 
   ticketEvents: defineTable({
+    ...tenantScope,
     centipidTicketId: v.string(),
     eventType: v.string(),
     subject: v.string(),
@@ -544,6 +620,7 @@ export default defineSchema({
     .index("by_webhookEventId", ["webhookEventId"]),
 
   webhookDeliveryLog: defineTable({
+    ...tenantScope,
     receivedAt: v.number(),
     eventType: v.string(),
     signatureValid: v.boolean(),
@@ -553,7 +630,23 @@ export default defineSchema({
     rawBodyPreview: v.optional(v.string()),
   }).index("by_receivedAt", ["receivedAt"]),
 
+  /** Durable, idempotent WorkOS delivery inbox. Payloads are short-lived. */
+  workosWebhookEvents: defineTable({
+    eventId: v.string(),
+    eventType: v.string(),
+    data: v.any(),
+    status: v.union(v.literal("received"), v.literal("completed"), v.literal("retry"), v.literal("quarantined")),
+    attempts: v.number(),
+    receivedAt: v.number(),
+    processedAt: v.optional(v.number()),
+    nextAttemptAt: v.optional(v.number()),
+    reason: v.optional(v.string()),
+  })
+    .index("by_eventId", ["eventId"])
+    .index("by_status", ["status"]),
+
   latestSubscriberState: defineTable({
+    ...tenantScope,
     centipidSubscriberId: v.string(),
     status: v.union(v.literal("active"), v.literal("paused")),
     phone: v.string(),
@@ -565,6 +658,7 @@ export default defineSchema({
     .index("by_status", ["status"]),
 
   ticketStatus: defineTable({
+    ...tenantScope,
     centipidTicketId: v.string(),
     status: v.union(v.literal("open"), v.literal("resolved")),
     subject: v.string(),
@@ -579,6 +673,7 @@ export default defineSchema({
   // ==========================================================================
 
   markets: defineTable({
+    ...tenantScope,
     name: v.string(),
     country: v.string(),
     // Widened from a UGX/KSH union: Uganda and Kenya today, spec §22 allows any
@@ -604,10 +699,12 @@ export default defineSchema({
     apiKeyHash: v.optional(v.string()),
     apiKeyCreatedAt: v.optional(v.number()),
   })
+    .index("by_tenant", ["tenantId"])
     .index("by_status", ["status"])
     .index("by_country", ["country"]),
 
   marketOperatingCosts: defineTable({
+    ...tenantScope,
     marketId: v.id("markets"),
     yearMonth: v.string(),
     airtelDataCost: v.number(),
@@ -620,6 +717,7 @@ export default defineSchema({
     .index("by_market", ["marketId"]),
 
   devices: defineTable({
+    ...tenantScope,
     marketId: v.id("markets"),
     parentDeviceId: v.optional(v.id("devices")),
     name: v.string(),
@@ -645,14 +743,29 @@ export default defineSchema({
     registeredBy: v.optional(v.union(v.literal("self"), v.id("users"))),
     routerId: v.optional(v.id("routers")),
     accessPointId: v.optional(v.id("accessPoints")),
+    // Platform device fleet fields (spec B1): firmware + health + provisioning
+    // posture surfaced in the fleet registry. All optional — legacy rows and
+    // devices self-registered before these fields exist carry no value.
+    firmwareVersion: v.optional(v.string()),
+    uptimePercent: v.optional(v.number()),
+    provisioningStatus: v.optional(
+      v.union(
+        v.literal("unprovisioned"),
+        v.literal("pending"),
+        v.literal("provisioned"),
+        v.literal("failed"),
+      ),
+    ),
   })
     .index("by_market", ["marketId"])
     .index("by_parent", ["parentDeviceId"])
     .index("by_lifecycleStatus", ["lifecycleStatus"])
     .index("by_status", ["status"])
-    .index("by_macAddress", ["macAddress"]),
+    .index("by_macAddress", ["macAddress"])
+    .index("by_provisioningStatus", ["provisioningStatus"]),
 
   deviceReplacementEvents: defineTable({
+    ...tenantScope,
     deviceId: v.id("devices"),
     replacedAt: v.number(),
     oldSerialOrMac: v.optional(v.string()),
@@ -661,7 +774,37 @@ export default defineSchema({
     loggedBy: v.id("users"),
   }).index("by_device", ["deviceId"]),
 
+  // Device provisioning pipeline (spec "Provisioning Queue"). A device that
+  // reports in self-registered (registeredBy: "self") lands here as a request
+  // that a super_admin or ops role must approve before it is treated as part
+  // of the managed estate. Terminal states: approved → deployed (device pushed
+  // its firmware/config), rejected (with a decision note).
+  provisioningRequests: defineTable({
+    ...tenantScope,
+    marketId: v.id("markets"),
+    deviceId: v.optional(v.id("devices")),
+    requestedFirmware: v.optional(v.string()),
+    requesterId: v.id("users"),
+    requestedAt: v.number(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("approved"),
+      v.literal("rejected"),
+      v.literal("deployed"),
+    ),
+    decidedBy: v.optional(v.id("users")),
+    decidedAt: v.optional(v.number()),
+    decisionNote: v.optional(v.string()),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_tenant", ["tenantId"])
+    .index("by_tenant_status", ["tenantId", "status"])
+    .index("by_market", ["marketId"]),
+
   agents: defineTable({
+    ...tenantScope,
     name: v.string(),
     phone: v.string(),
     email: v.optional(v.string()),
@@ -681,10 +824,12 @@ export default defineSchema({
     commissionModel: v.optional(v.union(v.literal("percentage"), v.literal("flat_per_sale"), v.literal("bonus_based"))),
     badges: v.optional(v.array(v.string())),
   })
+    .index("by_tenant", ["tenantId"])
     .index("by_lifecycleStatus", ["lifecycleStatus"])
     .index("by_status", ["status"]),
 
   agentMarketAssignments: defineTable({
+    ...tenantScope,
     agentId: v.id("agents"),
     marketId: v.id("markets"),
     assignmentStatus: v.string(),
@@ -694,11 +839,13 @@ export default defineSchema({
     endedAt: v.optional(v.number()),
     endReason: v.optional(v.string()),
   })
+    .index("by_tenant", ["tenantId"])
     .index("by_agent", ["agentId"])
     .index("by_agent_status", ["agentId", "assignmentStatus"])
     .index("by_market", ["marketId"]),
 
   commissions: defineTable({
+    ...tenantScope,
     agentId: v.id("agents"),
     marketId: v.id("markets"),
     voucherId: v.optional(v.id("vouchers")),
@@ -720,10 +867,12 @@ export default defineSchema({
     approvedAt: v.optional(v.number()),
     paidAt: v.optional(v.number()),
   })
+    .index("by_tenant", ["tenantId"])
     .index("by_status", ["payoutStatus"])
     .index("by_agent", ["agentId"]),
 
   vouchers: defineTable({
+    ...tenantScope,
     batchId: v.id("voucherBatches"),
     marketId: v.id("markets"),
     code: v.string(),
@@ -734,6 +883,15 @@ export default defineSchema({
     soldAt: v.optional(v.number()),
     redeemedAt: v.optional(v.number()),
     customerPhoneAtRedemption: v.optional(v.string()),
+    // Redemption forensics (spec F1): identity of the device/IP that redeemed
+    // the voucher, plus the fraud-monitor disposition. All optional — legacy
+    // and unredeemed vouchers carry no value.
+    redeemedDeviceId: v.optional(v.string()),
+    redeemedIpAddress: v.optional(v.string()),
+    fraudFlagStatus: v.optional(
+      v.union(v.literal("clean"), v.literal("flagged"), v.literal("blocked")),
+    ),
+    fraudFlagReason: v.optional(v.string()),
   })
     .index("by_batch", ["batchId"])
     .index("by_code", ["code"])
@@ -742,6 +900,7 @@ export default defineSchema({
     .index("by_market", ["marketId"]),
 
   voucherBatches: defineTable({
+    ...tenantScope,
     marketId: v.id("markets"),
     planType: v.string(),
     quantity: v.number(),
@@ -755,6 +914,7 @@ export default defineSchema({
   }).index("by_market", ["marketId"]),
 
   alerts: defineTable({
+    ...tenantScope,
     marketId: v.id("markets"),
     rootDeviceId: v.optional(v.id("devices")),
     dependentDeviceIds: v.array(v.id("devices")),
@@ -773,11 +933,13 @@ export default defineSchema({
     ownerId: v.optional(v.id("users")),
     recommendedAction: v.optional(v.string()),
   })
+    .index("by_tenant", ["tenantId"])
     .index("by_status", ["alertStatus"])
     .index("by_rootDevice", ["rootDeviceId"])
     .index("by_market_status", ["marketId", "alertStatus"]),
 
   auditLog: defineTable({
+    ...tenantScope,
     action: v.string(),
     entityTable: v.string(),
     entityId: v.string(),
@@ -823,6 +985,7 @@ export default defineSchema({
   // ==========================================================================
 
   supportTickets: defineTable({
+    ...tenantScope,
     subject: v.string(),
     description: v.string(),
     ticketStatus: v.union(
@@ -863,6 +1026,7 @@ export default defineSchema({
   // ==========================================================================
 
   renewalCredits: defineTable({
+    ...tenantScope,
     agentId: v.id("agents"),
     marketId: v.id("markets"),
     customerPhone: v.string(),
@@ -874,6 +1038,7 @@ export default defineSchema({
     creditedAt: v.number(),
     reconciliationBatchId: v.optional(v.string()),
   })
+    .index("by_tenant", ["tenantId"])
     .index("by_agent", ["agentId"])
     .index("by_market", ["marketId"])
     .index("by_phone", ["customerPhone"])
@@ -884,6 +1049,7 @@ export default defineSchema({
   // ==========================================================================
 
   leaderboardSnapshots: defineTable({
+    ...tenantScope,
     snapshotDate: v.string(),
     agentId: v.id("agents"),
     marketId: v.optional(v.id("markets")),
@@ -906,6 +1072,7 @@ export default defineSchema({
   // ==========================================================================
 
   broadcasts: defineTable({
+    ...tenantScope,
     message: v.string(),
     channel: v.union(v.literal("sms")),
     targetScope: v.union(
@@ -924,6 +1091,7 @@ export default defineSchema({
     .index("by_market", ["targetMarketId"]),
 
   broadcastDeliveryLogs: defineTable({
+    ...tenantScope,
     broadcastId: v.id("broadcasts"),
     agentId: v.id("agents"),
     phone: v.string(),
@@ -944,6 +1112,7 @@ export default defineSchema({
   // ==========================================================================
 
   agentInvitations: defineTable({
+    ...tenantScope,
     email: v.string(),
     phone: v.string(),
     name: v.string(),
@@ -975,6 +1144,7 @@ export default defineSchema({
 
   // Per-market, per-month financials (spec §22): paid-in vs. break-even.
   marketFinancials: defineTable({
+    ...tenantScope,
     marketId: v.id("markets"),
     month: v.string(), // "2026-08"
     revenueLocal: v.number(),
@@ -989,11 +1159,13 @@ export default defineSchema({
     enteredBy: v.id("users"),
     enteredAt: v.number(),
   })
+    .index("by_tenant", ["tenantId"])
     .index("by_market_month", ["marketId", "month"])
     .index("by_month", ["month"]),
 
   // Subscriber snapshot projections (spec §24 population model).
   subscriberSnapshots: defineTable({
+    ...tenantScope,
     marketId: v.id("markets"),
     date: v.string(), // "2026-08-14"
     activeCount: v.number(),
@@ -1004,6 +1176,7 @@ export default defineSchema({
     currency: v.string(),
     createdAt: v.number(),
   })
+    .index("by_tenant", ["tenantId"])
     .index("by_market_date", ["marketId", "date"])
     .index("by_date", ["date"]),
 
@@ -1011,6 +1184,7 @@ export default defineSchema({
   // renewal, new subscription). Single source for daily_snapshots, cost
   // allocation, analytics and the leaderboard (spec §25).
   agentActivity: defineTable({
+    ...tenantScope,
     agentId: v.id("agents"),
     marketId: v.id("markets"),
     action: v.union(v.literal("voucher_sale"), v.literal("renewal"), v.literal("new_subscription")),
@@ -1030,6 +1204,7 @@ export default defineSchema({
   // Operating expenses ledger (spec §27). Modernises the legacy
   // marketOperatingCosts rows — a startup migration folds those in.
   expenses: defineTable({
+    ...tenantScope,
     marketId: v.optional(v.id("markets")),
     category: v.union(
       v.literal("airtel_data"),
@@ -1051,6 +1226,7 @@ export default defineSchema({
     receiptFileId: v.optional(v.id("_storage")),
     notes: v.optional(v.string()),
   })
+    .index("by_tenant", ["tenantId"])
     .index("by_market_month", ["marketId", "month"])
     .index("by_month", ["month"])
     .index("by_type", ["type"]),
@@ -1058,6 +1234,7 @@ export default defineSchema({
   // Withdrawal / payout requests to any payee class (agent commissions,
   // investor dividends, vendors). Built on the spec §27 finance rules.
   payouts: defineTable({
+    ...tenantScope,
     type: v.string(),
     payeeType: v.union(v.literal("user"), v.literal("agent"), v.literal("investor"), v.literal("vendor")),
     payeeId: v.string(),
@@ -1077,6 +1254,7 @@ export default defineSchema({
     processedAt: v.optional(v.number()),
     notes: v.optional(v.string()),
   })
+    .index("by_tenant", ["tenantId"])
     .index("by_status", ["status"])
     .index("by_payee_type_status", ["type", "status"])
     .index("by_payee", ["payeeId", "status"])
@@ -1119,6 +1297,7 @@ export default defineSchema({
   // Per-market daily revenue/contribution snapshot (spec §25). The daily
   // rollup cron derives these from agentActivity + expenses.
   dailySnapshots: defineTable({
+    ...tenantScope,
     marketId: v.id("markets"),
     date: v.string(), // "2026-08-14"
     revenueLocal: v.number(),
@@ -1143,6 +1322,7 @@ export default defineSchema({
   // Configured tariff plans (spec §26). Existing voucher batches keep planType
   // and optionally reference a planId.
   plans: defineTable({
+    ...tenantScope,
     marketId: v.optional(v.id("markets")),
     code: v.string(),
     name: v.string(),
@@ -1161,6 +1341,7 @@ export default defineSchema({
   // Scheduled maintenance windows suppress alerting for the covered devices
   // (spec §17 maintenance mode).
   maintenanceWindows: defineTable({
+    ...tenantScope,
     marketId: v.id("markets"),
     deviceId: v.optional(v.id("devices")),
     scheduledStart: v.number(),
@@ -1178,6 +1359,7 @@ export default defineSchema({
 
   // Per-user alert preference matrix (spec §17 + §32).
   notificationPreferences: defineTable({
+    ...tenantScope,
     userId: v.id("users"),
     category: v.union(
       v.literal("device_online"),
@@ -1219,6 +1401,7 @@ export default defineSchema({
 
   // Scheduled report definitions (spec §29); each run appends a reportExport.
   scheduledReports: defineTable({
+    ...tenantScope,
     name: v.string(),
     reportType: v.union(v.literal("daily_digest"), v.literal("investor"), v.literal("custom_analytics")),
     recipients: v.array(v.string()),
@@ -1235,6 +1418,7 @@ export default defineSchema({
 
   // One row per generated report artifact; file bytes live in _storage.
   reportExports: defineTable({
+    ...tenantScope,
     scheduledReportId: v.optional(v.id("scheduledReports")),
     requestedBy: v.id("users"),
     format: v.union(v.literal("pdf"), v.literal("csv")),
@@ -1258,6 +1442,7 @@ export default defineSchema({
   // Hourly per-device telemetry rollups (spec §20). The rollup cron folds
   // raw healthSamples/accessPointSamples into these for fast charting.
   telemetryHourly: defineTable({
+    ...tenantScope,
     marketId: v.id("markets"),
     deviceKind: v.union(v.literal("router"), v.literal("access_point")),
     routerId: v.optional(v.id("routers")),
@@ -1281,6 +1466,7 @@ export default defineSchema({
     .index("by_device_hour", ["deviceId", "hourStart"]),
 
   telemetryDaily: defineTable({
+    ...tenantScope,
     marketId: v.id("markets"),
     deviceKind: v.union(v.literal("router"), v.literal("access_point")),
     routerId: v.optional(v.id("routers")),
@@ -1308,6 +1494,7 @@ export default defineSchema({
   // ==========================================================================
 
   teams: defineTable({
+    ...tenantScope,
     name: v.string(),
     leaderAgentId: v.optional(v.id("agents")),
     status: v.union(v.literal("active"), v.literal("removed")),
@@ -1315,18 +1502,91 @@ export default defineSchema({
     removedAt: v.optional(v.number()),
     removedBy: v.optional(v.id("users")),
   })
+    .index("by_tenant", ["tenantId"])
     .index("by_status", ["status"])
     .index("by_leader", ["leaderAgentId"]),
 
   teamMembers: defineTable({
+    ...tenantScope,
     teamId: v.id("teams"),
     agentId: v.id("agents"),
     joinedAt: v.number(),
     leftAt: v.optional(v.number()),
   })
+    .index("by_tenant", ["tenantId"])
     .index("by_team", ["teamId"])
     .index("by_agent", ["agentId"])
     .index("by_team_member", ["teamId", "agentId"]),
+
+  // ==========================================================================
+  // PHASE 1 — TENANCY & ISOLATION (§B1, §B5)
+  // ==========================================================================
+
+  // A tenant is one ISP operator (or related operator group) that owns its own
+  // sites, subscribers, routers, finance, and portal on the shared backend.
+  // `tenantId` on every tenant-owned document is the isolation contract.
+  tenants: defineTable({
+    // Unique, immutable operator slug (reserved-slug policy per the
+    // DNS/hostname secret plan). Never reused after a tenant is cancelled.
+    slug: v.string(),
+    name: v.string(),
+    country: v.string(),
+    timezone: v.string(),
+    // ISO-4217 code (spec §22 allows any code as markets expand).
+    currency: v.string(),
+    status: v.union(
+      v.literal("trial"),
+      v.literal("active"),
+      v.literal("suspended"),
+      v.literal("cancelled"),
+    ),
+    // WorkOS per-tenant org id (three-scope model, Phase 2). The server-side
+    // tenant resolver derives tenancy from this — never from the client.
+    workosOrganizationId: v.optional(v.string()),
+    settings: v.optional(v.any()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_status", ["status"])
+    .index("by_workosOrganizationId", ["workosOrganizationId"]),
+
+  // Warehouse of which workforce user belongs to which tenant (org-scoped).
+  tenantMemberships: defineTable({
+    userId: v.id("users"),
+    tenantId: v.id("tenants"),
+    // Bounded to the Phase 2 permission catalogue; free string while migrating.
+    role: v.string(),
+    status: v.union(v.literal("active"), v.literal("pending"), v.literal("revoked")),
+    // WorkOS membership id once the per-tenant org exists (Phase 2).
+    workosMembershipId: v.optional(v.string()),
+    invitedAt: v.optional(v.number()),
+    joinedAt: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_tenant", ["tenantId"])
+    .index("by_user_tenant", ["userId", "tenantId"]),
+
+  // SaaS plan / entitlement attached to a tenant (G-TEN, Phase 3). `planId` is
+  // a plan code string until the T-PLN catalogue lands.
+  entitlements: defineTable({
+    tenantId: v.id("tenants"),
+    planId: v.string(),
+    status: v.union(
+      v.literal("trial"),
+      v.literal("active"),
+      v.literal("expired"),
+      v.literal("suspended"),
+    ),
+    startsAt: v.optional(v.number()),
+    expiresAt: v.optional(v.number()),
+    trialEndsAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_tenant", ["tenantId"]),
 
   // ==========================================================================
   // PHASE 0 — MIGRATION RUN INFRASTRUCTURE (§B2)

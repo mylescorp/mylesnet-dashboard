@@ -599,6 +599,22 @@ export const handleVoucherEvent = internalMutation({
     const phone =
       pickNested(args.payload, ["phone", "mobile", "customer_phone", "customerPhone"]) ||
       undefined;
+    const deviceId =
+      pickNested(args.payload, [
+        "device_id",
+        "deviceId",
+        "device_mac",
+        "deviceMac",
+        "subscriber_device",
+      ]) || undefined;
+    const ipAddress =
+      pickNested(args.payload, [
+        "ip_address",
+        "ipAddress",
+        "ip",
+        "client_ip",
+        "remote_ip",
+      ]) || undefined;
     await ctx.db.insert("voucherEvents", {
       centipidVoucherId: voucherId,
       eventType,
@@ -610,6 +626,8 @@ export const handleVoucherEvent = internalMutation({
       ),
       webhookEventId: args.webhookEventId,
       customerPhone: phone,
+      redeemedDeviceId: deviceId,
+      redeemedIpAddress: ipAddress,
     });
     return { inserted: true };
   },

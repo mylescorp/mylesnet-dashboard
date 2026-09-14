@@ -1,10 +1,11 @@
-import type { Metadata } from "next";
+import { CheckCircle2 } from "lucide-react";
+import { pageMetadata } from "../../content/seo";
 
-export const metadata: Metadata = {
-  title: "Privacy",
-  description:
-    "How MylesNet handles customer, operator, and usage information.",
-};
+export const metadata = pageMetadata(
+  "Privacy",
+  "How MylesNet handles customer, operator, and usage information.",
+  { canonical: "/legal/privacy" }
+);
 
 export default function PrivacyPage() {
   return (
@@ -13,10 +14,24 @@ export default function PrivacyPage() {
         <div className="landing-page-banner-inner">
           <p className="landing-section-kicker">Legal</p>
           <h1>Privacy</h1>
-          <p>
+          <p className="landing-banner-lead">
             This page explains, in plain language, how MylesNet handles
             information as part of running the platform.
           </p>
+          <div className="landing-banner-meta">
+            <span className="landing-banner-meta-item">
+              <CheckCircle2 size={15} aria-hidden="true" />
+              Operator account required
+            </span>
+            <span className="landing-banner-meta-item">
+              <CheckCircle2 size={15} aria-hidden="true" />
+              Encrypted in transit
+            </span>
+            <span className="landing-banner-meta-item">
+              <CheckCircle2 size={15} aria-hidden="true" />
+              Protected settings
+            </span>
+          </div>
         </div>
       </section>
 

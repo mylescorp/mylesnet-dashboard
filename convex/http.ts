@@ -360,38 +360,27 @@ http.route({
 
     let data: unknown = {};
     try {
-      const payload = JSON.parse(rawBody) as { data?: unknown };
+      const payload = JSON.parse(rawBody) as { id?: unknown; data?: unknown };
       data = payload.data ?? {};
-    } catch {
-      return Response.json(
-        { success: false, message: "The request body was not valid JSON." },
-        { status: 400 },
-      );
-    }
-
-    try {
-      const result = await ctx.runMutation(internal.workosWebhook.processWorkosEvent, { event, data });
-      const handled = Boolean(result && typeof result === "object" && (result as { handled?: boolean }).handled);
-      const failureReason: string | undefined = !handled
-        ? ((result && typeof result === "object" && (result as { reason?: string }).reason) as string | undefined) ?? "unhandled_event"
-        : undefined;
-      await ctx.runMutation(internal.workosWebhook.logWorkosDelivery, {
-        eventType: event,
-        signatureValid: true,
-        processed: handled,
-        errorMessage: failureReason,
+      const eventId = typeof payload.id === "string" && payload.id.length > 0
+        ? payload.id
+        : `unidentified:${event}:${rawBody.slice(0, 256)}`;
+      const queued = await ctx.runMutation(internal.workosWebhook.enqueueWorkosEvent, {
+        eventId,
+        event,
+        data,
       });
-      return Response.json({ success: true, eventType: event, handled });
-    } catch (error) {
       await ctx.runMutation(internal.workosWebhook.logWorkosDelivery, {
         eventType: event,
         signatureValid: true,
         processed: false,
-        errorMessage: error instanceof Error ? error.message.slice(0, 240) : "The event could not be stored.",
+        errorMessage: queued.duplicate ? "Duplicate delivery acknowledged." : undefined,
       });
+      return Response.json({ success: true, eventType: event, accepted: true, duplicate: queued.duplicate });
+    } catch {
       return Response.json(
-        { success: false, message: "The event could not be stored." },
-        { status: 500 },
+        { success: false, message: "The request body was not valid JSON." },
+        { status: 400 },
       );
     }
   }),

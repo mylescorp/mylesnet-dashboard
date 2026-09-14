@@ -1,3 +1,12 @@
+export const MYLESCORP_SOCIAL_LINKS = {
+  linkedin: "https://www.linkedin.com/company/mylescorptech",
+  facebook: "https://www.facebook.com/mylescorptech",
+  twitter: "https://www.twitter.com/mylescorptech",
+  youtube: "https://www.youtube.com/@mylescorptech",
+  instagram: "https://www.instagram.com/mylescorptech",
+  tiktok: "https://www.tiktok.com/@mylescorptech",
+} as const;
+
 export type CompanyContact = {
   infoEmail: string | null;
   contactEmail: string | null;

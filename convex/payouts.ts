@@ -1,6 +1,8 @@
 import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
+import { Doc } from "./_generated/dataModel";
 import { requirePermission, requirePlatformOwner, requirePlatformUser } from "./lib/auth";
+import { readTenantList, enforceTenantOnResource } from "./lib/tenant";
 import { localToUsd } from "./lib/finance";
 import { logAudit } from "./lib/auditLog";
 
@@ -173,9 +175,14 @@ export const listPayouts = query({
   },
   handler: async (ctx, args) => {
     await requirePermission(ctx, "payouts:read");
-    const rows = args.status
-      ? await ctx.db.query("payouts").withIndex("by_status", (q) => q.eq("status", args.status!)).collect()
-      : await ctx.db.query("payouts").collect();
+    let rows = await readTenantList<Doc<"payouts">>(ctx, {
+      all: () => ctx.db.query("payouts").collect(),
+      tenant: (tenantId) =>
+        ctx.db.query("payouts").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
+      legacy: () =>
+        ctx.db.query("payouts").withIndex("by_tenant", (q) => q.eq("tenantId", undefined)).collect(),
+    });
+    if (args.status) rows = rows.filter((p) => p.status === args.status!);
     return rows.sort((a, b) => b.requestedAt - a.requestedAt).slice(0, args.limit ?? 100);
   },
 });
@@ -186,7 +193,7 @@ export const getPayout = query({
     await requirePlatformUser(ctx);
     const payout = await ctx.db.get(args.payoutId);
     if (!payout) throw new Error("Payout not found");
-    return payout;
+    return await enforceTenantOnResource(ctx, payout, "payout");
   },
 });
 
@@ -194,7 +201,13 @@ export const payoutApprovalSummary = query({
   args: {},
   handler: async (ctx) => {
     await requirePermission(ctx, "payouts:read");
-    const all = await ctx.db.query("payouts").collect();
+    const all = await readTenantList<Doc<"payouts">>(ctx, {
+      all: () => ctx.db.query("payouts").collect(),
+      tenant: (tenantId) =>
+        ctx.db.query("payouts").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
+      legacy: () =>
+        ctx.db.query("payouts").withIndex("by_tenant", (q) => q.eq("tenantId", undefined)).collect(),
+    });
     const pendingAgent = all.filter((p) => p.status === "pending_approval" && p.payeeType === "agent");
     const pendingTotal = all.filter((p) => p.status === "pending_approval");
     const approvalsNeeded =

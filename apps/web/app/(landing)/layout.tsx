@@ -2,9 +2,12 @@ import type { Metadata, Viewport } from "next";
 import "./landing.css";
 import Header from "./components/Header";
 import Footer from "./components/Footer";
+import JsonLd from "./components/JsonLd";
+import { MYLESCORP_SOCIAL_LINKS } from "./content/contact";
+import { SITE_URL } from "./content/seo";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://mylesnetisp.mylescorptech.com"),
+  metadataBase: new URL(SITE_URL),
   title: {
     default: "MylesNet — ISP Operations Platform for East Africa",
     template: "%s | MylesNet",
@@ -15,7 +18,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_KE",
-    url: "https://mylesnetisp.mylescorptech.com",
+    url: "/",
     siteName: "MylesNet",
     title: "MylesNet — ISP Operations Platform for East Africa",
     description:
@@ -28,6 +31,20 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
+const organizationJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: "MylesNet",
+  url: SITE_URL,
+  logo: `${SITE_URL}/favicon.ico`,
+  parentOrganization: {
+    "@type": "Organization",
+    name: "MylesCorp Technologies Ltd",
+    url: "https://mylescorptech.com/",
+  },
+  sameAs: Object.values(MYLESCORP_SOCIAL_LINKS),
+};
+
 export default function LandingLayout({
   children,
 }: Readonly<{
@@ -35,6 +52,7 @@ export default function LandingLayout({
 }>) {
   return (
     <>
+      <JsonLd data={organizationJsonLd} />
       <Header />
       <main className="landing-main">{children}</main>
       <Footer />

@@ -1,11 +1,11 @@
-import type { Metadata } from "next";
 import Link from "next/link";
+import { pageMetadata } from "../../content/seo";
 
-export const metadata: Metadata = {
-  title: "About MylesNet",
-  description:
-    "MylesNet is built by MylesCorp Technologies Ltd to serve East African internet service providers, communities, and connectivity businesses.",
-};
+export const metadata = pageMetadata(
+  "About MylesNet",
+  "MylesNet is built by MylesCorp Technologies Ltd to serve East African internet service providers, communities, and connectivity businesses.",
+  { canonical: "/company/about" }
+);
 
 export default function AboutPage() {
   return (
