@@ -90,6 +90,9 @@ export function PlatformTenantDetail({ tenantId }: { tenantId: string }) {
           <dt>Country</dt><dd>{tenant.country}</dd>
           <dt>Timezone</dt><dd>{tenant.timezone}</dd>
           <dt>Currency</dt><dd>{tenant.currency}</dd>
+          <dt>Markets</dt><dd>{tenant.marketCount}</dd>
+          <dt>Subscribers</dt><dd>{tenant.subscriberCount}</dd>
+          <dt>Account owner</dt><dd>{tenant.accountOwner ? tenant.accountOwner.name ?? tenant.accountOwner.email : "No tenant admin yet"}</dd>
           <dt>Created</dt><dd>{formatTs(tenant.createdAt)}</dd>
           <dt>Last updated</dt><dd>{formatTs(tenant.updatedAt)}</dd>
         </dl>
