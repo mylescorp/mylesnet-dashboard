@@ -13,6 +13,7 @@ divergence is drift.
 | Date | Slug | Topic | Agent | Status |
 |---|---|---|---|---|
 | 2026-09-12 | [transcript-archive-setup](2026-09-12-transcript-archive-setup) | Establish agent-thread archive (vault + repo mirror) | opencode (`big-pickle`) | recorded |
+| 2026-09-15 | [l2-audit-hash-chain-closeout](2026-09-15-l2-audit-hash-chain-closeout) | L2 audit hash chain close-out (Option C): full-chain verification, decision record, thread archive | opencode (`big-pickle`) | recorded |
 
 ## Rules
 

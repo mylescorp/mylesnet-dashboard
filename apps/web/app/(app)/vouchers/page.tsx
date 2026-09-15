@@ -4,8 +4,9 @@ import { useState } from "react";
 import { useMutation, useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
 import { Plus, ChevronRight, ChevronDown } from "lucide-react";
+import { PageHeader, Select, Field, TextInput, StatusPill, EmptyState } from "@mylesnet/ui";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
-import { Field, Select, TextInput, StatusPill, EmptyState, Loading, ErrorNote, formatMoney, formatDate } from "@/app/components/ui";
+import { Loading, ErrorNote, formatMoney, formatDate } from "@/app/components/ui";
 
 const PLANS = ["half_day", "day", "week", "month", "specialty"] as const;
 const PLAN_LABEL: Record<string, string> = { half_day: "Half-day", day: "Day", week: "Week", month: "Month", specialty: "Specialty" };
@@ -52,14 +53,12 @@ export default function VouchersPage() {
   if (batches === undefined || markets === undefined || agents === undefined) return <Loading />;
 
   return (
-    <div className="workspace-page">
-      <div className="page-heading">
-        <div>
-          <p className="eyebrow">Platform</p>
-          <h1 className="page-title">Vouchers</h1>
-          <p className="page-subtitle">Batch generation, allocation to agents, sale and manual redemption.</p>
-        </div>
-      </div>
+<div className="workspace-page">
+      <PageHeader
+        eyebrow="Platform"
+        title="Vouchers"
+        description="Batch generation, allocation to agents, sale and manual redemption."
+      />
 
       {error && <ErrorNote>{error}</ErrorNote>}
       {message && <p className="platform-claim-message ok" role="status">{message}</p>}
@@ -82,16 +81,16 @@ export default function VouchersPage() {
             </Select>
           </Field>
           <Field label="Quantity">
-            <TextInput type="number" min="1" value={quantity} onChange={(e) => setQuantity(e.target.value)} required />
+            <TextInput type="number" min="1" value={quantity} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuantity(e.target.value)} required />
           </Field>
           <Field label="Currency">
-            <Select value={currency} onChange={(e) => setCurrency(e.target.value as "UGX" | "KSH")}>
+            <Select value={currency} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setCurrency(e.target.value as "UGX" | "KSH")}>
               <option value="UGX">UGX</option>
               <option value="KSH">KSH</option>
             </Select>
           </Field>
           <Field label="Price each">
-            <TextInput type="number" step="0.01" min="0" value={priceEach} onChange={(e) => setPriceEach(e.target.value)} required />
+            <TextInput type="number" step="0.01" min="0" value={priceEach} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPriceEach(e.target.value)} required />
           </Field>
         </div>
         <div className="pf-form-actions">
@@ -104,7 +103,7 @@ export default function VouchersPage() {
         <div className="pf-page-toolbar" style={{ marginTop: 8 }}>
           <div className="pf-tools">
             <Field label="Filter by market">
-              <Select value={marketId} onChange={(e) => setMarketId(e.target.value)}>
+              <Select value={marketId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setMarketId(e.target.value)}>
                 <option value="">All markets</option>
                 {markets.map((m) => (
                   <option key={m._id} value={m._id as string}>{m.name}</option>
@@ -230,7 +229,7 @@ function BatchVouchers({ batchId, agents }: { batchId: string; agents: Doc<"agen
                       <TextInput
                         placeholder="Customer phone"
                         value={customerPhone[v._id] ?? ""}
-                        onChange={(e) => setCustomerPhone((r) => ({ ...r, [v._id]: e.target.value }))}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCustomerPhone((r) => ({ ...r, [v._id]: e.target.value }))}
                         style={{ width: 150 }}
                       />
                     )}
@@ -238,7 +237,7 @@ function BatchVouchers({ batchId, agents }: { batchId: string; agents: Doc<"agen
                   <td className="pf-actions">
                     {v.voucherStatus === "unallocated" && (
                       <>
-                        <Select value={allocAgent[v._id] ?? ""} onChange={(e) => setAllocAgent((r) => ({ ...r, [v._id]: e.target.value }))}>
+                        <Select value={allocAgent[v._id] ?? ""} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setAllocAgent((r) => ({ ...r, [v._id]: e.target.value }))}>
                           <option value="">Allocate to…</option>
                           {agents.map((a) => (<option key={a._id} value={a._id}>{a.name}</option>))}
                         </Select>

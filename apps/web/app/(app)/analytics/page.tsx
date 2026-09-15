@@ -3,8 +3,8 @@
 import { useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
 import { Cpu, MemoryStick, Users, Gauge, Radio, Wifi, Activity } from "lucide-react";
-import MetricCard from "@/app/components/MetricCard";
-import { EmptyState, Loading, StatusPill } from "@/app/components/ui";
+import { PageHeader, MetricCard, EmptyState, StatusPill } from "@mylesnet/ui";
+import { Loading } from "@/app/components/ui";
 
 const n = (v: number, d = 1) => v.toLocaleString("en", { maximumFractionDigits: d });
 
@@ -19,25 +19,23 @@ export default function AnalyticsPage() {
 
   return (
     <div className="workspace-page">
-      <div className="page-heading">
-        <div>
-          <p className="eyebrow">Performance</p>
-          <h1 className="page-title">Network analytics</h1>
-          <p className="page-subtitle">Fleet health over the last 14 days — CPU, memory, load and airtime quality.</p>
-        </div>
+      <PageHeader
+        eyebrow="Performance"
+        title="Network analytics"
+        description="Fleet health over the last 14 days — CPU, memory, load and airtime quality."
+      />
+
+      <div className="metric-grid">
+        <MetricCard icon={<Radio size={24} />} label="Routers" value={uptime.routerCount} hint="Telemetry reporting" />
+        <MetricCard icon={<Wifi size={24} />} label="Access points" value={uptime.accessPointCount} hint="Telemetry reporting" />
+        <MetricCard icon={<Users size={24} />} label="Peak clients" value={n(uptime.peakConnectedClients, 0)} hint="Across the fleet" />
+        <MetricCard icon={<Cpu size={24} />} label="Avg gateway CPU" value={`${n(cpuPct, 1)}%`} deltaTone={cpuPct >= 90 ? "down" : cpuPct >= 70 ? "flat" : "up"} hint="Daily average" />
       </div>
 
       <div className="metric-grid">
-        <MetricCard icon={Radio} label="Routers" value={uptime.routerCount} tone="primary" detail="Telemetry reporting" />
-        <MetricCard icon={Wifi} label="Access points" value={uptime.accessPointCount} tone="accent" detail="Telemetry reporting" />
-        <MetricCard icon={Users} label="Peak clients" value={n(uptime.peakConnectedClients, 0)} tone="success" detail="Across the fleet" />
-        <MetricCard icon={Cpu} label="Avg gateway CPU" value={`${n(cpuPct, 1)}%`} tone={cpuPct >= 90 ? "danger" : cpuPct >= 70 ? "warning" : "neutral"} detail="Daily average" />
-      </div>
-
-      <div className="metric-grid">
-        <MetricCard icon={MemoryStick} label="Avg gateway memory" value={`${n(memPct, 1)}%`} tone={memPct >= 90 ? "danger" : memPct >= 70 ? "warning" : "neutral"} detail="Daily average" />
-        <MetricCard icon={Gauge} label="Peak throughput" value={`${n(uptime.peakRxMbps, 0)} / ${n(uptime.peakTxMbps, 0)}`} tone="primary" detail="Rx / Tx Mbps" />
-        <MetricCard icon={Activity} label="Avg CCQ" value={`${n(ccq, 0)}%`} tone={ccq >= 80 ? "success" : ccq >= 60 ? "warning" : "danger"} detail="Client connection quality" />
+        <MetricCard icon={<MemoryStick size={24} />} label="Avg gateway memory" value={`${n(memPct, 1)}%`} deltaTone={memPct >= 90 ? "down" : memPct >= 70 ? "flat" : "up"} hint="Daily average" />
+        <MetricCard icon={<Gauge size={24} />} label="Peak throughput" value={`${n(uptime.peakRxMbps, 0)} / ${n(uptime.peakTxMbps, 0)}`} hint="Rx / Tx Mbps" />
+        <MetricCard icon={<Activity size={24} />} label="Avg CCQ" value={`${n(ccq, 0)}%`} deltaTone={ccq >= 80 ? "up" : ccq >= 60 ? "flat" : "down"} hint="Client connection quality" />
       </div>
 
       <div className="section-block">

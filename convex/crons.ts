@@ -163,4 +163,14 @@ crons.interval(
   {},
 );
 
+// Audit-chain integrity — advances a running verification sweep, or starts a
+// fresh full sweep once the previous one finished, so every sealed audit row
+// from genesis is re-verified on a rolling basis (see auditChainVerify.ts).
+crons.hourly(
+  "audit chain integrity sweep",
+  { minuteUTC: 15 },
+  internal.auditChainVerify.runAuditChainVerifyBatch,
+  {},
+);
+
 export default crons;

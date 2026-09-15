@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { query } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
 import { listAuditLog as readAuditLog } from "./lib/auditLog";
-import { verifyAuditChain, type SealedAuditEntry } from "./lib/auditChainCore";
+import { AUDIT_CHAIN_VERIFY_RUN_ID } from "./auditChainVerify";
 import {
   isPlatformUser,
   permissionsOf,
@@ -99,54 +99,64 @@ export const listAuditLogPage = query({
 });
 
 /**
- * Verify the most recent sealed audit links without exposing their payloads.
- * The bounded window keeps this platform query predictable as the log grows;
- * the UI labels a partial window honestly rather than claiming a full-history
- * verification. Rows written before L2 remain readable but intentionally have
- * no integrity hash.
+ * Report the state of the background audit-chain verification sweep — a low
+ * constant-cost read of the canonical `migrationRuns` row the sweep updates.
+ * The sweep itself (see `auditChainVerify.ts`) verifies every sealed row from
+ * the genesis sentinel forward; this query only reports its status, coverage
+ * range and completion time so the UI can label the result honestly without
+ * re-walking the chain. Rows written before L2 remain readable but
+ * intentionally have no integrity hash.
  */
 export const getAuditChainHealth = query({
   args: {},
   handler: async (ctx) => {
     await requirePlatformUser(ctx);
-    const windowSize = 2_000;
-    const newestFirst = await ctx.db
-      .query("auditLog")
-      .withIndex("by_timestamp")
-      .order("desc")
-      .take(windowSize);
-    const sealed = newestFirst
-      .filter((entry) => entry.hash !== undefined && entry.prevHash !== undefined && entry.chainSequence !== undefined)
-      .reverse()
-      .map((entry): SealedAuditEntry => ({
-        hash: entry.hash!,
-        prevHash: entry.prevHash!,
-        chainSequence: entry.chainSequence!,
-        action: entry.action,
-        entityTable: entry.entityTable,
-        entityId: entry.entityId,
-        changedBy: entry.changedBy,
-        beforeJson: entry.beforeJson,
-        afterJson: entry.afterJson,
-        timestamp: entry.timestamp,
-        ip: entry.ip,
-      }));
-    const first = sealed[0];
-    const last = sealed[sealed.length - 1];
-    const verification = await verifyAuditChain(sealed, {
-      requireGenesis: first?.chainSequence === 1,
-    });
+    const run = await ctx.db
+      .query("migrationRuns")
+      .withIndex("by_run_id", (q) => q.eq("runId", AUDIT_CHAIN_VERIFY_RUN_ID))
+      .first();
+    if (run === null) {
+      return {
+        status: "never",
+        valid: false,
+        issue: null,
+        checkedEntries: 0,
+        firstSequence: null,
+        lastSequence: null,
+        startsAt: null,
+        endsAt: null,
+        legacySkipped: 0,
+        runningSince: null,
+        completedAt: null,
+        lastGoodAt: null,
+      };
+    }
+
+    const manifest = (run.manifest ?? {}) as Record<string, unknown>;
+    const issue = typeof manifest.issue === "string" ? (manifest.issue as string) : null;
+    const lastGoodAt = typeof manifest.lastCompletedAt === "number" ? manifest.lastCompletedAt : null;
+    const lastSummary = (manifest.lastSummary ?? null) as Record<string, unknown> | null;
+    const numberField = (value: unknown): number | null => (typeof value === "number" ? value : null);
+
+    // `running` exposes the in-progress sweep's progress plus the last clean
+    // completion; `completed`/`failed` describe the latest attempt outright.
+    const described = run.status === "running"
+      ? { checkedEntries: Math.max(run.rowsProcessed, 0), firstSequence: numberField(manifest.firstSequence), lastSequence: numberField(manifest.lastSequence), startsAt: numberField(manifest.startsAt), endsAt: numberField(manifest.endsAt), legacySkipped: numberField(manifest.legacySkipped) ?? 0, valid: lastSummary !== null, completedAt: null }
+      : { checkedEntries: Math.max(run.rowsProcessed, 0), firstSequence: numberField(manifest.firstSequence), lastSequence: numberField(manifest.lastSequence), startsAt: numberField(manifest.startsAt), endsAt: numberField(manifest.endsAt), legacySkipped: numberField(manifest.legacySkipped) ?? 0, valid: issue === null, completedAt: run.completedAt ?? null };
 
     return {
-      ...verification,
-      sealedEntries: sealed.length,
-      legacyEntriesInWindow: newestFirst.length - sealed.length,
-      windowSize,
-      windowLimited: newestFirst.length === windowSize,
-      startsAt: first?.timestamp ?? null,
-      endsAt: last?.timestamp ?? null,
-      firstSequence: first?.chainSequence ?? null,
-      lastSequence: last?.chainSequence ?? null,
+      status: run.status,
+      valid: described.valid,
+      issue: run.status === "running" ? null : issue,
+      checkedEntries: described.checkedEntries,
+      firstSequence: described.firstSequence,
+      lastSequence: described.lastSequence,
+      startsAt: described.startsAt,
+      endsAt: described.endsAt,
+      legacySkipped: described.legacySkipped,
+      runningSince: run.status === "running" ? (run.startedAt ?? null) : null,
+      completedAt: described.completedAt,
+      lastGoodAt,
     };
   },
 });

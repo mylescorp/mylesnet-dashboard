@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useMutation, useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
-import { Field, Select, TextInput, TextArea, StatusPill, EmptyState, Loading, ErrorNote, formatDateTime } from "@/app/components/ui";
+import { PageHeader, Field, Select, TextInput, StatusPill, EmptyState } from "@mylesnet/ui";
+import { Loading, ErrorNote, formatDateTime } from "@/app/components/ui";
 
 const statusTone: Record<string, "neutral" | "warning" | "success" | "danger"> = {
   open: "danger",
@@ -80,16 +81,16 @@ export default function TicketsPage() {
 
   return (
     <div className="workspace-page">
-      <div className="page-heading">
-        <div>
-          <p className="eyebrow">Platform</p>
-          <h1 className="page-title">Support Tickets</h1>
-          <p className="page-subtitle">Queue for market and agent support issues.</p>
-        </div>
-        <button type="button" className="primary-button" onClick={() => setShowForm(!showForm)}>
-          {showForm ? "Cancel" : "+ New Ticket"}
-        </button>
-      </div>
+      <PageHeader
+        eyebrow="Platform"
+        title="Support Tickets"
+        description="Queue for market and agent support issues."
+        actions={
+          <button type="button" className="primary-button" onClick={() => setShowForm(!showForm)}>
+            {showForm ? "Cancel" : "+ New Ticket"}
+          </button>
+        }
+      />
 
       {error && <ErrorNote>{error}</ErrorNote>}
       {message && <p className="platform-claim-message ok" role="status">{message}</p>}
@@ -99,7 +100,7 @@ export default function TicketsPage() {
           <h2>New Ticket</h2>
           <form onSubmit={handleCreate} className="pf-form-grid" style={{ marginTop: 12 }}>
             <Field label="Subject"><TextInput value={subject} onChange={(e) => setSubject(e.target.value)} required /></Field>
-            <Field label="Description"><TextArea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} required /></Field>
+            <Field label="Description"><textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} required className="mn-input" /></Field>
             <Field label="Priority">
               <Select value={priority} onChange={(e) => setPriority(e.target.value as typeof priority)}>
                 <option value="low">Low</option>
@@ -120,10 +121,10 @@ export default function TicketsPage() {
                 {agents.map((a) => <option key={a._id} value={a._id as string}>{a.name}</option>)}
               </Select>
             </Field>
+            <div className="pf-form-actions">
+              <button type="submit" className="primary-button">Create Ticket</button>
+            </div>
           </form>
-          <div className="pf-form-actions">
-            <button type="button" className="primary-button" onClick={handleCreate}>Create Ticket</button>
-          </div>
         </div>
       )}
 

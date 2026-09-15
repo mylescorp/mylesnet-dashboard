@@ -25,17 +25,18 @@ export type AuditLogPage = {
 };
 
 export type AuditChainHealth = {
+  status: "never" | "running" | "completed" | "failed";
   valid: boolean;
   checkedEntries: number;
-  issue?: "invalid_genesis" | "missing_link" | "invalid_sequence" | "invalid_hash";
-  sealedEntries: number;
-  legacyEntriesInWindow: number;
-  windowSize: number;
-  windowLimited: boolean;
-  startsAt: number | null;
-  endsAt: number | null;
+  issue?: "invalid_genesis" | "missing_link" | "invalid_sequence" | "invalid_hash" | null;
   firstSequence: number | null;
   lastSequence: number | null;
+  startsAt: number | null;
+  endsAt: number | null;
+  legacySkipped: number;
+  runningSince: number | null;
+  completedAt: number | null;
+  lastGoodAt: number | null;
 };
 
 export type SecurityStaffEntry = {

@@ -172,10 +172,10 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
     }
   };
 
-  return (
-    <div className="profile-modal-overlay" onClick={onClose} role="presentation">
+return (
+    <div className="profile-drawer-overlay" onClick={onClose} role="presentation">
       <div
-        className="profile-modal-dialog"
+        className="profile-drawer-panel"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -192,8 +192,8 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
           <button
             type="button"
             onClick={onClose}
-            className="profile-modal-close"
-            aria-label="Close modal"
+className="profile-modal-close"
+            aria-label="Close account panel"
           >
             <X size={18} />
           </button>

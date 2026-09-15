@@ -61,7 +61,7 @@ export function PlatformOverview() {
       </section>
 
       <section className="pf-panel" style={{ marginTop: 28 }}>
-        <div className="section-heading"><div><p className="eyebrow">Control planes</p><h2>Sub-panels</h2></div><span className="section-count">8 surfaces</span></div>
+        <div className="section-heading"><div><p className="eyebrow">Control planes</p><h2>Sub-panels</h2></div><span className="section-count">9 surfaces</span></div>
         <div className="platform-actions-grid">
           <PlaneCard href="/platform/tenants" icon={<Building2 size={20} />} title="Tenants" body="Register verified operators, review identity readiness, and manage lifecycle state." />
           <PlaneCard href="/platform/subscriptions" icon={<CreditCard size={20} />} title="Subscriptions" body="Set plans and entitlement status per tenant, including trial windows and expiry." />
