@@ -1,6 +1,6 @@
 import { makeFunctionReference } from "convex/server";
 
-export type TenantStatus = "trial" | "active" | "suspended" | "cancelled";
+export type TenantStatus = "trial" | "active" | "suspended" | "cancelled" | "pending_deletion";
 
 export type EntitlementStatus = "trial" | "active" | "expired" | "suspended";
 
@@ -58,6 +58,14 @@ export type TenantDetail = {
   workosOrganizationId: string | null;
   createdAt: number;
   updatedAt: number;
+  deletionRequestedAt: number | null;
+  deletionRequestedBy: string | null;
+  deleteReason: string | null;
+  purgeEligibleAt: number | null;
+  purgedAt: number | null;
+  restoredAt: number | null;
+  retentionDaysRemaining: number | null;
+  purgeEligible: boolean;
   entitlement: {
     planId: string;
     status: EntitlementStatus;
@@ -87,6 +95,9 @@ export const tenantControl = {
     expiresAt?: number;
     trialEndsAt?: number;
   }, { changed: boolean }>("tenantControl:setEntitlement"),
+  requestTenantDeletion: makeFunctionReference<"mutation", { tenantId: string; deleteReason: string }, { changed: boolean }>("tenantControl:requestTenantDeletion"),
+  restoreTenant: makeFunctionReference<"mutation", { tenantId: string }, { changed: boolean }>("tenantControl:restoreTenant"),
+  purgeTenant: makeFunctionReference<"mutation", { tenantId: string }, { changed: boolean }>("tenantControl:purgeTenant"),
   registerExistingOrganization: makeFunctionReference<"action", {
     name: string;
     slug: string;

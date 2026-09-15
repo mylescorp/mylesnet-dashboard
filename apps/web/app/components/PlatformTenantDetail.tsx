@@ -3,12 +3,15 @@
 import { useState } from "react";
 import Link from "next/link";
 import {
+  AlertTriangle,
   ArrowLeft,
   Building2,
   Link2,
   PauseCircle,
-  PlayCircle,
   Pencil,
+  PlayCircle,
+  RotateCcw,
+  Trash2,
   UsersRound,
 } from "lucide-react";
 import { useMutation, useQuery } from "@/app/lib/convex";
@@ -30,17 +33,22 @@ const statusTone: Record<TenantStatus, "success" | "warning" | "danger" | "neutr
   trial: "warning",
   suspended: "danger",
   cancelled: "neutral",
+  pending_deletion: "danger",
 };
 
 export function PlatformTenantDetail({ tenantId }: { tenantId: string }) {
   const { user } = useUserProfile();
   const detail = useQuery(tenantControl.getTenantDetail, { tenantId });
   const setStatus = useMutation(tenantControl.setStatus);
+  const requestDeletion = useMutation(tenantControl.requestTenantDeletion);
+  const restoreTenant = useMutation(tenantControl.restoreTenant);
+  const purgeTenant = useMutation(tenantControl.purgeTenant);
   const [working, setWorking] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  const canManage = user?.roles.some((role) => ["platform_owner", "platform_admin"].includes(role.slug));
+  const [deleteReason, setDeleteReason] = useState("");
+  const [showRequestDeletion, setShowRequestDeletion] = useState(false);
+  const [confirmPurge, setConfirmPurge] = useState(false);
 
   const tenant = detail;
   if (tenant === undefined) return <p className="pf-muted">Loading tenant detail…</p>;
@@ -56,6 +64,42 @@ export function PlatformTenantDetail({ tenantId }: { tenantId: string }) {
     } finally { setWorking(false); }
   };
 
+  const reinstate = async () => {
+    setError(null); setNotice(null); setWorking(true);
+    try {
+      await restoreTenant({ tenantId });
+      setNotice(`${tenant.name} was reinstated.`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Tenant could not be restored.");
+    } finally { setWorking(false); }
+  };
+
+  const initiateDeletion = async () => {
+    setError(null); setNotice(null); setWorking(true);
+    try {
+      await requestDeletion({ tenantId, deleteReason });
+      setNotice(`${tenant.name} was marked for deletion; the 30-day retention window is now active.`);
+      setDeleteReason(""); setShowRequestDeletion(false);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Tenant deletion could not be requested.");
+    } finally { setWorking(false); }
+  };
+
+  const purge = async () => {
+    setError(null); setNotice(null); setWorking(true); setConfirmPurge(false);
+    try {
+      await purgeTenant({ tenantId });
+      setNotice(`${tenant.name} was purged and removed from the active tenant estate.`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Tenant purge failed.");
+    } finally { setWorking(false); }
+  };
+
+  const canManage = user?.roles.some((role) => ["platform_owner", "platform_admin"].includes(role.slug));
+  const canPurge = user?.roles.some((role) => ["platform_owner", "platform_admin"].includes(role.slug));
+  const purgeEligibleNow = tenant.status === "pending_deletion" && tenant.purgeEligible;
+  const daysRemaining = tenant.retentionDaysRemaining ?? 0;
+
   return (
     <div className="workspace-page">
       <header className="page-heading">
@@ -68,13 +112,32 @@ export function PlatformTenantDetail({ tenantId }: { tenantId: string }) {
           <div style={{ display: "flex", gap: 8 }}>
             {tenant.status === "suspended"
               ? <button type="button" className="secondary-button" disabled={working} onClick={() => void changeStatus("active")}><PlayCircle size={15} aria-hidden="true" />Activate</button>
-              : <button type="button" className="secondary-button" disabled={working || tenant.status === "cancelled"} onClick={() => void changeStatus("suspended")}><PauseCircle size={15} aria-hidden="true" />Suspend</button>}
+              : tenant.status === "pending_deletion"
+                ? <button type="button" className="secondary-button" disabled={working} onClick={() => void reinstate()}><RotateCcw size={15} aria-hidden="true" />Restore</button>
+                : <>
+                    <button type="button" className="secondary-button" disabled={working || tenant.status === "cancelled"} onClick={() => void changeStatus("suspended")}><PauseCircle size={15} aria-hidden="true" />Suspend</button>
+                    {tenant.status !== "cancelled" ? <button type="button" className="secondary-button" disabled={working} onClick={() => { setError(null); setNotice(null); setShowRequestDeletion(true); }}><Trash2 size={15} aria-hidden="true" />Delete</button> : null}
+                  </>}
           </div>
         ) : null}
       </header>
 
       {notice ? <p className="platform-claim-message ok" role="status">{notice}</p> : null}
       {error ? <p className="platform-claim-message" role="alert">{error}</p> : null}
+
+      {tenant.status === "pending_deletion" && tenant.deletionRequestedAt !== null ? (
+        <section className="pf-panel" style={{ marginBottom: 24 }}>
+          <div className="section-heading"><div><p className="eyebrow">Retention window</p><h2>Pending deletion</h2></div><span className="section-count">{purgeEligibleNow ? "Purge eligible" : `${daysRemaining} day(s) remaining`}</span></div>
+          <dl className="tenant-detail-fields">
+            <dt>Requested</dt><dd>{formatTs(tenant.deletionRequestedAt)}</dd>
+            <dt>Reason</dt><dd>{tenant.deleteReason ?? "No reason recorded"}</dd>
+            <dt>Purge eligible</dt><dd>{formatTs(tenant.purgeEligibleAt)}</dd>
+          </dl>
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            {canPurge && purgeEligibleNow ? <button type="button" className="secondary-button" disabled={working} onClick={() => setConfirmPurge(true)}><Trash2 size={15} aria-hidden="true" />Purge tenant</button> : null}
+          </div>
+        </section>
+      ) : null}
 
       <section className="metric-grid">
         <Metric icon={<Building2 size={19} />} label="Lifecycle status" value={<StatusPill tone={statusTone[tenant.status]}>{tenant.status}</StatusPill>} detail="Tenant directory state" />
@@ -123,6 +186,39 @@ export function PlatformTenantDetail({ tenantId }: { tenantId: string }) {
           </tbody></table></div>
         )}
       </section>
+
+      {showRequestDeletion ? (
+        <div className="profile-modal-overlay" role="dialog" aria-modal="true" aria-label="Request tenant deletion" onClick={(event) => { if (event.target === event.currentTarget && !working) setShowRequestDeletion(false); }}>
+          <form className="profile-modal-dialog" onSubmit={(event) => { event.preventDefault(); void initiateDeletion(); }}>
+            <header className="profile-modal-header"><div><p className="eyebrow">Retention window</p><h2 className="page-title">Request tenant deletion</h2></div><button type="button" className="profile-modal-close" onClick={() => setShowRequestDeletion(false)} aria-label="Close dialog">×</button></header>
+            <div className="modal-body">
+              <p className="pf-hint"><AlertTriangle size={15} aria-hidden="true" /> {tenant.name} will move to <strong>pending deletion</strong>. Access gate is denied immediately; a purge becomes possible only after the 30-day retention window, and a restore stays available until then. No records are destroyed by this action.</p>
+              {error ? <p className="platform-claim-message" role="alert">{error}</p> : null}
+              <label className="pf-field"><span className="pf-label">Reason for deletion</span><textarea className="pf-input" required value={deleteReason} onChange={(event) => setDeleteReason(event.target.value)} placeholder="e.g. Operator discontinued service; 30-day window before final purge" /></label>
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                <button type="button" className="secondary-button" disabled={working} onClick={() => setShowRequestDeletion(false)}>Cancel</button>
+                <button type="submit" className="primary-button" disabled={working}>Mark for deletion</button>
+              </div>
+            </div>
+          </form>
+        </div>
+      ) : null}
+
+      {confirmPurge ? (
+        <div className="profile-modal-overlay" role="dialog" aria-modal="true" aria-label="Confirm tenant purge" onClick={(event) => { if (event.target === event.currentTarget && !working) setConfirmPurge(false); }}>
+          <div className="profile-modal-dialog">
+            <header className="profile-modal-header"><div><p className="eyebrow">Retention window elapsed</p><h2 className="page-title">Purge {tenant.name}?</h2></div><button type="button" className="profile-modal-close" onClick={() => setConfirmPurge(false)} aria-label="Close dialog">×</button></header>
+            <div className="modal-body">
+              <p className="pf-hint"><AlertTriangle size={15} aria-hidden="true" /> This is a super-admin-only final step after the 30-day window. The tenant leaves the active estate; its record and audit trail are retained. This action is immediate and cannot be undone.</p>
+              {error ? <p className="platform-claim-message" role="alert">{error}</p> : null}
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                <button type="button" className="secondary-button" disabled={working} onClick={() => setConfirmPurge(false)}>Keep tenant</button>
+                <button type="button" className="primary-button" disabled={working} onClick={() => void purge()}><Trash2 size={14} aria-hidden="true" />Purge tenant</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

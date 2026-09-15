@@ -11,7 +11,8 @@ export type TenantStatus =
   | "trial"
   | "active"
   | "suspended"
-  | "cancelled";
+  | "cancelled"
+  | "pending_deletion";
 
 /**
  * Choose the only safe result from the server-derived resolution paths.
@@ -69,11 +70,13 @@ export function isTenantActive(status: TenantStatus | undefined): boolean {
 /**
  * Write/read gate for a tenant by lifecycle status. Unlike `isTenantActive`,
  * an unset status (pre-backfill rows) defaults to allowed so the additive
- * migration never cuts off legacy behavior; only an explicit suspension or
- * cancellation blocks tenant-owned work.
+ * migration never cuts off legacy behavior; only an explicit suspension,
+ * cancellation or pending deletion blocks tenant-owned work.
  */
 export function canTenantOperate(status: TenantStatus | undefined): boolean {
-  return status !== "suspended" && status !== "cancelled";
+  return (
+    status !== "suspended" && status !== "cancelled" && status !== "pending_deletion"
+  );
 }
 
 /**

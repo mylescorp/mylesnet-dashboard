@@ -23,6 +23,7 @@ const statusTone: Record<TenantStatus, "success" | "warning" | "danger" | "neutr
   trial: "warning",
   suspended: "danger",
   cancelled: "neutral",
+  pending_deletion: "danger",
 };
 
 function Metric({ icon, label, value, detail, tone = "accent" }: { icon: React.ReactNode; label: string; value: number | string; detail: string; tone?: "accent" | "success" | "warning" | "danger" }) {

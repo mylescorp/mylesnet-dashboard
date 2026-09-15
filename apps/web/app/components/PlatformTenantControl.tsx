@@ -7,7 +7,7 @@ import { useAction, useMutation, useQuery } from "@/app/lib/convex";
 import { tenantControl, type PlatformTenant, type TenantStatus } from "@/lib/convex/tenantControl";
 
 const statusTone: Record<TenantStatus, "success" | "warning" | "danger" | "neutral"> = {
-  active: "success", trial: "warning", suspended: "danger", cancelled: "neutral",
+  active: "success", trial: "warning", suspended: "danger", cancelled: "neutral", pending_deletion: "danger",
 };
 
 function Status({ status }: { status: TenantStatus }) {
@@ -17,6 +17,7 @@ function Status({ status }: { status: TenantStatus }) {
 export function PlatformTenantControl() {
   const tenants = useQuery(tenantControl.listForPlatform, {});
   const setStatus = useMutation(tenantControl.setStatus);
+  const restoreTenant = useMutation(tenantControl.restoreTenant);
   const registerTenant = useAction(tenantControl.registerExistingOrganization);
   const [creating, setCreating] = useState(false);
   const [workingId, setWorkingId] = useState<string | null>(null);
@@ -36,6 +37,16 @@ export function PlatformTenantControl() {
       setNotice(`${tenant.name} is now ${status}.`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Tenant status could not be changed.");
+    } finally { setWorkingId(null); }
+  };
+
+  const reinstate = async (tenant: PlatformTenant) => {
+    setError(null); setNotice(null); setWorkingId(tenant._id);
+    try {
+      await restoreTenant({ tenantId: tenant._id });
+      setNotice(`${tenant.name} was reinstated.`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Tenant could not be restored.");
     } finally { setWorkingId(null); }
   };
 
@@ -60,7 +71,7 @@ export function PlatformTenantControl() {
         <div className="section-heading"><div><p className="eyebrow">Tenant estate</p><h2>Registered operators</h2></div><span className="section-count">{counts.total} total</span></div>
         {tenants === undefined ? <p className="pf-muted">Loading tenant inventory…</p> : tenants.length === 0 ? <EmptyTenantState onRegister={() => setCreating(true)} /> : (
           <div className="pf-table-wrap"><table className="pf-table"><thead><tr><th>Tenant</th><th>Identity</th><th>Members</th><th>Plan</th><th>Status</th><th /></tr></thead><tbody>
-            {tenants.map((tenant) => <tr key={tenant._id}><td><Link href={`/platform/tenants/${tenant._id}`} className="tenant-name-link"><strong>{tenant.name}</strong></Link><small className="table-subtext">{tenant.slug} · {tenant.country}</small></td><td>{tenant.workosOrganizationId ? <span className="tenant-linked"><Link2 size={14} aria-hidden="true" />Connected</span> : <span className="tenant-unlinked"><CircleAlert size={14} aria-hidden="true" />Missing mapping</span>}</td><td>{tenant.membershipCount}</td><td>{tenant.entitlement ? `${tenant.entitlement.planId} · ${tenant.entitlement.status}` : "Not configured"}</td><td><Status status={tenant.status} /></td><td><div className="cell-actions">{tenant.status === "suspended" ? <button type="button" className="secondary-button" disabled={workingId === tenant._id} onClick={() => void changeStatus(tenant, "active")}><PlayCircle size={14} aria-hidden="true" />Activate</button> : <button type="button" className="secondary-button" disabled={workingId === tenant._id || tenant.status === "cancelled"} onClick={() => void changeStatus(tenant, "suspended")}><PauseCircle size={14} aria-hidden="true" />Suspend</button>}</div></td></tr>)}
+            {tenants.map((tenant) => <tr key={tenant._id}><td><Link href={`/platform/tenants/${tenant._id}`} className="tenant-name-link"><strong>{tenant.name}</strong></Link><small className="table-subtext">{tenant.slug} · {tenant.country}</small></td><td>{tenant.workosOrganizationId ? <span className="tenant-linked"><Link2 size={14} aria-hidden="true" />Connected</span> : <span className="tenant-unlinked"><CircleAlert size={14} aria-hidden="true" />Missing mapping</span>}</td><td>{tenant.membershipCount}</td><td>{tenant.entitlement ? `${tenant.entitlement.planId} · ${tenant.entitlement.status}` : "Not configured"}</td><td><Status status={tenant.status} /></td><td><div className="cell-actions">{tenant.status === "suspended" ? <button type="button" className="secondary-button" disabled={workingId === tenant._id} onClick={() => void changeStatus(tenant, "active")}><PlayCircle size={14} aria-hidden="true" />Activate</button> : tenant.status === "pending_deletion" ? <button type="button" className="secondary-button" disabled={workingId === tenant._id} onClick={() => void reinstate(tenant)}><PlayCircle size={14} aria-hidden="true" />Restore</button> : <button type="button" className="secondary-button" disabled={workingId === tenant._id || tenant.status === "cancelled"} onClick={() => void changeStatus(tenant, "suspended")}><PauseCircle size={14} aria-hidden="true" />Suspend</button>}</div></td></tr>)}
           </tbody></table></div>
         )}
       </section>

@@ -7,6 +7,7 @@ import { requirePlatformAdmin, requirePlatformSubRole, requirePlatformUser, reso
 import { PLATFORM_SUB_ROLE_MAP } from "./lib/permissions";
 import { assertMfaCompliance } from "./lib/mfa";
 import { requireTenantMember } from "./lib/tenant";
+import { assertCanPurge, assertCanRequestDeletion, assertCanRestore, purgeEligibleAt } from "./lib/tenantLifecycleCore";
 import { normalizeTenantRegistration } from "./lib/tenantProvisioning";
 import { getWorkosOrganizationMembership } from "./workos";
 
@@ -15,6 +16,7 @@ const tenantStatus = v.union(
   v.literal("active"),
   v.literal("suspended"),
   v.literal("cancelled"),
+  v.literal("pending_deletion"),
 );
 
 const entitlementStatus = v.union(
@@ -104,6 +106,12 @@ export const setStatus = mutation({
     if (args.status === "cancelled") {
       throw new Error("Cancellation requires the retention/offboarding workflow; direct cancellation is disabled");
     }
+    if (args.status === "pending_deletion") {
+      throw new Error("Deletion must be requested through requestTenantDeletion");
+    }
+    if (tenant.status === "pending_deletion") {
+      throw new Error("Tenant is pending deletion; use restoreTenant to reinstate it");
+    }
     if (tenant.status === args.status) return { changed: false };
     await ctx.db.patch(tenant._id, { status: args.status, updatedAt: Date.now() });
     await logAudit(ctx, {
@@ -113,6 +121,103 @@ export const setStatus = mutation({
       changedBy: actor._id,
       before: { status: tenant.status },
       after: { status: args.status },
+    });
+    return { changed: true };
+  },
+});
+
+/**
+ * Open the A3 retention window. Status becomes `pending_deletion` and a purge
+ * is eligible only after the 30-day window; the base (suspend/restore) flow
+ * stays fully reversible until then.
+ */
+export const requestTenantDeletion = mutation({
+  args: { tenantId: v.id("tenants"), deleteReason: v.string() },
+  handler: async (ctx, args) => {
+    const actor = await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_ops"]);
+    const tenant = await ctx.db.get(args.tenantId);
+    if (!tenant) throw new Error("Tenant not found");
+    const now = Date.now();
+    assertCanRequestDeletion(tenant);
+    await ctx.db.patch(tenant._id, {
+      status: "pending_deletion",
+      deletionRequestedAt: now,
+      deletionRequestedBy: actor._id,
+      deleteReason: args.deleteReason,
+      purgeEligibleAt: purgeEligibleAt(now),
+      updatedAt: now,
+    });
+    await logAudit(ctx, {
+      action: "tenant.deletionRequested",
+      entityTable: "tenants",
+      entityId: tenant._id,
+      changedBy: actor._id,
+      before: { status: tenant.status },
+      after: { status: "pending_deletion", purgeEligibleAt: purgeEligibleAt(now), reason: args.deleteReason },
+    });
+    return { changed: true };
+  },
+});
+
+/** Reinstate a suspended or pending-deletion tenant; clears the retention window. */
+export const restoreTenant = mutation({
+  args: { tenantId: v.id("tenants") },
+  handler: async (ctx, args) => {
+    const actor = await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_ops"]);
+    const tenant = await ctx.db.get(args.tenantId);
+    if (!tenant) throw new Error("Tenant not found");
+    const now = Date.now();
+    assertCanRestore(tenant);
+    await ctx.db.patch(tenant._id, {
+      status: "active",
+      deletionRequestedAt: undefined,
+      deletionRequestedBy: undefined,
+      deleteReason: undefined,
+      purgeEligibleAt: undefined,
+      restoredAt: now,
+      restoredBy: actor._id,
+      updatedAt: now,
+    });
+    await logAudit(ctx, {
+      action: "tenant.restored",
+      entityTable: "tenants",
+      entityId: tenant._id,
+      changedBy: actor._id,
+      before: { status: tenant.status, restoredAt: tenant.restoredAt ?? null },
+      after: { status: "active", restoredAt: now },
+    });
+    return { changed: true };
+  },
+});
+
+/**
+ * Finalize a pending-deletion tenant AFTER the retention window has elapsed
+ * (super-admin only — `platform_ops` can never reach a purge). A soft mark
+ * only: the row and its audit trail are retained per the retention workflow.
+ */
+export const purgeTenant = mutation({
+  args: { tenantId: v.id("tenants") },
+  handler: async (ctx, args) => {
+    const actor = await requirePlatformSubRole(ctx, ["platform_super_admin"]);
+    const tenant = await ctx.db.get(args.tenantId);
+    if (!tenant) throw new Error("Tenant not found");
+    const now = Date.now();
+    assertCanPurge(tenant, now);
+    await ctx.db.patch(tenant._id, {
+      deletedAt: now,
+      deletedBy: actor._id,
+      deleteReason: tenant.deleteReason ?? "Purged after retention window",
+      purgedAt: now,
+      purgedBy: actor._id,
+      updatedAt: now,
+    });
+    await logAudit(ctx, {
+      action: "tenant.purged",
+      entityTable: "tenants",
+      entityId: tenant._id,
+      changedBy: actor._id,
+      before: { deletionRequestedAt: tenant.deletionRequestedAt ?? null, purgeEligibleAt: tenant.purgeEligibleAt ?? null },
+      after: { deletedAt: now, purgedAt: now, reason: tenant.deleteReason ?? null },
     });
     return { changed: true };
   },
@@ -148,6 +253,10 @@ export const getTenantDetail = query({
         joinedAt: membership.joinedAt ?? null,
       };
     }));
+    const retentionDaysRemaining = tenant.purgeEligibleAt !== undefined
+      ? Math.max(0, Math.ceil((tenant.purgeEligibleAt - Date.now()) / (24 * 60 * 60 * 1000)))
+      : null;
+    const purgeEligible = tenant.purgeEligibleAt !== undefined && Date.now() >= tenant.purgeEligibleAt;
     return {
       _id: tenant._id,
       name: tenant.name,
@@ -159,6 +268,14 @@ export const getTenantDetail = query({
       workosOrganizationId: tenant.workosOrganizationId ?? null,
       createdAt: tenant.createdAt,
       updatedAt: tenant.updatedAt,
+      deletionRequestedAt: tenant.deletionRequestedAt ?? null,
+      deletionRequestedBy: tenant.deletionRequestedBy ?? null,
+      deleteReason: tenant.deleteReason ?? null,
+      purgeEligibleAt: tenant.purgeEligibleAt ?? null,
+      purgedAt: tenant.purgedAt ?? null,
+      restoredAt: tenant.restoredAt ?? null,
+      retentionDaysRemaining,
+      purgeEligible,
       entitlement: entitlement
         ? {
             planId: entitlement.planId,

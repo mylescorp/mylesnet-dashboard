@@ -96,6 +96,7 @@ import type * as supportTickets from "../supportTickets.js";
 import type * as systemSettings from "../systemSettings.js";
 import type * as teams from "../teams.js";
 import type * as tenantControl from "../tenantControl.js";
+import type * as tenantRetention from "../tenantRetention.js";
 import type * as tenantMigrations from "../tenantMigrations.js";
 import type * as thresholds from "../thresholds.js";
 import type * as trash from "../trash.js";
@@ -200,6 +201,7 @@ declare const fullApi: ApiFromModules<{
   systemSettings: typeof systemSettings;
   teams: typeof teams;
   tenantControl: typeof tenantControl;
+  tenantRetention: typeof tenantRetention;
   tenantMigrations: typeof tenantMigrations;
   thresholds: typeof thresholds;
   trash: typeof trash;
