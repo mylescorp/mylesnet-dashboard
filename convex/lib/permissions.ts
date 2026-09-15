@@ -472,3 +472,24 @@ export const PLATFORM_SUB_ROLE_MAP: Record<string, string[]> = {
   platform_support: ["platform_support"],
   platform_readonly: ["platform_readonly"],
 };
+
+/**
+ * Resolve a list of spec sub-role names (platform_super_admin, platform_ops, …)
+ * to the concrete role slugs that satisfy them. Unknown slugs pass through
+ * unchanged so literal slugs also work. This is the mapping layer used by
+ * `requirePlatformSubRole` and by the gate proofs in tenantControl.ts.
+ */
+export function platformSubRoleSlugs(allowedSubRoles: string[]): string[] {
+  return allowedSubRoles
+    .flatMap((subRole) => PLATFORM_SUB_ROLE_MAP[subRole] ?? [subRole])
+    .filter((slug, index, arr) => arr.indexOf(slug) === index);
+}
+
+/**
+ * True when the caller holds at least one of the allowed slugs. This is the
+ * exact predicate behind `requireAnyRole`, kept here as a pure function so role
+ * gates can be proven in the test suite without a Convex backend.
+ */
+export function hasAnyRoleSlug(heldSlugs: string[], allowedSlugs: string[]): boolean {
+  return allowedSlugs.some((slug) => heldSlugs.includes(slug));
+}
