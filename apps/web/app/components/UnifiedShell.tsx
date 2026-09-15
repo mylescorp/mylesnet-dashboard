@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { useAuth } from "@workos-inc/authkit-nextjs/components";
-import { Activity, Building2, CreditCard, Cpu, Flag, LayoutDashboard, LogOut, Menu, ScrollText, ServerCog, ShieldCheck, TicketCheck, Users, UsersRound, X } from "lucide-react";
+import { Activity, Building2, CreditCard, Cpu, Flag, LayoutDashboard, LogOut, Menu, Radio, ScrollText, ServerCog, ShieldCheck, TicketCheck, Users, UsersRound, X } from "lucide-react";
 import { useConvexAuth } from "@/app/lib/convex";
 import { UserProfileProvider, useUserProfile } from "./UserProfileContext";
 import { ThemeToggle } from "./ThemeToggle";
@@ -23,6 +23,7 @@ const platformLinks = [
   { href: "/platform/security", label: "Security", icon: ShieldCheck },
   { href: "/platform/provisioning", label: "Provisioning", icon: ServerCog },
   { href: "/platform/infrastructure/devices", label: "Device fleet", icon: Cpu },
+  { href: "/platform/infrastructure/radius", label: "RADIUS fleet", icon: Radio },
   { href: "/platform/vouchers/monitor", label: "Voucher monitor", icon: TicketCheck },
   { href: "/platform/feature-flags", label: "Feature flags", icon: Flag },
 ];

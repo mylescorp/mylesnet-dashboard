@@ -1,5 +1,16 @@
 # Build decisions
 
+## B3 — Platform RADIUS server fleet (2026-09-15)
+
+- **Data model:** new `radiusServers` table in `convex/schema.ts`, platform-owned (no `tenantScope`). Fields: name, hostname, port, protocol (radsec|udp), status (active|provisioning|failed|maintenance|decommissioned), healthStatus (healthy|degraded|down|unknown), region, certExpiryAt, lastHealthCheckAt, notes, registeredBy, createdAt, updatedAt. Indexed by `status` and `protocol`.
+- **Auth model:** CRUD matrix per spec — `platform_super_admin` and `platform_ops` have full create/read/update; super_admin only may decommission (soft-delete). All reads require `requirePlatformUser`.
+- **Server functions:** `radiusFleet.ts` — listRadiusServers (query, filterable by status/protocol), getRadiusServerRow (query), createRadiusServer (mutation, defaults to provisioning), updateRadiusServer (mutation, partial update), deleteRadiusServer (mutation, decommission only, super_admin).
+- **Pure core:** `radiusFleetCore.ts` — deterministic, I/O-free helpers for type guards (status, protocol, health), hostname validation (IPv4, IPv6 bracketed, RFC-1123), port validation (1–65535), and `buildRadiusServerRow`. 16 test cases in `radiusFleetCore.test.ts`, all passing.
+- **Client bridge:** `apps/web/lib/convex/radiusFleet.ts` — explicit function references (same pattern as `fleet.ts`), no regeneration needed.
+- **UI:** `PlatformRadiusFleet.tsx` — metrics grid (total, active, degraded, provisioning), tab filters, sortable table, modal editor with optional decommission button (super_admin). Route: `/platform/infrastructure/radius`. Server page wired through `requirePanelAccess("platform")`.
+- **Nav surfaces:** Added `RADIUS fleet` link (Radio icon) in `UnifiedShell.tsx` platform sidebar; added PlaneCard in `PlatformOverview.tsx` sub-panels grid.
+- **Gates:** `pnpm typecheck` 0, `pnpm lint` 0, `pnpm tokens:check` 0, `pnpm test` 160/160 (16 new `radiusFleetCore` tests), `pnpm build` green. All passing.
+
 ## Landing-surface consistency correction (2026-09-13)
 
 - **Token alias repair:** shadcn/Tailwind aliases are isolated behind `--ui-*` and `--color-*` mappings. The earlier implementation overwrote semantic `--primary`, `--muted`, and `--accent` values, producing low-contrast public navigation and copy. Product semantic tokens are now never shadowed by primitive aliases.
