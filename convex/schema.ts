@@ -1534,11 +1534,12 @@ export default defineSchema({
     timezone: v.string(),
     // ISO-4217 code (spec §22 allows any code as markets expand).
     currency: v.string(),
-    status: v.union(
+status: v.union(
       v.literal("trial"),
       v.literal("active"),
       v.literal("suspended"),
       v.literal("cancelled"),
+      v.literal("pending_deletion"),
     ),
     // WorkOS per-tenant org id (three-scope model, Phase 2). The server-side
     // tenant resolver derives tenancy from this — never from the client.
@@ -1547,6 +1548,18 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
     deletedAt: v.optional(v.number()),
+    deletedBy: v.optional(v.id("users")),
+    // Retention workflow (A3): a deletion request opens a 30-day soft-delete
+    // window before a super-admin purge may finalize the record (soft mark,
+    // never destructive). Restore clears the window fields.
+    deletionRequestedAt: v.optional(v.number()),
+    deletionRequestedBy: v.optional(v.id("users")),
+    deleteReason: v.optional(v.string()),
+    purgeEligibleAt: v.optional(v.number()),
+    purgedAt: v.optional(v.number()),
+    purgedBy: v.optional(v.id("users")),
+    restoredAt: v.optional(v.number()),
+    restoredBy: v.optional(v.id("users")),
   })
     .index("by_slug", ["slug"])
     .index("by_status", ["status"])

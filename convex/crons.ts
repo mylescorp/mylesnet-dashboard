@@ -163,4 +163,13 @@ crons.interval(
   {},
 );
 
+// Tenant retention sweep — a scheduled companion to the purge attempt guard:
+// every pending-deletion tenant is re-checked daily and the window-elapsed set
+// is reported (no auto-purge; a super-admin finalizes via purgeTenant).
+crons.daily(
+  "tenant retention sweep",
+  { hourUTC: 6, minuteUTC: 45 },
+  internal.tenantRetention.enforceTenantRetention,
+);
+
 export default crons;

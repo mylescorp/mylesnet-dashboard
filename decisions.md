@@ -1,5 +1,15 @@
 # Build decisions
 
+## A3 — Tenant suspension/restoration retention workflow (2026-09-15)
+
+- **Check №1 — suspend cascade works.** New authentication is denied at the gate (`tenantCore.canTenantOperate` + `requireTenantMember`), so billing-affecting tenant operations and the client dashboard are denied the moment status becomes `suspended`. No RouterOS session is force-disconnected (`reconnectSubscriber` does not exist in the current surface), so already-online sessions are honored until their data/expiry runs out — the graceful degradation required by the spec (Phase 7 FreeRADIUS will add RADIUS-level denial).
+- **Check №2 — 30-day soft-delete window was genuinely absent, now built.** There was no deletion path, no `pending_deletion` status, no retention job. A3 adds the retention workflow: requests open a 30-day window; `purgeTenant` is gated to `platform_super_admin` and its guard (`assertCanPurge`) throws until the window has elapsed (days remaining in the message). A daily cron re-checks the window and reports eligible tenants (no auto-purge — an operator finalizes).
+- **Check №3 — restore now validated + tested.** Previously reachable only via unvalidated `setStatus`. Added `restoreTenant` (suspended or pending_deletion → active, clears window fields, records `restoredAt/By`), exercised by the pure lifecycle-core tests.
+- **Check №4 — no hard delete for `platform_ops`.** `purgeTenant` requires `platform_super_admin`; `platform_ops` can still request deletion and restore, but can never purge.
+- **Lifecycle rules:** trial/active/suspended → requestDeletion is allowed; cancelled and deleted tenants cannot re-enter; a `pending_deletion` tenant cannot be mutated through `setStatus` (direct `pending_deletion` writes are refused — deletion goes through the retention workflow). The purge is a soft mark (`deletedAt`/`purgedAt` set, row + audit trail retained) per the standing soft-delete-only rule.
+- **New/edited files:** `convex/lib/tenantLifecycleCore.ts` (+tests), `convex/tenantRetention.ts` (daily cron), `convex/tenantControl.ts` (requestTenantDeletion / restoreTenant / purgeTenant), `convex/schema.ts` (status + `deletionRequestedAt/By`, `deleteReason`, `purgeEligibleAt`, `purgedAt/By`, `restoredAt/By`, `deletedBy`), `convex/lib/tenantCore.ts` (`canTenantOperate` now blocks `pending_deletion`), UI (`PlatformTenantControl`, `PlatformTenantDetail`, `PlatformOverview`).
+- **Flagged for personal review before merge** (live suspend/restore/purge of paying tenants).
+
 ## Landing-surface consistency correction (2026-09-13)
 
 - **Token alias repair:** shadcn/Tailwind aliases are isolated behind `--ui-*` and `--color-*` mappings. The earlier implementation overwrote semantic `--primary`, `--muted`, and `--accent` values, producing low-contrast public navigation and copy. Product semantic tokens are now never shadowed by primitive aliases.

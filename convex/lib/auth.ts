@@ -3,7 +3,8 @@ import { Id, Doc } from "../_generated/dataModel";
 import {
   SYSTEM_ROLE_SLUGS,
   getSystemRoleBySlug,
-  PLATFORM_SUB_ROLE_MAP,
+  hasAnyRoleSlug,
+  platformSubRoleSlugs,
 } from "./permissions";
 import { assertMfaCompliance as assertMfaCompliancePolicy } from "./mfa";
 
@@ -177,7 +178,7 @@ export async function requireAnyRole(
     throw new Error("Unauthorized: account is inactive");
   }
   const roles = await resolveRoles(ctx, user);
-  if (!slugs.some((slug) => roles.some((role) => role.slug === slug))) {
+  if (!hasAnyRoleSlug(roles.map((role) => role.slug), slugs)) {
     throw new Error("Unauthorized: insufficient role");
   }
   return user;
@@ -364,10 +365,7 @@ export async function requirePlatformSubRole(
   ctx: QueryCtx | MutationCtx,
   allowedSubRoles: string[],
 ): Promise<Doc<"users">> {
-  const mappedSlugs = allowedSubRoles
-    .flatMap((sub) => PLATFORM_SUB_ROLE_MAP[sub] ?? [sub])
-    .filter((slug, index, arr) => arr.indexOf(slug) === index);
-  return requireAnyRole(ctx, mappedSlugs);
+  return requireAnyRole(ctx, platformSubRoleSlugs(allowedSubRoles));
 }
 
 /**

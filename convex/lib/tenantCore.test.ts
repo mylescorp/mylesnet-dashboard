@@ -47,6 +47,7 @@ test("isTenantActive accepts trial and active only", () => {
   assert.equal(isTenantActive("active"), true);
   assert.equal(isTenantActive("suspended"), false);
   assert.equal(isTenantActive("cancelled"), false);
+  assert.equal(isTenantActive("pending_deletion"), false);
   assert.equal(isTenantActive(undefined), false);
 });
 
@@ -54,13 +55,15 @@ test("isTenantSuspended flags only suspended", () => {
   assert.equal(isTenantSuspended("suspended"), true);
   assert.equal(isTenantSuspended("active"), false);
   assert.equal(isTenantSuspended("cancelled"), false);
+  assert.equal(isTenantSuspended("pending_deletion"), false);
 });
 
-test("canTenantOperate blocks only explicit suspension/cancellation", () => {
+test("canTenantOperate blocks only explicit suspension/cancellation/pending deletion", () => {
   assert.equal(canTenantOperate("trial"), true);
   assert.equal(canTenantOperate("active"), true);
   assert.equal(canTenantOperate("suspended"), false);
   assert.equal(canTenantOperate("cancelled"), false);
+  assert.equal(canTenantOperate("pending_deletion"), false);
   // Unset status (pre-backfill rows) must not cut off legacy behavior.
   assert.equal(canTenantOperate(undefined), true);
 });
