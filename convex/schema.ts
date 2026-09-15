@@ -948,7 +948,14 @@ export default defineSchema({
     afterJson: v.optional(v.string()),
     timestamp: v.number(),
     ip: v.optional(v.string()),
-  }).index("by_entity", ["entityTable"]),
+    // Existing audit rows remain intentionally unsealed. New rows are linked
+    // by the centralized writer in lib/auditLog.ts.
+    chainSequence: v.optional(v.number()),
+    prevHash: v.optional(v.string()),
+    hash: v.optional(v.string()),
+  })
+    .index("by_entity", ["entityTable"])
+    .index("by_timestamp", ["timestamp"]),
 
   // ==========================================================================
   // EXPANSION PIPELINE (market prospects, separate from live markets)

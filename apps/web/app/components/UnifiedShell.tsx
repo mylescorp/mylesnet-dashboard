@@ -1,73 +1,30 @@
 "use client";
 
-import Link from "next/link";
+import type { ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect } from "react";
 import { useAuth } from "@workos-inc/authkit-nextjs/components";
-import { Activity, Building2, CreditCard, Cpu, Flag, LayoutDashboard, LogOut, Menu, ScrollText, ServerCog, ShieldCheck, TicketCheck, Users, UsersRound, X } from "lucide-react";
+import { LogOut, Settings } from "lucide-react";
+import { AppBootstrapLoader, AppShell, SidebarRail, Topbar } from "@mylesnet/ui";
 import { useConvexAuth } from "@/app/lib/convex";
 import { UserProfileProvider, useUserProfile } from "./UserProfileContext";
+import { AccountDrawer } from "./AccountDrawer";
 import { ThemeToggle } from "./ThemeToggle";
+import { productNavGroups } from "@/lib/navigation/product-nav";
+import { isRouteActive } from "@mylesnet/ui";
 
-const tenantLinks = [
-  { href: "/dashboard", label: "Tenant workspace", icon: LayoutDashboard },
-  { href: "/admin", label: "Tenant admin", icon: UsersRound },
-];
+const brand = {
+  name: "MylesNet",
+  logo: "/brand/mylesnet-logo.png",
+  mark: <span aria-hidden="true">M</span>,
+};
 
-const platformLinks = [
-  { href: "/platform", label: "Overview", icon: Activity, exact: true },
-  { href: "/platform/tenants", label: "Tenants", icon: Building2 },
-  { href: "/platform/subscriptions", label: "Subscriptions", icon: CreditCard },
-  { href: "/platform/access", label: "Access & roles", icon: Users },
-  { href: "/platform/audit", label: "Audit log", icon: ScrollText },
-  { href: "/platform/security", label: "Security", icon: ShieldCheck },
-  { href: "/platform/provisioning", label: "Provisioning", icon: ServerCog },
-  { href: "/platform/infrastructure/devices", label: "Device fleet", icon: Cpu },
-  { href: "/platform/vouchers/monitor", label: "Voucher monitor", icon: TicketCheck },
-  { href: "/platform/feature-flags", label: "Feature flags", icon: Flag },
-];
-
-function isLinkActive(pathname: string, href: string, exact?: boolean) {
-  return exact ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
-}
-
-function ProductNavigation({ onNavigate }: { onNavigate?: () => void }) {
-  const pathname = usePathname();
-  const { user } = useUserProfile();
-  const showPlatformSurface = user?.isPlatform === true;
-
-  return (
-    <nav className="product-nav" aria-label="MylesNet product navigation">
-      <p className="product-nav-section">Core</p>
-      <Link href="/platform" className={showPlatformSurface && pathname === "/platform" ? "product-nav-link" : isLinkActive(pathname, "/platform") ? "product-nav-link product-nav-link-active" : "product-nav-link"} onClick={onNavigate}>
-        <ShieldCheck size={17} aria-hidden="true" /><span>Platform</span>
-      </Link>
-      {showPlatformSurface ? (
-        <div className="product-nav-sub" role="group" aria-label="Platform control plane">
-          {platformLinks.map(({ href, label, icon: Icon, exact }) => (
-            <Link key={href} href={href} className={isLinkActive(pathname, href, exact) ? "product-nav-sub-link product-nav-sub-link-active" : "product-nav-sub-link"} onClick={onNavigate}>
-              <Icon size={15} aria-hidden="true" /><span>{label}</span>
-            </Link>
-          ))}
-        </div>
-      ) : null}
-      <p className="product-nav-section">Tenant</p>
-      {tenantLinks.map(({ href, label, icon: Icon }) => (
-        <Link key={href} href={href} className={isLinkActive(pathname, href) ? "product-nav-link product-nav-link-active" : "product-nav-link"} onClick={onNavigate}>
-          <Icon size={17} aria-hidden="true" /><span>{label}</span>
-        </Link>
-      ))}
-    </nav>
-  );
-}
-
-function ProductShellContent({ children }: { children: ReactNode }) {
+function WorkspaceShellContent({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { signOut } = useAuth();
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
   const { user, isLoading: userLoading } = useUserProfile();
-  const [mobileOpen, setMobileOpen] = useState(false);
   const isPublic = pathname === "/signin" || pathname === "/no-access";
 
   useEffect(() => {
@@ -75,10 +32,75 @@ function ProductShellContent({ children }: { children: ReactNode }) {
   }, [authLoading, isAuthenticated, isPublic, router]);
 
   if (isPublic) return <>{children}</>;
-  if (authLoading || userLoading || !user) return <div className="product-loading"><div className="loading-panel workspace-card">Loading MylesNet workspace…</div></div>;
+  if (authLoading || userLoading || !user) return <AppBootstrapLoader label="Loading MylesNet…" />;
 
-  const leave = async () => { await signOut({ returnTo: window.location.origin }); router.replace("/signin"); };
-  return <div className="product-shell"><header className="product-header"><Link href="/dashboard" className="product-brand" aria-label="MylesNet home"><span className="product-brand-mark">M</span><span>MylesNet</span></Link><button type="button" className="product-menu-button" onClick={() => setMobileOpen(true)} aria-label="Open navigation"><Menu size={20} /></button><div className="product-header-actions"><span className="product-user-label">{user.name || user.email || "Workspace user"}</span><ThemeToggle /><button type="button" className="product-signout" onClick={() => void leave()}><LogOut size={16} aria-hidden="true" />Sign out</button></div></header><div className="product-body"><aside className="product-sidebar"><ProductNavigation /></aside><main className="product-main">{children}</main></div>{mobileOpen ? <div className="product-mobile-overlay" role="presentation" onMouseDown={() => setMobileOpen(false)}><aside className="product-mobile-panel" onMouseDown={(event) => event.stopPropagation()}><div className="product-mobile-head"><strong>MylesNet</strong><button type="button" onClick={() => setMobileOpen(false)} aria-label="Close navigation"><X size={19} /></button></div><ProductNavigation onNavigate={() => setMobileOpen(false)} /></aside></div> : null}</div>;
+  const showPlatform = user.isPlatform === true;
+  const groups = productNavGroups(showPlatform);
+  
+  // Find active navigation item
+  const activeNav = groups.flatMap(g => g.items).find(item => isRouteActive(pathname, item));
+  const pageLabel =
+    activeNav?.label ??
+    (pathname === "/" ? "Dashboard" : pathname.slice(1).split("/")[0].replace(/^./, (c) => c.toUpperCase()));
+
+  const leave = async () => {
+    await signOut({ returnTo: window.location.origin });
+    router.replace("/signin");
+  };
+
+  return (
+    <AppShell
+      renderSidebar={(state) => (
+        <SidebarRail
+          groups={groups}
+          pathname={pathname}
+          brand={brand}
+          collapsed={state.collapsed}
+          onToggleCollapsed={state.onToggleCollapsed}
+          variant={state.variant}
+          can={(permission) => (permission === "platform" ? showPlatform : true)}
+          footer={
+            <>
+              <a className="sidebar-link" href="/settings" aria-current={pathname === "/settings" ? "page" : undefined}>
+                <Settings size={18} aria-hidden="true" />
+                <span className="sidebar-link-text">
+                  <span>Settings</span>
+                </span>
+              </a>
+              <button type="button" className="sidebar-signout" onClick={() => void leave()}>
+                <LogOut size={18} aria-hidden="true" />
+                <span className="sidebar-link-text">
+                  <span>Sign out</span>
+                </span>
+              </button>
+            </>
+          }
+        />
+      )}
+      topbar={({ onOpenDrawer }) => (
+        <Topbar
+          breadcrumb={[{ label: "MylesNet", href: "/dashboard" }, { label: pageLabel }]}
+          routeIndex={groups.flatMap(g => g.items.map(item => ({ ...item, group: g.label })))}
+          onMenuClick={onOpenDrawer}
+          onNavigate={(href) => router.push(href)}
+          right={
+            <>
+              <ThemeToggle />
+              <AccountDrawer />
+            </>
+          }
+        />
+      )}
+    >
+      {children}
+    </AppShell>
+  );
 }
 
-export function UnifiedShell({ children }: { children: ReactNode }) { return <UserProfileProvider><ProductShellContent>{children}</ProductShellContent></UserProfileProvider>; }
+export function UnifiedShell({ children }: { children: ReactNode }) {
+  return (
+    <UserProfileProvider>
+      <WorkspaceShellContent>{children}</WorkspaceShellContent>
+    </UserProfileProvider>
+  );
+}

@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { action, internalMutation } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { requireAuthenticatedUser, resolveUserByIdentity } from "./lib/auth";
+import { logAudit } from "./lib/auditLog";
 
 const ALLOWED_AVATAR_MIME_TYPES = new Set([
   "image/jpeg",
@@ -60,13 +61,12 @@ export const applyAvatar = internalMutation({
       }
     }
 
-    await ctx.db.insert("auditLog", {
+    await logAudit(ctx, {
       action: "user.update_avatar",
       entityTable: "users",
       entityId: user._id,
       changedBy: user._id,
-      afterJson: JSON.stringify({ storageId: args.storageId }),
-      timestamp: Date.now(),
+      after: { storageId: args.storageId },
     });
   },
 });

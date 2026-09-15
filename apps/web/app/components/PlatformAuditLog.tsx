@@ -12,6 +12,7 @@ export function PlatformAuditLog() {
 
   const audit = useQuery(platformPanel.listAuditLogPage, { entityTable, limit: 25, cursor });
   const tables = useQuery(platformPanel.listAuditEntityTables, {});
+  const chain = useQuery(platformPanel.getAuditChainHealth, {});
   const entityTables = tables ?? [];
 
   const goForward = () => { if (audit?.nextCursor) setCursors((prev) => [...prev, audit.nextCursor!]); };
@@ -26,6 +27,28 @@ export function PlatformAuditLog() {
           <p className="page-subtitle">Paginated, read-only log of every audited entity change across the platform. Filter by entity type or browse chronologically.</p>
         </div>
       </header>
+
+      <section className="pf-panel" aria-live="polite">
+        <div className="section-heading"><div><p className="eyebrow">Integrity</p><h2>Audit-chain verification</h2></div></div>
+        {chain === undefined ? <p className="pf-muted">Checking the latest sealed audit entries…</p> : chain.status === "never" ? (
+          <p className="pf-muted">No full-chain verification has run yet. The background sweep covers every sealed entry from the genesis sentinel forward.</p>
+        ) : chain.status === "running" ? (
+          <p className="pf-muted">
+            Full-chain sweep in progress since {formatDateTime(chain.runningSince ?? undefined)} — {chain.checkedEntries} sealed entries covered so far.
+            {chain.lastGoodAt ? ` Last clean sweep completed ${formatDateTime(chain.lastGoodAt)}.` : ""}
+          </p>
+        ) : chain.status === "completed" ? (
+          <p className="pf-muted">
+            Verified all {chain.checkedEntries} sealed entries in the chain, sequence {chain.firstSequence}–{chain.lastSequence} ({formatDateTime(chain.startsAt ?? undefined)} – {formatDateTime(chain.endsAt ?? undefined)}); last sweep completed {formatDateTime(chain.completedAt ?? undefined)}.
+            {chain.legacySkipped > 0 ? ` ${chain.legacySkipped} pre-seal ${chain.legacySkipped === 1 ? "entry is" : "entries are"} preserved outside the hash chain.` : ""}
+          </p>
+        ) : (
+          <p className="form-error">
+            Integrity check failed{chain.lastSequence !== null ? ` at sequence ${chain.lastSequence}` : ""}: {chain.issue?.replace("_", " ") ?? "unknown verification error"}. Investigate before relying on this audit history.
+            {chain.lastGoodAt ? ` Last clean sweep completed ${formatDateTime(chain.lastGoodAt)}.` : ""}
+          </p>
+        )}
+      </section>
 
       <section className="pf-panel">
         <div className="section-heading"><div><p className="eyebrow">Controls</p><h2>Filter</h2></div></div>

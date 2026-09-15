@@ -24,6 +24,21 @@ export type AuditLogPage = {
   nextCursor: string | null;
 };
 
+export type AuditChainHealth = {
+  status: "never" | "running" | "completed" | "failed";
+  valid: boolean;
+  checkedEntries: number;
+  issue?: "invalid_genesis" | "missing_link" | "invalid_sequence" | "invalid_hash" | null;
+  firstSequence: number | null;
+  lastSequence: number | null;
+  startsAt: number | null;
+  endsAt: number | null;
+  legacySkipped: number;
+  runningSince: number | null;
+  completedAt: number | null;
+  lastGoodAt: number | null;
+};
+
 export type SecurityStaffEntry = {
   userId: string;
   name: string | null;
@@ -59,5 +74,6 @@ export const platformPanel = {
     cursor?: string | null;
   }, AuditLogPage>("platform:listAuditLogPage"),
   listAuditEntityTables: makeFunctionReference<"query", Record<string, never>, string[]>("platform:listAuditEntityTables"),
+  getAuditChainHealth: makeFunctionReference<"query", Record<string, never>, AuditChainHealth>("platform:getAuditChainHealth"),
   getPlatformSecurityOverview: makeFunctionReference<"query", Record<string, never>, PlatformSecurityOverview>("platform:getPlatformSecurityOverview"),
 };

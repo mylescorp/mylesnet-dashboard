@@ -4,9 +4,10 @@ import { useState } from "react";
 import { useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
 import { Users, UserPlus, Percent, Layers } from "lucide-react";
+import { PageHeader, Select } from "@mylesnet/ui";
 import MetricCard from "@/app/components/MetricCard";
 import SimpleBars from "@/app/components/SimpleBars";
-import { EmptyState, Loading, Select, StatusPill } from "@/app/components/ui";
+import { EmptyState, Loading, StatusPill } from "@/app/components/ui";
 import type { Id } from "@/convex/_generated/dataModel";
 
 export default function SubscribersPage() {
@@ -25,22 +26,22 @@ export default function SubscribersPage() {
   const peak = trend.reduce((s, r) => Math.max(s, r.activeCount), 0);
 
   return (
-    <div className="workspace-page">
-      <div className="page-heading">
-        <div>
-          <p className="eyebrow">Business</p>
-          <h1 className="page-title">Subscribers</h1>
-          <p className="page-subtitle">Active subscriber base and growth from daily snapshots.</p>
-        </div>
-        <div style={{ minWidth: 220 }}>
-          <Select value={marketId} onChange={(e) => setMarketId(e.target.value)} aria-label="Filter by market">
-            <option value="">All markets</option>
-            {markets.map((m) => (
-              <option key={m._id} value={m._id}>{m.name}</option>
-            ))}
-          </Select>
-        </div>
-      </div>
+<div className="workspace-page">
+      <PageHeader
+        eyebrow="Business"
+        title="Subscribers"
+        description="Active subscriber base and growth from daily snapshots."
+        actions={
+          <div style={{ minWidth: 220 }}>
+            <Select value={marketId} onChange={(e) => setMarketId(e.target.value)} aria-label="Filter by market">
+              <option value="">All markets</option>
+              {markets.map((m) => (
+                <option key={m._id} value={m._id}>{m.name}</option>
+              ))}
+            </Select>
+          </div>
+        }
+      />
 
       <div className="metric-grid">
         <MetricCard icon={Users} label="Active subscribers" value={active.toLocaleString()} tone="primary" detail={latest ? `As of ${latest.date}` : undefined} />

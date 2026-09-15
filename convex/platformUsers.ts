@@ -4,6 +4,7 @@ import { action, internalMutation, internalQuery, mutation, query } from "./_gen
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 import { requirePermission, resolveRoles, resolveUserByIdentity } from "./lib/auth";
+import { logAudit } from "./lib/auditLog";
 import { workosSlugForRole } from "./lib/permissions";
 import { tenantMembershipStatusFromWorkos } from "./lib/tenantCore";
 import {
@@ -62,13 +63,12 @@ export const updateUserProfile = mutation({
 
     await ctx.db.patch(user._id, patchData);
 
-    await ctx.db.insert("auditLog", {
+    await logAudit(ctx, {
       action: "user.update_profile",
       entityTable: "users",
       entityId: user._id,
       changedBy: user._id,
-      afterJson: JSON.stringify(patchData),
-      timestamp: Date.now(),
+      after: patchData,
     });
 
     return user._id;
@@ -270,13 +270,12 @@ export const applyUserAccess = internalMutation({
         });
       }
     }
-    await ctx.db.insert("auditLog", {
+    await logAudit(ctx, {
       action: "user.update_access",
       entityTable: "users",
       entityId: target._id,
       changedBy: actor._id,
-      timestamp: Date.now(),
-      afterJson: JSON.stringify({
+      after: {
         roleIds,
         primarySlug,
         isActive: args.isActive,
@@ -285,7 +284,7 @@ export const applyUserAccess = internalMutation({
         name: args.name,
         jobTitle: args.jobTitle,
         phone: args.phone,
-      }),
+      },
     });
   },
 });
@@ -805,13 +804,12 @@ export const logUserAudit = internalMutation({
     after: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
-    await ctx.db.insert("auditLog", {
+    await logAudit(ctx, {
       action: args.action,
       entityTable: "users",
       entityId: args.userId,
       changedBy: args.actorUserId,
-      afterJson: args.after !== undefined ? JSON.stringify(args.after) : undefined,
-      timestamp: Date.now(),
+      after: args.after,
     });
   },
 });

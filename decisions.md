@@ -1,5 +1,45 @@
 # Build decisions
 
+## L2 audit hash chain — close-out decision (2026-09-15)
+
+- **Decision (Option C):** the audit hash chain ships as *new chain from
+  deployment*. The chain begins at the first post-deployment audit row
+  (genesis sentinel `mylesnet:audit-chain:v1:genesis`); all pre-deployment
+  `auditLog` rows remain readable but are intentionally unsealed and outside
+  the chain. **No historical backfill is built.** Delivered via PR #17
+  (`myles/platform-audit-hash-chain` → main).
+- **Chain semantics (approved as-is):** every new audit write is sealed by the
+  central writer (`convex/lib/auditLog.ts`) with monotonic `chainSequence`,
+  strict timestamp ordering, `prevHash` linking, and a SHA-256 over the one
+  canonical payload (version, sequence, prevHash, action, entity, actor,
+  before/after JSON, timestamp, IP).
+- **Verification coverage is complete, not windowed:** every sealed row
+  (non-null `hash`/`prevHash`/`chainSequence`) is verified from the genesis
+  sentinel forward. The first sealed row must satisfy `chainSequence === 1`
+  and `prevHash === AUDIT_CHAIN_GENESIS`; every later row must increment the
+  sequence, link the predecessor's hash, and recompute to its stored hash over
+  the canonical payload.
+- **Why no backfill:** a hash computed now cannot prove pre-backfill rows were
+  unmodified *before* hashing, so backfilling offers no stronger real-world
+  integrity guarantee than new-chain-from-deployment. It would additionally
+  rewrite existing audit rows, weakening the log's tamper-evidence value by
+  putting rewrite tooling inside an append-only system.
+- **Verification architecture:** a background sweep (`convex/auditChainVerify.ts`)
+  advances one bounded 500-row batch per internal mutation, resumable via a
+  single canonical `migrationRuns` row (`audit-chain-verify-001`), and
+  re-runs from genesis on an hourly cron so coverage rolls over the whole
+  sealed chain. `platform:getAuditChainHealth` only reads the run's stored
+  status/coverage; the Audit log UI reports when the last full sweep completed
+  and the exact chain range (sequence + time span) it covered. Unsealed legacy
+  rows are walked over but preserved, counted as `legacySkipped`, never part
+  of the chain.
+- **Gates:** `pnpm test` 154/154 (8 new `auditChainVerifyCore` cases covering
+  genesis enforcement, sequence gaps, missing links, tampered payloads, legacy
+  skipping, and cross-batch resume linking); `pnpm typecheck` 0, `pnpm lint`
+  0, `pnpm tokens:check` green, `pnpm build` green. PR #17 holds for personal
+  review before merge; a manual `npx convex run` of the sweep verifies the
+  environment's live chain end-to-end.
+
 ## Landing-surface consistency correction (2026-09-13)
 
 - **Token alias repair:** shadcn/Tailwind aliases are isolated behind `--ui-*` and `--color-*` mappings. The earlier implementation overwrote semantic `--primary`, `--muted`, and `--accent` values, producing low-contrast public navigation and copy. Product semantic tokens are now never shadowed by primitive aliases.

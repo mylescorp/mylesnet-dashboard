@@ -1,4 +1,5 @@
 import { Bricolage_Grotesque, Hanken_Grotesk, Inter, JetBrains_Mono } from "next/font/google";
+import "@mylesnet/ui/styles.css";
 import "./globals.css";
 
 const inter = Inter({

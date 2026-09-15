@@ -3,6 +3,7 @@ import { action, internalMutation, internalQuery, query } from "./_generated/ser
 import { internal } from "./_generated/api";
 import { getSystemRoleBySlug, PERMISSIONS, SYSTEM_ROLES, workosSlugForRole, ALL_PERMISSION_SLUGS, permissionInCatalog, CUSTOM_ROLE_DEFAULT_RANK } from "./lib/permissions";
 import { requirePermission } from "./lib/auth";
+import { logAudit } from "./lib/auditLog";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
   createWorkosOrganizationRole,
@@ -400,13 +401,12 @@ export const logRoleAudit = internalMutation({
     after: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
-    await ctx.db.insert("auditLog", {
+    await logAudit(ctx, {
       action: args.action,
       entityTable: "roles",
       entityId: args.roleId,
       changedBy: args.actorUserId,
-      afterJson: args.after !== undefined ? JSON.stringify(args.after) : undefined,
-      timestamp: Date.now(),
+      after: args.after,
     });
   },
 });
