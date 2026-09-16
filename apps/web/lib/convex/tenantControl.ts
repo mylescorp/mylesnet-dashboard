@@ -16,6 +16,9 @@ export type PlatformTenant = {
   status: TenantStatus;
   workosOrganizationId: string | null;
   membershipCount: number;
+  marketCount: number;
+  subscriberCount: number;
+  accountOwner: { name: string | null; email: string | null } | null;
   entitlement: EntitlementSummary;
   createdAt: number;
 };
@@ -66,6 +69,9 @@ export type TenantDetail = {
     trialEndsAt: number | null;
   } | null;
   activeMemberCount: number;
+  marketCount: number;
+  subscriberCount: number;
+  accountOwner: { name: string | null; email: string | null } | null;
   members: TenantDetailMember[];
 };
 
