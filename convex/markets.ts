@@ -4,6 +4,7 @@ import { Doc } from "./_generated/dataModel";
 import { requirePermission } from "./lib/auth";
 import { readTenantList, enforceTenantOnResource } from "./lib/tenant";
 import { logAudit } from "./lib/auditLog";
+import { marketSoftDeleteBlockReason } from "./lib/marketDependenciesCore";
 
 export const listMarkets = query({
   args: {},
@@ -119,11 +120,9 @@ export const softDeleteMarket = mutation({
       .filter((q) => q.eq(q.field("assignmentStatus"), "active"))
       .collect();
 
-    if ((activeDevices.length > 0 || activeAssignments.length > 0) && !args.forceCascade) {
-      throw new Error(
-        `This market has ${activeDevices.length} active device(s) and ${activeAssignments.length} active agent assignment(s). ` +
-          `Choose to soft-delete all dependents together (forceCascade: true) or reassign them first.`
-      );
+    const blockReason = marketSoftDeleteBlockReason(activeDevices.length, activeAssignments.length, !!args.forceCascade);
+    if (blockReason) {
+      throw new Error(blockReason);
     }
 
     const now = Date.now();
