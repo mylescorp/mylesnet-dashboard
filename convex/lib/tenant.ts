@@ -3,6 +3,7 @@ import { Id } from "../_generated/dataModel";
 import { resolveUserByIdentity } from "./auth";
 import { TENANT_FEATURE_FLAGS } from "./tenantMigration";
 import { assertNoClientOverride, assertTenantMatch, canTenantOperate, resolvedTenantOrNull } from "./tenantCore";
+import { organizationIdFromWorkosIdentity } from "./workosIdentity";
 
 export {
   assertNoClientOverride,
@@ -18,7 +19,7 @@ export {
  * Phase 1 tenant resolution layer (X-TEN §B1, §B5).
  *
  * The server derives a tenant from the caller's WorkOS identity
- * (`identity.organizationId`), matched against `tenants.workosOrganizationId`.
+ * (`identity["org_id"]`), matched against `tenants.workosOrganizationId`.
  * During the additive migration — before the Phase 2 three-scope WorkOS model
  * backfills org mappings — the resolver falls back to the single bootstrap
  * tenant (`slug: "mylesnet"`), returning null when no tenants exist yet. That
@@ -118,7 +119,7 @@ export async function resolveTenantFromAuth(
   if (!identity) return null;
 
   // Primary path: WorkOS per-tenant org claim (Phase 2 wiring, additive today).
-  const orgId = identity.organizationId;
+  const orgId = organizationIdFromWorkosIdentity(identity);
   let organizationTenantId: Id<"tenants"> | null = null;
   if (typeof orgId === "string" && orgId.length > 0) {
     const byOrg = await ctx.db

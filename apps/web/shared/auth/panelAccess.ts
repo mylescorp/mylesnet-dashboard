@@ -8,6 +8,10 @@
  */
 export const PANEL_ROLE_REQUIREMENTS = {
   platform: [
+    "platform_super_admin",
+    "platform_ops",
+    "platform_finance",
+    "platform_readonly",
     "platform_owner",
     "platform_admin",
     "platform_support",

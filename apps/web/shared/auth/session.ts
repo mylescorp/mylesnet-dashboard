@@ -10,7 +10,7 @@
 import { getTokenClaims } from "@workos-inc/authkit-nextjs";
 import { cookies } from "next/headers";
 import { TENANT_COOKIE_NAME, TENANT_COOKIE_MAX_AGE, baseCookieOptions } from "./cookies";
-import { hasAnyRole, toClaimArray } from "./rbac";
+import { hasAnyRole, normalizeRoleClaims, toClaimArray } from "./rbac";
 import { BOOTSTRAP_TENANT_SLUG } from "./tenant";
 
 export class AuthRequiredError extends Error {
@@ -43,11 +43,12 @@ export async function getSession(): Promise<AuthSession | null> {
   try {
     const claims = await getTokenClaims();
     if (!claims?.sub) return null;
+    const roleSlugs = normalizeRoleClaims(claims.role, claims.roles);
     return {
       workosUserId: claims.sub,
       email: typeof claims.email === "string" ? claims.email : undefined,
       orgId: typeof claims.org_id === "string" ? claims.org_id : undefined,
-      roleSlugs: toClaimArray(claims.roles),
+      roleSlugs,
       permissions: toClaimArray(claims.permissions),
       authenticatedAt:
         typeof claims.auth_time === "number" ? new Date(claims.auth_time * 1000) : undefined,

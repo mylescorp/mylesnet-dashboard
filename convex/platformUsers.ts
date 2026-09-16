@@ -5,7 +5,7 @@ import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 import { requirePermission, resolveRoles, resolveUserByIdentity } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
-import { workosSlugForRole } from "./lib/permissions";
+import { PLATFORM_SUB_ROLE_MAP, workosSlugForRole } from "./lib/permissions";
 import { tenantMembershipStatusFromWorkos } from "./lib/tenantCore";
 import {
   addWorkosOrganizationMembership,
@@ -433,19 +433,26 @@ export const recordOrganizationMembership = internalMutation({
       .withIndex("by_membership", (q) => q.eq("workosMembershipId", args.workosMembershipId))
       .first();
 
-    let roleId: Id<"roles"> | undefined;
-    if (args.roleSlug) {
-      const bySlug = await ctx.db.query("roles").withIndex("by_slug", (q) => q.eq("slug", args.roleSlug!)).first();
+    // WorkOS uses the approved Platform sub-role vocabulary while Convex stores
+    // the concrete system roles that implement it. Resolve that explicit map
+    // before falling back to a literal/custom role.
+    const roleSlugs = args.roleSlug
+      ? (PLATFORM_SUB_ROLE_MAP[args.roleSlug] ?? [args.roleSlug])
+      : [];
+    const roleIds: Id<"roles">[] = [];
+    for (const roleSlug of roleSlugs) {
+      const bySlug = await ctx.db.query("roles").withIndex("by_slug", (q) => q.eq("slug", roleSlug)).first();
       if (bySlug && bySlug.deletedAt === undefined) {
-        roleId = bySlug._id;
-      } else {
-        const custom = await ctx.db
-          .query("roles")
-          .filter((q) => q.eq(q.field("workosRoleSlug"), args.roleSlug!))
-          .first();
-        if (custom && custom.deletedAt === undefined) roleId = custom._id;
+        roleIds.push(bySlug._id);
+        continue;
       }
+      const custom = await ctx.db
+        .query("roles")
+        .filter((q) => q.eq(q.field("workosRoleSlug"), roleSlug))
+        .first();
+      if (custom && custom.deletedAt === undefined) roleIds.push(custom._id);
     }
+    const roleId = roleIds[0];
 
     if (existing) {
       await ctx.db.patch(existing._id, {
@@ -484,9 +491,10 @@ export const recordOrganizationMembership = internalMutation({
     } else if (args.status === "active") {
       if (args.organizationId === platformOrgId) {
         const patch: Record<string, unknown> = { isActive: true, deactivatedAt: undefined };
-        if (roleId) patch.roles = [roleId];
-        if (args.roleSlug && PLATFORM_MIRROR_SLUGS.has(args.roleSlug)) {
-          patch.platformRole = args.roleSlug;
+        if (roleIds.length > 0) patch.roles = roleIds;
+        const platformRole = roleSlugs.find((roleSlug) => PLATFORM_MIRROR_SLUGS.has(roleSlug));
+        if (platformRole) {
+          patch.platformRole = platformRole;
         }
         if (args.email !== undefined) patch.email = args.email.toLowerCase();
         if (args.name !== undefined) patch.name = args.name;
@@ -498,7 +506,7 @@ export const recordOrganizationMembership = internalMutation({
             email: args.email?.toLowerCase(),
             name: args.name,
             isActive: true,
-            roles: roleId ? [roleId] : undefined,
+            roles: roleIds.length > 0 ? roleIds : undefined,
           });
           user = await ctx.db.get(createdUserId);
         }

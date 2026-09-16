@@ -38,8 +38,7 @@ export const getDetail = query({
           ),
         )
         .order("desc")
-        .limit(30)
-        .collect(),
+        .take(30),
     ]);
 
     const scopedPayments = payments.filter((p) => p.tenantId === tenantId);

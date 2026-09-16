@@ -10,6 +10,7 @@ import {
   panelForRole,
   roleMatchesPanel,
   toClaimArray,
+  normalizeRoleClaims,
 } from "./rbac.ts";
 
 test("panelForRole maps role slugs to canonical panels", () => {
@@ -53,6 +54,12 @@ test("toClaimArray normalizes single values and arrays", () => {
   assert.deepEqual(toClaimArray(undefined), []);
   assert.deepEqual(toClaimArray(null), []);
   assert.deepEqual(toClaimArray({} as unknown), []);
+});
+
+test("normalizeRoleClaims supports singular and plural AuthKit role claims", () => {
+  assert.deepEqual(normalizeRoleClaims("platform_owner", undefined), ["platform_owner"]);
+  assert.deepEqual(normalizeRoleClaims(undefined, ["tenant_admin"]), ["tenant_admin"]);
+  assert.deepEqual(normalizeRoleClaims("platform_owner", ["platform_owner", "platform_admin"]), ["platform_owner", "platform_admin"]);
 });
 
 test("flattenOrgScopedRoles handles org-scoped role claims", () => {

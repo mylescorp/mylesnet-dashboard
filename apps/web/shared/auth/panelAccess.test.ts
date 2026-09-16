@@ -4,6 +4,7 @@ import { hasPanelAccess } from "./panelAccess.ts";
 
 test("panel access maps current WorkOS system and organization role slugs", () => {
   assert.equal(hasPanelAccess(["platform_admin"], "platform"), true);
+  assert.equal(hasPanelAccess(["platform_super_admin"], "platform"), true);
   assert.equal(hasPanelAccess(["org-platform_admin"], "platform"), true);
   assert.equal(hasPanelAccess(["org-client_admin"], "admin"), true);
   assert.equal(hasPanelAccess(["agent"], "dashboard"), true);
