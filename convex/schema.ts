@@ -774,6 +774,32 @@ export default defineSchema({
     loggedBy: v.id("users"),
   }).index("by_device", ["deviceId"]),
 
+  // Versioned PPPoE / rate-limit policy templates (spec B4): each family
+  // (identified by a stable code) is versioned 1..n. Versions are immutable
+  // once published, so tenants provisioned against an older version keep their
+  // behavior when a newer version ships.
+  policyTemplates: defineTable({
+    code: v.string(),
+    name: v.string(),
+    version: v.number(),
+    kind: v.union(v.literal("pppoe"), v.literal("rate_limit")),
+    downloadMbps: v.number(),
+    uploadMbps: v.number(),
+    burstDownloadMbps: v.optional(v.number()),
+    burstUploadMbps: v.optional(v.number()),
+    burstThresholdMbps: v.optional(v.number()),
+    burstTimeSeconds: v.optional(v.number()),
+    status: v.union(v.literal("draft"), v.literal("published"), v.literal("retired")),
+    description: v.optional(v.string()),
+    createdBy: v.optional(v.id("users")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_code_version", ["code", "version"])
+    .index("by_code", ["code"])
+    .index("by_status", ["status"])
+    .index("by_kind_status", ["kind", "status"]),
+
   // Device provisioning pipeline (spec "Provisioning Queue"). A device that
   // reports in self-registered (registeredBy: "self") lands here as a request
   // that a super_admin or ops role must approve before it is treated as part
