@@ -774,6 +774,38 @@ export default defineSchema({
     loggedBy: v.id("users"),
   }).index("by_device", ["deviceId"]),
 
+// Platform RADIUS server fleet (spec B3): shared FreeRADIUS nodes across
+  // every region. Platform-owned records (no tenant scope) — only Platform or
+  // Admin creates shared RADIUS nodes per the spec.
+  radiusServers: defineTable({
+    name: v.string(),
+    hostname: v.string(),
+    port: v.number(),
+    protocol: v.union(v.literal("radsec"), v.literal("udp")),
+    status: v.union(
+      v.literal("active"),
+      v.literal("provisioning"),
+      v.literal("failed"),
+      v.literal("maintenance"),
+      v.literal("decommissioned"),
+    ),
+    healthStatus: v.union(
+      v.literal("healthy"),
+      v.literal("degraded"),
+      v.literal("down"),
+      v.literal("unknown"),
+    ),
+    region: v.optional(v.string()),
+    certExpiryAt: v.optional(v.number()),
+    lastHealthCheckAt: v.optional(v.number()),
+    notes: v.optional(v.string()),
+    registeredBy: v.optional(v.id("users")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_status", ["status"])
+    .index("by_protocol", ["protocol"]),
+
   // Versioned PPPoE / rate-limit policy templates (spec B4): each family
   // (identified by a stable code) is versioned 1..n. Versions are immutable
   // once published, so tenants provisioned against an older version keep their
