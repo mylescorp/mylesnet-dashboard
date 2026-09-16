@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ArrowLeft, Save } from "lucide-react";
 import { useState } from "react";
 import { useMutation, useQuery } from "@/app/lib/convex";
-import { useUserProfile } from "./UserProfileContext";
+import { useUserProfile } from "@/shared/components/UserProfileContext";
 import { featureFlags } from "@/lib/convex/featureFlags";
 import { tenantControl } from "@/lib/convex/tenantControl";
 

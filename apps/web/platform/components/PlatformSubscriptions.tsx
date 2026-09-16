@@ -4,8 +4,8 @@ import { useState } from "react";
 import { CreditCard } from "lucide-react";
 import { useMutation, useQuery } from "@/app/lib/convex";
 import { tenantControl, type PlatformTenant, type EntitlementStatus } from "@/lib/convex/tenantControl";
-import { useUserProfile } from "./UserProfileContext";
-import { StatusPill, Field, TextInput } from "./ui";
+import { useUserProfile } from "@/shared/components/UserProfileContext";
+import { StatusPill, Field, TextInput } from "@/shared/components/ui";
 
 const entitlementTone: Record<EntitlementStatus, "success" | "warning" | "danger" | "neutral"> = {
   active: "success",

@@ -1,1 +1,1 @@
-export { default } from "@/features/landing/components/StatusChip";
+export { default } from "@/landing/components/StatusChip";

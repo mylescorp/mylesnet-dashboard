@@ -1,1 +1,1 @@
-export { default } from "@/features/platform/PlatformOverviewPage";
+export { default } from "@/platform/PlatformOverviewPage";

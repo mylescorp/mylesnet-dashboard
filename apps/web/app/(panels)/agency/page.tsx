@@ -1,1 +1,1 @@
-export { default } from "@/features/agency/AgencyEntryPage";
+export { default } from "@/agency/AgencyEntryPage";

@@ -1,1 +1,1 @@
-export { default } from "@/features/dashboard/TenantWorkspacePage";
+export { default } from "@/dashboard/TenantWorkspacePage";

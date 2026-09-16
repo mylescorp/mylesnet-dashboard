@@ -1,1 +1,1 @@
-export { default } from "@/features/landing/components/SectionHead";
+export { default } from "@/landing/components/SectionHead";

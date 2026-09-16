@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { requirePanelAccess } from "@/lib/auth/panels";
-import { QueryErrorBoundary } from "@/app/components/QueryErrorBoundary";
-import { PlatformTenantDetail } from "@/app/components/PlatformTenantDetail";
+import { QueryErrorBoundary } from "@/platform/components/QueryErrorBoundary";
+import { PlatformTenantDetail } from "@/platform/components/PlatformTenantDetail";
 
 export async function generateMetadata({
   params,

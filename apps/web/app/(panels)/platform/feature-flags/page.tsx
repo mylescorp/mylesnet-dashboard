@@ -1,6 +1,6 @@
 import { requirePanelAccess } from "@/lib/auth/panels";
-import { QueryErrorBoundary } from "@/app/components/QueryErrorBoundary";
-import { PlatformFeatureFlags } from "@/app/components/PlatformFeatureFlags";
+import { QueryErrorBoundary } from "@/platform/components/QueryErrorBoundary";
+import { PlatformFeatureFlags } from "@/platform/components/PlatformFeatureFlags";
 
 export default async function PlatformFeatureFlagsPage() {
   await requirePanelAccess("platform");

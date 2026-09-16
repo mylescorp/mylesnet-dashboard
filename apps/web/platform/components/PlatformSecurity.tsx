@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { useQuery } from "@/app/lib/convex";
 import { platformPanel, type SecurityStaffEntry } from "@/lib/convex/platformPanel";
-import { StatusPill } from "./ui";
+import { StatusPill } from "@/shared/components/ui";
 
 export function PlatformSecurity() {
   const security = useQuery(platformPanel.getPlatformSecurityOverview, {});

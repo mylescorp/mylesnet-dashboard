@@ -23,7 +23,10 @@
     "paths": {
       "@/convex/*": ["../../convex/*"],
       "@/*": ["./*"],
-      "@portal/*": ["features/captive-portal/*"]
+      "@/app/components/*": ["shared/components/*"],
+      "@/app/hooks/*": ["shared/hooks/*"],
+      "@/app/lib/*": ["shared/lib/*"],
+      "@portal/*": ["captive-portal/*"]
     }
   },
   "include": [

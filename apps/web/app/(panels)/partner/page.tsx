@@ -1,1 +1,1 @@
-export { default } from "@/features/partner/PartnerEntryPage";
+export { default } from "@/partner/PartnerEntryPage";

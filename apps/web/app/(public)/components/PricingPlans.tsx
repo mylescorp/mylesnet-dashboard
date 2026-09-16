@@ -1,1 +1,1 @@
-export { default } from "@/features/landing/components/PricingPlans";
+export { default } from "@/landing/components/PricingPlans";

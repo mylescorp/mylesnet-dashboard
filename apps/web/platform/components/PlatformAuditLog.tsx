@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "@/app/lib/convex";
 import { platformPanel, type AuditLogEntry } from "@/lib/convex/platformPanel";
-import { formatDateTime } from "./ui";
+import { formatDateTime } from "@/shared/components/ui";
 
 export function PlatformAuditLog() {
   const [entityTable, setEntityTable] = useState<string | undefined>(undefined);

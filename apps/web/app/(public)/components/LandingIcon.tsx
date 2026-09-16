@@ -1,1 +1,1 @@
-export * from "@/features/landing/components/LandingIcon";
+export * from "@/landing/components/LandingIcon";

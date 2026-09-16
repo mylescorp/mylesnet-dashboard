@@ -13,8 +13,8 @@ import {
 } from "lucide-react";
 import { useMutation, useQuery } from "@/app/lib/convex";
 import { tenantControl, type EntitlementStatus, type TenantStatus } from "@/lib/convex/tenantControl";
-import { useUserProfile } from "./UserProfileContext";
-import { StatusPill, EmptyState, formatDateTime } from "./ui";
+import { useUserProfile } from "@/shared/components/UserProfileContext";
+import { StatusPill, EmptyState, formatDateTime } from "@/shared/components/ui";
 
 const formatTs = (ts: number | null | undefined) => formatDateTime(ts ?? undefined);
 

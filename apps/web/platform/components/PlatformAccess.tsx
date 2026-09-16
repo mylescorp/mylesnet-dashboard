@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ExternalLink } from "lucide-react";
 import { useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
-import { formatDateTime } from "./ui";
+import { formatDateTime } from "@/shared/components/ui";
 
 type RoleRow = NonNullable<ReturnType<typeof useQuery<typeof api.rolesAdmin.listRoles>>>[number];
 type UserRow = NonNullable<ReturnType<typeof useQuery<typeof api.platformUsers.listUsers>>>[number];

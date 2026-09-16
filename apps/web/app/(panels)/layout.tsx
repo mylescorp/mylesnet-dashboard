@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import { ConvexClientProvider } from "../ConvexClientProvider";
-import { AppShell } from "../components/AppShell";
+import { ConvexClientProvider } from "@/shared/providers/ConvexClientProvider";
+import { AppShell } from "@/shared/components/AppShell";
 
 export const metadata: Metadata = {
   title: "MylesNet Billing Workspace",

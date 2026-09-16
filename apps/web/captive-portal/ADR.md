@@ -8,7 +8,7 @@ record below pins build-facing rulings; the spec remains the authority.
 
 - **Decision**: the captive portal is a route surface in the unified MylesNet
   system (one repo, one Next.js app, one Convex project). Screens live in this
-  `apps/web/features/captive-portal/` folder and are mounted by thin
+  `apps/web/captive-portal/` folder and are mounted by thin
   `apps/web/app/(portal)/hotspot/**`
   stubs and `convex/portal/` adapters, resolved by tenant hostname.
 - **Why**: no separate deployable; shared identity, billing, RADIUS, and tenant

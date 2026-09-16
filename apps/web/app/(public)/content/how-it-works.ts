@@ -1,1 +1,1 @@
-export * from "@/features/landing/content/how-it-works";
+export * from "@/landing/content/how-it-works";

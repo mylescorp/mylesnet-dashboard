@@ -1,1 +1,1 @@
-export { default } from "@/features/landing/components/Footer";
+export { default } from "@/landing/components/Footer";

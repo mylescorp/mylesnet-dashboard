@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { ShieldAlert } from "lucide-react";
 import { useMutation, useQuery } from "@/app/lib/convex";
-import { useUserProfile } from "./UserProfileContext";
+import { useUserProfile } from "@/shared/components/UserProfileContext";
 import { voucherFraud, type RedemptionMonitorRow } from "@/lib/convex/voucherFraud";
 
 const SIGNAL_LABEL: Record<string, string> = {

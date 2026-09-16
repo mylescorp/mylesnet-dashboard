@@ -19,7 +19,7 @@ Scaffold only (no code). No functional changes yet.
 
 ## 2026-09-16 — feature relocation and legacy reset
 
-- Moved the canonical feature scaffold to `apps/web/features/captive-portal/`.
+- Moved the canonical portal scaffold to `apps/web/captive-portal/`.
 - Reserved `apps/web/app/(portal)/hotspot/**` for thin route stubs only.
 - Retired the legacy RouterOS/collector dependency; future access integration is
   approval-gated behind a tenant-scoped RADIUS or connector contract.

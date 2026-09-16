@@ -1,1 +1,1 @@
-export { default } from "@/features/landing/components/ProductPreview";
+export { default } from "@/landing/components/ProductPreview";

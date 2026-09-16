@@ -1,1 +1,1 @@
-export * from "@/features/landing/content/rates";
+export * from "@/landing/content/rates";

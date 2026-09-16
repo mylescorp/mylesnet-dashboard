@@ -2,7 +2,7 @@
 
 This folder is the **organizational feature slice** for the MylesNet captive
 portal, module **T-HOT**. Its canonical repository location is
-`apps/web/features/captive-portal/`; it is not a separate app and adds no runtime
+`apps/web/captive-portal/`; it is not a separate app and adds no runtime
 dependency — it is a repository structure only.
 
 Authoritative specification: `docs/captive-portal/captive-portal-specification.md`
@@ -11,10 +11,10 @@ Read it before any code in this folder.
 
 ## Mount contract
 
-- Portal screens: `apps/web/features/captive-portal/ui/**` — thin route stubs in `apps/web/app/(portal)/hotspot/**`.
-- Business logic: `apps/web/features/captive-portal/core/**` — thin Convex adapters in `convex/portal/**`.
+- Portal screens: `apps/web/captive-portal/ui/**` — thin route stubs in `apps/web/app/(portal)/hotspot/**`.
+- Business logic: `apps/web/captive-portal/core/**` — thin Convex adapters in `convex/portal/**`.
 - Schema additions: centralized in `convex/schema.ts` (spec §18 tables).
-- Path alias: `@portal/*` → `apps/web/features/captive-portal/*`.
+- Path alias: `@portal/*` → `apps/web/captive-portal/*`.
 - Tenant resolution: by hostname, server-side, at the portal entry route.
 - OS detection probes: `/hotspot-detect.html`, `/generate_204`, NCSI (spec §2).
 

@@ -1,6 +1,6 @@
 import { requirePanelAccess } from "@/lib/auth/panels";
-import { QueryErrorBoundary } from "@/app/components/QueryErrorBoundary";
-import { PlatformOverview } from "@/app/components/PlatformOverview";
+import { QueryErrorBoundary } from "@/platform/components/QueryErrorBoundary";
+import { PlatformOverview } from "@/platform/components/PlatformOverview";
 
 export default async function PlatformOverviewPage() {
   await requirePanelAccess("platform");

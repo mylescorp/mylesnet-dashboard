@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Flag, Plus, Save, Trash2 } from "lucide-react";
 import { useMutation, useQuery } from "@/app/lib/convex";
-import { useUserProfile } from "./UserProfileContext";
+import { useUserProfile } from "@/shared/components/UserProfileContext";
 import { featureFlags, type FeatureFlag } from "@/lib/convex/featureFlags";
 import { tenantControl } from "@/lib/convex/tenantControl";
 
