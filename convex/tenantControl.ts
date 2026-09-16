@@ -3,10 +3,10 @@ import { internal } from "./_generated/api";
 import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
 import { logAudit } from "./lib/auditLog";
-import { requirePlatformAdmin, requirePlatformSubRole, requirePlatformUser, resolveRoles } from "./lib/auth";
+import { requirePlatformAdmin, requirePlatformSubRole, requirePlatformUser, resolveRoles, resolveUserByIdentity } from "./lib/auth";
 import { PLATFORM_SUB_ROLE_MAP } from "./lib/permissions";
 import { assertMfaCompliance } from "./lib/mfa";
-import { requireTenantMember } from "./lib/tenant";
+import { canTenantOperate, resolveTenantFromAuth } from "./lib/tenant";
 import { normalizeTenantRegistration } from "./lib/tenantProvisioning";
 import { getWorkosOrganizationMembership } from "./workos";
 
@@ -23,6 +23,33 @@ const entitlementStatus = v.union(
   v.literal("expired"),
   v.literal("suspended"),
 );
+
+type WorkspaceSetupReason =
+  | "authentication_required"
+  | "tenant_unconfigured"
+  | "tenant_unavailable"
+  | "account_inactive"
+  | "tenant_membership_required";
+
+type TenantWorkspaceResult =
+  | {
+      status: "ready";
+      workspace: {
+        tenant: {
+          _id: Id<"tenants">;
+          name: string;
+          slug: string;
+          status: "trial" | "active" | "suspended" | "cancelled";
+          country: string;
+          timezone: string;
+          currency: string;
+        };
+        activeMembers: number;
+        activeMarkets: number;
+        entitlement: { planId: string; status: string } | null;
+      };
+    }
+  | { status: "setup_required"; reason: WorkspaceSetupReason };
 
 /** Platform-only tenant estate inventory. It intentionally includes no tenant-owned records. */
 export const listForPlatform = query({
@@ -60,13 +87,36 @@ export const listForPlatform = query({
   },
 });
 
-/** The tenant-side workspace has no client-selected tenant identifier. */
+/**
+ * The tenant-side workspace has no client-selected tenant identifier.
+ * Missing tenancy is an expected onboarding state, not a server exception.
+ */
 export const getCurrentWorkspace = query({
   args: {},
-  handler: async (ctx) => {
-    const tenantId = await requireTenantMember(ctx);
+  handler: async (ctx): Promise<TenantWorkspaceResult> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { status: "setup_required", reason: "authentication_required" };
+
+    const tenantId = await resolveTenantFromAuth(ctx);
+    if (!tenantId) return { status: "setup_required", reason: "tenant_unconfigured" };
+
     const tenant = await ctx.db.get(tenantId);
-    if (!tenant || tenant.deletedAt !== undefined) throw new Error("Unauthorized: tenant is unavailable");
+    if (!tenant || tenant.deletedAt !== undefined || !canTenantOperate(tenant.status)) {
+      return { status: "setup_required", reason: "tenant_unavailable" };
+    }
+
+    const user = await resolveUserByIdentity(ctx);
+    if (!user || user.deletedAt !== undefined || user.isActive === false) {
+      return { status: "setup_required", reason: "account_inactive" };
+    }
+
+    const membership = await ctx.db
+      .query("tenantMemberships")
+      .withIndex("by_user_tenant", (q) => q.eq("userId", user._id).eq("tenantId", tenantId))
+      .first();
+    if (!membership || membership.status !== "active") {
+      return { status: "setup_required", reason: "tenant_membership_required" };
+    }
 
     const [memberships, markets, entitlements] = await Promise.all([
       ctx.db.query("tenantMemberships").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
@@ -74,18 +124,21 @@ export const getCurrentWorkspace = query({
       ctx.db.query("entitlements").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).order("desc").first(),
     ]);
     return {
-      tenant: {
-        _id: tenant._id,
-        name: tenant.name,
-        slug: tenant.slug,
-        status: tenant.status,
-        country: tenant.country,
-        timezone: tenant.timezone,
-        currency: tenant.currency,
+      status: "ready",
+      workspace: {
+        tenant: {
+          _id: tenant._id,
+          name: tenant.name,
+          slug: tenant.slug,
+          status: tenant.status,
+          country: tenant.country,
+          timezone: tenant.timezone,
+          currency: tenant.currency,
+        },
+        activeMembers: memberships.filter((membership) => membership.status === "active").length,
+        activeMarkets: markets.filter((market) => market.status !== "deleted" && market.lifecycleStatus === "active").length,
+        entitlement: entitlements ? { planId: entitlements.planId, status: entitlements.status } : null,
       },
-      activeMembers: memberships.filter((membership) => membership.status === "active").length,
-      activeMarkets: markets.filter((market) => market.status !== "deleted" && market.lifecycleStatus === "active").length,
-      entitlement: entitlements ? { planId: entitlements.planId, status: entitlements.status } : null,
     };
   },
 });
