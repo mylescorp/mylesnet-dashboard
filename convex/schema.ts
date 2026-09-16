@@ -143,93 +143,311 @@ export default defineSchema({
     .index("by_user_and_market", ["userId", "marketId"])
     .index("by_market", ["marketId"]),
 
-  featureFlags: defineTable({
-    key: v.string(),
-    valueJson: v.string(),
-    enabled: v.boolean(),
-    description: v.optional(v.string()),
-    tenantIds: v.optional(v.array(v.id("tenants"))),
-    createdBy: v.id("users"),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-    updatedBy: v.id("users"),
-  }).index("by_key", ["key"]),
+  // ==========================================================================
+  // NETWORK MONITORING
+  // ==========================================================================
 
-  subscribers: defineTable({
+  routers: defineTable({
     ...tenantScope,
-    accountNumber: v.string(),
-    username: v.optional(v.string()),
     name: v.string(),
-    email: v.optional(v.string()),
-    phone: v.string(),
-    planId: v.optional(v.id("plans")),
-    connectionType: v.union(v.literal("pppoe"), v.literal("hotspot")),
-    status: v.union(v.literal("active"), v.literal("expired"), v.literal("suspended"), v.literal("disabled"), v.literal("at_risk"), v.literal("churned")),
-    expiryDate: v.optional(v.number()),
-    macAddress: v.optional(v.string()),
-    ipAddress: v.optional(v.string()),
-    walletBalance: v.number(),
-    currency: v.string(),
-    createdBy: v.id("users"),
+    restBaseUrl: v.string(),
+    location: v.string(),
+    marketId: v.optional(v.id("markets")),
     createdAt: v.number(),
     updatedAt: v.number(),
-    deletedAt: v.optional(v.number()),
-    deletedBy: v.optional(v.id("users")),
+    cpuWarningThreshold: v.optional(v.number()),
+    cpuCriticalThreshold: v.optional(v.number()),
+    memoryWarningThreshold: v.optional(v.number()),
+    memoryCriticalThreshold: v.optional(v.number()),
+    archivedAt: v.optional(v.number()),
+    archivedBy: v.optional(v.id("users")),
+    archiveReason: v.optional(v.string()),
+    // Estate bridge (spec "Device Information").
+    macAddress: v.optional(v.string()),
+    lastSeenAt: v.optional(v.number()),
   })
     .index("by_tenant", ["tenantId"])
-    .index("by_account_number", ["accountNumber"])
-    .index("by_username", ["username"])
-    .index("by_phone", ["phone"])
-    .index("by_email", ["email"])
-    .index("by_status", ["status"])
-    .index("by_plan", ["planId"])
-    .index("by_expiry", ["expiryDate"]),
+    .index("by_location", ["location"])
+    .index("by_market", ["marketId"]),
 
-  payments: defineTable({
+  routerCredentials: defineTable({
     ...tenantScope,
-    subscriberId: v.optional(v.id("subscribers")),
-    invoiceId: v.optional(v.id("invoices")),
-    planId: v.optional(v.id("plans")),
-    amount: v.number(),
-    currency: v.string(),
-    gateway: v.string(),
-    reference: v.string(),
-    status: v.union(v.literal("pending"), v.literal("completed"), v.literal("failed"), v.literal("refunded")),
-    paymentDate: v.number(),
-    operatorId: v.optional(v.id("users")),
+    routerId: v.id("routers"),
+    encryptedUsername: v.string(),
+    encryptedPassword: v.string(),
+    updatedAt: v.number(),
+  }).index("by_tenant", ["tenantId"])
+    .index("by_router", ["routerId"]),
+
+  accessPoints: defineTable({
+    ...tenantScope,
+    routerId: v.id("routers"),
+    name: v.string(),
+    port: v.string(),
+    deviceType: v.union(v.literal("cpe220"), v.literal("indoor_ap"), v.literal("builtin_radio"), v.literal("other")),
+    sharesPortWith: v.optional(v.string()),
+    capacity: v.optional(v.number()),
+    rateLimitReference: v.optional(v.string()),
+    networkAddress: v.optional(v.string()),
+    ipAddress: v.optional(v.string()),
+    macAddress: v.optional(v.string()),
+    serialNumber: v.optional(v.string()),
+    model: v.optional(v.string()),
+    note: v.optional(v.string()),
+    switchId: v.optional(v.id("networkSwitches")),
+    switchPort: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_tenant", ["tenantId"]).index("by_subscriber", ["subscriberId"]).index("by_invoice", ["invoiceId"]).index("by_status", ["status"]).index("by_date", ["paymentDate"]),
+    archivedAt: v.optional(v.number()),
+    archivedBy: v.optional(v.id("users")),
+    archiveReason: v.optional(v.string()),
+    // Estate bridge (spec "Device Information"): when an access point is
+    // registered in the spec device registry, these fields track liveness and
+    // who registered it.
+    lastSeenAt: v.optional(v.number()),
+    registeredBy: v.optional(v.union(v.literal("self"), v.id("users"))),
+    lastSnapshotCcq: v.optional(v.number()),
+    lastSnapshotSignalDbm: v.optional(v.number()),
+  }).index("by_tenant", ["tenantId"])
+    .index("by_router", ["routerId"]),
 
-  invoices: defineTable({
+  /** Layer-2 switches that sit between a router port and downstream access points. */
+  networkSwitches: defineTable({
     ...tenantScope,
-    invoiceNumber: v.string(),
-    subscriberId: v.optional(v.id("subscribers")),
-    status: v.union(v.literal("draft"), v.literal("issued"), v.literal("paid"), v.literal("overdue"), v.literal("cancelled")),
-    currency: v.string(),
-    subtotal: v.number(),
-    tax: v.number(),
-    discount: v.number(),
-    total: v.number(),
-    dueDate: v.optional(v.number()),
-    paidDate: v.optional(v.number()),
-    issuedDate: v.optional(v.number()),
-    notes: v.optional(v.string()),
-    operatorId: v.optional(v.id("users")),
+    routerId: v.id("routers"),
+    name: v.string(),
+    model: v.optional(v.string()),
+    serialNumber: v.optional(v.string()),
+    macAddress: v.optional(v.string()),
+    ipAddress: v.optional(v.string()),
+    routerPort: v.optional(v.string()),
+    portCount: v.optional(v.number()),
+    managed: v.optional(v.boolean()),
+    note: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_tenant", ["tenantId"]).index("by_subscriber", ["subscriberId"]).index("by_status", ["status"]).index("by_number", ["invoiceNumber"]).index("by_due_date", ["dueDate"]),
+    archivedAt: v.optional(v.number()),
+    archivedBy: v.optional(v.id("users")),
+    archiveReason: v.optional(v.string()),
+  }).index("by_tenant", ["tenantId"])
+    .index("by_router", ["routerId"]),
 
-  invoiceLineItems: defineTable({
+  /** Last authenticated collector result for each router. Never stores credentials. */
+  collectorRuns: defineTable({
     ...tenantScope,
-    invoiceId: v.id("invoices"),
-    description: v.string(),
-    quantity: v.number(),
-    unitPrice: v.number(),
-    total: v.number(),
-    createdAt: v.number(),
-  }).index("by_tenant", ["tenantId"]).index("by_invoice", ["invoiceId"]),
+    routerId: v.id("routers"),
+    observedAt: v.number(),
+    status: v.union(v.literal("connected"), v.literal("failed")),
+    message: v.optional(v.string()),
+    latencyMs: v.optional(v.number()),
+    consecutiveFailures: v.optional(v.number()),
+    processUptimeMs: v.optional(v.number()),
+  }).index("by_router_observedAt", ["routerId", "observedAt"]),
 
+  healthSamples: defineTable({
+    ...tenantScope,
+    routerId: v.id("routers"),
+    accessPointId: v.optional(v.id("accessPoints")),
+    timestamp: v.number(),
+    cpuPercent: v.number(),
+    memoryPercent: v.number(),
+    linkState: v.boolean(),
+    txBytesPerSec: v.number(),
+    rxBytesPerSec: v.number(),
+    txBytes: v.optional(v.number()),
+    rxBytes: v.optional(v.number()),
+    connectedUserCount: v.optional(v.number()),
+    errorCount: v.number(),
+    queueDrops: v.number(),
+  }).index("by_router_timestamp", ["routerId", "timestamp"]),
+
+  accessPointSamples: defineTable({
+    ...tenantScope,
+    routerId: v.id("routers"),
+    accessPointId: v.id("accessPoints"),
+    timestamp: v.number(),
+    linkState: v.boolean(),
+    txBytesPerSec: v.number(),
+    rxBytesPerSec: v.number(),
+    errorCount: v.number(),
+    queueDrops: v.number(),
+    txBytes: v.number(),
+    rxBytes: v.number(),
+    connectedUserCount: v.optional(v.number()),
+    // Wi-Fi quality (spec "Device Details"): required for CCQ threshold alerts
+    // and signal-strength capacity planning.
+    ccq: v.optional(v.number()),
+    signalStrengthDbm: v.optional(v.number()),
+  }).index("by_access_point_timestamp", ["accessPointId", "timestamp"]),
+
+  activeHotspotSessions: defineTable({
+    ...tenantScope,
+    routerId: v.id("routers"),
+    accessPointId: v.optional(v.id("accessPoints")),
+    sessionIdentifier: v.string(),
+    subscriberIdentifier: v.string(),
+    observedBytes: v.number(),
+    observedAt: v.number(),
+  })
+    .index("by_router", ["routerId"])
+    .index("by_router_session", ["routerId", "sessionIdentifier"])
+    .index("by_access_point", ["accessPointId"]),
+
+  usageSamples: defineTable({
+    ...tenantScope,
+    routerId: v.id("routers"),
+    accessPointId: v.optional(v.id("accessPoints")),
+    subscriberIdentifier: v.string(),
+    timestamp: v.number(),
+    byteDelta: v.number(),
+    observedBytes: v.number(),
+  })
+    .index("by_tenant", ["tenantId"])
+    .index("by_router_timestamp", ["routerId", "timestamp"])
+    .index("by_router_subscriber_timestamp", ["routerId", "subscriberIdentifier", "timestamp"])
+    .index("by_access_point_timestamp", ["accessPointId", "timestamp"])
+    .index("by_timestamp", ["timestamp"]),
+
+  incidents: defineTable({
+    ...tenantScope,
+    routerId: v.id("routers"),
+    accessPointId: v.optional(v.id("accessPoints")),
+    openedAt: v.number(),
+    resolvedAt: v.optional(v.number()),
+    acknowledgedBy: v.optional(v.id("users")),
+    note: v.string(),
+    severity: v.string(),
+  })
+    .index("by_tenant", ["tenantId"])
+    .index("by_router_open", ["routerId", "openedAt"])
+    .index("by_resolved", ["resolvedAt"])
+    .index("by_router_severity_resolved", ["routerId", "severity", "resolvedAt"]),
+
+  shiftNotes: defineTable({
+    ...tenantScope,
+    routerId: v.id("routers"),
+    authorId: v.id("users"),
+    timestamp: v.number(),
+    note: v.string(),
+  }).index("by_router_timestamp", ["routerId", "timestamp"]),
+
+  configWatchBaselines: defineTable({
+    ...tenantScope,
+    routerId: v.id("routers"),
+    snapshotJson: v.string(),
+    capturedAt: v.number(),
+  }).index("by_router", ["routerId"]),
+
+  routerConfigurationSnapshots: defineTable({
+    ...tenantScope,
+    routerId: v.id("routers"),
+    observedAt: v.number(),
+    snapshotJson: v.string(),
+  }).index("by_router_timestamp", ["routerId", "observedAt"]),
+
+  /** Live DHCP leases observed by the collector — subscriber IP↔MAC↔host mapping. */
+  dhcpLeases: defineTable({
+    ...tenantScope,
+    routerId: v.id("routers"),
+    ipAddress: v.string(),
+    macAddress: v.string(),
+    hostname: v.optional(v.string()),
+    status: v.optional(v.string()),
+    expiresAt: v.optional(v.number()),
+    observedAt: v.number(),
+  })
+    .index("by_router", ["routerId"])
+    .index("by_router_ip", ["routerId", "ipAddress"])
+    .index("by_mac", ["macAddress"]),
+
+  /** RouterOS simple queues observed by the collector — per-subscriber rate limits. */
+  simpleQueues: defineTable({
+    ...tenantScope,
+    routerId: v.id("routers"),
+    name: v.string(),
+    target: v.optional(v.string()),
+    rateBps: v.optional(v.number()),
+    maxLimitBps: v.optional(v.number()),
+    disabled: v.optional(v.boolean()),
+    observedAt: v.number(),
+  })
+    .index("by_router", ["routerId"])
+    .index("by_router_name", ["routerId", "name"]),
+
+  /** Latest per-router telemetry details (identity, system health, ports, wifi radios). */
+  routerTelemetry: defineTable({
+    ...tenantScope,
+    routerId: v.id("routers"),
+    observedAt: v.number(),
+    identity: v.optional(v.string()),
+    systemHealth: v.optional(
+      v.object({
+        temperature: v.optional(v.number()),
+        temperatureUnit: v.optional(v.string()),
+        voltage: v.optional(v.number()),
+        badDrivers: v.optional(v.array(v.string())),
+      })
+    ),
+    ethernetPorts: v.optional(
+      v.array(
+        v.object({
+          name: v.string(),
+          running: v.optional(v.boolean()),
+          linkSpeedMbps: v.optional(v.number()),
+          duplex: v.optional(v.string()),
+          disabled: v.optional(v.boolean()),
+        })
+      )
+    ),
+    wifiRadios: v.optional(
+      v.array(
+        v.object({
+          interfaceName: v.string(),
+          state: v.optional(v.string()),
+          frequency: v.optional(v.number()),
+          channel: v.optional(v.string()),
+          signalStrength: v.optional(v.number()),
+          clientCount: v.optional(v.number()),
+        })
+      )
+    ),
+  }).index("by_router", ["routerId"]),
+
+  /** Operator-facing telemetry self-health events (ingest latency, backoff, drops). */
+  systemEvents: defineTable({
+    ...tenantScope,
+    routerId: v.optional(v.id("routers")),
+    accessPointId: v.optional(v.id("accessPoints")),
+    type: v.union(
+      v.literal("ingest_latency"),
+      v.literal("rate_limited"),
+      v.literal("dropped"),
+      v.literal("collector_backoff"),
+      v.literal("partial_telemetry"),
+      v.literal("notification"),
+      v.literal("self_heal_action"),
+      v.literal("self_heal_failed"),
+      v.literal("chronic_self_heal"),
+      v.literal("healthguard_stale"),
+    ),
+    severity: v.union(v.literal("info"), v.literal("warning"), v.literal("critical")),
+    title: v.string(),
+    details: v.optional(v.string()),
+    occurredAt: v.number(),
+  })
+    .index("by_occurredAt", ["occurredAt"])
+    .index("by_router", ["routerId"])
+    .index("by_type", ["type"]),
+
+  // ==========================================================================
+  // COLLECTOR SELF-HEAL & OPERATOR COMMAND QUEUE
+  // ==========================================================================
+
+  /**
+   * Global operator settings served to collectors. Missing rows mean the
+   * built-in default (e.g. collectors treat a missing healthguardEnabled row
+   * as enabled). One row per key.
+   */
   system_settings: defineTable({
     key: v.string(),
     valueJson: v.string(),
@@ -237,7 +455,172 @@ export default defineSchema({
     updatedBy: v.optional(v.id("users")),
   }).index("by_key", ["key"]),
 
+  /**
+   * Global feature-flag store (spec K). One row per key. Flags support
+   * percentage rollout (encoded in valueJson) and per-tenant overrides
+   * through tenantIds. Deliberately NOT tenant-scoped — flags are platform
+   * state, evaluated against an optional target tenant at read time.
+   */
+  featureFlags: defineTable({
+    key: v.string(),
+    valueJson: v.string(),
+    enabled: v.boolean(),
+    description: v.optional(v.string()),
+    tenantIds: v.optional(v.array(v.id("tenants"))),
+    createdBy: v.optional(v.id("users")),
+    createdAt: v.optional(v.number()),
+    updatedAt: v.number(),
+    updatedBy: v.optional(v.id("users")),
+  }).index("by_key", ["key"]),
+
+  /**
+   * Operator-queued actions executed by the local collector on its next
+   * check-in. The collector acknowledges a command, the server records that
+   * durable clear, and only then does the collector act — so a router write
+   * never happens around an un-acked command.
+   */
+  device_commands: defineTable({
+    ...tenantScope,
+    routerId: v.id("routers"),
+    type: v.union(
+      v.literal("reenable_www_ssl"),
+      v.literal("restart_collector"),
+      v.literal("run_full_healthcheck"),
+    ),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("acknowledged"),
+      v.literal("completed"),
+      v.literal("failed"),
+      v.literal("superseded"),
+    ),
+    requestedBy: v.id("users"),
+    requestedAt: v.number(),
+    acknowledgedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    failedAt: v.optional(v.number()),
+    supersededAt: v.optional(v.number()),
+    supersededByCommandId: v.optional(v.id("device_commands")),
+    errorMessage: v.optional(v.string()),
+    attempts: v.number(),
+    expiresAt: v.number(),
+  })
+    .index("by_router_status", ["routerId", "status"])
+    .index("by_router_type_status", ["routerId", "type", "status"])
+    .index("by_status_expiresAt", ["status", "expiresAt"]),
+
+  /**
+   * Latest healthguard observation per router. One row per router; the
+   * collector's telemetry upserts it on every push.
+   */
+  healthguardStates: defineTable({
+    ...tenantScope,
+    routerId: v.id("routers"),
+    lastRunAt: v.optional(v.number()),
+    wwwSslEnabled: v.optional(v.boolean()),
+    lastAction: v.optional(
+      v.union(
+        v.literal("none"),
+        v.literal("reenabled_www_ssl"),
+        v.literal("reenable_failed"),
+        v.literal("flagged_disabled"),
+      )
+    ),
+    lastActionAt: v.optional(v.number()),
+    lastActionMessage: v.optional(v.string()),
+    reenableTimestamps24h: v.optional(v.array(v.number())),
+    chronicAlertedAt: v.optional(v.number()),
+    staleAlertedAt: v.optional(v.number()),
+  }).index("by_router", ["routerId"]),
+
+  // ==========================================================================
+  // CENTIPID INTEGRATION
+  // ==========================================================================
+
+  centipidCredentials: defineTable({
+    apiToken: v.string(),
+    webhookSigningSecret: v.string(),
+    ingestionPaused: v.optional(v.boolean()),
+    lastHealthCheckAt: v.optional(v.number()),
+    lastHealthCheckOk: v.optional(v.boolean()),
+    lastHealthCheckError: v.optional(v.string()),
+    // Persisted MCP output lets authorized Convex subscribers update without
+    // keeping a browser-only action result or using a manual refresh button.
+    liveSnapshotAt: v.optional(v.number()),
+    liveSnapshotRevenueToday: v.optional(v.union(v.number(), v.null())),
+    liveSnapshotRevenueYesterday: v.optional(v.union(v.number(), v.null())),
+    liveSnapshotSubscribersOnline: v.optional(v.union(v.number(), v.null())),
+    liveSnapshotActiveSubscriptions: v.optional(v.union(v.number(), v.null())),
+    liveSnapshotExpiring24h: v.optional(v.union(v.number(), v.null())),
+    liveSnapshotUnreconciledPayments: v.optional(v.union(v.number(), v.null())),
+    liveSnapshotCurrency: v.optional(v.string()),
+    liveSnapshotLastAttemptAt: v.optional(v.number()),
+    liveSnapshotLastAttemptOk: v.optional(v.boolean()),
+    liveSnapshotLastAttemptError: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.optional(v.number()),
+  }).index("by_createdAt", ["createdAt"]),
+
+  subscriberEvents: defineTable({
+    ...tenantScope,
+    centipidSubscriberId: v.string(),
+    eventType: v.string(),
+    phone: v.string(),
+    name: v.optional(v.string()),
+    packageName: v.string(),
+    timestamp: v.number(),
+    rawPayloadRef: v.optional(v.string()),
+    webhookEventId: v.optional(v.string()),
+  }).index("by_tenant", ["tenantId"])
+    .index("by_timestamp", ["timestamp"])
+    .index("by_subscriber", ["centipidSubscriberId"])
+    .index("by_webhookEventId", ["webhookEventId"]),
+
+  paymentEvents: defineTable({
+    ...tenantScope,
+    centipidPaymentId: v.string(),
+    eventType: v.string(),
+    amount: v.number(),
+    currency: v.string(),
+    method: v.string(),
+    subscriberPhone: v.string(),
+    timestamp: v.number(),
+    webhookEventId: v.optional(v.string()),
+  }).index("by_tenant", ["tenantId"])
+    .index("by_timestamp", ["timestamp"])
+    .index("by_payment", ["centipidPaymentId"])
+    .index("by_webhookEventId", ["webhookEventId"]),
+
+  voucherEvents: defineTable({
+    ...tenantScope,
+    centipidVoucherId: v.string(),
+    eventType: v.string(),
+    packageName: v.string(),
+    timestamp: v.number(),
+    webhookEventId: v.optional(v.string()),
+    customerPhone: v.optional(v.string()),
+    // Redemption forensics (spec F1): device/IP seen in the redemption event.
+    // Optional — not every payload carries them.
+    redeemedDeviceId: v.optional(v.string()),
+    redeemedIpAddress: v.optional(v.string()),
+  }).index("by_timestamp", ["timestamp"])
+    .index("by_voucher", ["centipidVoucherId"])
+    .index("by_webhookEventId", ["webhookEventId"])
+    .index("by_customerPhone", ["customerPhone"]),
+
+  ticketEvents: defineTable({
+    ...tenantScope,
+    centipidTicketId: v.string(),
+    eventType: v.string(),
+    subject: v.string(),
+    timestamp: v.number(),
+    webhookEventId: v.optional(v.string()),
+  }).index("by_timestamp", ["timestamp"])
+    .index("by_ticket", ["centipidTicketId"])
+    .index("by_webhookEventId", ["webhookEventId"]),
+
   webhookDeliveryLog: defineTable({
+    ...tenantScope,
     receivedAt: v.number(),
     eventType: v.string(),
     signatureValid: v.boolean(),
@@ -260,6 +643,29 @@ export default defineSchema({
     reason: v.optional(v.string()),
   })
     .index("by_eventId", ["eventId"])
+    .index("by_status", ["status"]),
+
+  latestSubscriberState: defineTable({
+    ...tenantScope,
+    centipidSubscriberId: v.string(),
+    status: v.union(v.literal("active"), v.literal("paused")),
+    phone: v.string(),
+    name: v.optional(v.string()),
+    packageName: v.string(),
+    lastEventType: v.string(),
+    lastSeen: v.number(),
+  }).index("by_subscriber", ["centipidSubscriberId"])
+    .index("by_status", ["status"]),
+
+  ticketStatus: defineTable({
+    ...tenantScope,
+    centipidTicketId: v.string(),
+    status: v.union(v.literal("open"), v.literal("resolved")),
+    subject: v.string(),
+    openedAt: v.number(),
+    resolvedAt: v.optional(v.number()),
+    lastSeen: v.number(),
+  }).index("by_ticket", ["centipidTicketId"])
     .index("by_status", ["status"]),
 
   // ==========================================================================
@@ -308,6 +714,178 @@ export default defineSchema({
     reportedAt: v.number(),
   })
     .index("by_market_month", ["marketId", "yearMonth"])
+    .index("by_market", ["marketId"]),
+
+  devices: defineTable({
+    ...tenantScope,
+    marketId: v.id("markets"),
+    parentDeviceId: v.optional(v.id("devices")),
+    name: v.string(),
+    deviceKind: v.string(),
+    serialOrMac: v.optional(v.string()),
+    lifecycleStatus: v.string(),
+    status: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+    deletedBy: v.optional(v.id("users")),
+    deleteReason: v.optional(v.string()),
+    restoredAt: v.optional(v.number()),
+    restoredBy: v.optional(v.id("users")),
+    // Business/NOC bridge fields (spec "Device Information"): the devices table
+    // doubles as the spec device registry, linked to the ops estate below.
+    deviceType: v.optional(
+      v.union(v.literal("mikrotik"), v.literal("outdoor_ap"), v.literal("indoor_ap"), v.literal("extender"))
+    ),
+    role: v.optional(v.string()),
+    macAddress: v.optional(v.string()),
+    lastSeenAt: v.optional(v.number()),
+    registeredBy: v.optional(v.union(v.literal("self"), v.id("users"))),
+    routerId: v.optional(v.id("routers")),
+    accessPointId: v.optional(v.id("accessPoints")),
+    // Platform device fleet fields (spec B1): firmware + health + provisioning
+    // posture surfaced in the fleet registry. All optional — legacy rows and
+    // devices self-registered before these fields exist carry no value.
+    firmwareVersion: v.optional(v.string()),
+    uptimePercent: v.optional(v.number()),
+    provisioningStatus: v.optional(
+      v.union(
+        v.literal("unprovisioned"),
+        v.literal("pending"),
+        v.literal("provisioned"),
+        v.literal("failed"),
+      ),
+    ),
+  })
+    .index("by_market", ["marketId"])
+    .index("by_parent", ["parentDeviceId"])
+    .index("by_lifecycleStatus", ["lifecycleStatus"])
+    .index("by_status", ["status"])
+    .index("by_macAddress", ["macAddress"])
+    .index("by_provisioningStatus", ["provisioningStatus"]),
+
+  deviceReplacementEvents: defineTable({
+    ...tenantScope,
+    deviceId: v.id("devices"),
+    replacedAt: v.number(),
+    oldSerialOrMac: v.optional(v.string()),
+    newSerialOrMac: v.optional(v.string()),
+    reason: v.string(),
+    loggedBy: v.id("users"),
+  }).index("by_device", ["deviceId"]),
+
+// Staged firmware rollout campaigns (spec B6): an operator campaigns one
+  // firmware label across a bounded scope of the B1 fleet — by market, device
+  // kind, or a single device — in explicit waves. A rollout can never target
+  // "all tenants": the scope must resolve to exactly one bound, and each wave
+  // application is capped at waveSize devices.
+  firmwareRollouts: defineTable({
+    label: v.string(),
+    marketId: v.optional(v.id("markets")),
+    deviceKind: v.optional(v.string()),
+    deviceId: v.optional(v.id("devices")),
+    waveSize: v.number(),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("running"),
+      v.literal("paused"),
+      v.literal("completed"),
+      v.literal("cancelled"),
+    ),
+    appliedDeviceIds: v.array(v.id("devices")),
+    createdBy: v.optional(v.id("users")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    startedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    cancelledAt: v.optional(v.number()),
+  }).index("by_status", ["status"]),
+
+  // Platform RADIUS server fleet (spec B3): shared FreeRADIUS nodes across
+  // every region. Platform-owned records (no tenant scope) — only Platform or
+  // Admin creates shared RADIUS nodes per the spec.
+  radiusServers: defineTable({
+    name: v.string(),
+    hostname: v.string(),
+    port: v.number(),
+    protocol: v.union(v.literal("radsec"), v.literal("udp")),
+    status: v.union(
+      v.literal("active"),
+      v.literal("provisioning"),
+      v.literal("failed"),
+      v.literal("maintenance"),
+      v.literal("decommissioned"),
+    ),
+    healthStatus: v.union(
+      v.literal("healthy"),
+      v.literal("degraded"),
+      v.literal("down"),
+      v.literal("unknown"),
+    ),
+    region: v.optional(v.string()),
+    certExpiryAt: v.optional(v.number()),
+    lastHealthCheckAt: v.optional(v.number()),
+    notes: v.optional(v.string()),
+    registeredBy: v.optional(v.id("users")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_status", ["status"])
+    .index("by_protocol", ["protocol"]),
+
+  // Versioned PPPoE / rate-limit policy templates (spec B4): each family
+  // (identified by a stable code) is versioned 1..n. Versions are immutable
+  // once published, so tenants provisioned against an older version keep their
+  // behavior when a newer version ships.
+  policyTemplates: defineTable({
+    code: v.string(),
+    name: v.string(),
+    version: v.number(),
+    kind: v.union(v.literal("pppoe"), v.literal("rate_limit")),
+    downloadMbps: v.number(),
+    uploadMbps: v.number(),
+    burstDownloadMbps: v.optional(v.number()),
+    burstUploadMbps: v.optional(v.number()),
+    burstThresholdMbps: v.optional(v.number()),
+    burstTimeSeconds: v.optional(v.number()),
+    status: v.union(v.literal("draft"), v.literal("published"), v.literal("retired")),
+    description: v.optional(v.string()),
+    createdBy: v.optional(v.id("users")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_code_version", ["code", "version"])
+    .index("by_code", ["code"])
+    .index("by_status", ["status"])
+    .index("by_kind_status", ["kind", "status"]),
+
+  // Device provisioning pipeline (spec "Provisioning Queue"). A device that
+  // reports in self-registered (registeredBy: "self") lands here as a request
+  // that a super_admin or ops role must approve before it is treated as part
+  // of the managed estate. Terminal states: approved → deployed (device pushed
+  // its firmware/config), rejected (with a decision note).
+  provisioningRequests: defineTable({
+    ...tenantScope,
+    marketId: v.id("markets"),
+    deviceId: v.optional(v.id("devices")),
+    requestedFirmware: v.optional(v.string()),
+    requesterId: v.id("users"),
+    requestedAt: v.number(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("approved"),
+      v.literal("rejected"),
+      v.literal("deployed"),
+    ),
+    decidedBy: v.optional(v.id("users")),
+    decidedAt: v.optional(v.number()),
+    decisionNote: v.optional(v.string()),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_tenant", ["tenantId"])
+    .index("by_tenant_status", ["tenantId", "status"])
     .index("by_market", ["marketId"]),
 
   agents: defineTable({
@@ -420,6 +998,31 @@ export default defineSchema({
     planId: v.optional(v.id("plans")),
   }).index("by_market", ["marketId"]),
 
+  alerts: defineTable({
+    ...tenantScope,
+    marketId: v.id("markets"),
+    rootDeviceId: v.optional(v.id("devices")),
+    dependentDeviceIds: v.array(v.id("devices")),
+    alertType: v.string(),
+    message: v.string(),
+    alertStatus: v.string(),
+    openedAt: v.number(),
+    acknowledgedBy: v.optional(v.id("users")),
+    acknowledgedAt: v.optional(v.number()),
+    resolvedAt: v.optional(v.number()),
+    // NOC spec §17 alert enrichments. `triggeredAt` aliases `openedAt` under
+    // the spec name; escalation uses severity + channels.
+    triggeredAt: v.optional(v.number()),
+    severity: v.optional(v.union(v.literal("info"), v.literal("warning"), v.literal("critical"))),
+    notifiedVia: v.optional(v.array(v.union(v.literal("sms"), v.literal("email"), v.literal("dashboard")))),
+    ownerId: v.optional(v.id("users")),
+    recommendedAction: v.optional(v.string()),
+  })
+    .index("by_tenant", ["tenantId"])
+    .index("by_status", ["alertStatus"])
+    .index("by_rootDevice", ["rootDeviceId"])
+    .index("by_market_status", ["marketId", "alertStatus"]),
+
   auditLog: defineTable({
     ...tenantScope,
     action: v.string(),
@@ -430,14 +1033,7 @@ export default defineSchema({
     afterJson: v.optional(v.string()),
     timestamp: v.number(),
     ip: v.optional(v.string()),
-    // Existing audit rows remain intentionally unsealed. New rows are linked
-    // by the centralized writer in lib/auditLog.ts.
-    chainSequence: v.optional(v.number()),
-    prevHash: v.optional(v.string()),
-    hash: v.optional(v.string()),
-  })
-    .index("by_entity", ["entityTable"])
-    .index("by_timestamp", ["timestamp"]),
+  }).index("by_entity", ["entityTable"]),
 
   // ==========================================================================
   // EXPANSION PIPELINE (market prospects, separate from live markets)
@@ -511,8 +1107,27 @@ export default defineSchema({
     .index("by_created", ["createdBy"]),
 
   // ==========================================================================
-  // RENEWAL ATTRIBUTION (4.7 — conditional on provider CSV verification)
+  // RENEWAL ATTRIBUTION (4.7 — conditional on Centipid CSV verification)
   // ==========================================================================
+
+  renewalCredits: defineTable({
+    ...tenantScope,
+    agentId: v.id("agents"),
+    marketId: v.id("markets"),
+    customerPhone: v.string(),
+    initialVoucherId: v.id("vouchers"),
+    renewalType: v.string(),
+    renewalAmount: v.number(),
+    currency: v.string(),
+    centipidMatchRef: v.optional(v.string()),
+    creditedAt: v.number(),
+    reconciliationBatchId: v.optional(v.string()),
+  })
+    .index("by_tenant", ["tenantId"])
+    .index("by_agent", ["agentId"])
+    .index("by_market", ["marketId"])
+    .index("by_phone", ["customerPhone"])
+    .index("by_batch", ["reconciliationBatchId"]),
 
   // ==========================================================================
   // GAMIFICATION / LEADERBOARD
@@ -621,7 +1236,7 @@ export default defineSchema({
     revenueUSD: v.number(),
     airtelCostLocal: v.number(),
     electricityCostLocal: v.number(),
-    platformFeeLocal: v.number(),
+    centipidFeeLocal: v.number(),
     variableCostLocal: v.number(),
     netContributionLocal: v.number(),
     breakEvenStatus: v.union(v.literal("profit"), v.literal("break_even"), v.literal("loss")),
@@ -808,6 +1423,25 @@ export default defineSchema({
     .index("by_code", ["code"])
     .index("by_status", ["status"]),
 
+  // Scheduled maintenance windows suppress alerting for the covered devices
+  // (spec §17 maintenance mode).
+  maintenanceWindows: defineTable({
+    ...tenantScope,
+    marketId: v.id("markets"),
+    deviceId: v.optional(v.id("devices")),
+    scheduledStart: v.number(),
+    scheduledEnd: v.number(),
+    reason: v.string(),
+    suppressAlerts: v.boolean(),
+    status: v.union(v.literal("scheduled"), v.literal("active"), v.literal("completed"), v.literal("cancelled")),
+    createdBy: v.id("users"),
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_market", ["marketId"])
+    .index("by_status", ["status"])
+    .index("by_device", ["deviceId"]),
+
   // Per-user alert preference matrix (spec §17 + §32).
   notificationPreferences: defineTable({
     ...tenantScope,
@@ -834,6 +1468,21 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_category_channel", ["category", "channel"]),
+
+  // Approved device/build configurations (spec "Device Information").
+  standardSiteKit: defineTable({
+    deviceType: v.union(v.literal("mikrotik"), v.literal("outdoor_ap"), v.literal("indoor_ap"), v.literal("extender")),
+    approvedModel: v.string(),
+    approvedFirmwareVersion: v.optional(v.string()),
+    requiresUps: v.boolean(),
+    snmpProfile: v.optional(v.string()),
+    effectiveFrom: v.string(),
+    status: v.union(v.literal("active"), v.literal("superseded")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_device_type", ["deviceType", "status"])
+    .index("by_status", ["status"]),
 
   // Scheduled report definitions (spec §29); each run appends a reportExport.
   scheduledReports: defineTable({
@@ -877,6 +1526,54 @@ export default defineSchema({
 
   // Hourly per-device telemetry rollups (spec §20). The rollup cron folds
   // raw healthSamples/accessPointSamples into these for fast charting.
+  telemetryHourly: defineTable({
+    ...tenantScope,
+    marketId: v.id("markets"),
+    deviceKind: v.union(v.literal("router"), v.literal("access_point")),
+    routerId: v.optional(v.id("routers")),
+    accessPointId: v.optional(v.id("accessPoints")),
+    deviceId: v.optional(v.id("devices")),
+    hourStart: v.number(),
+    sampleCount: v.number(),
+    avgCpuPercent: v.optional(v.number()),
+    avgMemoryPercent: v.optional(v.number()),
+    avgTxRateMbps: v.number(),
+    avgRxRateMbps: v.number(),
+    maxTxRateMbps: v.number(),
+    maxRxRateMbps: v.number(),
+    maxConnectedClients: v.number(),
+    avgCcq: v.optional(v.number()),
+    avgSignalStrengthDbm: v.optional(v.number()),
+  })
+    .index("by_market_hour", ["marketId", "hourStart"])
+    .index("by_router_hour", ["routerId", "hourStart"])
+    .index("by_access_point_hour", ["accessPointId", "hourStart"])
+    .index("by_device_hour", ["deviceId", "hourStart"]),
+
+  telemetryDaily: defineTable({
+    ...tenantScope,
+    marketId: v.id("markets"),
+    deviceKind: v.union(v.literal("router"), v.literal("access_point")),
+    routerId: v.optional(v.id("routers")),
+    accessPointId: v.optional(v.id("accessPoints")),
+    deviceId: v.optional(v.id("devices")),
+    date: v.string(),
+    sampleCount: v.number(),
+    avgCpuPercent: v.optional(v.number()),
+    avgMemoryPercent: v.optional(v.number()),
+    avgTxRateMbps: v.number(),
+    avgRxRateMbps: v.number(),
+    maxTxRateMbps: v.number(),
+    maxRxRateMbps: v.number(),
+    maxConnectedClients: v.number(),
+    avgCcq: v.optional(v.number()),
+    avgSignalStrengthDbm: v.optional(v.number()),
+  })
+    .index("by_market_date", ["marketId", "date"])
+    .index("by_router_date", ["routerId", "date"])
+    .index("by_access_point_date", ["accessPointId", "date"])
+    .index("by_device_date", ["deviceId", "date"]),
+
   // ==========================================================================
   // NOC SPEC V2 — TEAMS
   // ==========================================================================

@@ -8,37 +8,63 @@
   `auditLog` rows remain readable but are intentionally unsealed and outside
   the chain. **No historical backfill is built.** Delivered via PR #17
   (`myles/platform-audit-hash-chain` → main).
-- **Chain semantics (approved as-is):** every new audit write is sealed by the
-  central writer (`convex/lib/auditLog.ts`) with monotonic `chainSequence`,
-  strict timestamp ordering, `prevHash` linking, and a SHA-256 over the one
-  canonical payload (version, sequence, prevHash, action, entity, actor,
-  before/after JSON, timestamp, IP).
-- **Verification coverage is complete, not windowed:** every sealed row
-  (non-null `hash`/`prevHash`/`chainSequence`) is verified from the genesis
-  sentinel forward. The first sealed row must satisfy `chainSequence === 1`
-  and `prevHash === AUDIT_CHAIN_GENESIS`; every later row must increment the
-  sequence, link the predecessor's hash, and recompute to its stored hash over
-  the canonical payload.
-- **Why no backfill:** a hash computed now cannot prove pre-backfill rows were
-  unmodified *before* hashing, so backfilling offers no stronger real-world
-  integrity guarantee than new-chain-from-deployment. It would additionally
-  rewrite existing audit rows, weakening the log's tamper-evidence value by
-  putting rewrite tooling inside an append-only system.
-- **Verification architecture:** a background sweep (`convex/auditChainVerify.ts`)
-  advances one bounded 500-row batch per internal mutation, resumable via a
-  single canonical `migrationRuns` row (`audit-chain-verify-001`), and
-  re-runs from genesis on an hourly cron so coverage rolls over the whole
-  sealed chain. `platform:getAuditChainHealth` only reads the run's stored
-  status/coverage; the Audit log UI reports when the last full sweep completed
-  and the exact chain range (sequence + time span) it covered. Unsealed legacy
-  rows are walked over but preserved, counted as `legacySkipped`, never part
-  of the chain.
-- **Gates:** `pnpm test` 154/154 (8 new `auditChainVerifyCore` cases covering
-  genesis enforcement, sequence gaps, missing links, tampered payloads, legacy
-  skipping, and cross-batch resume linking); `pnpm typecheck` 0, `pnpm lint`
-  0, `pnpm tokens:check` green, `pnpm build` green. PR #17 holds for personal
-  review before merge; a manual `npx convex run` of the sweep verifies the
-  environment's live chain end-to-end.
+- **Chain semantics:** every new audit write is sealed by the central writer
+  (`convex/lib/auditLog.ts`) with monotonic `chainSequence`, strict timestamp
+  ordering, `prevHash` linking, and a SHA-256 over the canonical payload.
+- **Verification coverage:** every sealed row is verified from the genesis
+  sentinel forward. Pre-deployment rows remain readable but are counted as
+  unsealed legacy rows and are never represented as cryptographically sealed.
+- **Verification architecture:** a resumable, bounded background sweep
+  (`convex/auditChainVerify.ts`) keeps the full chain covered without a
+  synchronous unbounded query.
+
+## B6 — Staged firmware rollout campaigns (2026-09-15)
+
+- **Data model:** new `firmwareRollouts` table in `convex/schema.ts`, platform-owned (no `tenantScope`). Fields: `label` (firmware version label, validated via `isValidFirmwareLabel`), `scopeType` is implicit from three optional bounds (`marketId`, `deviceKind`, `deviceId` — exactly one must be set at creation time, never "all tenants"), `waveSize` (devices per advance), `status` (`draft|running|paused|completed|cancelled`), `appliedDeviceIds` (array of device id tracked over time), `createdBy`, `createdAt`, `updatedAt`, `startedAt?`, `completedAt?`, `cancelledAt?`. Indexed by `by_status`.
+- **"Never all tenants" guard (pure core):** `resolveRolloutScope` rejects any scope where zero or more than one of marketId/deviceKind/deviceId is set. This is enforced at creation and at every start/advance: the operator *must* pick one bounded slice of the fleet. Each advance applies at most `waveSize` devices, capped by `devicesForNextWave` (generic, preserves caller's document type).
+- **Wave selection (pure core):** candidates are sorted (createdAt then _id for stable ordering), then `devicesForNextWave` skips already-applied and returns the first `waveSize` of the remainder. An advance never applies all matching devices even if `waveSize > total`.
+- **Lifecycle:** draft → running (start) → running can advance/pause/complete/cancel; paused can resume or cancel; cancelled/completed are terminal. `nextRolloutStatus` encodes the full transition table; illegal transitions return null.
+- **Pure core:** `firmwareRolloutCore.ts` — `resolveRolloutScope`, `firmwareRolloutMatchesDevice` (scope predicate), `devicesForNextWave` (bounded selection), `waveProgress`, `buildFirmwareRolloutRow`, `nextRolloutStatus`, `isRolloutLive`, `isFirmwareRolloutStatus`. 13 test cases, all passing.
+- **Server functions:** `firmwareRollout.ts` — `listFirmwareRollouts` (query, filterable by status, joins target count), `getFirmwareRollout` (query, includes in-scope device list with applied flag), `createFirmwareRollout` (mutation, scope-validated), `startFirmwareRollout`, `advanceFirmwareRolloutWave` (applies `waveSize` devices, patches `firmwareVersion` on the `devices` table, skips already-at-label), `pauseFirmwareRollout`, `resumeFirmwareRollout`, `completeFirmwareRollout`, `cancelFirmwareRollout`. Auth: `platform_super_admin` + `platform_ops` (per B6 CRUD matrix: super_admin CRUD, ops CRU).
+- **Client bridge:** `apps/web/lib/convex/firmwareRollout.ts` — explicit function references.
+- **UI:** `PlatformFirmwareRollout.tsx` — campaign list (status filter tabs, table with label/scope/wave/applied/progress/status/actions), create form (firmware label, wave size, radio-scope: market select, device kind select, or single-device select, each bound required), lifecycle action buttons per row (Start, Advance Wave, Pause, Resume, Complete, Cancel with confirmation). Route: `/platform/infrastructure/firmware`, server page wired through `requirePanelAccess("platform")`.
+- **Nav:** `Firmware rollout` link (RefreshCw icon) in `UnifiedShell.tsx` platform sidebar.
+- **Gates:** `pnpm typecheck` 0, `pnpm lint` 0, `pnpm tokens:check` 0, `pnpm test` 157/157 (13 new `firmwareRolloutCore` tests), `pnpm build` green.
+
+## B5 — Platform telemetry & health rollup (2026-09-15)
+
+- **Design:** read-only aggregation over the existing operations estate — the B1 device fleet registry (`devices` table: lastSeenAt, uptimePercent, lifecycleStatus), the `routers` table, `networkSwitches`, `alerts` (open alerts with severity), `healthSamples` (latest router CPU/mem/link), and `accessPointSamples` (AP link/CQ/clients). No new tables or fields; no new runtime packages.
+- **Staleness semantics:** a fleet device whose `lastSeenAt` exceeds `offlineAfterMs` (24h) is "critical"; exceeding `warningAfterMs` (2h) is "warning"; otherwise "ok". A device with no `lastSeenAt` is "unknown"; deleted rows are "unknown"; maintenance rows are "ok" (planned, never reads as an incident). Router tone derives from latest sample freshness (≤30m → ok) and whether any bridged device has an open alert (→ critical).
+- **Pure core:** `healthRollupCore.ts` — `computeDeviceHealthTone` (staleness-based classification), `combineHealthTones` (worst-wins: critical > warning > unknown > ok), `countTones`, `averageUptimePercent`, `buildHealthRollupRow` (normalized, serializable rollup with device/routers/alerts/firmware aggregates). 15 test cases, all passing.
+- **Server functions:** `healthRollup.ts` — `getPlatformHealthOverview` (query: platform-level overview row + per-device rows with tone/market/tenant + per-router rows with latest sample/managed switches + open alerts summary), `getPlatformRouterHealthDetail` (query: 24h sample history + AP health). Auth: `requirePlatformUser`. No writes (RU per B5 matrix; fleet updates and alert acknowledgement use existing B1/alert surfaces).
+- **Client bridge:** `apps/web/lib/convex/healthRollup.ts` — explicit function references.
+- **UI:** `PlatformHealthOverview.tsx` — 4 metric cards (devices by tone, routers, open alerts, avg uptime), router table (cpu/mem/link/traffic/tone, click to drill into APs), device table with firmware/market/tenant/tone, filtered view when a router is selected.
+- **Route:** `/platform/infrastructure/health`, server page wired through `requirePanelAccess("platform")`.
+- **Nav:** `Network health` link (HeartPulse icon) in `UnifiedShell.tsx` platform sidebar.
+- **Gates:** `pnpm typecheck` 0, `pnpm lint` 0, `pnpm tokens:check` 0, `pnpm test` 159/159 (15 new `healthRollupCore` tests), `pnpm build` green.
+
+## B4 — Versioned PPPoE / rate-limit policy templates (2026-09-15)
+
+- **Data model:** new `policyTemplates` table in `convex/schema.ts`, platform-owned (no `tenantScope`). Families identified by stable `code` (slug), versioned `1..n`. Fields: name, kind (pppoe|rate_limit), downloadMbps, uploadMbps, burstDownloadMbps, burstUploadMbps, burstThresholdMbps, burstTimeSeconds, status (draft|published|retired), description, createdBy, createdAt, updatedAt. Indexed by code/version, code, status, kind+status.
+- **Immutability guarantee (core):** a version is only editable while `status === "draft"`. Publishing freezes it — published/retired versions reject content changes. This is `isPolicyVersionFrozen` in the pure core: tenants provisioned against an older version keep their exact policy because an old version's fields can never change when a newer version ships. New behavior is always a new version of the same family (or a new family), never an in-place edit.
+- **Auth model:** CRUD matrix per spec — `platform_super_admin` and `platform_ops` create/publish/update; only super_admin may retire (safety guard consistent with B3 decommission).
+- **Pure core:** `policyTemplateCore.ts` — kind/status guards, frozen-version predicate, code slug validation (2–80 lowercase alphanumeric/hyphen), name validation, Mbps rate validation (positive ≤ 1,000,000), burst validation (0–1,000,000 or undefined), `nextPolicyTemplateVersion` (null → 1, else +1), `buildPolicyTemplateRow`, `latestVersionPerFamily` reducer. 20 test cases in `policyTemplateCore.test.ts`, all passing.
+- **Server functions:** `policyTemplates.ts` — listPolicyTemplates (query, filterable by kind/status/code, sorted by family then version desc), getPolicyTemplateRow (query), createPolicyTemplate (mutation, v1, unique family code), createPolicyTemplateVersion (mutation, next version of family), publishPolicyTemplate (mutation, draft → published, freeze), updatePolicyTemplate (mutation, draft-only), retirePolicyTemplate (mutation, published → retired, super_admin).
+- **Client bridge:** `apps/web/lib/convex/policyTemplates.ts` — explicit function references, no regeneration.
+- **UI:** `PlatformPolicyTemplates.tsx` — metrics grid (total/drafts/published/retired), tab filters, family/version table with per-status action (Publish / Retire), immutability copy on the header. Route: `/platform/infrastructure/policy-templates`. Server page wired through `requirePanelAccess("platform")`.
+- **Nav surfaces:** `Policy templates` link (FileCode icon) in `UnifiedShell.tsx` platform sidebar.
+- **Gates:** `pnpm typecheck` 0, `pnpm lint` 0, `pnpm tokens:check` 0, `pnpm test` 164/164 (20 new `policyTemplateCore` tests), `pnpm build` green. All passing.
+
+## B3 — Platform RADIUS server fleet (2026-09-15)
+
+- **Data model:** new `radiusServers` table in `convex/schema.ts`, platform-owned (no `tenantScope`). Fields: name, hostname, port, protocol (radsec|udp), status (active|provisioning|failed|maintenance|decommissioned), healthStatus (healthy|degraded|down|unknown), region, certExpiryAt, lastHealthCheckAt, notes, registeredBy, createdAt, updatedAt. Indexed by `status` and `protocol`.
+- **Auth model:** CRUD matrix per spec — `platform_super_admin` and `platform_ops` have full create/read/update; super_admin only may decommission (soft-delete). All reads require `requirePlatformUser`.
+- **Server functions:** `radiusFleet.ts` — listRadiusServers (query, filterable by status/protocol), getRadiusServerRow (query), createRadiusServer (mutation, defaults to provisioning), updateRadiusServer (mutation, partial update), deleteRadiusServer (mutation, decommission only, super_admin).
+- **Pure core:** `radiusFleetCore.ts` — deterministic, I/O-free helpers for type guards (status, protocol, health), hostname validation (IPv4, IPv6 bracketed, RFC-1123), port validation (1–65535), and `buildRadiusServerRow`. 16 test cases in `radiusFleetCore.test.ts`, all passing.
+- **Client bridge:** `apps/web/lib/convex/radiusFleet.ts` — explicit function references (same pattern as `fleet.ts`), no regeneration needed.
+- **UI:** `PlatformRadiusFleet.tsx` — metrics grid (total, active, degraded, provisioning), tab filters, sortable table, modal editor with optional decommission button (super_admin). Route: `/platform/infrastructure/radius`. Server page wired through `requirePanelAccess("platform")`.
+- **Nav surfaces:** Added `RADIUS fleet` link (Radio icon) in `UnifiedShell.tsx` platform sidebar; added PlaneCard in `PlatformOverview.tsx` sub-panels grid.
+- **Gates:** `pnpm typecheck` 0, `pnpm lint` 0, `pnpm tokens:check` 0, `pnpm test` 160/160 (16 new `radiusFleetCore` tests), `pnpm build` green. All passing.
 
 ## Landing-surface consistency correction (2026-09-13)
 
@@ -597,7 +623,7 @@ counts/data did not.
     WorkOS identity coverage, staff MFA posture (MANDATORY_MFA_ROLES),
     workosWebhookEvents by status, 24h webhookDeliveryLog stats, feature
     flags.
-- **Explicit client bindings:** apps/web/shared/convex/platformPanel.ts via
+- **Explicit client bindings:** apps/web/lib/convex/platformPanel.ts via
   makeFunctionReference. Generated api remains pinned (no regeneration).
 - **Explicitly deferred / not built:** tenant cancellation/offboarding data
   retention; real SaaS invoices/billing (entitlements only - schema gap);
@@ -664,7 +690,7 @@ SaaS invoices — confirmed not started, left unstarted per directive).
     3–80 chars.
   - UI: `PlatformProvisioning.tsx` + route `app/(app)/platform/provisioning/`
     + nav entry in `UnifiedShell` (ServerCog), bridged via
-    `apps/web/shared/convex/provisioning.ts` with `makeFunctionReference`
+    `apps/web/lib/convex/provisioning.ts` with `makeFunctionReference`
     (generated `api` stays pinned — no regeneration).
 - **E1 Commissions RBAC fix:** `accrueCommission`,
   `approveCommissionPayout`, `markCommissionProcessing`, `markCommissionPaid`

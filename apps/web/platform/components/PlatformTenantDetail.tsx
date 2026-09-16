@@ -9,6 +9,7 @@ import {
   PauseCircle,
   PlayCircle,
   Pencil,
+  Store,
   UsersRound,
 } from "lucide-react";
 import { useMutation, useQuery } from "@/app/lib/convex";
@@ -64,13 +65,16 @@ export function PlatformTenantDetail({ tenantId }: { tenantId: string }) {
           <h1 className="page-title">{tenant.name}</h1>
           <p className="page-subtitle">Tenant detail: identity mapping, lifecycle state, entitlement, and the members with access to this workspace.</p>
         </div>
-        {canManage ? (
-          <div style={{ display: "flex", gap: 8 }}>
-            {tenant.status === "suspended"
-              ? <button type="button" className="secondary-button" disabled={working} onClick={() => void changeStatus("active")}><PlayCircle size={15} aria-hidden="true" />Activate</button>
-              : <button type="button" className="secondary-button" disabled={working || tenant.status === "cancelled"} onClick={() => void changeStatus("suspended")}><PauseCircle size={15} aria-hidden="true" />Suspend</button>}
-          </div>
-        ) : null}
+        <div style={{ display: "flex", gap: 8 }}>
+          <Link href={`/platform/tenants/${tenantId}/markets`} className="secondary-button"><Store size={15} aria-hidden="true" />Markets</Link>
+          {canManage ? (
+            <>
+              {tenant.status === "suspended"
+                ? <button type="button" className="secondary-button" disabled={working} onClick={() => void changeStatus("active")}><PlayCircle size={15} aria-hidden="true" />Activate</button>
+                : <button type="button" className="secondary-button" disabled={working || tenant.status === "cancelled"} onClick={() => void changeStatus("suspended")}><PauseCircle size={15} aria-hidden="true" />Suspend</button>}
+            </>
+          ) : null}
+        </div>
       </header>
 
       {notice ? <p className="platform-claim-message ok" role="status">{notice}</p> : null}
@@ -90,6 +94,9 @@ export function PlatformTenantDetail({ tenantId }: { tenantId: string }) {
           <dt>Country</dt><dd>{tenant.country}</dd>
           <dt>Timezone</dt><dd>{tenant.timezone}</dd>
           <dt>Currency</dt><dd>{tenant.currency}</dd>
+          <dt>Markets</dt><dd>{tenant.marketCount}</dd>
+          <dt>Subscribers</dt><dd>{tenant.subscriberCount}</dd>
+          <dt>Account owner</dt><dd>{tenant.accountOwner ? tenant.accountOwner.name ?? tenant.accountOwner.email : "No tenant admin yet"}</dd>
           <dt>Created</dt><dd>{formatTs(tenant.createdAt)}</dd>
           <dt>Last updated</dt><dd>{formatTs(tenant.updatedAt)}</dd>
         </dl>
