@@ -4,14 +4,14 @@ import Link from "next/link";
 import {
   Building2,
   DollarSign,
-  ShieldCheck,
   Ticket,
   UsersRound,
 } from "lucide-react";
 import { useQuery } from "@/app/lib/convex";
-import { tenantControl, type TenantWorkspaceSetupReason } from "@/lib/convex/tenantControl";
+import { tenantControl } from "@/lib/convex/tenantControl";
 import { dashboard } from "@/shared/convex/dashboard";
 import MetricCard from "@/shared/components/MetricCard";
+import { openControlCentre } from "@/shared/auth/workspace-actions";
 
 const n = (v: number) => v.toLocaleString("en", { maximumFractionDigits: 2 });
 
@@ -29,7 +29,7 @@ export function TenantWorkspace() {
     );
 
   if (workspace.status === "setup_required") {
-    return <TenantWorkspaceSetup reason={workspace.reason} />;
+    return <TenantWorkspaceSetup />;
   }
 
   const tenantWorkspace = workspace.workspace;
@@ -50,10 +50,7 @@ export function TenantWorkspace() {
         <div>
           <p className="eyebrow">Tenant workspace</p>
           <h1 className="page-title">{tenantWorkspace.tenant.name}</h1>
-          <p className="page-subtitle">
-            Your operational workspace is bound to your active WorkOS
-            organization membership. No tenant can be selected from the browser.
-          </p>
+          <p className="page-subtitle">Your operational workspace.</p>
         </div>
         <span
           className={`status-pill status-pill-${tenantWorkspace.tenant.status === "active" ? "success" : tenantWorkspace.tenant.status === "suspended" ? "danger" : "warning"}`}
@@ -100,11 +97,10 @@ export function TenantWorkspace() {
         />
       </section>
 
-      {/* Service state summary */}
       <section className="tenant-workspace-summary workspace-card">
         <div>
-          <p className="eyebrow">Service state</p>
-          <h2>Tenant control status</h2>
+          <p className="eyebrow">Workspace details</p>
+          <h2>Operations at a glance</h2>
           <dl>
             <div>
               <dt>Subscription</dt>
@@ -125,10 +121,9 @@ export function TenantWorkspace() {
               <dd>{tenantWorkspace.tenant.currency}</dd>
             </div>
             <div>
-              <dt>Scope proof</dt>
+              <dt>Access</dt>
               <dd>
-                <ShieldCheck size={15} aria-hidden="true" /> WorkOS membership
-                required
+                Active team member
               </dd>
             </div>
           </dl>
@@ -146,14 +141,20 @@ export function TenantWorkspace() {
   );
 }
 
-function TenantWorkspaceSetup({ reason: _reason }: { reason: TenantWorkspaceSetupReason }) {
-
+function TenantWorkspaceSetup() {
   return (
     <div className="workspace-page">
       <section className="workspace-card tenant-workspace-summary" aria-live="polite">
         <p className="eyebrow">Workspace</p>
-        <h1 className="page-title">Your workspace is being prepared</h1>
-        <p className="page-subtitle">Please check back shortly.</p>
+        <div>
+          <h1 className="page-title">Your workspace is nearly ready</h1>
+          <p className="page-subtitle">Continue in the control centre while the workspace is prepared.</p>
+        </div>
+        <form action={openControlCentre}>
+          <button type="submit" className="primary-button">
+            Open control centre
+          </button>
+        </form>
       </section>
     </div>
   );
