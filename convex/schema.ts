@@ -774,7 +774,34 @@ export default defineSchema({
     loggedBy: v.id("users"),
   }).index("by_device", ["deviceId"]),
 
-// Platform RADIUS server fleet (spec B3): shared FreeRADIUS nodes across
+// Staged firmware rollout campaigns (spec B6): an operator campaigns one
+  // firmware label across a bounded scope of the B1 fleet — by market, device
+  // kind, or a single device — in explicit waves. A rollout can never target
+  // "all tenants": the scope must resolve to exactly one bound, and each wave
+  // application is capped at waveSize devices.
+  firmwareRollouts: defineTable({
+    label: v.string(),
+    marketId: v.optional(v.id("markets")),
+    deviceKind: v.optional(v.string()),
+    deviceId: v.optional(v.id("devices")),
+    waveSize: v.number(),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("running"),
+      v.literal("paused"),
+      v.literal("completed"),
+      v.literal("cancelled"),
+    ),
+    appliedDeviceIds: v.array(v.id("devices")),
+    createdBy: v.optional(v.id("users")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    startedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    cancelledAt: v.optional(v.number()),
+  }).index("by_status", ["status"]),
+
+  // Platform RADIUS server fleet (spec B3): shared FreeRADIUS nodes across
   // every region. Platform-owned records (no tenant scope) — only Platform or
   // Admin creates shared RADIUS nodes per the spec.
   radiusServers: defineTable({
