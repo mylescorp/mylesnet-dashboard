@@ -201,7 +201,8 @@ export const getSiteDetail = query({
             ),
           )
           .order("desc")
-          .take(30),
+          .limit(30)
+          .collect(),
       ]);
 
     const plans = sitePlans.filter(
