@@ -1,5 +1,18 @@
 # Build decisions
 
+## B6 — Staged firmware rollout campaigns (2026-09-15)
+
+- **Data model:** new `firmwareRollouts` table in `convex/schema.ts`, platform-owned (no `tenantScope`). Fields: `label` (firmware version label, validated via `isValidFirmwareLabel`), `scopeType` is implicit from three optional bounds (`marketId`, `deviceKind`, `deviceId` — exactly one must be set at creation time, never "all tenants"), `waveSize` (devices per advance), `status` (`draft|running|paused|completed|cancelled`), `appliedDeviceIds` (array of device id tracked over time), `createdBy`, `createdAt`, `updatedAt`, `startedAt?`, `completedAt?`, `cancelledAt?`. Indexed by `by_status`.
+- **"Never all tenants" guard (pure core):** `resolveRolloutScope` rejects any scope where zero or more than one of marketId/deviceKind/deviceId is set. This is enforced at creation and at every start/advance: the operator *must* pick one bounded slice of the fleet. Each advance applies at most `waveSize` devices, capped by `devicesForNextWave` (generic, preserves caller's document type).
+- **Wave selection (pure core):** candidates are sorted (createdAt then _id for stable ordering), then `devicesForNextWave` skips already-applied and returns the first `waveSize` of the remainder. An advance never applies all matching devices even if `waveSize > total`.
+- **Lifecycle:** draft → running (start) → running can advance/pause/complete/cancel; paused can resume or cancel; cancelled/completed are terminal. `nextRolloutStatus` encodes the full transition table; illegal transitions return null.
+- **Pure core:** `firmwareRolloutCore.ts` — `resolveRolloutScope`, `firmwareRolloutMatchesDevice` (scope predicate), `devicesForNextWave` (bounded selection), `waveProgress`, `buildFirmwareRolloutRow`, `nextRolloutStatus`, `isRolloutLive`, `isFirmwareRolloutStatus`. 13 test cases, all passing.
+- **Server functions:** `firmwareRollout.ts` — `listFirmwareRollouts` (query, filterable by status, joins target count), `getFirmwareRollout` (query, includes in-scope device list with applied flag), `createFirmwareRollout` (mutation, scope-validated), `startFirmwareRollout`, `advanceFirmwareRolloutWave` (applies `waveSize` devices, patches `firmwareVersion` on the `devices` table, skips already-at-label), `pauseFirmwareRollout`, `resumeFirmwareRollout`, `completeFirmwareRollout`, `cancelFirmwareRollout`. Auth: `platform_super_admin` + `platform_ops` (per B6 CRUD matrix: super_admin CRUD, ops CRU).
+- **Client bridge:** `apps/web/lib/convex/firmwareRollout.ts` — explicit function references.
+- **UI:** `PlatformFirmwareRollout.tsx` — campaign list (status filter tabs, table with label/scope/wave/applied/progress/status/actions), create form (firmware label, wave size, radio-scope: market select, device kind select, or single-device select, each bound required), lifecycle action buttons per row (Start, Advance Wave, Pause, Resume, Complete, Cancel with confirmation). Route: `/platform/infrastructure/firmware`, server page wired through `requirePanelAccess("platform")`.
+- **Nav:** `Firmware rollout` link (RefreshCw icon) in `UnifiedShell.tsx` platform sidebar.
+- **Gates:** `pnpm typecheck` 0, `pnpm lint` 0, `pnpm tokens:check` 0, `pnpm test` 157/157 (13 new `firmwareRolloutCore` tests), `pnpm build` green.
+
 ## Landing-surface consistency correction (2026-09-13)
 
 - **Token alias repair:** shadcn/Tailwind aliases are isolated behind `--ui-*` and `--color-*` mappings. The earlier implementation overwrote semantic `--primary`, `--muted`, and `--accent` values, producing low-contrast public navigation and copy. Product semantic tokens are now never shadowed by primitive aliases.

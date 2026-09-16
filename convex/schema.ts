@@ -774,6 +774,33 @@ export default defineSchema({
     loggedBy: v.id("users"),
   }).index("by_device", ["deviceId"]),
 
+  // Staged firmware rollout campaigns (spec B6): an operator campaigns one
+  // firmware label across a bounded scope of the B1 fleet — by market, device
+  // kind, or a single device — in explicit waves. A rollout can never target
+  // "all tenants": the scope must resolve to exactly one bound, and each wave
+  // application is capped at waveSize devices.
+  firmwareRollouts: defineTable({
+    label: v.string(),
+    marketId: v.optional(v.id("markets")),
+    deviceKind: v.optional(v.string()),
+    deviceId: v.optional(v.id("devices")),
+    waveSize: v.number(),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("running"),
+      v.literal("paused"),
+      v.literal("completed"),
+      v.literal("cancelled"),
+    ),
+    appliedDeviceIds: v.array(v.id("devices")),
+    createdBy: v.optional(v.id("users")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    startedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    cancelledAt: v.optional(v.number()),
+  }).index("by_status", ["status"]),
+
   // Device provisioning pipeline (spec "Provisioning Queue"). A device that
   // reports in self-registered (registeredBy: "self") lands here as a request
   // that a super_admin or ops role must approve before it is treated as part
