@@ -59,3 +59,16 @@ export type ProtectedPanel = keyof typeof PANEL_ROLE_REQUIREMENTS;
 export function hasPanelAccess(roleSlugs: readonly string[], panel: ProtectedPanel): boolean {
   return PANEL_ROLE_REQUIREMENTS[panel].some((role) => roleSlugs.includes(role));
 }
+
+/**
+ * Select a safe destination when an authenticated user reaches a panel that
+ * their current organization role cannot enter. Platform staff must never be
+ * treated as members of an arbitrary tenant workspace.
+ */
+export function panelAccessFallback(roleSlugs: readonly string[], panel: ProtectedPanel): string {
+  if (panel !== "platform" && hasPanelAccess(roleSlugs, "platform")) {
+    return "/platform?reason=tenant_workspace_required";
+  }
+
+  return "/no-access";
+}
