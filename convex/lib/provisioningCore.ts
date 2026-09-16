@@ -1,7 +1,7 @@
 /**
  * Pure provisioning queue state logic (spec "Provisioning Queue"). Kept free
  * of Convex imports so `npm test` can exercise it with plain node:test
- * (mirrors deviceCommandCore.ts / tenantCore.ts).
+ * (mirrors tenantCore.ts).
  */
 
 export type ProvisioningStatus = "pending" | "approved" | "rejected" | "deployed";

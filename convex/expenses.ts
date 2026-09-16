@@ -114,7 +114,7 @@ function currencyTotals(rows: { amountLocal: number; currency: string }[]): Reco
  * Recompute the financial row for one market/month. Pure function of the
  * ledgers: revenue = agentActivity sales; variable cost = expenses in variable
  * categories for that month (airtel_data, electricity, fuel, maintenance);
- * centipid fee = platformFeeLocal accrued on the ledger.
+ * platform fee = platformFeeLocal accrued on the ledger.
  */
 export const computeMarketFinancials = internalMutation({
   args: { marketId: v.id("markets"), month: v.string() },
@@ -151,9 +151,9 @@ export const computeMarketFinancials = internalMutation({
 
     // Distribute platform fee in local terms if it was recorded in local currency;
     // usually it is recorded in the market's currency already.
-    const centipidFeeLocal = platformFeeLocal;
+    const calculatedPlatformFeeLocal = platformFeeLocal;
 
-    const netContributionLocal = revenueLocal - variableCostLocal - centipidFeeLocal;
+    const netContributionLocal = revenueLocal - variableCostLocal - calculatedPlatformFeeLocal;
     const revenueUSD = await localToUsd(ctx, revenueLocal, market.currency, `${args.month}-01`);
     const breakEvenStatus: "profit" | "break_even" | "loss" =
       netContributionLocal > 0 ? "profit" : netContributionLocal === 0 ? "break_even" : "loss";
@@ -169,7 +169,7 @@ export const computeMarketFinancials = internalMutation({
       revenueUSD,
       airtelCostLocal: varyingTotals[market.currency] ?? 0,
       electricityCostLocal: variable.find((e) => e.category === "electricity")?.amountLocal ?? 0,
-      centipidFeeLocal,
+      platformFeeLocal: calculatedPlatformFeeLocal,
       variableCostLocal,
       netContributionLocal,
       breakEvenStatus,

@@ -1,7 +1,7 @@
 /**
  * Pure tenant-scope guard logic for Phase 1 (X-TEN §B1, §B5). Kept free of
  * Convex imports so `npm test` can exercise it with plain node:test (mirrors
- * migrationRunCore.ts / deviceCommandCore.ts). The Convex wrappers in
+ * migrationRunCore.ts). The Convex wrappers in
  * `./tenant.ts` use these to enforce server-derived tenancy — client-supplied
  * tenant ids are never authority.
  */

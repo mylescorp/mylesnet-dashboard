@@ -1,5 +1,5 @@
-import { features, solutions } from "../app/(landing)/content/pages";
-import { guides } from "../app/(landing)/content/guides";
+import { features, solutions } from "../app/(public)/content/pages";
+import { guides } from "../app/(public)/content/guides";
 
 /**
  * Every path an anonymous visitor must be able to reach without a session.

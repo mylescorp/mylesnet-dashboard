@@ -7,12 +7,9 @@
       "outputs": [".next/**", "!.next/cache/**", "dist/**"],
       "env": [
         "AUTH_SECRET",
-        "CENTIPID_CREDENTIALS_ENCRYPTION_KEY",
-        "CENTIPID_MCP_TOKEN",
         "CONVEX_DEPLOYMENT",
         "MYLESNET_BOOTSTRAP_OWNER_EMAILS",
         "MYLESNET_PLATFORM_ORG_ID",
-        "ROUTER_CREDENTIALS_ENCRYPTION_KEY",
         "WORKOS_API_KEY",
         "WORKOS_CLIENT_ID",
         "WORKOS_COOKIE_PASSWORD",

@@ -90,7 +90,7 @@ export const updateMarketLifecycleStatus = mutation({
 });
 
 /**
- * Soft delete. Cascading dependents (active devices/agents assigned to this
+ * Soft delete. Cascading agent assignments assigned to this
  * market) must be surfaced to the caller BEFORE this runs — the calling UI
  * is responsible for the "reassign or delete together" wizard per Section
  * 4.9. This mutation refuses to run if active dependents exist, forcing
@@ -107,37 +107,22 @@ export const softDeleteMarket = mutation({
     const market = await ctx.db.get(args.marketId);
     if (!market) throw new Error("Market not found");
 
-    const activeDevices = await ctx.db
-      .query("devices")
-      .withIndex("by_market", (q) => q.eq("marketId", args.marketId))
-      .filter((q) => q.neq(q.field("status"), "deleted"))
-      .collect();
-
     const activeAssignments = await ctx.db
       .query("agentMarketAssignments")
       .withIndex("by_market", (q) => q.eq("marketId", args.marketId))
       .filter((q) => q.eq(q.field("assignmentStatus"), "active"))
       .collect();
 
-    if ((activeDevices.length > 0 || activeAssignments.length > 0) && !args.forceCascade) {
+    if (activeAssignments.length > 0 && !args.forceCascade) {
       throw new Error(
-        `This market has ${activeDevices.length} active device(s) and ${activeAssignments.length} active agent assignment(s). ` +
-          `Choose to soft-delete all dependents together (forceCascade: true) or reassign them first.`
+        `This market has ${activeAssignments.length} active agent assignment(s). ` +
+          `Choose to end those assignments together (forceCascade: true) or reassign them first.`
       );
     }
 
     const now = Date.now();
 
     if (args.forceCascade) {
-      for (const device of activeDevices) {
-        await ctx.db.patch(device._id, {
-          status: "deleted",
-          lifecycleStatus: "deleted",
-          deletedAt: now,
-          deletedBy: user._id,
-          deleteReason: `Cascaded from market deletion: ${args.deleteReason}`,
-        });
-      }
       for (const assignment of activeAssignments) {
         await ctx.db.patch(assignment._id, {
           assignmentStatus: "ended",

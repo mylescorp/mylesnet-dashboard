@@ -1,6 +1,6 @@
 /**
  * L2 tamper-evident audit chain core. Pure, dependency-free helpers so they
- * can be unit-tested with node:test (mirrors centipidVerify.ts). No Convex
+ * can be unit-tested with node:test. No Convex
  * imports.
  *
  * Chain contract (approved L2 Option A):
@@ -81,7 +81,7 @@ function toHex(bytes: Uint8Array): string {
 }
 
 /** SHA-256 digest of a string, hex-encoded. WebCrypto is available in both
- * the Convex runtime and Node 18+ (used by centipidVerify.ts already). */
+ * the Convex runtime and Node 18+. */
 export async function sha256Hex(input: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
   return toHex(new Uint8Array(digest));

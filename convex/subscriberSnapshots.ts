@@ -5,7 +5,7 @@ import { dayOf } from "./lib/finance";
 
 /**
  * Subscriber snapshot projections (spec §24 population model). Without live
- * per-market subscriber counts in the Centipid feed, the ledger is the proxy:
+ * per-market subscriber counts in the billing ledger, the ledger is the proxy:
  *
  *   active subscribers = voucher activations still in their service window
  *     (a 45-day retention window approximates monthly plans churning monthly),

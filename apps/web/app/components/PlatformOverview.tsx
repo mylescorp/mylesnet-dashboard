@@ -5,11 +5,9 @@ import {
   Building2,
   CircleAlert,
   CreditCard,
-  Cpu,
   Flag,
   Link2,
   ScrollText,
-  ServerCog,
   ShieldCheck,
   TicketCheck,
   Users,
@@ -61,15 +59,13 @@ export function PlatformOverview() {
       </section>
 
       <section className="pf-panel" style={{ marginTop: 28 }}>
-        <div className="section-heading"><div><p className="eyebrow">Control planes</p><h2>Sub-panels</h2></div><span className="section-count">9 surfaces</span></div>
+        <div className="section-heading"><div><p className="eyebrow">Control planes</p><h2>Sub-panels</h2></div><span className="section-count">7 surfaces</span></div>
         <div className="platform-actions-grid">
           <PlaneCard href="/platform/tenants" icon={<Building2 size={20} />} title="Tenants" body="Register verified operators, review identity readiness, and manage lifecycle state." />
           <PlaneCard href="/platform/subscriptions" icon={<CreditCard size={20} />} title="Subscriptions" body="Set plans and entitlement status per tenant, including trial windows and expiry." />
           <PlaneCard href="/platform/access" icon={<Users size={20} />} title="Access & roles" body="Platform staff, roles, permissions, and pending invitations at a glance." />
           <PlaneCard href="/platform/audit" icon={<ScrollText size={20} />} title="Audit log" body="Searchable, paginated trail of every entity change across the platform." />
           <PlaneCard href="/platform/security" icon={<ShieldCheck size={20} />} title="Security" body="WorkOS identity coverage, staff MFA posture, webhook health, and feature flags." />
-          <PlaneCard href="/platform/provisioning" icon={<ServerCog size={20} />} title="Provisioning" body="Device provisioning queue — approve or reject self-registered devices for the managed estate." />
-          <PlaneCard href="/platform/infrastructure/devices" icon={<Cpu size={20} />} title="Device fleet" body="Firmware version, last-seen, uptime, and provisioning posture across every tenant." />
           <PlaneCard href="/platform/vouchers/monitor" icon={<TicketCheck size={20} />} title="Voucher monitor" body="Duplicate, velocity, and geo-anomaly signals on redeemed vouchers." />
           <PlaneCard href="/platform/feature-flags" icon={<Flag size={20} />} title="Feature flags" body="Global toggles, percentage rollouts, and per-tenant overrides." />
         </div>

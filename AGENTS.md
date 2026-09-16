@@ -36,7 +36,7 @@ Before starting any coding task, check available skills in `.agents/skills/` and
 ## Captive portal (T-HOT)
 
 - Canonical scope: `docs/captive-portal/captive-portal-specification.md` (byte-identical mirror of the vault `products/mylesnet/captive-portal-specification.md`); flows: `docs/captive-portal/captive-portal-flows.md`. Read these before any captive-portal/hotspot code.
-- Built as a route surface in this app: screens/logic in the `captive-portal/` feature-slice folder, thin stubs in `app/(portal)/hotspot/**`, thin Convex adapters in `convex/portal/`, `@portal/*` alias, tenant resolved by hostname. Do not create a separate portal app.
+- Built as a route surface in this app: screens/logic in `apps/web/features/captive-portal/`, thin stubs in `apps/web/app/(portal)/hotspot/**`, thin Convex adapters in `convex/portal/`, `@portal/*` alias, tenant resolved by hostname. Do not create a separate portal app.
 - Schema additions (§18) stay centralized in `convex/schema.ts`; no new runtime dependency may be introduced without the Technology Stack (no drift) rule above. Build work has not started (spec approved 2026-09-10; implementation deferred by owner directive).
 
 ## Agent threads / transcripts

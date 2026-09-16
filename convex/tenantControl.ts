@@ -68,11 +68,9 @@ export const getCurrentWorkspace = query({
     const tenant = await ctx.db.get(tenantId);
     if (!tenant || tenant.deletedAt !== undefined) throw new Error("Unauthorized: tenant is unavailable");
 
-    const [memberships, markets, routers, openAlerts, entitlements] = await Promise.all([
+    const [memberships, markets, entitlements] = await Promise.all([
       ctx.db.query("tenantMemberships").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
       ctx.db.query("markets").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
-      ctx.db.query("routers").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
-      ctx.db.query("alerts").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
       ctx.db.query("entitlements").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).order("desc").first(),
     ]);
     return {
@@ -87,8 +85,6 @@ export const getCurrentWorkspace = query({
       },
       activeMembers: memberships.filter((membership) => membership.status === "active").length,
       activeMarkets: markets.filter((market) => market.status !== "deleted" && market.lifecycleStatus === "active").length,
-      activeRouters: routers.filter((router) => router.archivedAt === undefined).length,
-      openAlerts: openAlerts.filter((alert) => alert.alertStatus === "open").length,
       entitlement: entitlements ? { planId: entitlements.planId, status: entitlements.status } : null,
     };
   },

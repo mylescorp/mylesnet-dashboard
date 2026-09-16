@@ -19,9 +19,11 @@
         "name": "next"
       }
     ],
+    "baseUrl": ".",
     "paths": {
       "@/convex/*": ["../../convex/*"],
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@portal/*": ["features/captive-portal/*"]
     }
   },
   "include": [
