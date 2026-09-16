@@ -9,7 +9,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import { useQuery } from "@/app/lib/convex";
-import { tenantControl } from "@/lib/convex/tenantControl";
+import { tenantControl, type TenantWorkspaceSetupReason } from "@/lib/convex/tenantControl";
 import { dashboard } from "@/shared/convex/dashboard";
 import MetricCard from "@/shared/components/MetricCard";
 
@@ -17,7 +17,7 @@ const n = (v: number) => v.toLocaleString("en", { maximumFractionDigits: 2 });
 
 export function TenantWorkspace() {
   const workspace = useQuery(tenantControl.getCurrentWorkspace, {});
-  const metrics = useQuery(dashboard.getMetrics, {});
+  const metrics = useQuery(dashboard.getMetrics, workspace?.status === "ready" ? {} : "skip");
 
   if (workspace === undefined)
     return (
@@ -28,6 +28,11 @@ export function TenantWorkspace() {
       </div>
     );
 
+  if (workspace.status === "setup_required") {
+    return <TenantWorkspaceSetup reason={workspace.reason} />;
+  }
+
+  const tenantWorkspace = workspace.workspace;
   const revenueDisplay =
     metrics === undefined
       ? "Loading…"
@@ -44,16 +49,16 @@ export function TenantWorkspace() {
       <header className="page-heading">
         <div>
           <p className="eyebrow">Tenant workspace</p>
-          <h1 className="page-title">{workspace.tenant.name}</h1>
+          <h1 className="page-title">{tenantWorkspace.tenant.name}</h1>
           <p className="page-subtitle">
             Your operational workspace is bound to your active WorkOS
             organization membership. No tenant can be selected from the browser.
           </p>
         </div>
         <span
-          className={`status-pill status-pill-${workspace.tenant.status === "active" ? "success" : workspace.tenant.status === "suspended" ? "danger" : "warning"}`}
+          className={`status-pill status-pill-${tenantWorkspace.tenant.status === "active" ? "success" : tenantWorkspace.tenant.status === "suspended" ? "danger" : "warning"}`}
         >
-          {workspace.tenant.status}
+          {tenantWorkspace.tenant.status}
         </span>
       </header>
 
@@ -104,20 +109,20 @@ export function TenantWorkspace() {
             <div>
               <dt>Subscription</dt>
               <dd>
-                {workspace.entitlement
-                  ? `${workspace.entitlement.planId} · ${workspace.entitlement.status}`
+                {tenantWorkspace.entitlement
+                  ? `${tenantWorkspace.entitlement.planId} · ${tenantWorkspace.entitlement.status}`
                   : "Not configured"}
               </dd>
             </div>
             <div>
               <dt>Region</dt>
               <dd>
-                {workspace.tenant.country} · {workspace.tenant.timezone}
+                {tenantWorkspace.tenant.country} · {tenantWorkspace.tenant.timezone}
               </dd>
             </div>
             <div>
               <dt>Currency</dt>
-              <dd>{workspace.tenant.currency}</dd>
+              <dd>{tenantWorkspace.tenant.currency}</dd>
             </div>
             <div>
               <dt>Scope proof</dt>
@@ -136,6 +141,42 @@ export function TenantWorkspace() {
             Manage plans
           </Link>
         </div>
+      </section>
+    </div>
+  );
+}
+
+function TenantWorkspaceSetup({ reason }: { reason: TenantWorkspaceSetupReason }) {
+  const copy: Record<TenantWorkspaceSetupReason, { title: string; detail: string }> = {
+    authentication_required: {
+      title: "Sign in required",
+      detail: "Sign in through WorkOS to open a tenant workspace.",
+    },
+    tenant_unconfigured: {
+      title: "Tenant workspace is being set up",
+      detail: "Your active WorkOS organization has not been registered as a MylesNet tenant yet. A platform administrator must complete verified tenant registration.",
+    },
+    tenant_unavailable: {
+      title: "Tenant workspace is unavailable",
+      detail: "This organization is not currently enabled for tenant operations. Contact your platform administrator.",
+    },
+    account_inactive: {
+      title: "Your account is inactive",
+      detail: "A platform administrator must reactivate your MylesNet account before the tenant workspace can be opened.",
+    },
+    tenant_membership_required: {
+      title: "Tenant membership required",
+      detail: "Your WorkOS organization is registered, but your tenant membership has not been activated yet.",
+    },
+  };
+  const message = copy[reason];
+
+  return (
+    <div className="workspace-page">
+      <section className="workspace-card tenant-workspace-summary" aria-live="polite">
+        <p className="eyebrow">Tenant onboarding</p>
+        <h1 className="page-title">{message.title}</h1>
+        <p className="page-subtitle">{message.detail}</p>
       </section>
     </div>
   );

@@ -35,6 +35,17 @@ export type TenantWorkspace = {
   entitlement: { planId: string; status: string } | null;
 };
 
+export type TenantWorkspaceSetupReason =
+  | "authentication_required"
+  | "tenant_unconfigured"
+  | "tenant_unavailable"
+  | "account_inactive"
+  | "tenant_membership_required";
+
+export type TenantWorkspaceResult =
+  | { status: "ready"; workspace: TenantWorkspace }
+  | { status: "setup_required"; reason: TenantWorkspaceSetupReason };
+
 export type TenantDetailMember = {
   userId: string;
   name: string | null;
@@ -74,7 +85,7 @@ export type TenantDetail = {
  */
 export const tenantControl = {
   listForPlatform: makeFunctionReference<"query", Record<string, never>, PlatformTenant[]>("tenantControl:listForPlatform"),
-  getCurrentWorkspace: makeFunctionReference<"query", Record<string, never>, TenantWorkspace>("tenantControl:getCurrentWorkspace"),
+  getCurrentWorkspace: makeFunctionReference<"query", Record<string, never>, TenantWorkspaceResult>("tenantControl:getCurrentWorkspace"),
   setStatus: makeFunctionReference<"mutation", { tenantId: string; status: TenantStatus }, { changed: boolean }>("tenantControl:setStatus"),
   getTenantDetail: makeFunctionReference<"query", { tenantId: string }, TenantDetail | null>("tenantControl:getTenantDetail"),
   setEntitlement: makeFunctionReference<"mutation", {
