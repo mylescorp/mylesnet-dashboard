@@ -19,9 +19,14 @@
         "name": "next"
       }
     ],
+    "baseUrl": ".",
     "paths": {
       "@/convex/*": ["../../convex/*"],
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@/components/*": ["shared/ui/*"],
+      "@/app/lib/*": ["shared/lib/*"],
+      "@/lib/*": ["shared/*"],
+      "@portal/*": ["captive-portal/*"]
     }
   },
   "include": [

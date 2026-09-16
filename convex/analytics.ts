@@ -5,7 +5,7 @@ import { dayOf } from "./lib/finance";
 
 /**
  * Performance analytics (spec "Performance Reporting"). Pure aggregations over
- * snapshots/ledgers/telemetry rollups — no per-row scans of raw samples.
+ * billing snapshots and ledgers — no per-row scans of raw data.
  */
 export const getRevenueTrend = query({
   args: { marketId: v.optional(v.id("markets")), days: v.optional(v.number()) },
@@ -86,31 +86,6 @@ export const getTopAgents = query({
       .map(([agentId, s]) => ({ agentId, agentName: agents.get(agentId as never) ?? agentId, ...s }))
       .sort((a, b) => b.revenueLocal - a.revenueLocal)
       .slice(0, args.limit ?? 10);
-  },
-});
-
-export const getDeviceUptimeStats = query({
-  args: { marketId: v.optional(v.id("markets")), days: v.optional(v.number()) },
-  handler: async (ctx, args) => {
-    await requirePermission(ctx, "telemetry_health:read");
-    const days = args.days ?? 7;
-    const from = dayOf(Date.now() - days * 24 * 60 * 60 * 1000);
-    const rows = (await ctx.db.query("telemetryDaily").collect())
-      .filter((t) => t.date >= from && (!args.marketId || t.marketId === args.marketId));
-    const routers = rows.filter((r) => r.deviceKind === "router");
-    const aps = rows.filter((r) => r.deviceKind === "access_point");
-    const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
-    return {
-      days,
-      routerCount: new Set(routers.map((r) => r.routerId)).size,
-      accessPointCount: new Set(aps.map((r) => r.accessPointId)).size,
-      avgRouterCpuPercent: avg(routers.map((r) => r.avgCpuPercent).filter((c): c is number => c !== undefined)),
-      avgRouterMemPercent: avg(routers.map((r) => r.avgMemoryPercent).filter((c): c is number => c !== undefined)),
-      peakConnectedClients: Math.max(0, ...routers.map((r) => r.maxConnectedClients), ...aps.map((r) => r.maxConnectedClients)),
-      peakTxMbps: Math.max(0, ...rows.map((r) => r.maxTxRateMbps)),
-      peakRxMbps: Math.max(0, ...rows.map((r) => r.maxRxRateMbps)),
-      avgCcq: avg(aps.map((r) => r.avgCcq).filter((c): c is number => c !== undefined)),
-    };
   },
 });
 

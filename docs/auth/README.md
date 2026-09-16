@@ -42,20 +42,20 @@ tags: [mylesnet, auth, rbac, workos, nextjs]
 | File | Purpose |
 |---|---|
 | `apps/web/proxy.ts` | AuthKit proxy: per-host callback URI (`resolveMylesnetHost` + `callbackUriForHost`), trailing-slash 308 normalization, 421 on unknown host, `__mylesnet_tenant` cookie from hostname, additive security headers, 503 cookie-password gate. Public paths derived from `PUBLIC_PATHS`. |
-| `apps/web/app/(app)/auth/callback/route.ts` | AuthKit callback with PKCE-replay resilience. |
-| `apps/web/app/(app)/signin/route.ts` | Redirect to WorkOS hosted auth. |
-| `apps/web/app/components/OrgGuard.tsx` | After-login org membership + role sync orchestrator. |
-| `apps/web/app/lib/convex.ts` | Typed Convex client + `ConvexProviderWithAuth`. |
-| `apps/web/lib/auth/cookies.ts` | `__mylesnet_*` cookie names/options (httpOnly+secure+sameSite+path+maxAge), host-only scope, clear-by-empty pattern (Cookie Handling). |
-| `apps/web/lib/auth/csrf.ts` | Pure double-submit core: token generation, well-formedness, constant-time verify; header `X-CSRF-Token`. |
-| `apps/web/lib/auth/tenant.ts` | Canonical host resolver: apex / panel / tenant / development / unknown (`MYLESNET_PUBLIC_DOMAIN` allow-list), `callbackUriForHost`, `tenantSlugFromHost`, bootstrap slug. |
-| `apps/web/lib/auth/session.ts` | Server session facade over `getTokenClaims`: `getSession`, `requireUser`, `requireRole`, `getActiveTenantSlug` (AuthRequiredError / RoleRequiredError). |
-| `apps/web/lib/auth/rbac.ts` | Pure optimistic UI helpers: role/panel/permission checks, claim flattening. |
-| `apps/web/lib/auth/panelAccess.ts` | Panel role-requirement map incl. historical `org-*` slugs; `hasPanelAccess`. |
-| `apps/web/lib/auth/panels.ts` | `requirePanelAccess(panel)` server gate; agency/partner data-dark behind env flags. |
-| `apps/web/lib/public-routes.ts` | `PUBLIC_PATHS` derived from landing content (drives proxy allow-list + sitemap). |
-| `apps/web/lib/convex/tenantControl.ts` | Typed function references for the tenant-control surface (pinned). |
-| `apps/web/lib/utils.ts` | `cn()` (clsx + tailwind-merge). |
+| `apps/web/app/(panels)/auth/callback/route.ts` | AuthKit callback with PKCE-replay resilience. |
+| `apps/web/app/(panels)/signin/route.ts` | Redirect to WorkOS hosted auth. |
+| `apps/web/shared/components/OrgGuard.tsx` | After-login org membership + role sync orchestrator. |
+| `apps/web/shared/lib/convex.ts` | Typed Convex client + `ConvexProviderWithAuth`. |
+| `apps/web/shared/auth/cookies.ts` | `__mylesnet_*` cookie names/options (httpOnly+secure+sameSite+path+maxAge), host-only scope, clear-by-empty pattern (Cookie Handling). |
+| `apps/web/shared/auth/csrf.ts` | Pure double-submit core: token generation, well-formedness, constant-time verify; header `X-CSRF-Token`. |
+| `apps/web/shared/auth/tenant.ts` | Canonical host resolver: apex / panel / tenant / development / unknown (`MYLESNET_PUBLIC_DOMAIN` allow-list), `callbackUriForHost`, bootstrap slug. |
+| `apps/web/shared/auth/session.ts` | Server session facade over `getTokenClaims`: `getSession`, `requireUser`, `requireRole`, `getActiveTenantSlug` (AuthRequiredError / RoleRequiredError). |
+| `apps/web/shared/auth/rbac.ts` | Pure optimistic UI helpers: role/panel/permission checks, claim flattening. |
+| `apps/web/shared/auth/panelAccess.ts` | Panel role-requirement map incl. historical `org-*` slugs; `hasPanelAccess`. |
+| `apps/web/shared/auth/panels.ts` | `requirePanelAccess(panel)` server gate; agency/partner data-dark behind env flags. |
+| `apps/web/shared/public-routes.ts` | `PUBLIC_PATHS` derived from landing content (drives proxy allow-list + sitemap). |
+| `apps/web/shared/convex/tenantControl.ts` | Typed function references for the tenant-control surface (pinned). |
+| `apps/web/shared/utils.ts` | `cn()` (clsx + tailwind-merge). |
 
 ### Verification (2026-09-14)
 

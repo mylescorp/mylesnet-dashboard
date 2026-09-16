@@ -1,10 +1,13 @@
 # apps/web
 
-Target location for the Next.js web application (Platform, Admin, Dashboard incl.
-subscriber portal, and Reseller panels) per the monorepo shape in
-`docs/technology-stack.md`.
+The MylesNet Next.js web application. See [PANELS.md](PANELS.md) for the
+developer-facing ownership map.
 
-The application currently lives at the repository root (`app/`, `public/`,
-`proxy.ts`, `next.config.ts`, etc.) as the pre-monorepo state. Relocating it into
-this package is a deploy-gated checkpoint (see `products/mylesnet/tasks/backlog.md`
-Phase 0 — pnpm + Turborepo monorepo conversion).
+The direct panel folders (`landing/`, `dashboard/`, `admin/`, `platform/`,
+`reseller/`, `agency/`, `partner/`, `captive-portal/`, and
+`subscriber-portal/`) own application implementation. `shared/` owns reusable
+web-only UI, authentication, adapters, hooks, and design utilities.
+
+`app/` is intentionally limited to the Next.js-required route entrypoints,
+layouts, metadata files, and HTTP route façades. Do not put panel business UI
+or content there.

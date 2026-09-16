@@ -13,7 +13,7 @@ import type { Id } from "./_generated/dataModel";
  * same action.
  */
 
-export type ReportDataset = "revenue" | "subscribers" | "devices" | "financials";
+export type ReportDataset = "revenue" | "subscribers" | "financials";
 
 export const listScheduledReports = query({
   args: {},
@@ -120,16 +120,6 @@ export const collectReportRows = internalQuery({
             .filter((s) => s.date.startsWith(month.slice(0, 7)))
             .sort((a, b) => a.date.localeCompare(b.date))
             .map((s) => [s.date, s.marketId, s.activeCount, s.newCount, s.renewalCount, s.renewalRate?.toFixed(3), s.avgPlanPriceLocal, s.currency]),
-        };
-      }
-      case "devices": {
-        const tel = await ctx.db.query("telemetryDaily").collect();
-        return {
-          header: ["date", "marketId", "kind", "avgCpuPercent", "avgTxRateMbps", "avgRxRateMbps", "maxConnectedClients"],
-          rows: tel
-            .filter((t) => t.date.startsWith(month.slice(0, 7)))
-            .sort((a, b) => a.date.localeCompare(b.date))
-            .map((t) => [t.date, t.marketId, t.deviceKind, t.avgCpuPercent, t.avgTxRateMbps, t.avgRxRateMbps, t.maxConnectedClients]),
         };
       }
       case "financials": {

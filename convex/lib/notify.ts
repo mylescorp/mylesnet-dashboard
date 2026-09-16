@@ -4,8 +4,8 @@ import type { MutationCtx } from "../_generated/server";
 /**
  * Notification transport-fanout (spec §17 + §20). Africa's Talking is the SMS
  * provider (sandbox fallback), Resend is email. Provider credentials live in
- * environment variables — same convention as the collector shared secret and
- * Resend key already used in this repo:
+ * environment variables — the same convention as the Resend key already used
+ * in this repository:
  *   AFRICAS_TALKING_USERNAME / AFRICAS_TALKING_API_KEY
  *   RESEND_API_KEY / RESEND_FROM
  */
@@ -70,8 +70,8 @@ async function sendEmail(to: string, subject: string, html: string): Promise<{ o
 
 /**
  * Fan out a notification to one user on one channel, honouring their stored
- * preference (internal query resolves it). Dashboard channel always stores a
- * systemEvent so the in-app bell never depends on SMS/email delivery.
+ * preference (internal query resolves it). The retired monitoring event store
+ * no longer backs an in-app notification channel.
  */
 export async function notifyUser(
   ctx: Pick<MutationCtx, "runQuery"> & { db: MutationCtx["db"] },
@@ -89,16 +89,7 @@ export async function notifyUser(
   if (!user || user.deletedAt !== undefined) return { dispatched: false, reason: "no_user" };
 
   if (channel === "dashboard") {
-    await ctx.db.insert("systemEvents", {
-      routerId: undefined,
-      accessPointId: undefined,
-      type: "notification",
-      severity: "info",
-      title: payload.subject,
-      details: category,
-      occurredAt: Date.now(),
-    });
-    return { dispatched: true };
+    return { dispatched: false, reason: "dashboard_channel_retired" };
   }
 
   const pref = await ctx.runQuery(internal.notifications.isPreferenceEnabled, {

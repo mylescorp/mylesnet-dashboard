@@ -1,0 +1,39 @@
+{
+  "id": "2026-09-15-l2-audit-hash-chain-closeout",
+  "date": "2026-09-15",
+  "agent": "opencode",
+  "model": "big-pickle",
+  "tool": "opencode",
+  "product": "mylesnet",
+  "topic": "L2 audit hash chain close-out (Option C): full-chain verification, decision record, thread archive",
+  "status": "recorded",
+  "outcome": "Closed out L2 audit hash chain under the owner's Option (c) directive: no historical backfill; verification changed from a bounded 2000-row window to complete coverage of the entire post-deployment sealed chain via a resumable background sweep (one canonical migrationRuns row, 500-row batches chained by scheduler, hourly cron re-running from genesis). getAuditChainHealth now reads run status/coverage; the Audit log UI shows when the last full sweep completed and the exact chain range covered. Explicit decision recorded in decisions.md (2026-09-15, PR #17). Full gate green: typecheck 0, lint 0, tokens:check green, tests 154/154, build green. PR #17 held for personal review - no self-merge.",
+  "decisions": [
+    "Option (c) - new chain from deployment: chain starts at the first post-deployment audit row (genesis sentinel mylesnet:audit-chain:v1:genesis); pre-deployment rows remain readable but are intentionally unsealed and outside the chain. No backfill built.",
+    "No-backfill rationale: a hash computed now cannot prove pre-backfill rows were unmodified before hashing, so backfilling offers no stronger real-world integrity guarantee and would put rewrite tooling inside an append-only log.",
+    "Verification coverage must be complete, not windowed - the previous newest-2000 window is not a permanent ceiling.",
+    "Verification architecture: background sweep (convex/auditChainVerify.ts) advancing one bounded 500-row batch per internal mutation, resumable via canonical migrationRuns run 'audit-chain-verify-001', hourly cron re-ran from genesis for rolling full coverage; platform:getAuditChainHealth reads only the stored run status/coverage.",
+    "Chain semantics unchanged: sealing, canonical payload, and chainSequence behavior stay approved as-is (146/146 baseline + 8 new pure-core cases).",
+    "Hold for personal review: PR #17 (myles/platform-audit-hash-chain -> main) is not self-merged."
+  ],
+  "files": [
+    "convex/lib/auditChainVerifyCore.ts + auditChainVerifyCore.test.ts (new, 8 cases)",
+    "convex/auditChainVerify.ts (new sweep driver)",
+    "convex/platform.ts (getAuditChainHealth rewritten as run-status read)",
+    "convex/crons.ts (hourly audit chain integrity sweep)",
+    "convex/_generated/api.d.ts (surgical module entry, no regeneration)",
+    "apps/web/lib/convex/platformPanel.ts (AuditChainHealth bridge type)",
+    "apps/web/app/components/PlatformAuditLog.tsx (integrity panel)",
+    "decisions.md (explicit L2 close-out decision, 2026-09-15)",
+    "docs/agent-threads/2026-09-15-l2-audit-hash-chain-closeout.{md,json} + README index; vault mirror created"
+  ],
+  "openQuestions": [
+    "Manual npx convex run of the sweep in the live environment to verify the production chain end-to-end before merge."
+  ],
+  "transcript": [
+    "User: directed L2 close-out under Option (c) - keep new-chain-from-deployment, no historical backfill, fix verification to full sealed-chain coverage (complete, not windowed), update decisions.md with explicit decision (date, PR, rationale), archive the agent thread, re-run the full gate and report, hold PR for personal review, no self-merge.",
+    "Assistant: reconciled state (L2 already committed by another agent in PR #17); recon read crons.ts, migration-run infra, scheduler-chaining patterns, pinned generated api, decisions.md; designed and implemented pure resumable verification state machine + tests, internal-mutation sweep driver, hourly cron, rewritten status query, bridge + UI update, surgical api.d.ts entry; fixed decisions.md EOLs to LF-only in the added region with minimal diff.",
+    "User: \"proced\" (proceed).",
+    "Assistant: executed full implementation, ran the full gate (typecheck 0, lint 0, tokens:check green, tests 154/154, build green), created the agent-thread archive pair and mirrored the vault folder; reported, with PR #17 held for personal review."
+  ]
+}

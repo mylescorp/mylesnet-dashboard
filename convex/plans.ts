@@ -21,6 +21,15 @@ export const listPlans = query({
   },
 });
 
+export const list = query({
+  args: {},
+  handler: async (ctx) => {
+    await requirePermission(ctx, "plans:read");
+    const plans = await ctx.db.query("plans").collect();
+    return plans.filter((p) => p.status === "active").sort((a, b) => a.priceLocal - b.priceLocal);
+  },
+});
+
 export const createPlan = mutation({
   args: {
     marketId: v.optional(v.id("markets")),

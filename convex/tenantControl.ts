@@ -31,16 +31,10 @@ export const listForPlatform = query({
     await requirePlatformUser(ctx);
     const tenants = await ctx.db.query("tenants").order("desc").collect();
     return Promise.all(tenants.filter((tenant) => tenant.deletedAt === undefined).map(async (tenant) => {
-      const [memberships, entitlement, marketCount, subscriberCount] = await Promise.all([
+      const [memberships, entitlement] = await Promise.all([
         ctx.db.query("tenantMemberships").withIndex("by_tenant", (q) => q.eq("tenantId", tenant._id)).collect(),
         ctx.db.query("entitlements").withIndex("by_tenant", (q) => q.eq("tenantId", tenant._id)).order("desc").first(),
-        ctx.db.query("markets").withIndex("by_tenant", (q) => q.eq("tenantId", tenant._id)).collect().then((markets) => markets.filter((market) => market.status !== "deleted").length),
-        ctx.db.query("latestSubscriberState").collect().then((subscribers) => subscribers.filter((subscriber) => subscriber.tenantId === tenant._id).length),
       ]);
-      const ownerMembership = memberships
-        .filter((membership) => membership.status === "active" && membership.role === "tenant_admin")
-        .sort((a, b) => (a.joinedAt ?? 0) - (b.joinedAt ?? 0))[0];
-      const owner = ownerMembership ? await ctx.db.get(ownerMembership.userId) : null;
       return {
         _id: tenant._id,
         name: tenant.name,
@@ -51,9 +45,6 @@ export const listForPlatform = query({
         status: tenant.status,
         workosOrganizationId: tenant.workosOrganizationId ?? null,
         membershipCount: memberships.filter((membership) => membership.status === "active").length,
-        marketCount,
-        subscriberCount,
-        accountOwner: owner ? { name: owner.name ?? null, email: owner.email ?? null } : null,
         entitlement: entitlement
           ? {
               planId: entitlement.planId,
@@ -77,11 +68,9 @@ export const getCurrentWorkspace = query({
     const tenant = await ctx.db.get(tenantId);
     if (!tenant || tenant.deletedAt !== undefined) throw new Error("Unauthorized: tenant is unavailable");
 
-    const [memberships, markets, routers, openAlerts, entitlements] = await Promise.all([
+    const [memberships, markets, entitlements] = await Promise.all([
       ctx.db.query("tenantMemberships").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
       ctx.db.query("markets").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
-      ctx.db.query("routers").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
-      ctx.db.query("alerts").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
       ctx.db.query("entitlements").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).order("desc").first(),
     ]);
     return {
@@ -96,8 +85,6 @@ export const getCurrentWorkspace = query({
       },
       activeMembers: memberships.filter((membership) => membership.status === "active").length,
       activeMarkets: markets.filter((market) => market.status !== "deleted" && market.lifecycleStatus === "active").length,
-      activeRouters: routers.filter((router) => router.archivedAt === undefined).length,
-      openAlerts: openAlerts.filter((alert) => alert.alertStatus === "open").length,
       entitlement: entitlements ? { planId: entitlements.planId, status: entitlements.status } : null,
     };
   },
@@ -157,13 +144,6 @@ export const getTenantDetail = query({
         joinedAt: membership.joinedAt ?? null,
       };
     }));
-    const [marketCount, subscriberCount] = await Promise.all([
-      ctx.db.query("markets").withIndex("by_tenant", (q) => q.eq("tenantId", args.tenantId)).collect().then((markets) => markets.filter((market) => market.status !== "deleted").length),
-      ctx.db.query("latestSubscriberState").collect().then((subscribers) => subscribers.filter((subscriber) => subscriber.tenantId === args.tenantId).length),
-    ]);
-    const owner = members
-      .filter((member) => member.role === "tenant_admin" && member.status === "active")
-      .sort((a, b) => (a.joinedAt ?? 0) - (b.joinedAt ?? 0))[0] ?? null;
     return {
       _id: tenant._id,
       name: tenant.name,
@@ -185,9 +165,6 @@ export const getTenantDetail = query({
           }
         : null,
       activeMemberCount: memberships.filter((membership) => membership.status === "active").length,
-      marketCount,
-      subscriberCount,
-      accountOwner: owner ? { name: owner.name, email: owner.email } : null,
       members,
     };
   },

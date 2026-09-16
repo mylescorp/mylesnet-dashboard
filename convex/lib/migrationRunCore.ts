@@ -1,7 +1,7 @@
 /**
  * Pure migration-run domain logic for the Phase 0 "migration run infrastructure"
  * gate (§B2). Kept free of Convex imports so `npm test` can exercise it with
- * plain node:test (mirrors deviceCommandCore.ts / centipidVerify.ts).
+ * plain node:test.
  *
  * The Phase 1 `tenantId` backfill uses these invariants:
  *  - every run is idempotent and tracked by an immutable run id,

@@ -224,12 +224,9 @@ export const markVoucherSold = mutation({
 
 /**
  * Redemption — the ONLY point where a customer phone number is captured,
- * per Section 4.7. This builds the permanent customer-to-agent link used
- * for weekly Centipid CSV reconciliation. Whether that reconciliation ever
- * populates renewalCredits depends entirely on whether Centipid's export
- * contains a matching identifier — still unverified as of this build
- * (see decisions.md). The field is optional here specifically so the
- * system degrades gracefully rather than assuming.
+ * per Section 4.7. This builds the permanent customer-to-agent link used for
+ * voucher support and fraud review. The fields are optional so an authorised
+ * redemption can proceed without collecting data that is not required.
  */
 export const redeemVoucher = mutation({
   args: {
