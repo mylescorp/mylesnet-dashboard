@@ -1,6 +1,7 @@
 import { action, query, ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { requirePlatformOwner } from "./lib/auth";
+import { organizationIdFromWorkosIdentity } from "./lib/workosIdentity";
 
 function platformOrganizationId(): string {
   const organizationId = process.env.MYLESNET_PLATFORM_ORG_ID;
@@ -401,7 +402,7 @@ export const syncActiveOrganizationMembership = action({
         return { status: "unauthenticated" as const };
       }
 
-      const organizationId = typeof identity.organizationId === "string" ? identity.organizationId : undefined;
+      const organizationId = organizationIdFromWorkosIdentity(identity);
       if (!organizationId) {
         return { status: "denied" as const, reason: "No active WorkOS organization claim" };
       }

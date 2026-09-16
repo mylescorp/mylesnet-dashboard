@@ -68,11 +68,23 @@ export function hasAnyPermission(permissions: string[], requiredPermissions: str
   return requiredPermissions.some((permission) => permissions.includes(permission));
 }
 
-/** Flatten a WorkOS `roles`/`permissions` claim (array of strings) to string[]. */
+/** Flatten a WorkOS `role`/`roles`/`permissions` claim to string[]. */
 export function toClaimArray(value: unknown): string[] {
   if (Array.isArray(value)) return value.filter((entry): entry is string => typeof entry === "string");
   if (typeof value === "string") return [value];
   return [];
+}
+
+/**
+ * Normalize both role shapes that AuthKit may emit.
+ *
+ * Organization membership commonly arrives as the singular `role` claim,
+ * while multi-role configurations use `roles`. Retaining both prevents a
+ * valid organization member from being denied before Convex can enforce the
+ * authoritative tenant/data checks.
+ */
+export function normalizeRoleClaims(role: unknown, roles: unknown): string[] {
+  return [...new Set([...toClaimArray(role), ...toClaimArray(roles)])];
 }
 
 /** Flatten org-scoped role claims shaped `{ [orgId]: string[] }` into one list. */

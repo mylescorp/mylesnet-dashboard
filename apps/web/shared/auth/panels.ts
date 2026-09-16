@@ -1,16 +1,20 @@
 import { redirect } from "next/navigation";
-import { hasPanelAccess, type ProtectedPanel } from "./panelAccess";
-import { requireUser } from "./session";
+import { hasPanelAccess, panelAccessFallback, type ProtectedPanel } from "./panelAccess";
+import { requireUser, type AuthSession } from "./session";
 
 export type PanelName = ProtectedPanel;
 
 /** Server-only entry gate. Convex remains the authority for every data call. */
 export async function requirePanelAccess(panel: PanelName): Promise<void> {
+  let session: AuthSession;
   try {
-    const session = await requireUser();
-    if (!hasPanelAccess(session.roleSlugs, panel)) throw new Error("Panel access denied");
+    session = await requireUser();
   } catch {
     redirect("/no-access");
+  }
+
+  if (!hasPanelAccess(session.roleSlugs, panel)) {
+    redirect(panelAccessFallback(session.roleSlugs, panel));
   }
 
   // Agency and Partner hosts are provisioned, but stay data-dark until their

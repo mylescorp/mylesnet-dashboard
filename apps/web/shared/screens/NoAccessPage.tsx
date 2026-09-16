@@ -1,6 +1,11 @@
 import Link from "next/link";
+import { hasPanelAccess } from "@/shared/auth/panelAccess";
+import { getSession } from "@/shared/auth/session";
 
-export default function NoAccessPage() {
+export default async function NoAccessPage() {
+  const session = await getSession();
+  const returnToPlatform = Boolean(session && hasPanelAccess(session.roleSlugs, "platform"));
+
   return (
     <div className="platform-standalone">
       <div className="platform-card">
@@ -11,8 +16,8 @@ export default function NoAccessPage() {
           this is a mistake, contact your administrator.
         </p>
         <div className="platform-actions">
-          <Link href="/dashboard" className="primary-button">
-            Return to dashboard
+          <Link href={returnToPlatform ? "/platform" : "/"} className="primary-button">
+            {returnToPlatform ? "Return to platform" : "Return to home"}
           </Link>
         </div>
       </div>
