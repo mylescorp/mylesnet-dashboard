@@ -146,37 +146,14 @@ export function TenantWorkspace() {
   );
 }
 
-function TenantWorkspaceSetup({ reason }: { reason: TenantWorkspaceSetupReason }) {
-  const copy: Record<TenantWorkspaceSetupReason, { title: string; detail: string }> = {
-    authentication_required: {
-      title: "Sign in required",
-      detail: "Sign in through WorkOS to open a tenant workspace.",
-    },
-    tenant_unconfigured: {
-      title: "Tenant workspace is being set up",
-      detail: "Your active WorkOS organization has not been registered as a MylesNet tenant yet. A platform administrator must complete verified tenant registration.",
-    },
-    tenant_unavailable: {
-      title: "Tenant workspace is unavailable",
-      detail: "This organization is not currently enabled for tenant operations. Contact your platform administrator.",
-    },
-    account_inactive: {
-      title: "Your account is inactive",
-      detail: "A platform administrator must reactivate your MylesNet account before the tenant workspace can be opened.",
-    },
-    tenant_membership_required: {
-      title: "Tenant membership required",
-      detail: "Your WorkOS organization is registered, but your tenant membership has not been activated yet.",
-    },
-  };
-  const message = copy[reason];
+function TenantWorkspaceSetup({ reason: _reason }: { reason: TenantWorkspaceSetupReason }) {
 
   return (
     <div className="workspace-page">
       <section className="workspace-card tenant-workspace-summary" aria-live="polite">
-        <p className="eyebrow">Tenant onboarding</p>
-        <h1 className="page-title">{message.title}</h1>
-        <p className="page-subtitle">{message.detail}</p>
+        <p className="eyebrow">Workspace</p>
+        <h1 className="page-title">Your workspace is being prepared</h1>
+        <p className="page-subtitle">Please check back shortly.</p>
       </section>
     </div>
   );

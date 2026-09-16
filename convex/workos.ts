@@ -283,9 +283,9 @@ export interface WorkosMfaEnrollment {
 
 type OrganizationSyncResult =
   | { status: "unauthenticated" }
-  | { status: "denied"; reason: string }
-  | { status: "synced"; organizationId: string; roleSlug: string; scope: "platform" | "network" | "tenant" }
-  | { status: "error"; reason: string };
+  | { status: "denied" }
+  | { status: "synced" }
+  | { status: "error" };
 
 /**
  * Read a user's WorkOS MFA enrollment state. WorkOS account authentication
@@ -404,21 +404,21 @@ export const syncActiveOrganizationMembership = action({
 
       const organizationId = organizationIdFromWorkosIdentity(identity);
       if (!organizationId) {
-        return { status: "denied" as const, reason: "No active WorkOS organization claim" };
+        return { status: "denied" as const };
       }
       const scope = await ctx.runQuery(internal.tenantMigrations.getKnownOrganizationScope, {
         organizationId,
       });
       if (scope.kind === "unknown") {
-        return { status: "denied" as const, reason: "WorkOS organization is not provisioned for MylesNet" };
+        return { status: "denied" as const };
       }
       const membership = await getWorkosOrganizationMembership(organizationId, identity.subject);
       if (!membership || membership.status !== "active") {
-        return { status: "denied" as const, reason: "Active WorkOS organization membership required" };
+        return { status: "denied" as const };
       }
       const roleSlug = membershipRoleSlug(membership);
       if (!roleSlug) {
-        return { status: "denied" as const, reason: "WorkOS organization membership has no role" };
+        return { status: "denied" as const };
       }
 
       // Mirror MFA enrollment for the mandatory-2FA role policy (lib/mfa).
@@ -454,11 +454,10 @@ export const syncActiveOrganizationMembership = action({
         email: identity.email,
         name: typeof identity.name === "string" ? identity.name : undefined,
       });
-      return { status: "synced" as const, organizationId, roleSlug, scope: scope.kind };
+      return { status: "synced" as const };
     } catch (error) {
       console.error("syncActiveOrganizationMembership: Organization membership error:", error);
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      return { status: "error" as const, reason: `Identity synchronization failed: ${errorMessage}` };
+      return { status: "error" as const };
     }
   },
 });
