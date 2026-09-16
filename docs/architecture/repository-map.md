@@ -4,9 +4,9 @@
 
 | Area | Responsibility |
 | --- | --- |
-| `apps/web/app/(public)` | Landing, legal, SEO, and public resources |
-| `apps/web/app/(panels)` | Route/layout boundaries for Platform, Admin, Dashboard, Reseller, Agency, and Partner |
-| `apps/web/features` | Audience and feature workflows; route files stay thin |
+| `apps/web/features/landing` | Landing, legal, SEO, public resources, and conversion UI |
+| `apps/web/features/{admin,platform,dashboard,reseller,agency,partner}` | The named panel implementation boundaries |
+| `apps/web/app/(public)` and `apps/web/app/(panels)` | URL, metadata, layout, and thin route-entry boundaries only |
 | `apps/web/features/captive-portal` | Deferred captive-portal feature slice; route stubs live in `(portal)/hotspot` |
 | `convex` | Tenant authorization, billing workflows, WorkOS webhook, schema, and jobs |
 | `packages` | Shared contracts only; no panel-specific implementation |
