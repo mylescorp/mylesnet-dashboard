@@ -12,6 +12,29 @@
 - **Nav:** `Network health` link (HeartPulse icon) in `UnifiedShell.tsx` platform sidebar.
 - **Gates:** `pnpm typecheck` 0, `pnpm lint` 0, `pnpm tokens:check` 0, `pnpm test` 159/159 (15 new `healthRollupCore` tests), `pnpm build` green.
 
+## B4 — Versioned PPPoE / rate-limit policy templates (2026-09-15)
+
+- **Data model:** new `policyTemplates` table in `convex/schema.ts`, platform-owned (no `tenantScope`). Families identified by stable `code` (slug), versioned `1..n`. Fields: name, kind (pppoe|rate_limit), downloadMbps, uploadMbps, burstDownloadMbps, burstUploadMbps, burstThresholdMbps, burstTimeSeconds, status (draft|published|retired), description, createdBy, createdAt, updatedAt. Indexed by code/version, code, status, kind+status.
+- **Immutability guarantee (core):** a version is only editable while `status === "draft"`. Publishing freezes it — published/retired versions reject content changes. This is `isPolicyVersionFrozen` in the pure core: tenants provisioned against an older version keep their exact policy because an old version's fields can never change when a newer version ships. New behavior is always a new version of the same family (or a new family), never an in-place edit.
+- **Auth model:** CRUD matrix per spec — `platform_super_admin` and `platform_ops` create/publish/update; only super_admin may retire (safety guard consistent with B3 decommission).
+- **Pure core:** `policyTemplateCore.ts` — kind/status guards, frozen-version predicate, code slug validation (2–80 lowercase alphanumeric/hyphen), name validation, Mbps rate validation (positive ≤ 1,000,000), burst validation (0–1,000,000 or undefined), `nextPolicyTemplateVersion` (null → 1, else +1), `buildPolicyTemplateRow`, `latestVersionPerFamily` reducer. 20 test cases in `policyTemplateCore.test.ts`, all passing.
+- **Server functions:** `policyTemplates.ts` — listPolicyTemplates (query, filterable by kind/status/code, sorted by family then version desc), getPolicyTemplateRow (query), createPolicyTemplate (mutation, v1, unique family code), createPolicyTemplateVersion (mutation, next version of family), publishPolicyTemplate (mutation, draft → published, freeze), updatePolicyTemplate (mutation, draft-only), retirePolicyTemplate (mutation, published → retired, super_admin).
+- **Client bridge:** `apps/web/lib/convex/policyTemplates.ts` — explicit function references, no regeneration.
+- **UI:** `PlatformPolicyTemplates.tsx` — metrics grid (total/drafts/published/retired), tab filters, family/version table with per-status action (Publish / Retire), immutability copy on the header. Route: `/platform/infrastructure/policy-templates`. Server page wired through `requirePanelAccess("platform")`.
+- **Nav surfaces:** `Policy templates` link (FileCode icon) in `UnifiedShell.tsx` platform sidebar.
+- **Gates:** `pnpm typecheck` 0, `pnpm lint` 0, `pnpm tokens:check` 0, `pnpm test` 164/164 (20 new `policyTemplateCore` tests), `pnpm build` green. All passing.
+
+## B3 — Platform RADIUS server fleet (2026-09-15)
+
+- **Data model:** new `radiusServers` table in `convex/schema.ts`, platform-owned (no `tenantScope`). Fields: name, hostname, port, protocol (radsec|udp), status (active|provisioning|failed|maintenance|decommissioned), healthStatus (healthy|degraded|down|unknown), region, certExpiryAt, lastHealthCheckAt, notes, registeredBy, createdAt, updatedAt. Indexed by `status` and `protocol`.
+- **Auth model:** CRUD matrix per spec — `platform_super_admin` and `platform_ops` have full create/read/update; super_admin only may decommission (soft-delete). All reads require `requirePlatformUser`.
+- **Server functions:** `radiusFleet.ts` — listRadiusServers (query, filterable by status/protocol), getRadiusServerRow (query), createRadiusServer (mutation, defaults to provisioning), updateRadiusServer (mutation, partial update), deleteRadiusServer (mutation, decommission only, super_admin).
+- **Pure core:** `radiusFleetCore.ts` — deterministic, I/O-free helpers for type guards (status, protocol, health), hostname validation (IPv4, IPv6 bracketed, RFC-1123), port validation (1–65535), and `buildRadiusServerRow`. 16 test cases in `radiusFleetCore.test.ts`, all passing.
+- **Client bridge:** `apps/web/lib/convex/radiusFleet.ts` — explicit function references (same pattern as `fleet.ts`), no regeneration needed.
+- **UI:** `PlatformRadiusFleet.tsx` — metrics grid (total, active, degraded, provisioning), tab filters, sortable table, modal editor with optional decommission button (super_admin). Route: `/platform/infrastructure/radius`. Server page wired through `requirePanelAccess("platform")`.
+- **Nav surfaces:** Added `RADIUS fleet` link (Radio icon) in `UnifiedShell.tsx` platform sidebar; added PlaneCard in `PlatformOverview.tsx` sub-panels grid.
+- **Gates:** `pnpm typecheck` 0, `pnpm lint` 0, `pnpm tokens:check` 0, `pnpm test` 160/160 (16 new `radiusFleetCore` tests), `pnpm build` green. All passing.
+
 ## Landing-surface consistency correction (2026-09-13)
 
 - **Token alias repair:** shadcn/Tailwind aliases are isolated behind `--ui-*` and `--color-*` mappings. The earlier implementation overwrote semantic `--primary`, `--muted`, and `--accent` values, producing low-contrast public navigation and copy. Product semantic tokens are now never shadowed by primitive aliases.

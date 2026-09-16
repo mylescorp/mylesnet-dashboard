@@ -774,6 +774,64 @@ export default defineSchema({
     loggedBy: v.id("users"),
   }).index("by_device", ["deviceId"]),
 
+// Platform RADIUS server fleet (spec B3): shared FreeRADIUS nodes across
+  // every region. Platform-owned records (no tenant scope) — only Platform or
+  // Admin creates shared RADIUS nodes per the spec.
+  radiusServers: defineTable({
+    name: v.string(),
+    hostname: v.string(),
+    port: v.number(),
+    protocol: v.union(v.literal("radsec"), v.literal("udp")),
+    status: v.union(
+      v.literal("active"),
+      v.literal("provisioning"),
+      v.literal("failed"),
+      v.literal("maintenance"),
+      v.literal("decommissioned"),
+    ),
+    healthStatus: v.union(
+      v.literal("healthy"),
+      v.literal("degraded"),
+      v.literal("down"),
+      v.literal("unknown"),
+    ),
+    region: v.optional(v.string()),
+    certExpiryAt: v.optional(v.number()),
+    lastHealthCheckAt: v.optional(v.number()),
+    notes: v.optional(v.string()),
+    registeredBy: v.optional(v.id("users")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_status", ["status"])
+    .index("by_protocol", ["protocol"]),
+
+  // Versioned PPPoE / rate-limit policy templates (spec B4): each family
+  // (identified by a stable code) is versioned 1..n. Versions are immutable
+  // once published, so tenants provisioned against an older version keep their
+  // behavior when a newer version ships.
+  policyTemplates: defineTable({
+    code: v.string(),
+    name: v.string(),
+    version: v.number(),
+    kind: v.union(v.literal("pppoe"), v.literal("rate_limit")),
+    downloadMbps: v.number(),
+    uploadMbps: v.number(),
+    burstDownloadMbps: v.optional(v.number()),
+    burstUploadMbps: v.optional(v.number()),
+    burstThresholdMbps: v.optional(v.number()),
+    burstTimeSeconds: v.optional(v.number()),
+    status: v.union(v.literal("draft"), v.literal("published"), v.literal("retired")),
+    description: v.optional(v.string()),
+    createdBy: v.optional(v.id("users")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_code_version", ["code", "version"])
+    .index("by_code", ["code"])
+    .index("by_status", ["status"])
+    .index("by_kind_status", ["kind", "status"]),
+
   // Device provisioning pipeline (spec "Provisioning Queue"). A device that
   // reports in self-registered (registeredBy: "self") lands here as a request
   // that a super_admin or ops role must approve before it is treated as part
