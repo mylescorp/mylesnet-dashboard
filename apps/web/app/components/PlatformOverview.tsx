@@ -8,6 +8,7 @@ import {
   Cpu,
   Flag,
   Link2,
+  Radio,
   ScrollText,
   ServerCog,
   ShieldCheck,
@@ -70,6 +71,7 @@ export function PlatformOverview() {
           <PlaneCard href="/platform/security" icon={<ShieldCheck size={20} />} title="Security" body="WorkOS identity coverage, staff MFA posture, webhook health, and feature flags." />
           <PlaneCard href="/platform/provisioning" icon={<ServerCog size={20} />} title="Provisioning" body="Device provisioning queue — approve or reject self-registered devices for the managed estate." />
           <PlaneCard href="/platform/infrastructure/devices" icon={<Cpu size={20} />} title="Device fleet" body="Firmware version, last-seen, uptime, and provisioning posture across every tenant." />
+          <PlaneCard href="/platform/infrastructure/radius" icon={<Radio size={20} />} title="RADIUS fleet" body="Shared FreeRADIUS nodes, protocol, status, and health across every region." />
           <PlaneCard href="/platform/vouchers/monitor" icon={<TicketCheck size={20} />} title="Voucher monitor" body="Duplicate, velocity, and geo-anomaly signals on redeemed vouchers." />
           <PlaneCard href="/platform/feature-flags" icon={<Flag size={20} />} title="Feature flags" body="Global toggles, percentage rollouts, and per-tenant overrides." />
         </div>
