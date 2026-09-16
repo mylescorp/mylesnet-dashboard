@@ -1,19 +1,19 @@
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight, CheckCircle2, ShieldCheck, X } from "lucide-react";
-import SectionHead from "./components/SectionHead";
-import StatusChip from "./components/StatusChip";
-import JsonLd from "./components/JsonLd";
-import { Icon } from "./components/LandingIcon";
-import { Button } from "@/components/ui/button";
+import SectionHead from "@/landing/components/SectionHead";
+import StatusChip from "@/landing/components/StatusChip";
+import JsonLd from "@/landing/components/JsonLd";
+import { Icon } from "@/landing/components/LandingIcon";
+import { Button } from "@/shared/ui/button";
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
-} from "@/components/ui/accordion";
-import { pageMetadata } from "./content/seo";
-import { features, solutions } from "./content/pages";
+} from "@/shared/ui/accordion";
+import { pageMetadata } from "@/landing/content/seo";
+import { features, solutions } from "@/landing/content/pages";
 import {
   audiences,
   industryStats,
@@ -26,7 +26,7 @@ import {
   lifecycleSteps,
   lifecycleHonesty,
   integrationHighlights,
-} from "./content/home";
+} from "@/landing/content/home";
 
 export const metadata = pageMetadata(
   "MylesNet — ISP Operations Platform for East Africa",

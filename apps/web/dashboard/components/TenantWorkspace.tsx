@@ -10,10 +10,15 @@ import {
 } from "lucide-react";
 import { useQuery } from "@/app/lib/convex";
 import { tenantControl } from "@/lib/convex/tenantControl";
+import { dashboard } from "@/shared/convex/dashboard";
 import MetricCard from "@/shared/components/MetricCard";
+
+const n = (v: number) => v.toLocaleString("en", { maximumFractionDigits: 2 });
 
 export function TenantWorkspace() {
   const workspace = useQuery(tenantControl.getCurrentWorkspace, {});
+  const metrics = useQuery(dashboard.getMetrics, {});
+
   if (workspace === undefined)
     return (
       <div className="workspace-page">
@@ -23,7 +28,16 @@ export function TenantWorkspace() {
       </div>
     );
 
-  const newSignups = 0;
+  const revenueDisplay =
+    metrics === undefined
+      ? "Loading…"
+      : `${metrics.currency} ${n(metrics.revenueToday)}`;
+  const revenueDetail =
+    metrics === undefined
+      ? "Today's completed payments"
+      : `${metrics.revenueTodayCount} completed payment${metrics.revenueTodayCount === 1 ? "" : "s"} today`;
+  const newSignups = metrics === undefined ? 0 : metrics.newSignupsToday;
+  const openTickets = metrics === undefined ? "—" : metrics.openTickets;
 
   return (
     <div className="workspace-page tenant-workspace-page">
@@ -47,14 +61,14 @@ export function TenantWorkspace() {
         <MetricCard
           icon={DollarSign}
           label="Revenue today"
-          value="KES 0"
-          detail="Today's payments"
+          value={revenueDisplay}
+          detail={revenueDetail}
           tone="primary"
         />
         <MetricCard
           icon={UsersRound}
           label="Active subscriptions"
-          value={workspace.activeMembers}
+          value={metrics === undefined ? "Loading…" : metrics.activeSubscriptions}
           detail="Current active subscribers"
           tone="success"
         />
@@ -68,14 +82,14 @@ export function TenantWorkspace() {
         <MetricCard
           icon={Ticket}
           label="Open tickets"
-          value="—"
+          value={openTickets}
           detail="Support queue is available from Tickets"
           tone="neutral"
         />
         <MetricCard
           icon={Building2}
           label="Active sites"
-          value={workspace.activeMarkets}
+          value={metrics === undefined ? "Loading…" : metrics.activeMarkets}
           detail="Tenant operating locations"
           tone="success"
         />

@@ -7,7 +7,7 @@ import { useMutation, useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { Trash2 } from "lucide-react";
-import { Field, Select, TextInput, StatusPill, EmptyState, Loading, ErrorNote, formatMoney } from "@/app/components/ui";
+import { Field, Select, TextInput, StatusPill, EmptyState, Loading, ErrorNote, formatMoney } from "@/shared/components/ui";
 
 const LIFECYCLE = ["planned", "active", "paused", "decommissioned"] as const;
 type Lifecycle = (typeof LIFECYCLE)[number];

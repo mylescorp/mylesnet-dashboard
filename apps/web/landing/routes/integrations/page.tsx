@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import { integrationGroups, integrationStatusLegend } from "../content/integrations";
-import { pageMetadata } from "../content/seo";
-import StatusChip from "../components/StatusChip";
+import { integrationGroups, integrationStatusLegend } from "@/landing/content/integrations";
+import { pageMetadata } from "@/landing/content/seo";
+import StatusChip from "@/landing/components/StatusChip";
 
 export const metadata = pageMetadata(
   "Integrations",

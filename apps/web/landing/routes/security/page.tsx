@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
-import { securityPillars } from "../content/home";
-import { pageMetadata } from "../content/seo";
-import { Icon } from "../components/LandingIcon";
+import { securityPillars } from "@/landing/content/home";
+import { pageMetadata } from "@/landing/content/seo";
+import { Icon } from "@/landing/components/LandingIcon";
 
 export const metadata = pageMetadata(
   "Security & trust",
@@ -34,7 +34,7 @@ const securityDetail: { title: string; description: string }[] = [
   {
     title: "Your network stays yours",
     description:
-      "Live router reads use the platform's secure path, and the on-premise collector supports private networks that must not touch the public internet.",
+      "Live access integrations use tenant-scoped, secure platform workflows for private networks that must not touch the public internet.",
   },
   {
     title: "The boundary is explicit",

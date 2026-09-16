@@ -4,7 +4,7 @@ import { makeFunctionReference } from "convex/server";
  * Client-side bindings for the Platform panel surfaces that live in
  * `convex/platform.ts` but are not yet in the pinned generated `api`.
  * Keep in sync — never regenerate bindings until the Convex target is
- * explicitly verified (see apps/web/lib/convex/tenantControl.ts).
+ * explicitly verified (see apps/web/shared/convex/tenantControl.ts).
  */
 
 export type AuditLogEntry = {

@@ -2,7 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 
 const appRoot = join(process.cwd(), "app");
-const allowedFiles = new Set(["app/design/tokens.ts"]);
+const allowedFiles = new Set(["shared/design/tokens.ts"]);
 const sourceExtensions = new Set([".ts", ".tsx"]);
 const rawColorPattern = /#[0-9a-fA-F]{3,8}\b|\b(?:rgb|rgba|hsl|hsla)\(/g;
 const tailwindPalettePattern = /(?:^|[\s"'`])(?:bg|text|border|ring|outline|fill|stroke)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|white|black)(?:-[\w/]+)?\b/g;
@@ -24,7 +24,19 @@ const violations = [];
 const report = (message) => violations.push(message);
 
 // ---- 1. Application TypeScript: no literal colour values or Tailwind palette utilities ----
-const applicationRoots = [appRoot, join(process.cwd(), "components")];
+const moduleRoots = [
+  "dashboard",
+  "platform",
+  "reseller",
+  "agency",
+  "partner",
+  "captive-portal",
+  "subscriber-portal",
+  "landing",
+  "shared",
+  "admin",
+];
+const applicationRoots = [appRoot, ...moduleRoots.map((name) => join(process.cwd(), name))];
 for (const root of applicationRoots) for (const file of await sourceFiles(root)) {
   const relativePath = relative(process.cwd(), file).replaceAll("\\", "/");
   if (allowedFiles.has(relativePath)) continue;
@@ -120,7 +132,7 @@ const colorOutsideTokenBlock = (cssText) => {
   return hits;
 };
 
-const landingCssRoot = join(process.cwd(), "app", "(landing)");
+const landingCssRoot = join(process.cwd(), "app", "(public)");
 for (const file of await cssFiles(landingCssRoot)) {
   const relativePath = relative(process.cwd(), file).replaceAll("\\", "/");
   const landingCss = await readFile(file, "utf8");
@@ -137,7 +149,7 @@ if (violations.length > 0) {
   process.exitCode = 1;
 } else {
   console.log(
-    "Design token check passed: no raw colour values or Tailwind palette utilities in application TypeScript, no undefined custom properties in globals.css, and no raw colour values outside :root token blocks in app/(landing)/ CSS."
+    "Design token check passed: no raw colour values or Tailwind palette utilities in application TypeScript, no undefined custom properties in globals.css, and no raw colour values outside :root token blocks in app/(public)/ CSS."
   );
 }
 

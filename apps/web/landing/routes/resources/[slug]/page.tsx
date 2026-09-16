@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowRight } from "lucide-react";
-import { guides } from "../../content/guides";
-import { pageMetadata } from "../../content/seo";
+import { guides } from "@/landing/content/guides";
+import { pageMetadata } from "@/landing/content/seo";
 
 export function generateStaticParams() {
   return guides.map((guide) => ({ slug: guide.slug }));

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { SITE_URL } from "../content/seo";
+import { SITE_URL } from "@/landing/content/seo";
 
 export function GET() {
   const ROBOTS_TXT = `User-Agent: *

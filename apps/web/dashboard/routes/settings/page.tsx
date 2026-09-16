@@ -4,8 +4,8 @@ import { Globe, Settings2, Wallet } from "lucide-react";
 import { PageHeader } from "@mylesnet/ui";
 import { useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
-import MetricCard from "@/app/components/MetricCard";
-import { Loading } from "@/app/components/ui";
+import MetricCard from "@/shared/components/MetricCard";
+import { Loading } from "@/shared/components/ui";
 
 export default function SettingsPage() {
   const environment = process.env.NEXT_PUBLIC_CONVEX_URL || "local";
@@ -23,7 +23,7 @@ export default function SettingsPage() {
       </div>
       <section className="section-block">
         <div className="section-heading"><div><p className="eyebrow">Billing platform</p><h2>Configuration boundary</h2></div></div>
-        <div className="pf-panel"><p className="pf-muted">Provider, payment, and access configuration is introduced through approved tenant-scoped workflows. Legacy device monitoring and collector controls are retired.</p></div>
+        <div className="pf-panel"><p className="pf-muted">Provider, payment, and access configuration is introduced through approved tenant-scoped workflows. Legacy device-monitoring controls are retired.</p></div>
       </section>
     </div>
   );

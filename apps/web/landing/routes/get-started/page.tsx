@@ -1,6 +1,6 @@
 import { CheckCircle2 } from "lucide-react";
-import { getCompanyContact } from "../content/contact";
-import { pageMetadata } from "../content/seo";
+import { getCompanyContact } from "@/landing/content/contact";
+import { pageMetadata } from "@/landing/content/seo";
 
 export const metadata = pageMetadata(
   "Get started",

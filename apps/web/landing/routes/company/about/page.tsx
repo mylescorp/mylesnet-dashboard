@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { pageMetadata } from "../../content/seo";
+import { pageMetadata } from "@/landing/content/seo";
 
 export const metadata = pageMetadata(
   "About MylesNet",

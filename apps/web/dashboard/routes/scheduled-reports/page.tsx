@@ -4,8 +4,8 @@ import { useState } from "react";
 import { useMutation, useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
 import { CalendarClock, FileBarChart, CheckCircle2, XCircle } from "lucide-react";
-import MetricCard from "@/app/components/MetricCard";
-import { EmptyState, ErrorNote, Field, Loading, Select, StatusPill, TextInput, formatDateTime } from "@/app/components/ui";
+import MetricCard from "@/shared/components/MetricCard";
+import { EmptyState, ErrorNote, Field, Loading, Select, StatusPill, TextInput, formatDateTime } from "@/shared/components/ui";
 
 export default function ScheduledReportsPage() {
   const reports = useQuery(api.scheduledReports.listScheduledReports, {});

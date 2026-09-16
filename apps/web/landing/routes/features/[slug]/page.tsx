@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
-import { features } from "../../content/pages";
-import { pageMetadata } from "../../content/seo";
-import { Icon } from "../../components/LandingIcon";
+import { features } from "@/landing/content/pages";
+import { pageMetadata } from "@/landing/content/seo";
+import { Icon } from "@/landing/components/LandingIcon";
 
 export function generateStaticParams() {
   return features.map((feature) => ({ slug: feature.slug }));

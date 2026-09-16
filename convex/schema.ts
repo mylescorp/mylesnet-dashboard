@@ -155,6 +155,81 @@ export default defineSchema({
     updatedBy: v.id("users"),
   }).index("by_key", ["key"]),
 
+  subscribers: defineTable({
+    ...tenantScope,
+    accountNumber: v.string(),
+    username: v.optional(v.string()),
+    name: v.string(),
+    email: v.optional(v.string()),
+    phone: v.string(),
+    planId: v.optional(v.id("plans")),
+    connectionType: v.union(v.literal("pppoe"), v.literal("hotspot")),
+    status: v.union(v.literal("active"), v.literal("expired"), v.literal("suspended"), v.literal("disabled"), v.literal("at_risk"), v.literal("churned")),
+    expiryDate: v.optional(v.number()),
+    macAddress: v.optional(v.string()),
+    ipAddress: v.optional(v.string()),
+    walletBalance: v.number(),
+    currency: v.string(),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+    deletedBy: v.optional(v.id("users")),
+  })
+    .index("by_tenant", ["tenantId"])
+    .index("by_account_number", ["accountNumber"])
+    .index("by_username", ["username"])
+    .index("by_phone", ["phone"])
+    .index("by_email", ["email"])
+    .index("by_status", ["status"])
+    .index("by_plan", ["planId"])
+    .index("by_expiry", ["expiryDate"]),
+
+  payments: defineTable({
+    ...tenantScope,
+    subscriberId: v.optional(v.id("subscribers")),
+    invoiceId: v.optional(v.id("invoices")),
+    planId: v.optional(v.id("plans")),
+    amount: v.number(),
+    currency: v.string(),
+    gateway: v.string(),
+    reference: v.string(),
+    status: v.union(v.literal("pending"), v.literal("completed"), v.literal("failed"), v.literal("refunded")),
+    paymentDate: v.number(),
+    operatorId: v.optional(v.id("users")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_tenant", ["tenantId"]).index("by_subscriber", ["subscriberId"]).index("by_invoice", ["invoiceId"]).index("by_status", ["status"]).index("by_date", ["paymentDate"]),
+
+  invoices: defineTable({
+    ...tenantScope,
+    invoiceNumber: v.string(),
+    subscriberId: v.optional(v.id("subscribers")),
+    status: v.union(v.literal("draft"), v.literal("issued"), v.literal("paid"), v.literal("overdue"), v.literal("cancelled")),
+    currency: v.string(),
+    subtotal: v.number(),
+    tax: v.number(),
+    discount: v.number(),
+    total: v.number(),
+    dueDate: v.optional(v.number()),
+    paidDate: v.optional(v.number()),
+    issuedDate: v.optional(v.number()),
+    notes: v.optional(v.string()),
+    operatorId: v.optional(v.id("users")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_tenant", ["tenantId"]).index("by_subscriber", ["subscriberId"]).index("by_status", ["status"]).index("by_number", ["invoiceNumber"]).index("by_due_date", ["dueDate"]),
+
+  invoiceLineItems: defineTable({
+    ...tenantScope,
+    invoiceId: v.id("invoices"),
+    description: v.string(),
+    quantity: v.number(),
+    unitPrice: v.number(),
+    total: v.number(),
+    createdAt: v.number(),
+  }).index("by_tenant", ["tenantId"]).index("by_invoice", ["invoiceId"]),
+
   system_settings: defineTable({
     key: v.string(),
     valueJson: v.string(),
@@ -436,7 +511,7 @@ export default defineSchema({
     .index("by_created", ["createdBy"]),
 
   // ==========================================================================
-  // RENEWAL ATTRIBUTION (4.7 — conditional on Centipid CSV verification)
+  // RENEWAL ATTRIBUTION (4.7 — conditional on provider CSV verification)
   // ==========================================================================
 
   // ==========================================================================

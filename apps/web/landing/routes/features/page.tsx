@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import { features } from "../content/pages";
-import { pageMetadata } from "../content/seo";
-import { Icon } from "../components/LandingIcon";
+import { features } from "@/landing/content/pages";
+import { pageMetadata } from "@/landing/content/seo";
+import { Icon } from "@/landing/components/LandingIcon";
 
 export const metadata = pageMetadata(
   "Features",

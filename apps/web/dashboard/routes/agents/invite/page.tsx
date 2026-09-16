@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useMutation, useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
-import { Field, Select, TextInput, StatusPill, EmptyState, Loading, ErrorNote, formatDateTime } from "@/app/components/ui";
+import { Field, Select, TextInput, StatusPill, EmptyState, Loading, ErrorNote, formatDateTime } from "@/shared/components/ui";
 
 export default function AgentInvitePage() {
   const invitations = useQuery(api.agentInvitations.listInvitations, {});

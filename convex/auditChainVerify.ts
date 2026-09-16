@@ -11,7 +11,7 @@
  * previous one has finished, so coverage re-verifies the whole sealed chain on
  * a rolling basis. Each bounded batch is one internalMutation; long chains
  * chain further batches via `ctx.scheduler.runAfter(0, ...)` (same pattern as
- * centipid live-data sync).
+ * scheduled audit maintenance).
  *
  * Legacy rows (pre-deployment, no integrity hash) are walked over but never
  * treated as part of the chain — they are counted as `legacySkipped` so the

@@ -5,7 +5,7 @@ import { useMutation, useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { PageHeader, Field, Select, TextInput, StatusPill, EmptyState } from "@mylesnet/ui";
-import { Loading, ErrorNote, formatDateTime } from "@/app/components/ui";
+import { Loading, ErrorNote, formatDateTime } from "@/shared/components/ui";
 
 const statusTone: Record<string, "neutral" | "warning" | "success" | "danger"> = {
   open: "danger",
@@ -185,4 +185,3 @@ export default function TicketsPage() {
     </div>
   );
 }
-

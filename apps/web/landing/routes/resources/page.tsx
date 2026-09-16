@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import { resourceItems } from "../content/resources";
-import { pageMetadata } from "../content/seo";
-import StatusChip from "../components/StatusChip";
+import { resourceItems } from "@/landing/content/resources";
+import { pageMetadata } from "@/landing/content/seo";
+import StatusChip from "@/landing/components/StatusChip";
 
 export const metadata = pageMetadata(
   "Resources",

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
-import { StatusPill, EmptyState, Loading, ErrorNote, formatMoney, formatDate } from "@/app/components/ui";
+import { StatusPill, EmptyState, Loading, ErrorNote, formatMoney, formatDate } from "@/shared/components/ui";
 
 const STATUSES = [
   "accrued", "held", "requested", "approved", "processing", "paid", "disputed", "all",

@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
-import { PUBLIC_PATHS } from "../../lib/public-routes";
-import { SITE_URL } from "./content/seo";
+import { PUBLIC_PATHS } from "@/lib/public-routes";
+import { SITE_URL } from "@/landing/content/seo";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const legacyRedirects = ["/landing", "/landing/get-started"];

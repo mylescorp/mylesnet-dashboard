@@ -597,7 +597,7 @@ counts/data did not.
     WorkOS identity coverage, staff MFA posture (MANDATORY_MFA_ROLES),
     workosWebhookEvents by status, 24h webhookDeliveryLog stats, feature
     flags.
-- **Explicit client bindings:** apps/web/lib/convex/platformPanel.ts via
+- **Explicit client bindings:** apps/web/shared/convex/platformPanel.ts via
   makeFunctionReference. Generated api remains pinned (no regeneration).
 - **Explicitly deferred / not built:** tenant cancellation/offboarding data
   retention; real SaaS invoices/billing (entitlements only - schema gap);
@@ -664,7 +664,7 @@ SaaS invoices — confirmed not started, left unstarted per directive).
     3–80 chars.
   - UI: `PlatformProvisioning.tsx` + route `app/(app)/platform/provisioning/`
     + nav entry in `UnifiedShell` (ServerCog), bridged via
-    `apps/web/lib/convex/provisioning.ts` with `makeFunctionReference`
+    `apps/web/shared/convex/provisioning.ts` with `makeFunctionReference`
     (generated `api` stays pinned — no regeneration).
 - **E1 Commissions RBAC fix:** `accrueCommission`,
   `approveCommissionPayout`, `markCommissionProcessing`, `markCommissionPaid`

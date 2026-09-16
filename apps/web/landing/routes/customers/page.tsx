@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import { pageMetadata } from "../content/seo";
+import { pageMetadata } from "@/landing/content/seo";
 import {
   customersIntro,
   customersToday,
   customersHonesty,
   earlyOperatorPerks,
   customersRoadmap,
-} from "../content/customers";
+} from "@/landing/content/customers";
 
 export const metadata = pageMetadata(
   "Customers",

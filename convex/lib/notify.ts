@@ -4,8 +4,8 @@ import type { MutationCtx } from "../_generated/server";
 /**
  * Notification transport-fanout (spec §17 + §20). Africa's Talking is the SMS
  * provider (sandbox fallback), Resend is email. Provider credentials live in
- * environment variables — same convention as the collector shared secret and
- * Resend key already used in this repo:
+ * environment variables — the same convention as the Resend key already used
+ * in this repository:
  *   AFRICAS_TALKING_USERNAME / AFRICAS_TALKING_API_KEY
  *   RESEND_API_KEY / RESEND_FROM
  */

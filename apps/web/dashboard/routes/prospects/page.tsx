@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useMutation, useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
-import { Field, Select, TextInput, TextArea, StatusPill, EmptyState, Loading, ErrorNote, formatDate } from "@/app/components/ui";
+import { Field, Select, TextInput, TextArea, StatusPill, EmptyState, Loading, ErrorNote, formatDate } from "@/shared/components/ui";
 
 const pipelineTone: Record<string, "neutral" | "warning" | "danger" | "success"> = {
   prospect: "neutral",

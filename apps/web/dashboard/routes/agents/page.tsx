@@ -6,7 +6,7 @@ import { useMutation, useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
 import { Plus } from "lucide-react";
 import type { Id } from "@/convex/_generated/dataModel";
-import { Field, Select, TextInput, StatusPill, EmptyState, Loading, ErrorNote } from "@/app/components/ui";
+import { Field, Select, TextInput, StatusPill, EmptyState, Loading, ErrorNote } from "@/shared/components/ui";
 
 const lifecycleTone = (s: string) =>
   s === "active" ? "success" : s === "suspended" ? "warning" : "danger";

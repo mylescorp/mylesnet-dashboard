@@ -3,14 +3,14 @@
 import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { ArrowRight, Check } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/shared/ui/button";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@/shared/ui/select";
 import {
   CURRENCIES,
   formatPrice,

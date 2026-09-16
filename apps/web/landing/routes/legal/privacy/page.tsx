@@ -1,5 +1,5 @@
 import { CheckCircle2 } from "lucide-react";
-import { pageMetadata } from "../../content/seo";
+import { pageMetadata } from "@/landing/content/seo";
 
 export const metadata = pageMetadata(
   "Privacy",

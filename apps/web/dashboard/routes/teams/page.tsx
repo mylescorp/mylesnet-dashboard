@@ -5,9 +5,9 @@ import { useMutation, useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { Plus, Shield, UserPlus, Users, UserMinus, Pencil, Archive } from "lucide-react";
-import MetricCard from "@/app/components/MetricCard";
-import { EmptyState, ErrorNote, Loading, Select, TextInput, formatDate } from "@/app/components/ui";
-import { useUserProfile } from "@/app/components/UserProfileContext";
+import MetricCard from "@/shared/components/MetricCard";
+import { EmptyState, ErrorNote, Loading, Select, TextInput, formatDate } from "@/shared/components/ui";
+import { useUserProfile } from "@/shared/components/UserProfileContext";
 
 export default function TeamsPage() {
   const teams = useQuery(api.teams.listTeams, {});

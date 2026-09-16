@@ -5,9 +5,9 @@ import { useMutation, useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { CheckSquare, Home, Package, Pencil, Plus, Radio, Tv } from "lucide-react";
-import MetricCard from "@/app/components/MetricCard";
-import { EmptyState, ErrorNote, Loading, Select, StatusPill, TextInput } from "@/app/components/ui";
-import { useUserProfile } from "@/app/components/UserProfileContext";
+import MetricCard from "@/shared/components/MetricCard";
+import { EmptyState, ErrorNote, Loading, Select, StatusPill, TextInput } from "@/shared/components/ui";
+import { useUserProfile } from "@/shared/components/UserProfileContext";
 
 type Category = "data" | "tv" | "home_bundle";
 const categoryIcon: Record<Category, typeof Radio> = { data: Radio, tv: Tv, home_bundle: Home };

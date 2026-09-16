@@ -9,14 +9,13 @@
   },
   "scripts": {
     "dev": "pnpm --filter @mylesnet/web run dev",
-    "dev:https": "pnpm --filter @mylesnet/web run dev:https",
     "build": "pnpm --filter @mylesnet/web run build",
     "start": "pnpm --filter @mylesnet/web run start",
     "lint": "pnpm --filter @mylesnet/web run lint",
     "typecheck": "pnpm --filter @mylesnet/web run typecheck",
     "tokens:check": "pnpm --filter @mylesnet/web run tokens:check",
     "landing:check": "node scripts/check-landing-routes.mjs",
-    "test": "node --test convex/lib/*.test.ts apps/web/lib/**/*.test.ts",
+    "test": "node --test convex/lib/*.test.ts apps/web/shared/**/*.test.ts",
     "test:ui": "pnpm --filter @mylesnet/web run test"
   },
   "dependencies": {

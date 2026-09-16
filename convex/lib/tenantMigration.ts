@@ -155,7 +155,8 @@ export function isInventoryConsistent(
  * Master spec §18.8 (N-tenant, N-site) is deliberately NOT promoted in Phase 1;
  * that is the Phase 8 "promote-sites" step.
  *
- * The two lists are grep-verified inventory as of 2026-09-11:
+ * The two lists are the retained billing/workspace inventory after the
+ * 2026-09-16 legacy-monitoring retirement:
  *   marketScopedTables = schema tables that declare `marketId`
  *   marketScopedFiles  = convex handler/route files referencing `marketId`
  */
@@ -178,7 +179,7 @@ export const MARKET_SITE_RESCOPING = {
     "dailySnapshots",
     "plans",
   ] as const,
-  /** Convex surface touching `marketId` (38 files, 348 references). */
+  /** Retained Convex surface touching `marketId`. */
   marketScopedFiles: [
     "agentActivity",
     "agentInvitations",

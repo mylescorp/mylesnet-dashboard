@@ -23,9 +23,9 @@
     "paths": {
       "@/convex/*": ["../../convex/*"],
       "@/*": ["./*"],
-      "@/app/components/*": ["shared/components/*"],
-      "@/app/hooks/*": ["shared/hooks/*"],
+      "@/components/*": ["shared/ui/*"],
       "@/app/lib/*": ["shared/lib/*"],
+      "@/lib/*": ["shared/*"],
       "@portal/*": ["captive-portal/*"]
     }
   },

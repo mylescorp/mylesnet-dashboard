@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { ArrowRight, CalendarCheck, Gift } from "lucide-react";
-import PricingPlans from "../components/PricingPlans";
-import { pageMetadata } from "../content/seo";
-import { FX_SNAPSHOT } from "../content/rates";
+import PricingPlans from "@/landing/components/PricingPlans";
+import { pageMetadata } from "@/landing/content/seo";
+import { FX_SNAPSHOT } from "@/landing/content/rates";
 
 export const metadata = pageMetadata(
   "Pricing",

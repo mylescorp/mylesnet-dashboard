@@ -9,7 +9,7 @@ tags: [mylesnet, component-system, account, drawer]
 
 The account drawer is the single account/workspace surface in the MylesNet shell. It replaces the inline avatar button + `UserProfileModal` wiring. It is mounted once, from `UnifiedShell`'s top bar, and is the only place the current user sees their identity, role, workspace context, appearance, platform administration shortcuts (for platform users), and sign-out.
 
-Source: `apps/web/app/components/AccountDrawer.tsx`. CSS: `.acw-*` classes in `apps/web/app/globals.css`. Tests: `apps/web/app/components/AccountDrawer.test.tsx`.
+Source: `apps/web/shared/components/AccountDrawer.tsx`. CSS: `.acw-*` classes in `apps/web/app/globals.css`. Tests: `apps/web/shared/components/AccountDrawer.test.tsx`.
 
 ## Component contract
 
@@ -31,7 +31,7 @@ The trigger stays visible at all breakpoints; `matchMedia("(min-width: 980px)")`
 
 1. Identity header — avatar, name, email, primary-role pill (shield icon).
 2. Workspace context — single-workspace label derived from `tenantSlugFromHost`. No fake workspace switcher (spec §5.2); requests stay bound to the active WorkOS organization.
-3. Appearance — Light / Dark / System segmented radiogroup, backed by the shared theme helpers in `apps/web/lib/theme.ts`. Placed first so the theme control is the first item in the scroll area.
+3. Appearance — Light / Dark / System segmented radiogroup, backed by the shared theme helpers in `apps/web/shared/theme.ts`. Placed first so the theme control is the first item in the scroll area.
 4. Profile & security — Profile & photo (opens `UserProfileModal`), Roles & permissions (`users:manage`/`roles:manage`), Audit log (link), Tenant administration (link).
 5. Support — Help center → `/get-started`, Contact → `/contact`.
 6. Footer — Sign out behind a `ConfirmDialog`. Errors surface inline; an offline banner (`role="status"`) appears when `navigator.onLine` is false and updates live via the `online`/`offline` events.

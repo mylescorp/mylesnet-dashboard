@@ -4,8 +4,8 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
 import { PiggyBank, CircleDollarSign, TrendingDown, TrendingUp } from "lucide-react";
-import MetricCard from "@/app/components/MetricCard";
-import { EmptyState, Loading, Select, StatusPill } from "@/app/components/ui";
+import MetricCard from "@/shared/components/MetricCard";
+import { EmptyState, Loading, Select, StatusPill } from "@/shared/components/ui";
 
 const n = (v: number, d = 2) => v.toLocaleString("en", { minimumFractionDigits: d, maximumFractionDigits: d });
 

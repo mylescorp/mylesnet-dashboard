@@ -3,8 +3,8 @@
 import { useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
 import { Users, ShieldCheck, UserX, Trophy } from "lucide-react";
-import MetricCard from "@/app/components/MetricCard";
-import { EmptyState, Loading, StatusPill } from "@/app/components/ui";
+import MetricCard from "@/shared/components/MetricCard";
+import { EmptyState, Loading, StatusPill } from "@/shared/components/ui";
 
 const n = (v: number, d = 2) => v.toLocaleString("en", { maximumFractionDigits: d });
 

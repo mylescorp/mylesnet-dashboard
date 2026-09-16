@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import { howItWorksSteps } from "../../content/how-it-works";
-import { pageMetadata } from "../../content/seo";
+import { howItWorksSteps } from "@/landing/content/how-it-works";
+import { pageMetadata } from "@/landing/content/seo";
 
 export const metadata = pageMetadata(
   "How MylesNet works",

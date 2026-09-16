@@ -32,8 +32,6 @@ export type TenantWorkspace = {
   };
   activeMembers: number;
   activeMarkets: number;
-  activeRouters: number;
-  openAlerts: number;
   entitlement: { planId: string; status: string } | null;
 };
 

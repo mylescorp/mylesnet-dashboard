@@ -32,7 +32,7 @@ jobs:
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
-          sources: apps/web/app convex scripts
+          sources: apps/web convex scripts packages
       - name: Autobuild
         uses: github/codeql-action/autobuild@v3
       - name: Perform CodeQL analysis

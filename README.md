@@ -17,8 +17,11 @@ infrastructure/               Infrastructure and operational runbooks
 docs/                         Product documentation and vault mirrors
 ```
 
-The captive portal is a deferred feature slice at
-`apps/web/features/captive-portal/`. Its future routes are mounted under
+Product decisions are maintained in `docs/decisions.md`; the vault holds the
+canonical long-term record and is reconciled separately when decisions change.
+
+The captive portal is a deferred web boundary at
+`apps/web/captive-portal/`. Its future routes are mounted under
 `apps/web/app/(portal)/hotspot/`; it is not a separate deployment.
 
 ## Local development

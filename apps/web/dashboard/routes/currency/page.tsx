@@ -4,8 +4,8 @@ import { useMemo } from "react";
 import { useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
 import { Coins, RefreshCcw, Activity } from "lucide-react";
-import MetricCard from "@/app/components/MetricCard";
-import { EmptyState, Loading, StatusPill, formatDateTime } from "@/app/components/ui";
+import MetricCard from "@/shared/components/MetricCard";
+import { EmptyState, Loading, StatusPill, formatDateTime } from "@/shared/components/ui";
 import type { Doc } from "@/convex/_generated/dataModel";
 
 const n = (v: number) => v.toLocaleString("en", { maximumFractionDigits: 4 });

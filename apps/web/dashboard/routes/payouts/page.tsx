@@ -4,8 +4,8 @@ import { useState } from "react";
 import { useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
 import { Wallet, Clock, CheckCircle2, HandCoins } from "lucide-react";
-import MetricCard from "@/app/components/MetricCard";
-import { EmptyState, Loading, Select, StatusPill, formatDateTime } from "@/app/components/ui";
+import MetricCard from "@/shared/components/MetricCard";
+import { EmptyState, Loading, Select, StatusPill, formatDateTime } from "@/shared/components/ui";
 
 const statusInfo: Record<string, { tone: "success" | "warning" | "danger" | "neutral"; label: string }> = {
   pending_approval: { tone: "warning", label: "Pending approval" },

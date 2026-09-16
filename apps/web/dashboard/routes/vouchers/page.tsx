@@ -6,7 +6,7 @@ import { api } from "@/convex/_generated/api";
 import { Plus, ChevronRight, ChevronDown } from "lucide-react";
 import { PageHeader, Select, Field, TextInput, StatusPill, EmptyState } from "@mylesnet/ui";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
-import { Loading, ErrorNote, formatMoney, formatDate } from "@/app/components/ui";
+import { Loading, ErrorNote, formatMoney, formatDate } from "@/shared/components/ui";
 
 const PLANS = ["half_day", "day", "week", "month", "specialty"] as const;
 const PLAN_LABEL: Record<string, string> = { half_day: "Half-day", day: "Day", week: "Week", month: "Month", specialty: "Specialty" };
@@ -290,4 +290,3 @@ function BatchVouchers({ batchId, agents }: { batchId: string; agents: Doc<"agen
     </div>
   );
 }
-

@@ -5,10 +5,10 @@ import { useMutation, useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { Banknote, TrendingUp, Users, FileBarChart } from "lucide-react";
-import MetricCard from "@/app/components/MetricCard";
-import SimpleBars from "@/app/components/SimpleBars";
-import { EmptyState, ErrorNote, Loading, Select, StatusPill, TextInput, formatDateTime } from "@/app/components/ui";
-import { useUserProfile } from "@/app/components/UserProfileContext";
+import MetricCard from "@/shared/components/MetricCard";
+import SimpleBars from "@/shared/components/SimpleBars";
+import { EmptyState, ErrorNote, Loading, Select, StatusPill, TextInput, formatDateTime } from "@/shared/components/ui";
+import { useUserProfile } from "@/shared/components/UserProfileContext";
 
 const n = (v: number, d = 2) => v.toLocaleString("en", { minimumFractionDigits: d, maximumFractionDigits: d });
 

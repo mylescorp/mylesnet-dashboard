@@ -1,10 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import "./landing.css";
-import Header from "./components/Header";
-import Footer from "./components/Footer";
-import JsonLd from "./components/JsonLd";
-import { MYLESCORP_SOCIAL_LINKS } from "./content/contact";
-import { SITE_URL } from "./content/seo";
+import Header from "@/landing/components/Header";
+import Footer from "@/landing/components/Footer";
+import JsonLd from "@/landing/components/JsonLd";
+import { MYLESCORP_SOCIAL_LINKS } from "@/landing/content/contact";
+import { SITE_URL } from "@/landing/content/seo";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),

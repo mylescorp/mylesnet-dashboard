@@ -6,15 +6,15 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
 import logo from "../assets/logo.png";
-import { ThemeToggle } from "@/app/components/ThemeToggle";
-import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/shared/components/ThemeToggle";
+import { Button } from "@/shared/ui/button";
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
-} from "@/components/ui/sheet";
+} from "@/shared/ui/sheet";
 
 const NAV_LINKS: { href: string; label: string }[] = [
   { href: "/product", label: "Product" },

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
-import { Field, Select, Loading, EmptyState, formatDateTime } from "@/app/components/ui";
+import { Field, Select, Loading, EmptyState, formatDateTime } from "@/shared/components/ui";
 
 const CONFIG = {
   market: { table: "markets", label: "Markets" },

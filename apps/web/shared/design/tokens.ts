@@ -1,5 +1,5 @@
 /**
- * MylesNet semantic design-token contract (v3.0 — Centipid parity).
+ * MylesNet semantic design-token contract (v3.0).
  *
  * CSS variables in app/globals.css are the runtime source of truth. This file
  * gives TypeScript and non-CSS consumers stable names without duplicating

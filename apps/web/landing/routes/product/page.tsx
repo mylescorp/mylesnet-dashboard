@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { ArrowRight, Info } from "lucide-react";
-import { productModules, moduleStatusLegend } from "../content/product";
-import { pageMetadata } from "../content/seo";
-import { Icon } from "../components/LandingIcon";
-import StatusChip from "../components/StatusChip";
-import { Button } from "@/components/ui/button";
+import { productModules, moduleStatusLegend } from "@/landing/content/product";
+import { pageMetadata } from "@/landing/content/seo";
+import { Icon } from "@/landing/components/LandingIcon";
+import StatusChip from "@/landing/components/StatusChip";
+import { Button } from "@/shared/ui/button";
 
 export const metadata = pageMetadata(
   "Product",

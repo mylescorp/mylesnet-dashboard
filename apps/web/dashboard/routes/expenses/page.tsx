@@ -4,8 +4,8 @@ import { useState } from "react";
 import { useMutation, useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
 import { Receipt, PiggyBank, Wrench, Trash2 } from "lucide-react";
-import MetricCard from "@/app/components/MetricCard";
-import { EmptyState, ErrorNote, Field, Loading, Select, StatusPill, TextInput, formatDateTime } from "@/app/components/ui";
+import MetricCard from "@/shared/components/MetricCard";
+import { EmptyState, ErrorNote, Field, Loading, Select, StatusPill, TextInput, formatDateTime } from "@/shared/components/ui";
 import type { Id } from "@/convex/_generated/dataModel";
 
 const CATEGORIES = ["airtel_data", "electricity", "rent", "salaries", "fuel", "maintenance", "equipment", "other"] as const;
@@ -17,9 +17,9 @@ const n = (v: number) => v.toLocaleString("en", { maximumFractionDigits: 2 });
 export default function ExpensesPage() {
   const markets = useQuery(api.markets.listMarkets, {});
   const [month, setMonth] = useState(monthNow);
-  const rows = useQuery(api.expenses.listExpenses, { month });
-  const recordExpense = useMutation(api.expenses.recordExpense);
-  const deleteExpense = useMutation(api.expenses.deleteExpense);
+  const rows = useQuery(api.expenses.list, { month });
+  const recordExpense = useMutation(api.expenses.create);
+  const deleteExpense = useMutation(api.expenses.remove);
 
   const [marketId, setMarketId] = useState<Id<"markets"> | "">("");
   const [category, setCategory] = useState<(typeof CATEGORIES)[number]>("airtel_data");
@@ -52,6 +52,7 @@ export default function ExpensesPage() {
         currency,
         type,
         month,
+        amountUSD: amountLocal / 3800, // Simple conversion rate, should be improved
         notes: notes || undefined,
       });
       setAmount("");
@@ -158,7 +159,11 @@ export default function ExpensesPage() {
                       <td className="pf-hide-sm">{formatDateTime(r.enteredAt)}</td>
                       <td className="pf-hide-sm" style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.notes ?? "—"}</td>
                       <td className="pf-actions">
-                        <button className="secondary-button" onClick={() => deleteExpense({ expenseId: r._id })} title="Delete"><Trash2 size={14} /></button>
+                        <button className="secondary-button" onClick={() => {
+                          if (confirm("Delete this expense?")) {
+                            deleteExpense({ id: r._id });
+                          }
+                        }} title="Delete"><Trash2 size={14} /></button>
                       </td>
                     </tr>
                   ))}
