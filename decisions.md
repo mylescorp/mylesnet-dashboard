@@ -1,5 +1,17 @@
 # Build decisions
 
+## B4 — Versioned PPPoE / rate-limit policy templates (2026-09-15)
+
+- **Data model:** new `policyTemplates` table in `convex/schema.ts`, platform-owned (no `tenantScope`). Families identified by stable `code` (slug), versioned `1..n`. Fields: name, kind (pppoe|rate_limit), downloadMbps, uploadMbps, burstDownloadMbps, burstUploadMbps, burstThresholdMbps, burstTimeSeconds, status (draft|published|retired), description, createdBy, createdAt, updatedAt. Indexed by code/version, code, status, kind+status.
+- **Immutability guarantee (core):** a version is only editable while `status === "draft"`. Publishing freezes it — published/retired versions reject content changes. This is `isPolicyVersionFrozen` in the pure core: tenants provisioned against an older version keep their exact policy because an old version's fields can never change when a newer version ships. New behavior is always a new version of the same family (or a new family), never an in-place edit.
+- **Auth model:** CRUD matrix per spec — `platform_super_admin` and `platform_ops` create/publish/update; only super_admin may retire (safety guard consistent with B3 decommission).
+- **Pure core:** `policyTemplateCore.ts` — kind/status guards, frozen-version predicate, code slug validation (2–80 lowercase alphanumeric/hyphen), name validation, Mbps rate validation (positive ≤ 1,000,000), burst validation (0–1,000,000 or undefined), `nextPolicyTemplateVersion` (null → 1, else +1), `buildPolicyTemplateRow`, `latestVersionPerFamily` reducer. 20 test cases in `policyTemplateCore.test.ts`, all passing.
+- **Server functions:** `policyTemplates.ts` — listPolicyTemplates (query, filterable by kind/status/code, sorted by family then version desc), getPolicyTemplateRow (query), createPolicyTemplate (mutation, v1, unique family code), createPolicyTemplateVersion (mutation, next version of family), publishPolicyTemplate (mutation, draft → published, freeze), updatePolicyTemplate (mutation, draft-only), retirePolicyTemplate (mutation, published → retired, super_admin).
+- **Client bridge:** `apps/web/lib/convex/policyTemplates.ts` — explicit function references, no regeneration.
+- **UI:** `PlatformPolicyTemplates.tsx` — metrics grid (total/drafts/published/retired), tab filters, family/version table with per-status action (Publish / Retire), immutability copy on the header. Route: `/platform/infrastructure/policy-templates`. Server page wired through `requirePanelAccess("platform")`.
+- **Nav surfaces:** `Policy templates` link (FileCode icon) in `UnifiedShell.tsx` platform sidebar.
+- **Gates:** `pnpm typecheck` 0, `pnpm lint` 0, `pnpm tokens:check` 0, `pnpm test` 164/164 (20 new `policyTemplateCore` tests), `pnpm build` green. All passing.
+
 ## B3 — Platform RADIUS server fleet (2026-09-15)
 
 - **Data model:** new `radiusServers` table in `convex/schema.ts`, platform-owned (no `tenantScope`). Fields: name, hostname, port, protocol (radsec|udp), status (active|provisioning|failed|maintenance|decommissioned), healthStatus (healthy|degraded|down|unknown), region, certExpiryAt, lastHealthCheckAt, notes, registeredBy, createdAt, updatedAt. Indexed by `status` and `protocol`.
