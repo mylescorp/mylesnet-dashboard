@@ -8,11 +8,7 @@ import type { Id } from "./_generated/dataModel";
  * Compute and store a leaderboard snapshot. Intended to run as a daily cron.
  * For each active agent, calculates:
  *   - Total sales volume and count (from voucher ownership + sold status)
- *   - Renewal count (from renewalCredits table)
- *   - Renewal rate (only where renewal data is available — never silently 0%)
  *   - Total commission earned (from commissions table)
- * Anti-gaming: renewal rate is null when data is genuinely unavailable,
- * not 0. The UI must show "N/A" rather than misranking the agent.
  */
 export const computeLeaderboard = mutation({
   args: {
@@ -66,33 +62,14 @@ export const computeLeaderboard = mutation({
         .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
         .collect();
 
-      let renewals;
-      if (args.marketId) {
-        renewals = await ctx.db
-          .query("renewalCredits")
-          .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
-          .filter((q) => q.eq(q.field("marketId"), args.marketId!))
-          .collect();
-      } else {
-        renewals = await ctx.db
-          .query("renewalCredits")
-          .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
-          .collect();
-      }
-
-      const hasRenewalData = renewals.length > 0;
-      const renewalRate = hasRenewalData && soldVouchers.length > 0
-        ? renewals.length / soldVouchers.length
-        : undefined;
-
       rankings.push({
         agentId: agent._id,
         marketId: args.marketId,
         totalSalesVolume: soldVouchers.length,
         totalSalesCount: soldVouchers.length,
-        renewalCount: renewals.length,
-        renewalRateAvailable: hasRenewalData,
-        renewalRate,
+        renewalCount: 0,
+        renewalRateAvailable: false,
+        renewalRate: undefined,
         totalCommissionEarned: commissions.reduce((sum, c) => sum + c.amount, 0),
         currency,
       });

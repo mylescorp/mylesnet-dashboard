@@ -13,9 +13,7 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     "../convex/_generated/**",
-    // Local HTTPS dev-proxy helper script (CommonJS, not app code).
-    "https-dev.js",
-    // Build and utility scripts (CommonJS, not app code).
+    // Build and utility scripts (not app code).
     "../scripts/**",
     // Test files have different linting rules
     "**/*.test.ts",

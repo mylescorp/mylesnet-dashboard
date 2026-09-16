@@ -13,13 +13,10 @@ import {
   tenantMigrationPlan,
 } from "./tenantMigration.ts";
 
-test("the tenant inventory lists every tenant-owned table from the transition inventory", () => {
-  // Spot-check core tenant-owned groups (inventory §1).
+test("the tenant inventory lists retained tenant-owned billing and workspace tables", () => {
+  // Spot-check the retained product surface after legacy-monitoring retirement.
   for (const table of [
     "markets",
-    "routers",
-    "routerCredentials",
-    "devices",
     "agents",
     "vouchers",
     "expenses",
@@ -31,6 +28,9 @@ test("the tenant inventory lists every tenant-owned table from the transition in
     "auditLog",
   ]) {
     assert.ok(TENANT_OWNED_TABLES.includes(table), `expected ${table} in tenant-owned inventory`);
+  }
+  for (const retired of ["routers", "routerCredentials", "devices"]) {
+    assert.ok(!TENANT_OWNED_TABLES.includes(retired), `${retired} must remain retired`);
   }
 });
 
@@ -82,12 +82,12 @@ test("run id and batch size are stable", () => {
 test("market→site rescoping: phase is carry-along and every market-scoped table is tenant-owned", () => {
   assert.equal(MARKET_SITE_RESCOPING.phase, "carry-along");
   assert.equal(MARKET_SITE_RESCOPING.requiresFlag, TENANT_FEATURE_FLAGS.readPath);
-  assert.ok(MARKET_SITE_RESCOPING.marketScopedTables.length >= 15);
+  assert.ok(MARKET_SITE_RESCOPING.marketScopedTables.length >= 13);
   for (const table of MARKET_SITE_RESCOPING.marketScopedTables) {
     assert.ok(TENANT_OWNED_TABLES.includes(table), `${table} must be tenant-owned`);
     assert.ok(!PLATFORM_OWNED_TABLES.includes(table), `${table} must not be platform-owned`);
   }
-  assert.ok(MARKET_SITE_RESCOPING.marketScopedFiles.length >= 30);
+  assert.ok(MARKET_SITE_RESCOPING.marketScopedFiles.length >= 20);
   for (const file of MARKET_SITE_RESCOPING.alreadyGatedFiles) {
     assert.ok(
       MARKET_SITE_RESCOPING.marketScopedFiles.includes(file),

@@ -2,26 +2,21 @@
   "name": "mylesnet-dashboard",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "packageManager": "pnpm@10.33.0",
   "engines": {
     "node": ">=24"
   },
   "scripts": {
     "dev": "pnpm --filter @mylesnet/web run dev",
-    "dev:https": "pnpm --filter @mylesnet/web run dev:https",
     "build": "pnpm --filter @mylesnet/web run build",
     "start": "pnpm --filter @mylesnet/web run start",
     "lint": "pnpm --filter @mylesnet/web run lint",
     "typecheck": "pnpm --filter @mylesnet/web run typecheck",
     "tokens:check": "pnpm --filter @mylesnet/web run tokens:check",
     "landing:check": "node scripts/check-landing-routes.mjs",
-    "test": "node --test convex/lib/*.test.ts apps/web/lib/**/*.test.ts",
-    "test:ui": "pnpm --filter @mylesnet/web run test",
-    "test:collector": "node --test collector/*.test.mjs",
-    "collector:start": "node --env-file-if-exists=collector/.env.local collector/forwarder.mjs",
-    "collector:check": "node --env-file-if-exists=collector/.env.local collector/forwarder.mjs --once",
-    "collector:local": "powershell -ExecutionPolicy Bypass -File collector/run-local.ps1",
-    "collector:local:check": "powershell -ExecutionPolicy Bypass -File collector/run-local.ps1 -Once"
+    "test": "node --test convex/lib/*.test.ts apps/web/shared/**/*.test.ts",
+    "test:ui": "pnpm --filter @mylesnet/web run test"
   },
   "dependencies": {
     "@convex-dev/auth": "^0.0.95",

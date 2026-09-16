@@ -29,7 +29,7 @@ Gate commands (run from repo root, pnpm workspace — `packageManager: pnpm@10.3
 pnpm tokens:check   # design-token linter (raw hex / undefined var gate)
 pnpm typecheck
 pnpm lint
-pnpm test           # node --test (convex/lib, apps/web/lib)
+pnpm test           # node --test (convex/lib, apps/web/shared)
 pnpm test:ui        # jest, apps/web
 pnpm build          # production build
 pnpm dev            # Next dev on :3000, for rendered review
@@ -109,7 +109,7 @@ shadcn/ui + Radix contract that docs/technology-stack.md already names.
   (fonts only, only if a phase says so), docs/design/*, docs/technology-stack.md
   (package recording), decisions.md (entries), package.json / pnpm.lock via
   `pnpm --filter @mylesnet/web add <pkg>`.
-- NEVER touch: apps/web/app/(app)/**, apps/web/app/components/** (dashboard),
+- NEVER touch: apps/web/app/(panels)/**, apps/web/shared/components/** (dashboard),
   convex/**, captive-portal/**, collector/**, services/**, infrastructure/**.
 - No route, URL, or filename changes under (landing) — SEO parity is a gate.
   Preserve every page's metadata (title/description/OG/canonical), sitemap.ts,

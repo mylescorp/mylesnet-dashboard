@@ -5,7 +5,7 @@ import { dayOf, localToUsd } from "./lib/finance";
 
 /**
  * Daily revenue & contribution snapshot (spec §25). Derived purely from the
- * agentActivity ledger + expenses + alerts, so the numbers always reconcile.
+ * agentActivity ledger and expenses, so the numbers always reconcile.
  * Run nightly by the crons job for every active market.
  */
 
@@ -63,26 +63,6 @@ export const buildDailySnapshot = internalMutation({
     const variableMonthly = expenses.filter((e) => e.type === "variable").reduce((sum, e) => sum + e.amountLocal, 0);
     const variableCostLocal = Math.round((variableMonthly / daysInMonth(date)) * 100) / 100;
 
-    // Uptime from the hourly rollup if present.
-    const telemetry = await ctx.db
-      .query("telemetryDaily")
-      .withIndex("by_market_date", (q) => q.eq("marketId", args.marketId).eq("date", date))
-      .collect();
-    let avgUptimePercent: number | undefined;
-    if (telemetry.length > 0) {
-      // Approximate uptime from sample link health is not stored directly;
-      // use CPU/CCQ health as a proxy for "healthy service".
-      const cpuValues = telemetry.map((t) => t.avgCpuPercent).filter((c): c is number => c !== undefined);
-      avgUptimePercent =
-        cpuValues.length > 0 ? Math.round((1 - cpuValues.filter((c) => c >= 90).length / cpuValues.length) * 10000) / 100 : undefined;
-    }
-
-    const activeAlerts = await ctx.db
-      .query("alerts")
-      .withIndex("by_market_status", (q) => q.eq("marketId", args.marketId).eq("alertStatus", "open"))
-      .collect();
-    const activeAlertsCount = activeAlerts.length;
-
     const revenueUSD = await localToUsd(ctx, revenueLocal, market.currency, date);
 
     const row = {
@@ -94,8 +74,6 @@ export const buildDailySnapshot = internalMutation({
       newSubscribers,
       variableCostLocal,
       netContributionLocal: Math.round((revenueLocal - variableCostLocal) * 100) / 100,
-      avgUptimePercent,
-      activeAlertsCount,
       topAgentId: topAgentId as never,
       currency: market.currency,
       createdAt: Date.now(),

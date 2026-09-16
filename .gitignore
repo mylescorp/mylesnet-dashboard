@@ -1,61 +1,43 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
-node_modules
-/.pnp
+# Dependencies and package-manager state
+node_modules/
+.pnpm-store/
+.pnp
 .pnp.*
 .yarn/*
 !.yarn/patches
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
-# pnpm
-.pnpm-store/
 
-# turborepo cache
+# Generated application and test output
+.next/
+apps/*/.next/
+apps/*/out/
+out/
+build/
+dist/
+coverage/
 .turbo/
-
-# testing
-/coverage
-
-# next.js
-/.next/
-/apps/web/.next/
-/apps/web/out/
-/out/
-
-# production
-/build
-
-# misc
-.DS_Store
-*.pem
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-
-# env files (can opt-in for committing if needed)
-.env*
-
-# vercel
-.vercel
-
-# typescript
 *.tsbuildinfo
 
-.vercel
-
-# local https dev certs
-/.certs/
+# Local configuration, credentials, and certificates
 .env*
+!.env.example
+.certs/
+*.pem
 
-# runtime artifacts
-landingserver.log
-collector/.executed-commands.json
+# Deployment and local runtime state
+.vercel/
+apps/*/.vercel/
+.convex/local/
 
-# agent scratch + local logs
-.zcode/
+# Logs, local scratch space, and generated inventories
 *.log
+.zcode/
+.devin/
+mylesnet-folders.txt
+mylesnet-structure.txt
+
+# OS/editor files
+.DS_Store
+Thumbs.db

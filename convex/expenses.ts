@@ -1,215 +1,217 @@
 import { v } from "convex/values";
-import { internalMutation, mutation, query } from "./_generated/server";
-import { Doc, Id } from "./_generated/dataModel";
-import { requireFinanceOrAbove, requirePermission } from "./lib/auth";
-import { readTenantList } from "./lib/tenant";
-import { localToUsd, monthOf } from "./lib/finance";
+import { mutation, query } from "./_generated/server";
+import { requirePermission } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 
-export const EXPENSE_CATEGORIES = [
-  "airtel_data",
-  "electricity",
-  "rent",
-  "salaries",
-  "fuel",
-  "maintenance",
-  "equipment",
-  "other",
-] as const;
-
-export const EXPENSE_CATEGORY_VALIDATOR = v.union(
-  ...EXPENSE_CATEGORIES.map((category) => v.literal(category))
-);
-
-export const listExpenses = query({
+export const list = query({
   args: {
-    marketId: v.optional(v.id("markets")),
+    category: v.optional(v.union(
+      v.literal("airtel_data"),
+      v.literal("electricity"),
+      v.literal("rent"),
+      v.literal("salaries"),
+      v.literal("fuel"),
+      v.literal("maintenance"),
+      v.literal("equipment"),
+      v.literal("other")
+    )),
     month: v.optional(v.string()),
-    category: v.optional(v.string()),
+    type: v.optional(v.union(v.literal("fixed"), v.literal("variable"))),
   },
   handler: async (ctx, args) => {
-    // Markets/agents can see their own market's expenses; finance sees all.
-    await requireFinanceOrAbove(ctx);
-    let rows = await readTenantList<Doc<"expenses">>(ctx, {
-      all: () => ctx.db.query("expenses").collect(),
-      tenant: (tenantId) =>
-        ctx.db.query("expenses").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
-      legacy: () =>
-        ctx.db.query("expenses").withIndex("by_tenant", (q) => q.eq("tenantId", undefined)).collect(),
-    });
-    if (args.marketId) rows = rows.filter((e) => e.marketId === args.marketId);
-    if (args.month) rows = rows.filter((e) => e.month === args.month);
-    if (args.category) rows = rows.filter((e) => e.category === args.category);
-    return rows.sort((a, b) => b.enteredAt - a.enteredAt);
+    await requirePermission(ctx, "expenses:read");
+    
+    let expenses = await ctx.db.query("expenses").order("desc").collect();
+    
+    if (args.category) {
+      expenses = expenses.filter(e => e.category === args.category);
+    }
+    
+    if (args.month) {
+      expenses = expenses.filter(e => e.month === args.month);
+    }
+    
+    if (args.type) {
+      expenses = expenses.filter(e => e.type === args.type);
+    }
+    
+    return expenses;
   },
 });
 
-export const recordExpense = mutation({
+export const get = query({
+  args: { id: v.id("expenses") },
+  handler: async (ctx, args) => {
+    await requirePermission(ctx, "expenses:read");
+    return await ctx.db.get(args.id);
+  },
+});
+
+export const create = mutation({
   args: {
     marketId: v.optional(v.id("markets")),
-    category: v.union(...EXPENSE_CATEGORIES.map((category) => v.literal(category))),
+    category: v.union(
+      v.literal("airtel_data"),
+      v.literal("electricity"),
+      v.literal("rent"),
+      v.literal("salaries"),
+      v.literal("fuel"),
+      v.literal("maintenance"),
+      v.literal("equipment"),
+      v.literal("other")
+    ),
     amountLocal: v.number(),
     currency: v.string(),
+    amountUSD: v.number(),
     type: v.union(v.literal("fixed"), v.literal("variable")),
     month: v.string(),
     receiptFileId: v.optional(v.id("_storage")),
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const user = await requirePermission(ctx, "expenses:manage");
-    if (args.amountLocal <= 0) throw new Error("Amount must be positive");
-    const amountUSD = await localToUsd(ctx, args.amountLocal, args.currency, `${args.month}-01`);
+    await requirePermission(ctx, "expenses:create");
+    
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+    
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_workosUserId", (q) => q.eq("workosUserId", identity.subject))
+      .first();
+    
+    if (!user) throw new Error("User not found");
+    
     const id = await ctx.db.insert("expenses", {
-      marketId: args.marketId,
-      category: args.category,
-      amountLocal: args.amountLocal,
-      currency: args.currency,
-      amountUSD,
-      type: args.type,
-      month: args.month,
+      ...args,
       enteredBy: user._id,
       enteredAt: Date.now(),
-      receiptFileId: args.receiptFileId,
-      notes: args.notes,
     });
+    
     await logAudit(ctx, {
-      action: "expense.record",
+      action: "expense_created",
       entityTable: "expenses",
       entityId: id,
       changedBy: user._id,
-      after: { category: args.category, amountLocal: args.amountLocal, month: args.month },
+      after: args,
     });
+    
     return id;
   },
 });
 
-export const deleteExpense = mutation({
-  args: { expenseId: v.id("expenses") },
-  handler: async (ctx, args) => {
-    const user = await requirePermission(ctx, "expenses:manage");
-    const expense = await ctx.db.get(args.expenseId);
-    if (!expense) throw new Error("Expense not found");
-    await ctx.db.delete(args.expenseId);
-    await logAudit(ctx, {
-      action: "expense.delete",
-      entityTable: "expenses",
-      entityId: args.expenseId,
-      changedBy: user._id,
-      before: { amountLocal: expense.amountLocal, month: expense.month },
-    });
+export const update = mutation({
+  args: {
+    id: v.id("expenses"),
+    category: v.optional(v.union(
+      v.literal("airtel_data"),
+      v.literal("electricity"),
+      v.literal("rent"),
+      v.literal("salaries"),
+      v.literal("fuel"),
+      v.literal("maintenance"),
+      v.literal("equipment"),
+      v.literal("other")
+    )),
+    amountLocal: v.optional(v.number()),
+    currency: v.optional(v.string()),
+    amountUSD: v.optional(v.number()),
+    type: v.optional(v.union(v.literal("fixed"), v.literal("variable"))),
+    month: v.optional(v.string()),
+    receiptFileId: v.optional(v.id("_storage")),
+    notes: v.optional(v.string()),
   },
-});
-
-// ---------------------------------------------------------------------------
-// Market financials (spec §22)
-// ---------------------------------------------------------------------------
-
-function currencyTotals(rows: { amountLocal: number; currency: string }[]): Record<string, number> {
-  const totals: Record<string, number> = {};
-  for (const row of rows) totals[row.currency] = (totals[row.currency] ?? 0) + row.amountLocal;
-  return totals;
-}
-
-/**
- * Recompute the financial row for one market/month. Pure function of the
- * ledgers: revenue = agentActivity sales; variable cost = expenses in variable
- * categories for that month (airtel_data, electricity, fuel, maintenance);
- * centipid fee = platformFeeLocal accrued on the ledger.
- */
-export const computeMarketFinancials = internalMutation({
-  args: { marketId: v.id("markets"), month: v.string() },
   handler: async (ctx, args) => {
-    const market = await ctx.db.get(args.marketId);
-    if (!market) throw new Error("Market not found");
-
-    const [yearStr, monthStr] = args.month.split("-");
-    const from = new Date(Number(yearStr), Number(monthStr) - 1, 1).getTime();
-    const to = new Date(Number(yearStr), Number(monthStr), 1).getTime();
-
-    const activity = await ctx.db
-      .query("agentActivity")
-      .withIndex("by_market_time", (q) => q.eq("marketId", args.marketId))
-      .filter((q) =>
-        q.and(
-          q.gte(q.field("occurredAt"), from),
-          q.lt(q.field("occurredAt"), to)
-        )
-      )
-      .collect();
-
-    const revenueTotals = currencyTotals(activity);
-    const revenueLocal = revenueTotals[market.currency] ?? 0;
-    const platformFeeLocal = activity.reduce((sum, a) => sum + (a.platformFeeLocal ?? 0), 0);
-
-    const expenses = await ctx.db
-      .query("expenses")
-      .withIndex("by_market_month", (q) => q.eq("marketId", args.marketId).eq("month", args.month))
-      .collect();
-    const variable = expenses.filter((e) => e.type === "variable");
-    const varyingTotals = currencyTotals(variable);
-    const variableCostLocal = varyingTotals[market.currency] ?? 0;
-
-    // Distribute platform fee in local terms if it was recorded in local currency;
-    // usually it is recorded in the market's currency already.
-    const centipidFeeLocal = platformFeeLocal;
-
-    const netContributionLocal = revenueLocal - variableCostLocal - centipidFeeLocal;
-    const revenueUSD = await localToUsd(ctx, revenueLocal, market.currency, `${args.month}-01`);
-    const breakEvenStatus: "profit" | "break_even" | "loss" =
-      netContributionLocal > 0 ? "profit" : netContributionLocal === 0 ? "break_even" : "loss";
-
-    const existing = await ctx.db
-      .query("marketFinancials")
-      .withIndex("by_market_month", (q) => q.eq("marketId", args.marketId).eq("month", args.month))
-      .first();
-    const row = {
-      marketId: args.marketId,
-      month: args.month,
-      revenueLocal,
-      revenueUSD,
-      airtelCostLocal: varyingTotals[market.currency] ?? 0,
-      electricityCostLocal: variable.find((e) => e.category === "electricity")?.amountLocal ?? 0,
-      centipidFeeLocal,
-      variableCostLocal,
-      netContributionLocal,
-      breakEvenStatus,
-      currency: market.currency,
-      enteredBy: "system" as unknown as Id<"users">,
-      enteredAt: Date.now(),
-    };
-    if (existing) {
-      await ctx.db.replace(existing._id, row);
-      return { updated: true, id: existing._id, ...row };
+    await requirePermission(ctx, "expenses:update");
+    
+    const { id, ...updates } = args;
+    const expense = await ctx.db.get(id);
+    
+    if (!expense) {
+      throw new Error("Expense not found");
     }
-    const id = await ctx.db.insert("marketFinancials", row);
-    return { updated: false, id, ...row };
-  },
-});
-
-export const getMarketFinancials = query({
-  args: { marketId: v.id("markets"), month: v.optional(v.string()) },
-  handler: async (ctx, args) => {
-    await requirePermission(ctx, "financials:read");
-    const rows = await readTenantList<Doc<"marketFinancials">>(ctx, {
-      all: () => ctx.db.query("marketFinancials").collect(),
-      tenant: (tenantId) => ctx.db.query("marketFinancials").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
-      legacy: () => ctx.db.query("marketFinancials").withIndex("by_tenant", (q) => q.eq("tenantId", undefined)).collect(),
+    
+    await ctx.db.patch(id, updates);
+    
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+    
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_workosUserId", (q) => q.eq("workosUserId", identity.subject))
+      .first();
+    
+    if (!user) throw new Error("User not found");
+    
+    await logAudit(ctx, {
+      action: "expense_updated",
+      entityTable: "expenses",
+      entityId: id,
+      changedBy: user._id,
+      before: expense,
+      after: updates,
     });
-    return rows.filter((r) => r.marketId === args.marketId && (!args.month || r.month === args.month)).sort((a, b) => b.month.localeCompare(a.month));
+    
+    return id;
   },
 });
 
 export const listAllFinancials = query({
-  args: { month: v.optional(v.string()) },
-  handler: async (ctx, args) => {
-    await requireFinanceOrAbove(ctx);
-    const rows = await readTenantList<Doc<"marketFinancials">>(ctx, {
-      all: () => ctx.db.query("marketFinancials").collect(),
-      tenant: (tenantId) => ctx.db.query("marketFinancials").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
-      legacy: () => ctx.db.query("marketFinancials").withIndex("by_tenant", (q) => q.eq("tenantId", undefined)).collect(),
-    });
-    return rows.filter((r) => !args.month || r.month === args.month).sort((a, b) => b.month.localeCompare(a.month));
+  args: {},
+  handler: async (ctx) => {
+    await requirePermission(ctx, "expenses:read");
+    return await ctx.db.query("marketFinancials").order("desc").collect();
   },
 });
 
-export { monthOf };
+export const remove = mutation({
+  args: { id: v.id("expenses") },
+  handler: async (ctx, args) => {
+    await requirePermission(ctx, "expenses:update");
+
+    const expense = await ctx.db.get(args.id);
+    if (!expense) throw new Error("Expense not found");
+
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_workosUserId", (q) => q.eq("workosUserId", identity.subject))
+      .first();
+    if (!user) throw new Error("User not found");
+
+    await ctx.db.delete(args.id);
+
+    await logAudit(ctx, {
+      action: "expenses.remove",
+      entityTable: "expenses",
+      entityId: args.id,
+      changedBy: user._id,
+      before: expense,
+    });
+
+    return args.id;
+  },
+});
+
+export const getStats = query({
+  args: {
+    month: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await requirePermission(ctx, "expenses:read");
+    
+    let expenses = await ctx.db.query("expenses").collect();
+    
+    if (args.month) {
+      expenses = expenses.filter(e => e.month === args.month);
+    }
+    
+    return {
+      total: expenses.length,
+      fixed: expenses.filter(e => e.type === "fixed").length,
+      variable: expenses.filter(e => e.type === "variable").length,
+      totalAmountLocal: expenses.reduce((sum, e) => sum + e.amountLocal, 0),
+      totalAmountUSD: expenses.reduce((sum, e) => sum + e.amountUSD, 0),
+    };
+  },
+});

@@ -12,7 +12,7 @@ const customJestConfig = {
     '^@/(.*)$': '<rootDir>/$1',
   },
   testMatch: [
-    '**/app/components/**/*.test.[jt]s?(x)',
+    '**/shared/components/**/*.test.[jt]s?(x)',
   ],
   testPathIgnorePatterns: [
     '<rootDir>/convex/',

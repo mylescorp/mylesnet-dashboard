@@ -29,7 +29,7 @@ tags:
 | Component | Subscriber-facing captive portal + operator hotspot configuration |
 | Vault scope | `products/mylesnet/` and child folders |
 | Repository | `C:\Users\Admin\Projects\mylesnet-dashboard` (git `mylescorp/mylesnet-dashboard`) |
-| Repo folder | `captive-portal/` (feature slice) + `docs/captive-portal/` (spec + flow mirrors) |
+| Repo folder | `apps/web/captive-portal/` (portal boundary) + `docs/captive-portal/` (spec + flow mirrors) |
 | Related modules | [[tasks/backlog\|backlog]] T-HOT, N-AAA, T-VOU, T-PAY, T-PRT, T-COM, T-TKT, T-SES |
 
 ## Source Of Truth Rule
@@ -98,13 +98,13 @@ The captive portal is **not** a separate deployed application. Per the 2026-09-1
 system decision, [[MylesNet]] is **one system in one repository**: the portal is a **route
 surface** inside the single Next.js application, tenant-resolved by hostname. All captive
 portal logic, UI, templates, content, configuration, and tests live in a dedicated
-standalone folder `captive-portal/` at the repository root so future updates stay
-contained.
+folder `apps/web/captive-portal/` so portal code stays beside
+the web product it serves.
 
 ### 2.2 Repository folder contract
 
 ```text
-captive-portal/
+apps/web/captive-portal/
   README.md            # what it is, mount contract, how to add a feature
   ADR.md               # captive portal design decisions
   CHANGELOG.md
@@ -130,14 +130,14 @@ captive-portal/
 
 | Concern | Lives in | Why |
 |---|---|---|
-| All logic, UI, templates, i18n, config, tests, ADRs | `captive-portal/` | standalone feature home |
-| Next.js page **stubs** (thin `page.tsx` re-exporting portal screens) | `app/(portal)/hotspot/**` | Next.js hard-requires routes under `app/`; stubs stay 5–10 lines and never contain business logic |
-| Convex **adapters** (thin query/mutation/action/httpAction glue calling `captive-portal/core`) | `convex/portal/` | Convex reads functions from a single function root; adapters hold only glue |
+| All logic, UI, templates, i18n, config, tests, ADRs | `apps/web/captive-portal/` | web-local portal home |
+| Next.js page **stubs** (thin `page.tsx` re-exporting portal screens) | `apps/web/app/(portal)/hotspot/**` | Next.js hard-requires routes under `app/`; stubs stay 5–10 lines and never contain business logic |
+| Convex **adapters** (thin query/mutation/action/httpAction glue calling `apps/web/captive-portal/core`) | `convex/portal/` | Convex reads functions from a single function root; adapters hold only glue |
 | Schema tables (central) | `convex/schema.ts` + schema additions (see §18) | Convex indexes schema centrally |
-| Path alias `@portal/*` → `captive-portal/*` | `tsconfig.json` + `next.config.ts` | clean imports from stubs and adapters |
+| Path alias `@portal/*` → `apps/web/captive-portal/*` | `apps/web/tsconfig.json` + `apps/web/next.config.ts` | clean imports from stubs and adapters |
 
-**Rule of thumb:** logic is added in `captive-portal/`, never in `app/` or `convex/`.
-Those two only ever gain re-export stubs and thin adapters. A `captive-portal/CHANGELOG.md`
+**Rule of thumb:** logic is added in `apps/web/captive-portal/`, never in `app/` or `convex/`.
+Those two only ever gain re-export stubs and thin adapters. A `apps/web/captive-portal/CHANGELOG.md`
 entry and an update to the mount contract in `README.md` accompany every portal change.
 
 ### 2.4 Logical architecture
@@ -159,7 +159,7 @@ graph TD
 
     subgraph Logic_Layer ["Application Logic - Convex"]
         PortalCall[convex/portal adapters]
-        Core[captive-portal/core domain logic]
+        Core[apps/web/captive-portal/core domain logic]
         Queries[Queries - Reactive Reads]
         Mutations[Mutations - Validated Writes]
         Actions[Actions - Side Effects]
@@ -1032,4 +1032,4 @@ separation via [`X-OPS`] administrative configuration.
 - [[design/system|MylesNet Design System]]
 - [[design/captive-portal-flows|Captive Portal User Flows]]
 - [[technology-stack|MylesNet Full Production Technology Stack]]
-- Repository: `captive-portal/` (code), `docs/captive-portal/` (mirrors)
+- Repository: `apps/web/captive-portal/` (code), `docs/captive-portal/` (mirrors)

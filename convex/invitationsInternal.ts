@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { requirePermission, resolveRoles } from "./lib/auth";
+import { logAudit } from "./lib/auditLog";
 
 /**
  * Internal invitation helpers used by the `invitations` actions and the
@@ -91,13 +92,12 @@ export const logInvitationAudit = internalMutation({
     actorUserId: v.id("users"),
   },
   handler: async (ctx, args) => {
-    await ctx.db.insert("auditLog", {
+    await logAudit(ctx, {
       action: args.action,
       entityTable: "invitations",
       entityId: args.workosInvitationId,
       changedBy: args.actorUserId,
-      afterJson: JSON.stringify({ email: args.email, roleSlug: args.roleSlug }),
-      timestamp: Date.now(),
+      after: { email: args.email, roleSlug: args.roleSlug },
     });
   },
 });
