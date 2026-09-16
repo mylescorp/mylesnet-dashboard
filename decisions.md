@@ -1,5 +1,17 @@
 # Build decisions
 
+## B5 — Platform telemetry & health rollup (2026-09-15)
+
+- **Design:** read-only aggregation over the existing operations estate — the B1 device fleet registry (`devices` table: lastSeenAt, uptimePercent, lifecycleStatus), the `routers` table, `networkSwitches`, `alerts` (open alerts with severity), `healthSamples` (latest router CPU/mem/link), and `accessPointSamples` (AP link/CQ/clients). No new tables or fields; no new runtime packages.
+- **Staleness semantics:** a fleet device whose `lastSeenAt` exceeds `offlineAfterMs` (24h) is "critical"; exceeding `warningAfterMs` (2h) is "warning"; otherwise "ok". A device with no `lastSeenAt` is "unknown"; deleted rows are "unknown"; maintenance rows are "ok" (planned, never reads as an incident). Router tone derives from latest sample freshness (≤30m → ok) and whether any bridged device has an open alert (→ critical).
+- **Pure core:** `healthRollupCore.ts` — `computeDeviceHealthTone` (staleness-based classification), `combineHealthTones` (worst-wins: critical > warning > unknown > ok), `countTones`, `averageUptimePercent`, `buildHealthRollupRow` (normalized, serializable rollup with device/routers/alerts/firmware aggregates). 15 test cases, all passing.
+- **Server functions:** `healthRollup.ts` — `getPlatformHealthOverview` (query: platform-level overview row + per-device rows with tone/market/tenant + per-router rows with latest sample/managed switches + open alerts summary), `getPlatformRouterHealthDetail` (query: 24h sample history + AP health). Auth: `requirePlatformUser`. No writes (RU per B5 matrix; fleet updates and alert acknowledgement use existing B1/alert surfaces).
+- **Client bridge:** `apps/web/lib/convex/healthRollup.ts` — explicit function references.
+- **UI:** `PlatformHealthOverview.tsx` — 4 metric cards (devices by tone, routers, open alerts, avg uptime), router table (cpu/mem/link/traffic/tone, click to drill into APs), device table with firmware/market/tenant/tone, filtered view when a router is selected.
+- **Route:** `/platform/infrastructure/health`, server page wired through `requirePanelAccess("platform")`.
+- **Nav:** `Network health` link (HeartPulse icon) in `UnifiedShell.tsx` platform sidebar.
+- **Gates:** `pnpm typecheck` 0, `pnpm lint` 0, `pnpm tokens:check` 0, `pnpm test` 159/159 (15 new `healthRollupCore` tests), `pnpm build` green.
+
 ## B4 — Versioned PPPoE / rate-limit policy templates (2026-09-15)
 
 - **Data model:** new `policyTemplates` table in `convex/schema.ts`, platform-owned (no `tenantScope`). Families identified by stable `code` (slug), versioned `1..n`. Fields: name, kind (pppoe|rate_limit), downloadMbps, uploadMbps, burstDownloadMbps, burstUploadMbps, burstThresholdMbps, burstTimeSeconds, status (draft|published|retired), description, createdBy, createdAt, updatedAt. Indexed by code/version, code, status, kind+status.
