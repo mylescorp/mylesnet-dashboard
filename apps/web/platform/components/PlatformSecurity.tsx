@@ -28,26 +28,26 @@ export function PlatformSecurity() {
         <div>
           <p className="eyebrow">Platform control plane</p>
           <h1 className="page-title">Security</h1>
-          <p className="page-subtitle">WorkOS identity coverage, staff MFA posture, webhook health, and feature-flag state across the platform.</p>
+          <p className="page-subtitle">Access coverage, staff MFA posture, delivery health, and feature-flag state across the platform.</p>
         </div>
       </header>
 
       <section className="metric-grid">
-        <Metric icon={<ShieldCheck size={19} />} label="Identity mapped" value={`${security.tenantOverview.identityMapped}/${security.tenantOverview.total}`} detail="Tenants linked to a WorkOS organization" tone={security.tenantOverview.identityMapped === security.tenantOverview.total ? "success" : "warning"} />
+        <Metric icon={<ShieldCheck size={19} />} label="Access configured" value={`${security.tenantOverview.identityMapped}/${security.tenantOverview.total}`} detail="Tenant workspaces with secure access" tone={security.tenantOverview.identityMapped === security.tenantOverview.total ? "success" : "warning"} />
         <Metric icon={<UserCheck size={19} />} label="Staff missing MFA" value={security.staffMissingMfa} detail={`${security.staff.length} platform staff total`} tone={security.staffMissingMfa === 0 ? "success" : "danger"} />
         <Metric icon={<Webhook size={19} />} label="Webhooks (24h)" value={`${security.deliveries24h.processed}/${security.deliveries24h.total}`} detail={`${security.deliveries24h.signatureInvalid} invalid signatures`} tone={security.deliveries24h.signatureInvalid === 0 ? "success" : "warning"} />
         <Metric icon={<Flag size={19} />} label="Feature flags" value={Object.values(security.featureFlags).filter(Boolean).length} detail={`${Object.keys(security.featureFlags).length} tracked flags`} tone={Object.values(security.featureFlags).some(Boolean) ? "success" : "accent"} />
       </section>
 
       <section className="pf-panel">
-        <div className="section-heading"><div><p className="eyebrow">Identity</p><h2>WorkOS organization mapping</h2></div></div>
+        <div className="section-heading"><div><p className="eyebrow">Access</p><h2>Workspace access coverage</h2></div></div>
         <dl className="tenant-detail-fields">
           <dt>Total tenants</dt><dd>{security.tenantOverview.total}</dd>
           <dt>Active</dt><dd>{security.tenantOverview.active}</dd>
           <dt>Trial</dt><dd>{security.tenantOverview.trial}</dd>
           <dt>Suspended</dt><dd>{security.tenantOverview.suspended}</dd>
           <dt>Cancelled</dt><dd>{security.tenantOverview.cancelled}</dd>
-          <dt>Identity mapped</dt><dd>{security.tenantOverview.identityMapped}</dd>
+          <dt>Access configured</dt><dd>{security.tenantOverview.identityMapped}</dd>
         </dl>
       </section>
 
@@ -69,7 +69,7 @@ export function PlatformSecurity() {
       </section>
 
       <section className="pf-panel">
-        <div className="section-heading"><div><p className="eyebrow">Webhook health</p><h2>WorkOS event queue</h2></div></div>
+        <div className="section-heading"><div><p className="eyebrow">Delivery health</p><h2>Identity event queue</h2></div></div>
         <dl className="tenant-detail-fields">
           <dt>Received</dt><dd>{security.workosEvents.received}</dd>
           <dt>Completed</dt><dd>{security.workosEvents.completed}</dd>

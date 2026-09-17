@@ -67,6 +67,7 @@ import type * as profile from "../profile.js";
 import type * as rolesAdmin from "../rolesAdmin.js";
 import type * as rolesInternal from "../rolesInternal.js";
 import type * as scheduledReports from "../scheduledReports.js";
+import type * as seed from "../seed.js";
 import type * as subscriberDetail from "../subscriberDetail.js";
 import type * as subscriberSnapshots from "../subscriberSnapshots.js";
 import type * as subscribers from "../subscribers.js";
@@ -145,6 +146,7 @@ declare const fullApi: ApiFromModules<{
   rolesAdmin: typeof rolesAdmin;
   rolesInternal: typeof rolesInternal;
   scheduledReports: typeof scheduledReports;
+  seed: typeof seed;
   subscriberDetail: typeof subscriberDetail;
   subscriberSnapshots: typeof subscriberSnapshots;
   subscribers: typeof subscribers;

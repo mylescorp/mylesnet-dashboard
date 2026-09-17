@@ -8,6 +8,7 @@
 
 /** Lifecycle of a tenant on the shared backend. */
 export type TenantStatus =
+  | "provisioning"
   | "trial"
   | "active"
   | "suspended"
@@ -69,11 +70,11 @@ export function isTenantActive(status: TenantStatus | undefined): boolean {
 /**
  * Write/read gate for a tenant by lifecycle status. Unlike `isTenantActive`,
  * an unset status (pre-backfill rows) defaults to allowed so the additive
- * migration never cuts off legacy behavior; only an explicit suspension or
- * cancellation blocks tenant-owned work.
+ * migration never cuts off legacy behavior. A newly provisioned tenant is
+ * deliberately blocked until its invited administrator has been verified.
  */
 export function canTenantOperate(status: TenantStatus | undefined): boolean {
-  return status !== "suspended" && status !== "cancelled";
+  return status === undefined || status === "trial" || status === "active";
 }
 
 /**

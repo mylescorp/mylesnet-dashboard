@@ -923,6 +923,9 @@ export default defineSchema({
     // ISO-4217 code (spec §22 allows any code as markets expand).
     currency: v.string(),
     status: v.union(
+      // A newly created tenant cannot access operational data until its first
+      // administrator accepts the secure workforce invitation.
+      v.literal("provisioning"),
       v.literal("trial"),
       v.literal("active"),
       v.literal("suspended"),
@@ -956,6 +959,29 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_tenant", ["tenantId"])
     .index("by_user_tenant", ["userId", "tenantId"]),
+
+  // Durable, retry-safe record for the background identity onboarding flow.
+  // It holds no credentials or provider secret: only the minimum delivery
+  // references needed to resume safely after an action retry.
+  tenantOnboardingRuns: defineTable({
+    slug: v.string(),
+    name: v.string(),
+    country: v.string(),
+    timezone: v.string(),
+    currency: v.string(),
+    ownerEmail: v.string(),
+    ownerName: v.optional(v.string()),
+    state: v.union(v.literal("pending"), v.literal("invited"), v.literal("failed"), v.literal("completed")),
+    tenantId: v.optional(v.id("tenants")),
+    workosOrganizationId: v.optional(v.string()),
+    workosInvitationId: v.optional(v.string()),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_tenant", ["tenantId"])
+    .index("by_state", ["state"]),
 
   // SaaS plan / entitlement attached to a tenant (G-TEN, Phase 3). `planId` is
   // a plan code string until the T-PLN catalogue lands.

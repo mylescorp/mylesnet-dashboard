@@ -222,6 +222,40 @@ export interface WorkosInvitation {
   revoked_at: string | null;
 }
 
+export interface WorkosOrganization {
+  id: string;
+  name: string;
+  externalId: string | null;
+}
+
+function toWorkosOrganization(payload: { id?: unknown; name?: unknown; external_id?: unknown }): WorkosOrganization | null {
+  if (typeof payload.id !== "string" || typeof payload.name !== "string") return null;
+  return {
+    id: payload.id,
+    name: payload.name,
+    externalId: typeof payload.external_id === "string" ? payload.external_id : null,
+  };
+}
+
+/** Find an organization by MylesNet's deterministic external identity key. */
+export async function getWorkosOrganizationByExternalId(externalId: string): Promise<WorkosOrganization | null> {
+  const payload = (await workosFetch(
+    `/organizations?external_id=${encodeURIComponent(externalId)}`,
+  )) as { data?: Array<{ id?: unknown; name?: unknown; external_id?: unknown }> };
+  return toWorkosOrganization(payload.data?.[0] ?? {});
+}
+
+/** Create one tenant workforce organization. This never returns credentials. */
+export async function createWorkosOrganization(name: string, externalId: string): Promise<WorkosOrganization> {
+  const payload = (await workosFetch("/organizations", {
+    method: "POST",
+    body: JSON.stringify({ name, external_id: externalId }),
+  })) as { id?: unknown; name?: unknown; external_id?: unknown };
+  const organization = toWorkosOrganization(payload);
+  if (!organization) throw new Error("Identity organization creation did not return a valid result");
+  return organization;
+}
+
 /** Invite a user, auto-allocating them to the platform organization. */
 export async function createWorkosInvitation(
   email: string,

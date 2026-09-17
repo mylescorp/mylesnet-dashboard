@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { normalizeTenantRegistration } from "./tenantProvisioning.ts";
+import { normalizeAutomatedTenantOnboarding, normalizeTenantRegistration, tenantOrganizationExternalId } from "./tenantProvisioning.ts";
 
 const valid = {
   name: "Example ISP",
@@ -26,4 +26,18 @@ test("tenant registration rejects malformed identity or tenant metadata", () => 
   assert.throws(() => normalizeTenantRegistration({ ...valid, slug: "bad slug" }), /slug/);
   assert.throws(() => normalizeTenantRegistration({ ...valid, workosOrganizationId: "not-an-org" }), /organization ID/);
   assert.throws(() => normalizeTenantRegistration({ ...valid, ownerWorkosUserId: "not-a-user" }), /owner user ID/);
+});
+
+test("automatic onboarding accepts only tenant details and normalizes the administrator email", () => {
+  assert.deepEqual(normalizeAutomatedTenantOnboarding({
+    name: " Example ISP ", slug: "Example-ISP", country: "ke", timezone: "Africa/Nairobi", currency: "kes",
+    ownerEmail: " OWNER@EXAMPLE.COM ", ownerName: " Ada Owner ",
+  }), {
+    name: "Example ISP", slug: "example-isp", country: "KE", timezone: "Africa/Nairobi", currency: "KES",
+    ownerEmail: "owner@example.com", ownerName: "Ada Owner",
+  });
+  assert.equal(tenantOrganizationExternalId("example-isp"), "mylesnet-tenant-example-isp");
+  assert.throws(() => normalizeAutomatedTenantOnboarding({
+    name: "Example ISP", slug: "example-isp", country: "KE", timezone: "Africa/Nairobi", currency: "KES", ownerEmail: "not-an-email",
+  }), /administrator email/);
 });
