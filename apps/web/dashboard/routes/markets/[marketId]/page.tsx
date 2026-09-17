@@ -1,5 +1,7 @@
 "use client";
 
+import { userFacingMessage } from "@/shared/lib/user-facing-error";
+
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
@@ -54,7 +56,7 @@ export default function MarketDetailPage() {
       setAirtelDataCost("");
       setElectricityCost("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save cost");
+      setError(userFacingMessage(err, "Could not save cost"));
     } finally {
       setBusy(false);
     }
@@ -65,7 +67,7 @@ export default function MarketDetailPage() {
     try {
       await updateStatus({ marketId: market._id, lifecycleStatus });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not update status");
+      setError(userFacingMessage(err, "Could not update status"));
     }
   };
 
@@ -81,7 +83,7 @@ export default function MarketDetailPage() {
       setMessage(forceCascade ? "Market and its dependents soft-deleted." : "Market soft-deleted.");
       setDeleteReason("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not delete market");
+      setError(userFacingMessage(err, "Could not delete market"));
     } finally {
       setBusy(false);
     }

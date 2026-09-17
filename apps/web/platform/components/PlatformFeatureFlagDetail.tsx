@@ -1,5 +1,7 @@
 "use client";
 
+import { userFacingMessage } from "@/shared/lib/user-facing-error";
+
 import Link from "next/link";
 import { ArrowLeft, Save } from "lucide-react";
 import { useState } from "react";
@@ -19,7 +21,6 @@ export function PlatformFeatureFlagDetail({ flag }: { flag: string }) {
   const tenants = useQuery(tenantControl.listForPlatform, {});
   const setFlag = useMutation(featureFlags.set);
   const [enabled, setEnabled] = useState<boolean | undefined>(undefined);
-  const [payload, setPayload] = useState<string | undefined>(undefined);
   const [description, setDescription] = useState<string | undefined>(undefined);
   const [tenantOverride, setTenantOverride] = useState<string[] | undefined>(undefined);
   const [working, setWorking] = useState(false);
@@ -28,11 +29,11 @@ export function PlatformFeatureFlagDetail({ flag }: { flag: string }) {
 
   const editable = canManage(user?.roles);
 
-  if (flagRow === undefined) return <p className="pf-muted">Loading flag…</p>;
-  if (flagRow === null) return <p className="pf-muted">Flag “{flag}” not found.</p>;
+  if (flagRow === undefined) return <p className="pf-muted">Loading service control…</p>;
+  if (flagRow === null) return <p className="pf-muted">The requested service control is unavailable.</p>;
 
   const currentEnabled = enabled ?? flagRow.enabled;
-  const currentPayload = payload ?? flagRow.valueJson;
+  const currentPayload = flagRow.valueJson;
 
   return (
     <div className="workspace-page">
@@ -40,10 +41,10 @@ export function PlatformFeatureFlagDetail({ flag }: { flag: string }) {
         <div>
           <p className="eyebrow">
             <Link href="/platform/feature-flags" className="platform-back-link">
-              <ArrowLeft size={15} aria-hidden="true" />Feature flags
+              <ArrowLeft size={15} aria-hidden="true" />Service controls
             </Link>
           </p>
-          <h1 className="page-title">{flagRow.key}</h1>
+          <h1 className="page-title">{flagRow.description || "Service control"}</h1>
           <p className="page-subtitle">{flagRow.description || "No description"}</p>
         </div>
         <span className={`pf-badge ${flagRow.enabled ? "pf-badge-success" : "pf-badge-neutral"}`}>
@@ -54,11 +55,11 @@ export function PlatformFeatureFlagDetail({ flag }: { flag: string }) {
       {error ? <p className="platform-claim-message" role="alert">{error}</p> : null}
       {notice ? <p className="platform-notice" role="status">{notice}</p> : null}
 
-      <section className="section-heading"><div><p className="eyebrow">Flag</p><h2>Configuration</h2></div></section>
+      <section className="section-heading"><div><p className="eyebrow">Service control</p><h2>Configuration</h2></div></section>
 
       <div className="form-grid">
         <div className="pf-field">
-          <span className="pf-label">Enabled</span>
+          <span className="pf-label">Availability</span>
           <select
             className="pf-input"
             disabled={!editable}
@@ -79,16 +80,6 @@ export function PlatformFeatureFlagDetail({ flag }: { flag: string }) {
             />
           </label>
         ) : null}
-        <label className="pf-field pf-field-wide">
-          <span className="pf-label">JSON payload</span>
-          <textarea
-            className="pf-input pf-input-code"
-            rows={6}
-            disabled={!editable}
-            value={currentPayload}
-            onChange={(event) => setPayload(event.target.value)}
-          />
-        </label>
         {editable ? (
           <label className="pf-field pf-field-wide">
             <span className="pf-label">Tenant override (empty = global rollout)</span>
@@ -127,15 +118,15 @@ export function PlatformFeatureFlagDetail({ flag }: { flag: string }) {
                   description: (description ?? flagRow.description) ?? undefined,
                   tenantIds: tenantOverride ?? flagRow.tenantIds ?? undefined,
                 });
-                setNotice("Flag saved.");
+                setNotice("Service control saved.");
               } catch (caught) {
-                setError(caught instanceof Error ? caught.message : "Save failed.");
+                setError(userFacingMessage(caught, "Save failed."));
               } finally {
                 setWorking(false);
               }
             }}
           >
-            <Save size={16} aria-hidden="true" />{working ? "Saving…" : "Save flag"}
+            <Save size={16} aria-hidden="true" />{working ? "Saving…" : "Save changes"}
           </button>
         </div>
       ) : null}

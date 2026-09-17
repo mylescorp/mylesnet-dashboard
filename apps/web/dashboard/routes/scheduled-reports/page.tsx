@@ -1,5 +1,7 @@
 "use client";
 
+import { userFacingMessage } from "@/shared/lib/user-facing-error";
+
 import { useState } from "react";
 import { useMutation, useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
@@ -44,7 +46,7 @@ export default function ScheduledReportsPage() {
       setName("");
       setRecipients("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create scheduled report.");
+      setError(userFacingMessage(err, "Failed to create scheduled report."));
     } finally {
       setSaving(false);
     }
