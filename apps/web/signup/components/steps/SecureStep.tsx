@@ -3,7 +3,7 @@
 import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { Eye, EyeOff } from "lucide-react";
-import { useMutation } from "@/app/lib/convex";
+import { useAction } from "@/app/lib/convex";
 import { signup } from "@/shared/convex/signup";
 import {
   Field,
@@ -24,7 +24,7 @@ export function SecureStep({
   formOptions: { minPasswordLength: number };
   onFatal: (message: string) => void;
 }) {
-  const setPasswordAndConsent = useMutation(signup.setPasswordAndConsent);
+  const setPasswordAndConsent = useAction(signup.setPasswordAndConsent);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [consent, setConsent] = useState(false);

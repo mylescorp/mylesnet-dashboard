@@ -176,7 +176,10 @@ export function isValidReferralSource(value: string | null | undefined): value i
 export const SIGNUP_PROVISIONING_STEPS = [
   { key: "accountAddress", label: "Creating your account address" },
   { key: "adminAccount", label: "Creating your admin account" },
-  { key: "welcomeEmail", label: "Sending your welcome email" },
+  // WorkOS already delivered the verification email. Do not claim a distinct
+  // welcome email has been sent until the approved communications adapter is
+  // available and reports a delivery result.
+  { key: "welcomeEmail", label: "Finalizing account access" },
   { key: "ready", label: "Account ready" },
 ] as const;
 

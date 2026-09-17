@@ -1044,10 +1044,10 @@ export default defineSchema({
     .index("by_state", ["state"])
     .index("by_expires_at", ["expiresAt"]),
 
-  // Auditable record that a self-serve operator's welcome email was sent for
-  // the workspace. The email itself is sent by WorkOS User Management during
-  // sign-up; this row is the durable, append-only proof ("A welcome email has
-  // been sent to...") shown on the Account ready screen.
+  // Auditable record that a self-service operator completed account
+  // confirmation for the workspace. The legacy table name remains for
+  // migration compatibility; it is not evidence that a separate welcome
+  // email was sent. The identity provider owns verification delivery.
   tenantWelcomeDeliveries: defineTable({
     tenantId: v.id("tenants"),
     tenantSlug: v.string(),

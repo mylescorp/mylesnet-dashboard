@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
-import { useMutation } from "@/app/lib/convex";
+import { useAction } from "@/app/lib/convex";
 import { signup, type SignupSessionView } from "@/shared/convex/signup";
 import { FormError, SubmitButton, extractErrorMessage, useCountdown } from "../fields";
 
@@ -18,8 +18,8 @@ export function VerifyEmailStep({
   resendCooldownMs: number;
   onFatal: (message: string) => void;
 }) {
-  const requestCode = useMutation(signup.requestCode);
-  const verifyCode = useMutation(signup.verifyCode);
+  const requestCode = useAction(signup.requestCode);
+  const verifyCode = useAction(signup.verifyCode);
   const requestedRef = useRef(false);
   const [code, setCode] = useState("");
   const [formError, setFormError] = useState<string | null>(null);

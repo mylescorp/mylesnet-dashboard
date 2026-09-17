@@ -86,7 +86,6 @@ function TenantOnboardingDialog({ onClose, onCreated }: { onClose: () => void; o
   const save = async (event: FormEvent) => {
     event.preventDefault(); setError(null); setWorking(true);
     try {
-      if (!/^[a-z0-9-]{3,50}$/.test(form.slug)) throw new Error("Use a lowercase slug (3–50 letters, numbers, or hyphens).");
       const result = await provisionTenant({ ...form, ownerName: form.ownerName.trim() || undefined });
       if (result.status === "authentication_required") {
         setError("Sign in again before creating a tenant workspace.");

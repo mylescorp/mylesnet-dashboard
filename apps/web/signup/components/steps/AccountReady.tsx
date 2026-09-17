@@ -33,8 +33,8 @@ export function AccountReady({
       </span>
       <h2 className="signup-ready-title">You are all set.</h2>
       <p className="signup-ready-text">
-        Your workspace is ready at <strong>{session.slug}.{formOptions.signupDomain}</strong>. We sent
-        a welcome email to <strong>{session.email}</strong>.
+        Your workspace is ready at <strong>{session.slug}.{formOptions.signupDomain}</strong>. Sign in with
+        your verified email address <strong>{session.email}</strong>.
       </p>
       <button
         type="button"

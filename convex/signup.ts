@@ -47,11 +47,33 @@ import {
   setWorkosUserPassword,
   verifyWorkosEmailCode,
 } from "./workos";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 
 function hashToken(token: string): string {
   return sha256Hex(`__mylesnet_signup:${token}`);
+}
+
+/**
+ * WorkOS helpers throw plain `Error`, whose message is redacted to
+ * "Server Error" on production deployments. Re-throw anything the caller
+ * intended as user-facing (`ConvexError`) untouched, and convert everything
+ * else into a safe, actionable message while keeping the real cause in logs.
+ */
+function rethrowIdentityError(error: unknown): never {
+  if (error instanceof ConvexError) throw error;
+  console.error("signup: identity provider call failed", error);
+  throw new ConvexError("We couldn't complete that step right now. Please try again in a moment.");
+}
+
+/**
+ * Provisioning progress is visible to an unauthenticated browser. Keep
+ * provider and database diagnostics in server logs, never in that progress
+ * record, so a failed operation cannot disclose implementation details.
+ */
+function safeProvisioningFailure(error: unknown, message: string): string {
+  console.error("signup: provisioning step failed", error);
+  return message;
 }
 
 function deterministicUserExternalId(email: string): string {
@@ -137,11 +159,11 @@ export const begin = mutation({
   },
   handler: async (ctx, { token, firstName, lastName, email }) => {
     const emailValue = normalizeEmail(email);
-    if (!isValidEmail(emailValue)) throw new Error("Please enter a valid email address.");
+    if (!isValidEmail(emailValue)) throw new ConvexError("Please enter a valid email address.");
     const first = normalizeDisplayName(firstName);
     const last = normalizeDisplayName(lastName);
     if (!isValidDisplayName(first) || !isValidDisplayName(last)) {
-      throw new Error("Please enter your full name.");
+      throw new ConvexError("Please enter your full name.");
     }
     const tokenHash = hashToken(token);
     const existing = await ctx.db
@@ -150,7 +172,7 @@ export const begin = mutation({
       .first();
     if (existing) {
       if (Date.now() > existing.expiresAt) {
-        throw new Error("Your sign-up session has expired. Please start again.");
+        throw new ConvexError("Your sign-up session has expired. Please start again.");
       }
       if (
         existing.state === "organization" ||
@@ -159,7 +181,7 @@ export const begin = mutation({
         existing.state === "provisioning" ||
         existing.state === "ready"
       ) {
-        throw new Error("A sign-up for this browser is already in progress.");
+        throw new ConvexError("A sign-up for this browser is already in progress.");
       }
       await ctx.db.patch(existing._id, {
         firstName: first,
@@ -172,7 +194,7 @@ export const begin = mutation({
     }
     await ctx.db.insert("signupSessions", {
       tokenHash,
-      state: "identity",
+      state: "code",
       firstName: first,
       lastName: last,
       email: emailValue,
@@ -185,101 +207,89 @@ export const begin = mutation({
   },
 });
 
-export const requestCode = mutation({
+export const requestCode = action({
   args: { token: v.string() },
-  handler: async (ctx, { token }) => {
+  handler: async (ctx, { token }): Promise<{ sent: true }> => {
     const now = Date.now();
-    const session = await ctx.db
-      .query("signupSessions")
-      .withIndex("by_token_hash", (q) => q.eq("tokenHash", hashToken(token)))
-      .first();
-    if (!session) throw new Error("Your sign-up session could not be found. Please start again.");
-    if (now > session.expiresAt) throw new Error("Your sign-up session has expired. Please start again.");
-    if (!session.email) throw new Error("Your sign-up session could not be found. Please start again.");
+    const tokenHash = hashToken(token);
+    const session = await ctx.runQuery(internal.signup.getSessionInternal, { tokenHash });
+    if (!session) throw new ConvexError("Your sign-up session could not be found. Please start again.");
+    if (now > session.expiresAt) throw new ConvexError("Your sign-up session has expired. Please start again.");
+    if (!session.email) throw new ConvexError("Your sign-up session could not be found. Please start again.");
     if (session.state !== "identity" && session.state !== "code") {
-      throw new Error("A sign-up for this browser is already in progress.");
+      throw new ConvexError("A sign-up for this browser is already in progress.");
     }
     if (session.workosEmailVerified === true) {
-      await ctx.db.patch(session._id, { state: "organization", updatedAt: now });
+      await ctx.runMutation(internal.signup.advanceToOrganizationInternal, { tokenHash });
       return { sent: true };
     }
     if (session.codeSentAt && now - session.codeSentAt < WORKOS_EMAIL_CODE_RESEND_COOLDOWN_MS) {
-      throw new Error("Please wait a moment before requesting another code.");
+      throw new ConvexError("Please wait a moment before requesting another code.");
     }
 
     let workosUserId = session.workosUserId;
-    if (workosUserId) {
-      const profile = await getWorkosUserProfile(workosUserId);
-      if (profile.emailVerified) {
-        throw new Error("An account with this email already exists. Sign in instead.");
-      }
-    } else {
-      const existing = await getWorkosUserByEmail(session.email);
-      if (existing) {
-        const profile = await getWorkosUserProfile(existing);
+    try {
+      if (workosUserId) {
+        const profile = await getWorkosUserProfile(workosUserId);
         if (profile.emailVerified) {
-          throw new Error("An account with this email already exists. Sign in instead.");
+          throw new ConvexError("An account with this email already exists. Sign in instead.");
         }
-        workosUserId = existing;
       } else {
-        workosUserId = await createWorkosUserWithProfile({
-          email: session.email,
-          firstName: session.firstName,
-          lastName: session.lastName,
-          externalId: deterministicUserExternalId(session.email),
-        });
+        const existing = await getWorkosUserByEmail(session.email);
+        if (existing) {
+          const profile = await getWorkosUserProfile(existing);
+          if (profile.emailVerified) {
+            throw new ConvexError("An account with this email already exists. Sign in instead.");
+          }
+          workosUserId = existing;
+        } else {
+          workosUserId = await createWorkosUserWithProfile({
+            email: session.email,
+            firstName: session.firstName,
+            lastName: session.lastName,
+            externalId: deterministicUserExternalId(session.email),
+          });
+        }
       }
+      await sendWorkosEmailVerification(workosUserId);
+    } catch (error) {
+      rethrowIdentityError(error);
     }
-    await sendWorkosEmailVerification(workosUserId);
-    await ctx.db.patch(session._id, {
-      workosUserId,
-      codeSentAt: now,
-      codeSentCount: (session.codeSentCount ?? 0) + 1,
-      state: "code",
-      updatedAt: now,
-    });
+    await ctx.runMutation(internal.signup.markCodeSentInternal, { tokenHash, workosUserId, now });
     return { sent: true };
   },
 });
 
-export const verifyCode = mutation({
+export const verifyCode = action({
   args: { token: v.string(), code: v.string() },
-  handler: async (ctx, { token, code }) => {
+  handler: async (ctx, { token, code }): Promise<{ verified: true }> => {
     const now = Date.now();
-    const session = await ctx.db
-      .query("signupSessions")
-      .withIndex("by_token_hash", (q) => q.eq("tokenHash", hashToken(token)))
-      .first();
-    if (!session) throw new Error("Your sign-up session could not be found. Please start again.");
-    if (now > session.expiresAt) throw new Error("Your sign-up session has expired. Please start again.");
+    const tokenHash = hashToken(token);
+    const session = await ctx.runQuery(internal.signup.getSessionInternal, { tokenHash });
+    if (!session) throw new ConvexError("Your sign-up session could not be found. Please start again.");
+    if (now > session.expiresAt) throw new ConvexError("Your sign-up session has expired. Please start again.");
     if (session.state !== "identity" && session.state !== "code") {
-      throw new Error("A sign-up for this browser is already in progress.");
+      throw new ConvexError("A sign-up for this browser is already in progress.");
     }
     if (session.workosEmailVerified === true) {
-      await ctx.db.patch(session._id, { state: "organization", updatedAt: now });
+      await ctx.runMutation(internal.signup.advanceToOrganizationInternal, { tokenHash });
       return { verified: true };
     }
-    if (!session.workosUserId) throw new Error("Please request a verification code first.");
+    if (!session.workosUserId) throw new ConvexError("Please request a verification code first.");
     const attempts = (session.codeAttempts ?? 0) + 1;
-    if (attempts > WORKOS_EMAIL_CODE_MAX_ATTEMPTS) throw new Error("Too many attempts. Please request a new code.");
+    if (attempts > WORKOS_EMAIL_CODE_MAX_ATTEMPTS) throw new ConvexError("Too many attempts. Please request a new code.");
     const sanitizedCode = code.trim().replace(/\s+/g, "");
     if (!/^\d{6}$/.test(sanitizedCode)) {
-      await ctx.db.patch(session._id, { codeAttempts: attempts, updatedAt: now });
-      throw new Error("Enter the 6-digit code from the email.");
+      await ctx.runMutation(internal.signup.recordCodeAttemptInternal, { tokenHash, attempts, now });
+      throw new ConvexError("Enter the 6-digit code from the email.");
     }
     try {
       await verifyWorkosEmailCode(session.workosUserId, sanitizedCode);
     } catch {
-      await ctx.db.patch(session._id, { codeAttempts: attempts, updatedAt: now });
-      throw new Error("The code you entered is incorrect or has expired.");
+      await ctx.runMutation(internal.signup.recordCodeAttemptInternal, { tokenHash, attempts, now });
+      throw new ConvexError("The code you entered is incorrect or has expired.");
     }
-    await ctx.db.patch(session._id, {
-      workosEmailVerified: true,
-      emailVerifiedAt: now,
-      codeAttempts: 0,
-      state: "organization",
-      updatedAt: now,
-    });
+    await ctx.runMutation(internal.signup.markEmailVerifiedInternal, { tokenHash, now });
     return { verified: true };
   },
 });
@@ -292,8 +302,8 @@ export const checkSlug = query({
       .query("signupSessions")
       .withIndex("by_token_hash", (q) => q.eq("tokenHash", hashToken(token)))
       .first();
-    if (!session) throw new Error("Your sign-up session could not be found. Please start again.");
-    if (now > session.expiresAt) throw new Error("Your sign-up session has expired. Please start again.");
+    if (!session) throw new ConvexError("Your sign-up session could not be found. Please start again.");
+    if (now > session.expiresAt) throw new ConvexError("Your sign-up session has expired. Please start again.");
     const value = normalizeSlug(slug);
     if (!value) return { status: "idle" as const, host: null };
     if (!isValidSignupSlug(value)) return { status: "invalid" as const, host: null };
@@ -328,23 +338,31 @@ export const setOrganization = mutation({
       .query("signupSessions")
       .withIndex("by_token_hash", (q) => q.eq("tokenHash", hashToken(token)))
       .first();
-    if (!session) throw new Error("Your sign-up session could not be found. Please start again.");
-    if (Date.now() > session.expiresAt) throw new Error("Your sign-up session has expired. Please start again.");
+    if (!session) throw new ConvexError("Your sign-up session could not be found. Please start again.");
+    if (Date.now() > session.expiresAt) throw new ConvexError("Your sign-up session has expired. Please start again.");
     if (session.workosEmailVerified !== true) {
-      throw new Error("Please verify your email before continuing.");
+      throw new ConvexError("Please verify your email before continuing.");
     }
     const name = normalizeBusinessName(companyName);
-    if (!isValidBusinessName(name)) throw new Error("Please enter your business name.");
+    if (!isValidBusinessName(name)) throw new ConvexError("Please enter your business name.");
     const value = normalizeSlug(slug);
     if (!isValidSignupSlug(value)) {
-      throw new Error("Please enter a valid workspace address.");
+      throw new ConvexError("Please enter a valid workspace address.");
     }
     const now = Date.now();
     const takenTenant = await ctx.db
       .query("tenants")
       .withIndex("by_slug", (q) => q.eq("slug", value))
       .first();
-    if (takenTenant) throw new Error("That workspace address is already taken.");
+    if (takenTenant) throw new ConvexError("That workspace address is already taken.");
+    const platformRun = await ctx.db
+      .query("tenantOnboardingRuns")
+      .withIndex("by_slug", (q) => q.eq("slug", value))
+      .order("desc")
+      .first();
+    if (platformRun && platformRun.tenantId !== session.tenantId) {
+      throw new ConvexError("That workspace address is unavailable.");
+    }
     const competing = await ctx.db
       .query("signupSessions")
       .withIndex("by_slug", (q) => q.eq("slug", value))
@@ -357,7 +375,7 @@ export const setOrganization = mutation({
         state !== "expired" &&
         state !== "failed"
       ) {
-        throw new Error("That workspace address is unavailable.");
+        throw new ConvexError("That workspace address is unavailable.");
       }
     }
     await ctx.db.patch(session._id, {
@@ -384,20 +402,20 @@ export const setDefaults = mutation({
       .query("signupSessions")
       .withIndex("by_token_hash", (q) => q.eq("tokenHash", hashToken(token)))
       .first();
-    if (!session) throw new Error("Your sign-up session could not be found. Please start again.");
-    if (Date.now() > session.expiresAt) throw new Error("Your sign-up session has expired. Please start again.");
+    if (!session) throw new ConvexError("Your sign-up session could not be found. Please start again.");
+    if (Date.now() > session.expiresAt) throw new ConvexError("Your sign-up session has expired. Please start again.");
     if (session.workosEmailVerified !== true) {
-      throw new Error("Please verify your email before continuing.");
+      throw new ConvexError("Please verify your email before continuing.");
     }
     const countryValue = country.trim().toUpperCase();
     const currencyValue = currency.trim().toUpperCase();
-    if (!isValidCountryCode(countryValue)) throw new Error("Please choose your country.");
-    if (!isValidTimezone(timezone)) throw new Error("Please choose your timezone.");
-    if (!isValidCurrencyCode(currencyValue)) throw new Error("Please choose your currency.");
+    if (!isValidCountryCode(countryValue)) throw new ConvexError("Please choose your country.");
+    if (!isValidTimezone(timezone)) throw new ConvexError("Please choose your timezone.");
+    if (!isValidCurrencyCode(currencyValue)) throw new ConvexError("Please choose your currency.");
     const reference = referralSource ?? "";
-    if (reference && !isValidReferralSource(reference)) throw new Error("Please choose a valid referral source.");
+    if (reference && !isValidReferralSource(reference)) throw new ConvexError("Please choose a valid referral source.");
     const phoneValue = phone ?? "";
-    if (!isValidPhone(phoneValue)) throw new Error("Please enter a valid phone number.");
+    if (!isValidPhone(phoneValue)) throw new ConvexError("Please enter a valid phone number.");
     await ctx.db.patch(session._id, {
       country: countryValue,
       timezone,
@@ -411,31 +429,28 @@ export const setDefaults = mutation({
   },
 });
 
-export const setPasswordAndConsent = mutation({
+export const setPasswordAndConsent = action({
   args: { token: v.string(), password: v.string(), consent: v.boolean() },
-  handler: async (ctx, { token, password, consent }) => {
-    const sessions = await ctx.db
-      .query("signupSessions")
-      .withIndex("by_token_hash", (q) => q.eq("tokenHash", hashToken(token)))
-      .first();
-    if (!sessions) throw new Error("Your sign-up session could not be found. Please start again.");
-    if (Date.now() > sessions.expiresAt) throw new Error("Your sign-up session has expired. Please start again.");
-    if (sessions.workosEmailVerified !== true) {
-      throw new Error("Please verify your email before choosing a password.");
+  handler: async (ctx, { token, password, consent }): Promise<{ accepted: true }> => {
+    const now = Date.now();
+    const tokenHash = hashToken(token);
+    const session = await ctx.runQuery(internal.signup.getSessionInternal, { tokenHash });
+    if (!session) throw new ConvexError("Your sign-up session could not be found. Please start again.");
+    if (now > session.expiresAt) throw new ConvexError("Your sign-up session has expired. Please start again.");
+    if (session.workosEmailVerified !== true) {
+      throw new ConvexError("Please verify your email before choosing a password.");
     }
     if (!isValidPassword(password)) {
-      throw new Error("Use at least 10 characters with an uppercase letter, a number and a symbol.");
+      throw new ConvexError("Use at least 10 characters with an uppercase letter, a number and a symbol.");
     }
-    if (!consent) throw new Error("Please agree to the Terms of service and Privacy policy to continue.");
-    if (!sessions.workosUserId) throw new Error("Please request a verification code first.");
-    await setWorkosUserPassword(sessions.workosUserId, password);
-    const now = Date.now();
-    await ctx.db.patch(sessions._id, {
-      consentAt: now,
-      passwordSetAt: now,
-      state: "provisioning",
-      updatedAt: now,
-    });
+    if (!consent) throw new ConvexError("Please agree to the Terms of service and Privacy policy to continue.");
+    if (!session.workosUserId) throw new ConvexError("Please request a verification code first.");
+    try {
+      await setWorkosUserPassword(session.workosUserId, password);
+    } catch (error) {
+      rethrowIdentityError(error);
+    }
+    await ctx.runMutation(internal.signup.markPasswordSetInternal, { tokenHash, now });
     return { accepted: true };
   },
 });
@@ -450,8 +465,8 @@ export const provisionStep = action({
   handler: async (ctx, { token }): Promise<{ finished: boolean; step: string; status: string }> => {
     const tokenHash = hashToken(token);
     const session = await ctx.runQuery(internal.signup.getSessionInternal, { tokenHash });
-    if (!session) throw new Error("Your sign-up session could not be found. Please start again.");
-    if (Date.now() > session.expiresAt) throw new Error("Your sign-up session has expired. Please start again.");
+    if (!session) throw new ConvexError("Your sign-up session could not be found. Please start again.");
+    if (Date.now() > session.expiresAt) throw new ConvexError("Your sign-up session has expired. Please start again.");
     if (session.state === "ready") return { finished: true, step: "ready", status: "done" };
 
     const entries = session.provisioning;
@@ -483,11 +498,21 @@ export const provisionStep = action({
     if (nextKey === "accountAddress") {
       let organizationId = session.workosOrganizationId;
       try {
+        // Reserve the workspace address against the platform-assisted flow
+        // before contacting WorkOS. This keeps a concurrent Platform "New
+        // tenant" request from creating or adopting the same tenant org.
+        await ctx.runMutation(internal.signup.assertWorkspaceAvailableForSignup, {
+          tokenHash,
+          slug: session.slug ?? "",
+        });
         const externalId = `mylesnet-tenant-${session.slug ?? ""}`;
         if (!organizationId) {
           const existing = await getWorkosOrganizationByExternalId(externalId);
           if (existing) {
-            organizationId = existing.id;
+            // Only a previously persisted session reference is safe to
+            // resume. An unclaimed provider org may belong to a different
+            // onboarding flow or a legacy workspace, so never adopt it.
+            throw new Error("Workspace identity already exists");
           } else {
             const created = await createWorkosOrganization(session.companyName ?? "", externalId);
             organizationId = created.id;
@@ -514,7 +539,7 @@ export const provisionStep = action({
         });
         return { finished: false, step: nextKey, status: "done" };
       } catch (error) {
-        const message = error instanceof Error ? error.message : "The workspace could not be created.";
+        const message = safeProvisioningFailure(error, "The workspace could not be prepared. Please retry.");
         await ctx.runMutation(internal.signup.markProvisioningInternal, {
           tokenHash,
           key: nextKey,
@@ -534,6 +559,9 @@ export const provisionStep = action({
         if (!membership) {
           membership = await addWorkosOrganizationMembership(organizationId, workosUserId, "tenant_admin");
         }
+        if (membership.status.toLowerCase() !== "active") {
+          throw new Error("Tenant administrator membership is not active");
+        }
         const outcome = await ctx.runMutation(internal.signup.commitAdminInternal, {
           tokenHash,
           workosMembershipId: membership.id,
@@ -547,7 +575,7 @@ export const provisionStep = action({
         });
         return { finished: false, step: nextKey, status: "done" };
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Your admin account could not be created.";
+        const message = safeProvisioningFailure(error, "Administrator access could not be prepared. Please retry.");
         await ctx.runMutation(internal.signup.markProvisioningInternal, {
           tokenHash,
           key: nextKey,
@@ -562,7 +590,7 @@ export const provisionStep = action({
     if (nextKey === "welcomeEmail") {
       try {
         const tenantRef = session.tenantId;
-        if (!tenantRef) throw new Error("The workspace has not been created yet.");
+        if (!tenantRef) throw new ConvexError("The workspace has not been created yet.");
         const welcomeId = await ctx.runMutation(internal.signup.recordWelcomeInternal, {
           tokenHash,
           tenantId: tenantRef,
@@ -578,7 +606,7 @@ export const provisionStep = action({
         });
         return { finished: false, step: nextKey, status: "done" };
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Your welcome email could not be recorded.";
+        const message = safeProvisioningFailure(error, "Account confirmation could not be completed. Please retry.");
         await ctx.runMutation(internal.signup.markProvisioningInternal, {
           tokenHash,
           key: nextKey,
@@ -602,6 +630,83 @@ export const getSessionInternal = internalQuery({
       .query("signupSessions")
       .withIndex("by_token_hash", (q) => q.eq("tokenHash", tokenHash))
       .first();
+  },
+});
+
+export const markCodeSentInternal = internalMutation({
+  args: { tokenHash: v.string(), workosUserId: v.string(), now: v.number() },
+  handler: async (ctx, { tokenHash, workosUserId, now }) => {
+    const session = await ctx.db
+      .query("signupSessions")
+      .withIndex("by_token_hash", (q) => q.eq("tokenHash", tokenHash))
+      .first();
+    if (!session) return;
+    await ctx.db.patch(session._id, {
+      workosUserId,
+      codeSentAt: now,
+      codeSentCount: (session.codeSentCount ?? 0) + 1,
+      state: "code",
+      updatedAt: now,
+    });
+  },
+});
+
+export const advanceToOrganizationInternal = internalMutation({
+  args: { tokenHash: v.string() },
+  handler: async (ctx, { tokenHash }) => {
+    const session = await ctx.db
+      .query("signupSessions")
+      .withIndex("by_token_hash", (q) => q.eq("tokenHash", tokenHash))
+      .first();
+    if (!session) return;
+    await ctx.db.patch(session._id, { state: "organization", updatedAt: Date.now() });
+  },
+});
+
+export const recordCodeAttemptInternal = internalMutation({
+  args: { tokenHash: v.string(), attempts: v.number(), now: v.number() },
+  handler: async (ctx, { tokenHash, attempts, now }) => {
+    const session = await ctx.db
+      .query("signupSessions")
+      .withIndex("by_token_hash", (q) => q.eq("tokenHash", tokenHash))
+      .first();
+    if (!session) return;
+    await ctx.db.patch(session._id, { codeAttempts: attempts, updatedAt: now });
+  },
+});
+
+export const markEmailVerifiedInternal = internalMutation({
+  args: { tokenHash: v.string(), now: v.number() },
+  handler: async (ctx, { tokenHash, now }) => {
+    const session = await ctx.db
+      .query("signupSessions")
+      .withIndex("by_token_hash", (q) => q.eq("tokenHash", tokenHash))
+      .first();
+    if (!session) return;
+    await ctx.db.patch(session._id, {
+      workosEmailVerified: true,
+      emailVerifiedAt: now,
+      codeAttempts: 0,
+      state: "organization",
+      updatedAt: now,
+    });
+  },
+});
+
+export const markPasswordSetInternal = internalMutation({
+  args: { tokenHash: v.string(), now: v.number() },
+  handler: async (ctx, { tokenHash, now }) => {
+    const session = await ctx.db
+      .query("signupSessions")
+      .withIndex("by_token_hash", (q) => q.eq("tokenHash", tokenHash))
+      .first();
+    if (!session) return;
+    await ctx.db.patch(session._id, {
+      consentAt: now,
+      passwordSetAt: now,
+      state: "provisioning",
+      updatedAt: now,
+    });
   },
 });
 
@@ -658,6 +763,14 @@ export const commitTenantInternal = internalMutation({
     if (!session) throw new Error("Your sign-up session could not be found. Please start again.");
     if (!args.workosOrganizationId) throw new Error("Identity provisioning is incomplete.");
     if (!isValidSignupSlug(args.slug)) throw new Error("That workspace address is unavailable.");
+    const platformRun = await ctx.db
+      .query("tenantOnboardingRuns")
+      .withIndex("by_slug", (q) => q.eq("slug", args.slug))
+      .order("desc")
+      .first();
+    if (platformRun && platformRun.tenantId !== session.tenantId) {
+      throw new Error("That workspace address is unavailable.");
+    }
     const now = Date.now();
     let tenantId: Id<"tenants"> | undefined;
     const existingTenant = await ctx.db
@@ -665,6 +778,15 @@ export const commitTenantInternal = internalMutation({
       .withIndex("by_slug", (q) => q.eq("slug", args.slug))
       .first();
     if (existingTenant) {
+      // A retry may encounter the tenant that this exact session committed.
+      // Any other tenant is a race or collision and must never receive the
+      // new sign-up's WorkOS organization or administrator membership.
+      if (
+        session.tenantId !== existingTenant._id ||
+        existingTenant.workosOrganizationId !== args.workosOrganizationId
+      ) {
+        throw new Error("That workspace address is unavailable.");
+      }
       tenantId = existingTenant._id;
     } else {
       tenantId = await ctx.db.insert("tenants", {
@@ -690,6 +812,40 @@ export const commitTenantInternal = internalMutation({
   },
 });
 
+/**
+ * The public and platform-assisted onboarding paths share the workspace
+ * namespace. This mutation is intentionally called before a public session
+ * creates its WorkOS organization; it is the cross-flow reservation check.
+ */
+export const assertWorkspaceAvailableForSignup = internalMutation({
+  args: { tokenHash: v.string(), slug: v.string() },
+  handler: async (ctx, { tokenHash, slug }) => {
+    const session = await ctx.db
+      .query("signupSessions")
+      .withIndex("by_token_hash", (q) => q.eq("tokenHash", tokenHash))
+      .first();
+    if (!session || session.slug !== slug) {
+      throw new Error("Your sign-up session is no longer valid.");
+    }
+    if (!isValidSignupSlug(slug)) throw new Error("That workspace address is unavailable.");
+    const existingTenant = await ctx.db
+      .query("tenants")
+      .withIndex("by_slug", (q) => q.eq("slug", slug))
+      .first();
+    if (existingTenant && session.tenantId !== existingTenant._id) {
+      throw new Error("That workspace address is unavailable.");
+    }
+    const platformRun = await ctx.db
+      .query("tenantOnboardingRuns")
+      .withIndex("by_slug", (q) => q.eq("slug", slug))
+      .order("desc")
+      .first();
+    if (platformRun && platformRun.tenantId !== session.tenantId) {
+      throw new Error("That workspace address is unavailable.");
+    }
+  },
+});
+
 export const commitAdminInternal = internalMutation({
   args: { tokenHash: v.string(), workosMembershipId: v.string() },
   handler: async (ctx, { tokenHash, workosMembershipId }) => {
@@ -706,6 +862,9 @@ export const commitAdminInternal = internalMutation({
       .query("users")
       .withIndex("by_workosUserId", (q) => q.eq("workosUserId", workosUserId))
       .first();
+    if (user?.deletedAt !== undefined || user?.isActive === false) {
+      throw new Error("The administrator account is unavailable.");
+    }
     let userId = user?._id;
     if (!userId) {
       userId = await ctx.db.insert("users", {
@@ -729,6 +888,17 @@ export const commitAdminInternal = internalMutation({
         status: "active",
         workosMembershipId,
         joinedAt: now,
+      });
+    } else {
+      // WorkOS was checked as active by the action immediately before this
+      // mutation. Keep the local authorization projection idempotent on a
+      // retry so a stale pending/revoked mirror cannot strand the new owner.
+      await ctx.db.patch(membershipId, {
+        role: "tenant_admin",
+        status: "active",
+        workosMembershipId,
+        joinedAt: existingMembership?.joinedAt ?? now,
+        revokedAt: undefined,
       });
     }
     await ctx.db.patch(session._id, {

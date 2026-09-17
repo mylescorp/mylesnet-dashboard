@@ -5,8 +5,6 @@ import { useAction } from "@/app/lib/convex";
 import { signup, type SignupFormOptions, type SignupSessionView } from "@/shared/convex/signup";
 import { extractErrorMessage } from "../fields";
 
-const PROVIDING_STEP_PAUSE_MS = 800;
-
 export function ProvisioningScreen({
   token,
   session,
@@ -39,7 +37,6 @@ export function ProvisioningScreen({
           setRunError("One of the set-up steps could not complete. You can retry.");
           break;
         }
-        await new Promise((resolve) => window.setTimeout(resolve, PROVIDING_STEP_PAUSE_MS));
       }
     } catch (error) {
       const message = extractErrorMessage(error, "Set-up could not complete right now.");
@@ -66,7 +63,7 @@ export function ProvisioningScreen({
     <div className="signup-provisioning" role="status" aria-live="polite">
       <p className="signup-provisioning-title">Setting up your workspace</p>
       <p className="signup-provisioning-subtitle">
-        We are creating your account and sending your welcome email. This takes a moment.
+        We are creating your workspace and finalizing secure account access. This takes a moment.
       </p>
       <ol className="signup-provisioning-list">
         {formOptions.provisioningSteps.map((step, index) => {

@@ -84,10 +84,10 @@ export const signup = {
     { token: string; firstName: string; lastName: string; email: string },
     { started: boolean; resumed: boolean }
   >("signup:begin"),
-  requestCode: makeFunctionReference<"mutation", { token: string }, { sent: boolean }>(
+  requestCode: makeFunctionReference<"action", { token: string }, { sent: boolean }>(
     "signup:requestCode",
   ),
-  verifyCode: makeFunctionReference<"mutation", { token: string; code: string }, { verified: boolean }>(
+  verifyCode: makeFunctionReference<"action", { token: string; code: string }, { verified: boolean }>(
     "signup:verifyCode",
   ),
   checkSlug: makeFunctionReference<"query", { token: string; slug: string }, SignupSlugCheck>(
@@ -111,7 +111,7 @@ export const signup = {
     { accepted: boolean }
   >("signup:setDefaults"),
   setPasswordAndConsent: makeFunctionReference<
-    "mutation",
+    "action",
     { token: string; password: string; consent: boolean },
     { accepted: boolean }
   >("signup:setPasswordAndConsent"),

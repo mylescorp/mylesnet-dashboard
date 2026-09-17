@@ -339,6 +339,17 @@ export const prepareAutomatedTenantOnboarding = internalMutation({
     const tenant = await ctx.db.query("tenants").withIndex("by_slug", (q) => q.eq("slug", args.slug)).first();
     if (tenant && tenant.deletedAt === undefined) throw new Error("A tenant already uses this slug");
 
+    const publicSignupSessions = await ctx.db
+      .query("signupSessions")
+      .withIndex("by_slug", (q) => q.eq("slug", args.slug))
+      .collect();
+    const activePublicSignup = publicSignupSessions.find(
+      (session) => session.tenantId === undefined && session.expiresAt > Date.now(),
+    );
+    if (activePublicSignup) {
+      throw new Error("This workspace address is currently being set up");
+    }
+
     const existing = await ctx.db
       .query("tenantOnboardingRuns")
       .withIndex("by_slug", (q) => q.eq("slug", args.slug))
@@ -553,15 +564,23 @@ export const provisionTenant = action({
       });
       if (run.tenantId) return { tenantId: run.tenantId, status: "ready" };
       const externalId = tenantOrganizationExternalId(onboarding.slug);
-      const organization = run.workosOrganizationId
-        ? { id: run.workosOrganizationId }
-        : (await getWorkosOrganizationByExternalId(externalId)) ?? await createWorkosOrganization(onboarding.name, externalId);
+      let organization: { id: string };
+      if (run.workosOrganizationId) {
+        organization = { id: run.workosOrganizationId };
+      } else {
+        // Never adopt an unrecorded provider organization. It may have been
+        // created by the public wizard or a historical onboarding attempt;
+        // associating it here could give the wrong administrator access.
+        const existingOrganization = await getWorkosOrganizationByExternalId(externalId);
+        if (existingOrganization) throw new Error("Workspace identity already exists");
+        organization = await createWorkosOrganization(onboarding.name, externalId);
+      }
       await ctx.runMutation(internal.tenantControl.recordAutomatedTenantIdentity, {
         runId: run.runId, workosOrganizationId: organization.id,
       });
       const ownerWorkosUserId = run.workosUserId ?? await createWorkosUser(onboarding.ownerEmail);
       const existingMembership = await getWorkosOrganizationMembership(organization.id, ownerWorkosUserId);
-      if (existingMembership && existingMembership.status !== "active") {
+      if (existingMembership && existingMembership.status.toLowerCase() !== "active") {
         throw new Error("Tenant administrator has an unresolved organization membership");
       }
       const membership = existingMembership ?? await addWorkosOrganizationMembership(
@@ -569,7 +588,7 @@ export const provisionTenant = action({
         ownerWorkosUserId,
         "tenant_admin",
       );
-      if (membership.status !== "active") {
+      if (membership.status.toLowerCase() !== "active") {
         throw new Error("Tenant administrator membership is not active");
       }
       await ctx.runMutation(internal.tenantControl.recordAutomatedTenantIdentity, {
