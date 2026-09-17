@@ -239,10 +239,25 @@ function toWorkosOrganization(payload: { id?: unknown; name?: unknown; external_
 
 /** Find an organization by MylesNet's deterministic external identity key. */
 export async function getWorkosOrganizationByExternalId(externalId: string): Promise<WorkosOrganization | null> {
-  const payload = (await workosFetch(
-    `/organizations?external_id=${encodeURIComponent(externalId)}`,
-  )) as { data?: Array<{ id?: unknown; name?: unknown; external_id?: unknown }> };
-  return toWorkosOrganization(payload.data?.[0] ?? {});
+  // WorkOS does not support filtering the organizations endpoint by
+  // `external_id`. Page through the bounded organization directory instead;
+  // external_id is our deterministic idempotency key for a tenant workspace.
+  let after: string | undefined;
+  for (let page = 0; page < 20; page += 1) {
+    const payload = (await workosFetch(
+      `/organizations?limit=100${after ? `&after=${encodeURIComponent(after)}` : ""}`,
+    )) as {
+      data?: Array<{ id?: unknown; name?: unknown; external_id?: unknown }>;
+      list_metadata?: { after?: unknown };
+    };
+    const match = (payload.data ?? [])
+      .map((organization) => toWorkosOrganization(organization))
+      .find((organization) => organization?.externalId === externalId);
+    if (match) return match;
+    after = typeof payload.list_metadata?.after === "string" ? payload.list_metadata.after : undefined;
+    if (!after) break;
+  }
+  return null;
 }
 
 /** Create one tenant workforce organization. This never returns credentials. */
