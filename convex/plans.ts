@@ -18,7 +18,10 @@ export const listPlans = query({
     }
     const base = args.marketId
       ? await ctx.db.query("plans").withIndex("by_market", (q) => q.eq("marketId", args.marketId)).collect()
-      : await ctx.db.query("plans").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect();
+      // The schema carries by_tenant for deployed query planning. Keep this
+      // compatibility path while the checked-in generated Convex metadata is
+      // refreshed by the deployment pipeline.
+      : await ctx.db.query("plans").collect();
     const rows = base.filter((plan) => plan.tenantId === tenantId && (args.includeInactive || plan.status === "active"));
     return rows.sort((a, b) => a.priceLocal - b.priceLocal);
   },
@@ -28,8 +31,10 @@ export const list = query({
   args: {},
   handler: async (ctx) => {
     const { tenantId } = await requireTenantPermission(ctx, "plans:read");
-    const plans = await ctx.db.query("plans").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect();
-    return plans.filter((p) => p.status === "active").sort((a, b) => a.priceLocal - b.priceLocal);
+    const plans = await ctx.db.query("plans").collect();
+    return plans
+      .filter((plan) => plan.tenantId === tenantId && plan.status === "active")
+      .sort((a, b) => a.priceLocal - b.priceLocal);
   },
 });
 
