@@ -53,8 +53,11 @@ export default function Header() {
 
         <div className="landing-nav-cta">
           <ThemeToggle className="landing-theme-toggle" />
-          <Button asChild variant="default" size="default">
-            <Link href="/get-started">Get started</Link>
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/signin">Sign in</Link>
+          </Button>
+          <Button asChild variant="default" size="sm">
+            <Link href="/signup">Sign up</Link>
           </Button>
         </div>
 
@@ -89,8 +92,11 @@ export default function Header() {
               ))}
               <div className="landing-mobile-theme-row">
                 <ThemeToggle className="landing-theme-toggle" />
+                <Button asChild variant="ghost" className="flex-1" onClick={() => setMenuOpen(false)}>
+                  <Link href="/signin">Sign in</Link>
+                </Button>
                 <Button asChild variant="default" className="flex-1" onClick={() => setMenuOpen(false)}>
-                  <Link href="/get-started">Get started</Link>
+                  <Link href="/signup">Sign up</Link>
                 </Button>
               </div>
             </nav>

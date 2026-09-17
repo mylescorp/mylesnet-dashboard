@@ -56,7 +56,7 @@ export function PlatformOverview() {
         <Metric icon={<Building2 size={19} />} label="Registered tenants" value={totals.total} detail={`${totals.active} active · ${totals.trial} trial`} />
         <Metric icon={<Link2 size={19} />} label="Workspace access" value={totals.total - totals.littleIdentity} detail={`${totals.littleIdentity} tenant(s) need secure access setup`} tone={totals.littleIdentity ? "warning" : "success"} />
         <Metric icon={<CreditCard size={19} />} label="Entitlement risk" value={totals.limitedEntitlement} detail="Expired or suspended plans that need attention" tone={totals.limitedEntitlement ? "warning" : "success"} />
-        <Metric icon={<ShieldCheck size={19} />} label="Staff MFA gaps" value={security?.staffMissingMfa ?? 0} detail={`${security?.staff.length ?? 0} platform staff on record`} tone={security && security.staffMissingMfa > 0 ? "warning" : "success"} />
+        <Metric icon={<ShieldCheck size={19} />} label="MFA enrolled" value={security?.staffMfaEnrolled ?? 0} detail={`Optional for ${security?.staff.length ?? 0} platform staff`} tone="accent" />
       </section>
 
       <section className="pf-panel" style={{ marginTop: 28 }}>
@@ -66,9 +66,9 @@ export function PlatformOverview() {
           <PlaneCard href="/platform/subscriptions" icon={<CreditCard size={20} />} title="Subscriptions" body="Set plans and entitlement status per tenant, including trial windows and expiry." />
           <PlaneCard href="/platform/access" icon={<Users size={20} />} title="Access & roles" body="Platform staff, roles, permissions, and pending invitations at a glance." />
           <PlaneCard href="/platform/audit" icon={<ScrollText size={20} />} title="Audit log" body="Searchable, paginated trail of every entity change across the platform." />
-          <PlaneCard href="/platform/security" icon={<ShieldCheck size={20} />} title="Security" body="Access coverage, staff MFA posture, secure delivery health, and service controls." />
+          <PlaneCard href="/platform/security" icon={<ShieldCheck size={20} />} title="Security" body="Access coverage, staff MFA posture, webhook health, and feature flags." />
           <PlaneCard href="/platform/vouchers/monitor" icon={<TicketCheck size={20} />} title="Voucher monitor" body="Duplicate, velocity, and geo-anomaly signals on redeemed vouchers." />
-          <PlaneCard href="/platform/feature-flags" icon={<Flag size={20} />} title="Service controls" body="Availability controls, targeted releases, and workspace-specific settings." />
+          <PlaneCard href="/platform/feature-flags" icon={<Flag size={20} />} title="Feature flags" body="Global toggles, percentage rollouts, and per-tenant overrides." />
         </div>
       </section>
 

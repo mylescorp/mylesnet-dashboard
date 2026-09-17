@@ -44,10 +44,10 @@ export type SecurityStaffEntry = {
   name: string | null;
   email: string | null;
   roles: string[];
-  mandatoryMfa: boolean;
+  mfaOptional: true;
   mfaEnrolled: boolean;
   mfaEnrolledAt: number | null;
-  compliance: "compliant" | "missing_mfa" | "n/a";
+  status: "enrolled" | "not_enrolled";
 };
 
 export type PlatformSecurityOverview = {
@@ -60,7 +60,8 @@ export type PlatformSecurityOverview = {
     identityMapped: number;
   };
   staff: SecurityStaffEntry[];
-  staffMissingMfa: number;
+  staffMfaEnrolled: number;
+  mfaMode: "optional";
   workosEvents: { received: number; completed: number; retry: number; quarantined: number };
   deliveries24h: { total: number; processed: number; signatureInvalid: number };
   featureFlags: Record<string, boolean>;

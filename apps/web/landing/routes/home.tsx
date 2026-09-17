@@ -68,7 +68,7 @@ export default function LandingHome() {
         />
         <div className="landing-hero-actions landing-hero-cover-actions">
           <Button asChild variant="default" size="lg">
-            <Link href="/get-started">
+            <Link href="/signup">
               Get started
               <ArrowRight size={17} aria-hidden="true" />
             </Link>
@@ -405,19 +405,19 @@ export default function LandingHome() {
           <p className="landing-section-kicker">Ready when you are</p>
           <h2>Run your network on MylesNet</h2>
           <p>
-            Tell us about your network and we will help you choose the right starting
-            point — and walk you through the launch every step of the way.
+            Start your workspace in minutes. Prefer a guided launch? Talk to our team
+            and we will help you choose the right starting point.
           </p>
           <div className="landing-hero-actions">
             <Button asChild variant="default" size="lg">
-              <Link href="/get-started">
+              <Link href="/signup">
                 Get started
                 <ArrowRight size={17} aria-hidden="true" />
               </Link>
             </Button>
             <Button asChild variant="outline" size="lg">
-              <Link href="/pricing">
-                See pricing
+              <Link href="/get-started">
+                Talk to sales
               </Link>
             </Button>
           </div>

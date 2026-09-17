@@ -10,7 +10,6 @@ import {
   resolveRoles,
   resolveUserByIdentity,
 } from "./lib/auth";
-import { MANDATORY_MFA_ROLES } from "./lib/mfa";
 
 /**
  * Returns the current authenticated platform user's role, permissions and
@@ -40,6 +39,7 @@ export const getCurrentPlatformUser = query({
       platformRole: user.platformRole ?? null,
       isPlatform: isPlatformUser(roles),
       canViewRevenue: roles.some((role) => role.permissions.includes("revenue:view")),
+      mfaEnrolled: user.mfaEnrolled === true,
       permissions: permissionsOf(roles),
       roles: roles.map((role) => ({
         _id: role._id,
@@ -184,26 +184,25 @@ export const getPlatformSecurityOverview = query({
       name: string | null;
       email: string | null;
       roles: string[];
-      mandatoryMfa: boolean;
+      mfaOptional: true;
       mfaEnrolled: boolean;
       mfaEnrolledAt: number | null;
-      compliance: "compliant" | "missing_mfa" | "n/a";
+      status: "enrolled" | "not_enrolled";
     }> = [];
     for (const user of users) {
       if (user.deletedAt !== undefined) continue;
       const resolved = await resolveRoles(ctx, user);
       if (!isPlatformUser(resolved)) continue;
-      const mandatoryMfa = resolved.some((role) => (MANDATORY_MFA_ROLES as readonly string[]).includes(role.slug));
       const enrolled = user.mfaEnrolled === true;
       staff.push({
         userId: user._id,
         name: user.name ?? null,
         email: user.email ?? null,
         roles: resolved.map((role) => role.slug),
-        mandatoryMfa,
+        mfaOptional: true,
         mfaEnrolled: enrolled,
         mfaEnrolledAt: user.mfaEnrolledAt ?? null,
-        compliance: mandatoryMfa ? (enrolled ? "compliant" : "missing_mfa") : "n/a",
+        status: enrolled ? "enrolled" : "not_enrolled",
       });
     }
 
@@ -233,7 +232,8 @@ export const getPlatformSecurityOverview = query({
         identityMapped: tenants.filter((tenant) => tenant.workosOrganizationId !== undefined).length,
       },
       staff,
-      staffMissingMfa: staff.filter((entry) => entry.mandatoryMfa && !entry.mfaEnrolled).length,
+      staffMfaEnrolled: staff.filter((entry) => entry.mfaEnrolled).length,
+      mfaMode: "optional" as const,
       workosEvents: eventStatusCounts,
       deliveries24h: {
         total: deliveries24h.length,

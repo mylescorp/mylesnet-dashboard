@@ -189,7 +189,6 @@ export async function requirePlatformAdmin(ctx: QueryCtx | MutationCtx): Promise
   if (!isPlatformAdmin(roles)) {
     throw new Error("Unauthorized: admin role required");
   }
-  assertMfaCompliancePolicy(user, roles.map((role) => role.slug));
   return user;
 }
 
@@ -203,7 +202,6 @@ export async function requirePlatformOwner(ctx: QueryCtx | MutationCtx): Promise
   if (!isPlatformOwner(roles)) {
     throw new Error("Unauthorized: owner role required");
   }
-  assertMfaCompliancePolicy(user, roles.map((role) => role.slug));
   return user;
 }
 
@@ -415,10 +413,7 @@ export async function requirePlatformSubRole(
 }
 
 /**
- * Enforce the mandatory-2FA policy (lib/mfa). WorkOS owns enrollment; this is
- * the app-side fail-closed check on the synced marker. Ops can dial it to
- * shadow mode via env flags (RBAC shadow mode, doc 06); the default is full
- * enforcement.
+ * MFA enrollment is optional and never part of a server authorization gate.
  */
 /** Keep the system role slugs reachable from auth consumers. */
 export { SYSTEM_ROLE_SLUGS };

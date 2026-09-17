@@ -10,7 +10,7 @@ import { useConvexAuth } from "@/app/lib/convex";
 import { UserProfileProvider, useUserProfile } from "./UserProfileContext";
 import { AccountDrawer } from "./AccountDrawer";
 import { ThemeToggle } from "./ThemeToggle";
-import { productNavGroups } from "@/lib/navigation/product-nav";
+import { panelForPathname, panelHome, productNavGroups, productRouteIndex } from "@/lib/navigation/product-nav";
 import { isRouteActive } from "@mylesnet/ui";
 
 const brand = {
@@ -34,8 +34,9 @@ function WorkspaceShellContent({ children }: { children: ReactNode }) {
   if (isPublic) return <>{children}</>;
   if (authLoading || userLoading || !user) return <AppBootstrapLoader label="Loading MylesNet…" />;
 
-  const showPlatform = user.isPlatform === true;
-  const groups = productNavGroups(showPlatform);
+  const panel = panelForPathname(pathname);
+  const groups = productNavGroups(user, pathname);
+  const homeHref = panelHome(panel);
   
   // Find active navigation item
   const activeNav = groups.flatMap(g => g.items).find(item => isRouteActive(pathname, item));
@@ -58,7 +59,7 @@ function WorkspaceShellContent({ children }: { children: ReactNode }) {
           collapsed={state.collapsed}
           onToggleCollapsed={state.onToggleCollapsed}
           variant={state.variant}
-          can={(permission) => (permission === "platform" ? showPlatform : true)}
+          homeHref={homeHref}
           footer={
             <>
               <a className="sidebar-link" href="/settings" aria-current={pathname === "/settings" ? "page" : undefined}>
@@ -79,14 +80,14 @@ function WorkspaceShellContent({ children }: { children: ReactNode }) {
       )}
       topbar={({ onOpenDrawer }) => (
         <Topbar
-          breadcrumb={[{ label: "MylesNet", href: "/dashboard" }, { label: pageLabel }]}
-          routeIndex={groups.flatMap(g => g.items.map(item => ({ ...item, group: g.label })))}
+          breadcrumb={[{ label: panel === "platform" ? "MylesNet Platform" : "MylesNet", href: homeHref }, { label: pageLabel }]}
+          routeIndex={productRouteIndex(groups)}
           onMenuClick={onOpenDrawer}
           onNavigate={(href) => router.push(href)}
           right={
             <>
               <ThemeToggle />
-              <AccountDrawer />
+              <AccountDrawer panel={panel} />
             </>
           }
         />

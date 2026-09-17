@@ -104,5 +104,5 @@ export const tenantControl = {
     currency: string;
     ownerEmail: string;
     ownerName?: string;
-  }, { tenantId: string; status: "provisioning" }>("tenantControl:provisionTenant"),
+  }, { tenantId: string; status: "ready" } | { status: "authentication_required" | "unavailable" }>("tenantControl:provisionTenant"),
 };
