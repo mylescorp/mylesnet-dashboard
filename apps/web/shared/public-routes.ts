@@ -13,6 +13,10 @@ export const PUBLIC_PATHS: string[] = [
   "/signin",
   "/auth/callback",
 
+  // Self-service sign-up wizard
+  "/signup",
+  "/api/signup/start",
+
   // Marketing home
   "/",
 

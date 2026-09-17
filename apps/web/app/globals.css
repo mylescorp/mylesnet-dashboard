@@ -309,6 +309,16 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .checklist li { display: flex; align-items: center; gap: 8px; padding: 8px 0; font-size: 14px; color: var(--muted); }
 .checklist li.checked { color: var(--text); }
 .checklist li.checked svg { color: var(--success); }
+
+/* Launch checklist (dashboard tenant workspace) */
+.launch-checklist { display: flex; flex-direction: column; gap: 2px; }
+.launch-checklist li { min-height: 40px; padding: 8px 2px; border-bottom: 1px solid var(--line-soft); }
+.launch-checklist li:last-child { border-bottom: 0; }
+.launch-checklist-dot { width: 8px; height: 8px; flex: none; border-radius: 999px; background: var(--line-strong); }
+.launch-checklist-pending { color: var(--text); font-weight: 600; }
+.launch-checklist-link { display: inline-flex; align-items: center; gap: 2px; margin-left: auto; color: var(--primary-text); font-size: 13px; font-weight: 700; text-decoration: none; white-space: nowrap; }
+.launch-checklist-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.launch-checklist-done { display: flex; flex-direction: column; gap: 6px; }
 .sidebar-link-active .sidebar-link-text { color: var(--primary-action-foreground); }
 .sidebar-badge { display: inline-flex; min-width: 19px; height: 19px; align-items: center; justify-content: center; border-radius: 999px; background: var(--danger); color: var(--danger-foreground); font-size: 11px; font-weight: 800; line-height: 1; padding: 0 5px; }
 .sidebar-planned { display: inline-flex; align-items: center; border-radius: 999px; background: color-mix(in srgb, var(--sidebar-muted) 25%, transparent); color: var(--sidebar-text); font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; line-height: 1; padding: 3px 6px; }
