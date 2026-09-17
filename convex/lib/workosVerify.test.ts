@@ -15,9 +15,21 @@ function signBody(rawBody: string, secret: string, timestampSeconds: number): Pr
 test("parseWorkosSignatureHeader extracts timestamp and v1 signature", () => {
   const { timestamp, signature } = parseWorkosSignatureHeader("t=1701234567,v1=abcdef0123");
   assert.equal(timestamp, 1701234567 * 1000);
+  assert.equal(parseWorkosSignatureHeader("t=1701234567,v1=abcdef0123").signedTimestamp, "1701234567");
   assert.equal(signature, "abcdef0123");
   assert.equal(parseWorkosSignatureHeader(null).timestamp, null);
   assert.equal(parseWorkosSignatureHeader("junk").signature, null);
+});
+
+test("verifyWorkosWebhook accepts current millisecond WorkOS timestamps", async () => {
+  const rawBody = JSON.stringify({ event: "user.created", data: { id: "user_123" } });
+  const secret = "signing-secret";
+  const timestamp = Date.now();
+  const digest = await hmacSha256Hex(secret, `${timestamp}.${rawBody}`);
+  assert.equal(
+    await verifyWorkosWebhook(rawBody, `t=${timestamp},v1=${digest}`, secret, timestamp),
+    true,
+  );
 });
 
 test("verifyWorkosWebhook accepts a valid fresh signature", async () => {
