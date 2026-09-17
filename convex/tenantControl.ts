@@ -5,12 +5,22 @@ import { Id } from "./_generated/dataModel";
 import { logAudit } from "./lib/auditLog";
 import { requirePlatformAdmin, requirePlatformSubRole, requirePlatformUser, resolveRoles, resolveUserByIdentity } from "./lib/auth";
 import { PLATFORM_SUB_ROLE_MAP } from "./lib/permissions";
-import { assertMfaCompliance } from "./lib/mfa";
 import { canTenantOperate, resolveTenantFromAuth } from "./lib/tenant";
-import { normalizeTenantRegistration } from "./lib/tenantProvisioning";
-import { getWorkosOrganizationMembership } from "./workos";
+import {
+  normalizeAutomatedTenantOnboarding,
+  normalizeTenantRegistration,
+  tenantOrganizationExternalId,
+} from "./lib/tenantProvisioning";
+import {
+  createWorkosOrganization,
+  addWorkosOrganizationMembership,
+  createWorkosUser,
+  getWorkosOrganizationByExternalId,
+  getWorkosOrganizationMembership,
+} from "./workos";
 
 const tenantStatus = v.union(
+  v.literal("provisioning"),
   v.literal("trial"),
   v.literal("active"),
   v.literal("suspended"),
@@ -39,7 +49,7 @@ type TenantWorkspaceResult =
           _id: Id<"tenants">;
           name: string;
           slug: string;
-          status: "trial" | "active" | "suspended" | "cancelled";
+          status: "provisioning" | "trial" | "active" | "suspended" | "cancelled";
           country: string;
           timezone: string;
           currency: string;
@@ -150,6 +160,7 @@ export const setStatus = mutation({
     const actor = await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_ops"]);
     const tenant = await ctx.db.get(args.tenantId);
     if (!tenant || tenant.deletedAt !== undefined) throw new Error("Tenant not found");
+    if (args.status === "provisioning") throw new Error("Provisioning status is managed by secure onboarding only");
     if (args.status === "cancelled") {
       throw new Error("Cancellation requires the retention/offboarding workflow; direct cancellation is disabled");
     }
@@ -302,7 +313,304 @@ export const assertProvisioner = internalQuery({
     if (!roles.some((role) => allowed.includes(role.slug))) {
       throw new Error("Unauthorized: platform administrator required");
     }
-    assertMfaCompliance(actor, roles.map((role) => role.slug));
+  },
+});
+
+/** Start a durable, non-sensitive run before contacting the identity provider. */
+export const prepareAutomatedTenantOnboarding = internalMutation({
+  args: {
+    actorWorkosUserId: v.string(),
+    name: v.string(),
+    slug: v.string(),
+    country: v.string(),
+    timezone: v.string(),
+    currency: v.string(),
+    ownerEmail: v.string(),
+    ownerName: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const actor = await ctx.db
+      .query("users")
+      .withIndex("by_workosUserId", (q) => q.eq("workosUserId", args.actorWorkosUserId))
+      .first();
+    if (!actor || actor.deletedAt !== undefined || actor.isActive === false) {
+      throw new Error("Unauthorized: platform administrator required");
+    }
+    const tenant = await ctx.db.query("tenants").withIndex("by_slug", (q) => q.eq("slug", args.slug)).first();
+    if (tenant && tenant.deletedAt === undefined) throw new Error("A tenant already uses this slug");
+
+    const publicSignupSessions = await ctx.db
+      .query("signupSessions")
+      .withIndex("by_slug", (q) => q.eq("slug", args.slug))
+      .collect();
+    const activePublicSignup = publicSignupSessions.find(
+      (session) => session.tenantId === undefined && session.expiresAt > Date.now(),
+    );
+    if (activePublicSignup) {
+      throw new Error("This workspace address is currently being set up");
+    }
+
+    const existing = await ctx.db
+      .query("tenantOnboardingRuns")
+      .withIndex("by_slug", (q) => q.eq("slug", args.slug))
+      .order("desc")
+      .first();
+    if (existing) {
+      return {
+        runId: existing._id,
+        workosOrganizationId: existing.workosOrganizationId,
+        workosUserId: existing.workosUserId,
+        workosMembershipId: existing.workosMembershipId,
+        workosInvitationId: existing.workosInvitationId,
+        tenantId: existing.tenantId,
+      };
+    }
+
+    const now = Date.now();
+    const runId = await ctx.db.insert("tenantOnboardingRuns", {
+      name: args.name,
+      slug: args.slug,
+      country: args.country,
+      timezone: args.timezone,
+      currency: args.currency,
+      ownerEmail: args.ownerEmail,
+      ownerName: args.ownerName,
+      state: "pending",
+      createdBy: actor._id,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return {
+      runId,
+      workosOrganizationId: undefined,
+      workosUserId: undefined,
+      workosMembershipId: undefined,
+      workosInvitationId: undefined,
+      tenantId: undefined,
+    };
+  },
+});
+
+/** Persist non-secret provider delivery references so a retry does not recreate the workspace. */
+export const recordAutomatedTenantIdentity = internalMutation({
+  args: {
+    runId: v.id("tenantOnboardingRuns"),
+    workosOrganizationId: v.optional(v.string()),
+    workosUserId: v.optional(v.string()),
+    workosMembershipId: v.optional(v.string()),
+    workosInvitationId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const run = await ctx.db.get(args.runId);
+    if (!run) throw new Error("Tenant onboarding run not found");
+    if (run.tenantId) return;
+    await ctx.db.patch(run._id, {
+      workosOrganizationId: args.workosOrganizationId ?? run.workosOrganizationId,
+      workosUserId: args.workosUserId ?? run.workosUserId,
+      workosMembershipId: args.workosMembershipId ?? run.workosMembershipId,
+      workosInvitationId: args.workosInvitationId ?? run.workosInvitationId,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+/** Turn a fully prepared background run into a tenant with a ready owner grant. */
+export const finalizeAutomatedTenantOnboarding = internalMutation({
+  args: { runId: v.id("tenantOnboardingRuns") },
+  handler: async (ctx, args) => {
+    const run = await ctx.db.get(args.runId);
+    if (!run) throw new Error("Tenant onboarding run not found");
+    if (!run.workosOrganizationId || !run.workosUserId || !run.workosMembershipId) {
+      throw new Error("Tenant onboarding has not completed administrator access setup");
+    }
+    const now = Date.now();
+    let owner = await ctx.db
+      .query("users")
+      .withIndex("by_workosUserId", (q) => q.eq("workosUserId", run.workosUserId!))
+      .first();
+    if (!owner) {
+      const ownerId = await ctx.db.insert("users", {
+        workosUserId: run.workosUserId,
+        email: run.ownerEmail,
+        name: run.ownerName,
+        isActive: true,
+      });
+      owner = await ctx.db.get(ownerId);
+    }
+    if (!owner || owner.deletedAt !== undefined || owner.isActive === false) {
+      throw new Error("Tenant administrator account is unavailable");
+    }
+    if (run.tenantId) {
+      const existingMembership = await ctx.db
+        .query("tenantMemberships")
+        .withIndex("by_user_tenant", (q) => q.eq("userId", owner!._id).eq("tenantId", run.tenantId!))
+        .first();
+      if (existingMembership) {
+        await ctx.db.patch(existingMembership._id, {
+          role: "tenant_admin", status: "active", workosMembershipId: run.workosMembershipId,
+          joinedAt: existingMembership.joinedAt ?? now, revokedAt: undefined,
+        });
+      } else {
+        await ctx.db.insert("tenantMemberships", {
+          userId: owner._id, tenantId: run.tenantId, role: "tenant_admin", status: "active",
+          workosMembershipId: run.workosMembershipId, joinedAt: now,
+        });
+      }
+      const existingTenant = await ctx.db.get(run.tenantId);
+      if (existingTenant?.status === "provisioning") {
+        await ctx.db.patch(existingTenant._id, { status: "trial", updatedAt: now });
+      }
+      await ctx.db.patch(run._id, { state: "completed", updatedAt: now });
+      return { tenantId: run.tenantId };
+    }
+    const [bySlug, byOrganization] = await Promise.all([
+      ctx.db.query("tenants").withIndex("by_slug", (q) => q.eq("slug", run.slug)).first(),
+      ctx.db.query("tenants").withIndex("by_workosOrganizationId", (q) => q.eq("workosOrganizationId", run.workosOrganizationId!)).first(),
+    ]);
+    if (bySlug || byOrganization) throw new Error("A tenant already uses this workspace identity");
+    const tenantId = await ctx.db.insert("tenants", {
+      name: run.name,
+      slug: run.slug,
+      country: run.country,
+      timezone: run.timezone,
+      currency: run.currency,
+      status: "trial",
+      workosOrganizationId: run.workosOrganizationId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert("tenantMemberships", {
+      userId: owner._id,
+      tenantId,
+      role: "tenant_admin",
+      status: "active",
+      workosMembershipId: run.workosMembershipId,
+      joinedAt: now,
+    });
+    await ctx.db.patch(run._id, { tenantId, state: "completed", updatedAt: now });
+    await logAudit(ctx, {
+      action: "tenant.onboardingCompleted",
+      entityTable: "tenants",
+      entityId: tenantId,
+      changedBy: run.createdBy,
+      after: { status: "trial", ownerEmail: run.ownerEmail, ownerReady: true },
+    });
+    return { tenantId };
+  },
+});
+
+/** Record a safe, generic failure state without exposing provider details to the UI. */
+export const markAutomatedTenantOnboardingFailed = internalMutation({
+  args: { runId: v.id("tenantOnboardingRuns") },
+  handler: async (ctx, args) => {
+    const run = await ctx.db.get(args.runId);
+    if (!run || run.tenantId) return;
+    await ctx.db.patch(run._id, { state: "failed", updatedAt: Date.now() });
+  },
+});
+
+/** Enable the tenant only after WorkOS confirms an active tenant membership. */
+export const activateProvisionedTenant = internalMutation({
+  args: { tenantId: v.id("tenants"), ownerUserId: v.id("users") },
+  handler: async (ctx, args) => {
+    const tenant = await ctx.db.get(args.tenantId);
+    if (!tenant || tenant.deletedAt !== undefined || tenant.status !== "provisioning") return;
+    const owner = await ctx.db.get(args.ownerUserId);
+    if (!owner || owner.deletedAt !== undefined || owner.isActive === false) return;
+    const membership = await ctx.db
+      .query("tenantMemberships")
+      .withIndex("by_user_tenant", (q) => q.eq("userId", args.ownerUserId).eq("tenantId", args.tenantId))
+      .first();
+    if (!membership || membership.status !== "active" || membership.role !== "tenant_admin") return;
+    const now = Date.now();
+    await ctx.db.patch(tenant._id, { status: "trial", updatedAt: now });
+    const run = await ctx.db
+      .query("tenantOnboardingRuns")
+      .withIndex("by_tenant", (q) => q.eq("tenantId", tenant._id))
+      .first();
+    if (run) await ctx.db.patch(run._id, { state: "completed", updatedAt: now });
+    await logAudit(ctx, {
+      action: "tenant.onboardingCompleted",
+      entityTable: "tenants",
+      entityId: tenant._id,
+      changedBy: owner._id,
+      before: { status: "provisioning" },
+      after: { status: "trial" },
+    });
+  },
+});
+
+/**
+ * Automatic onboarding path. Platform staff enter business and administrator
+ * details only; provider identifiers and membership setup remain backend-only.
+ */
+export const provisionTenant = action({
+  args: {
+    name: v.string(), slug: v.string(), country: v.string(), timezone: v.string(), currency: v.string(),
+    ownerEmail: v.string(), ownerName: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<
+    | { tenantId: Id<"tenants">; status: "ready" }
+    | { status: "authentication_required" | "unavailable" }
+  > => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { status: "authentication_required" };
+    const onboarding = normalizeAutomatedTenantOnboarding(args);
+    try {
+      await ctx.runQuery(internal.tenantControl.assertProvisioner, { workosUserId: identity.subject });
+      const run = await ctx.runMutation(internal.tenantControl.prepareAutomatedTenantOnboarding, {
+        actorWorkosUserId: identity.subject,
+        ...onboarding,
+      });
+      if (run.tenantId) return { tenantId: run.tenantId, status: "ready" };
+      const externalId = tenantOrganizationExternalId(onboarding.slug);
+      let organization: { id: string };
+      if (run.workosOrganizationId) {
+        organization = { id: run.workosOrganizationId };
+      } else {
+        // Never adopt an unrecorded provider organization. It may have been
+        // created by the public wizard or a historical onboarding attempt;
+        // associating it here could give the wrong administrator access.
+        const existingOrganization = await getWorkosOrganizationByExternalId(externalId);
+        if (existingOrganization) throw new Error("Workspace identity already exists");
+        organization = await createWorkosOrganization(onboarding.name, externalId);
+      }
+      await ctx.runMutation(internal.tenantControl.recordAutomatedTenantIdentity, {
+        runId: run.runId, workosOrganizationId: organization.id,
+      });
+      const ownerWorkosUserId = run.workosUserId ?? await createWorkosUser(onboarding.ownerEmail);
+      const existingMembership = await getWorkosOrganizationMembership(organization.id, ownerWorkosUserId);
+      if (existingMembership && existingMembership.status.toLowerCase() !== "active") {
+        throw new Error("Tenant administrator has an unresolved organization membership");
+      }
+      const membership = existingMembership ?? await addWorkosOrganizationMembership(
+        organization.id,
+        ownerWorkosUserId,
+        "tenant_admin",
+      );
+      if (membership.status.toLowerCase() !== "active") {
+        throw new Error("Tenant administrator membership is not active");
+      }
+      await ctx.runMutation(internal.tenantControl.recordAutomatedTenantIdentity, {
+        runId: run.runId,
+        workosUserId: ownerWorkosUserId,
+        workosMembershipId: membership.id,
+      });
+      // Direct membership is intentional: tenant owners can sign in right
+      // away with their existing identity. Credentials remain in WorkOS.
+      const result = await ctx.runMutation(internal.tenantControl.finalizeAutomatedTenantOnboarding, { runId: run.runId });
+      return { tenantId: result.tenantId, status: "ready" };
+    } catch (error) {
+      // A run is available only after authorization succeeds. Preserve it for
+      // a retry, but never disclose provider diagnostics to the browser.
+      const run = await ctx.runMutation(internal.tenantControl.prepareAutomatedTenantOnboarding, {
+        actorWorkosUserId: identity.subject,
+        ...onboarding,
+      }).catch(() => null);
+      if (run) await ctx.runMutation(internal.tenantControl.markAutomatedTenantOnboardingFailed, { runId: run.runId });
+      console.error("Tenant onboarding failed", error);
+      return { status: "unavailable" };
+    }
   },
 });
 

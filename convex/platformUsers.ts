@@ -549,6 +549,16 @@ export const recordOrganizationMembership = internalMutation({
         revokedAt: tenantStatus === "revoked" ? Date.now() : undefined,
       });
     }
+
+    // A provisioning tenant becomes usable only after WorkOS has confirmed an
+    // active tenant-admin membership. This is deliberately webhook/sync driven
+    // rather than a browser-side success assumption.
+    if (tenantStatus === "active" && args.roleSlug === "tenant_admin") {
+      await ctx.runMutation(internal.tenantControl.activateProvisionedTenant, {
+        tenantId: tenant._id,
+        ownerUserId: user._id,
+      });
+    }
   },
 });
 

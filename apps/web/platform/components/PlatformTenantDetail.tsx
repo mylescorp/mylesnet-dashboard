@@ -26,6 +26,7 @@ const entitlementTone: Record<EntitlementStatus, "success" | "warning" | "danger
 };
 
 const statusTone: Record<TenantStatus, "success" | "warning" | "danger" | "neutral"> = {
+  provisioning: "warning",
   active: "success",
   trial: "warning",
   suspended: "danger",
@@ -68,7 +69,7 @@ export function PlatformTenantDetail({ tenantId }: { tenantId: string }) {
           <div style={{ display: "flex", gap: 8 }}>
             {tenant.status === "suspended"
               ? <button type="button" className="secondary-button" disabled={working} onClick={() => void changeStatus("active")}><PlayCircle size={15} aria-hidden="true" />Activate</button>
-              : <button type="button" className="secondary-button" disabled={working || tenant.status === "cancelled"} onClick={() => void changeStatus("suspended")}><PauseCircle size={15} aria-hidden="true" />Suspend</button>}
+              : <button type="button" className="secondary-button" disabled={working || tenant.status === "cancelled" || tenant.status === "provisioning"} onClick={() => void changeStatus("suspended")}><PauseCircle size={15} aria-hidden="true" />Suspend</button>}
           </div>
         ) : null}
       </header>
@@ -78,7 +79,7 @@ export function PlatformTenantDetail({ tenantId }: { tenantId: string }) {
 
       <section className="metric-grid">
         <Metric icon={<Building2 size={19} />} label="Lifecycle status" value={<StatusPill tone={statusTone[tenant.status]}>{tenant.status}</StatusPill>} detail="Tenant directory state" />
-        <Metric icon={<Link2 size={19} />} label="WorkOS identity" value={tenant.workosOrganizationId ? "Mapped" : "Missing"} detail={tenant.workosOrganizationId ?? "Not connected"} tone={tenant.workosOrganizationId ? "success" : "warning"} />
+        <Metric icon={<Link2 size={19} />} label="Workspace access" value={tenant.workosOrganizationId ? "Ready" : "Preparing"} detail={tenant.workosOrganizationId ? "Secure access configured" : "Access setup is in progress"} tone={tenant.workosOrganizationId ? "success" : "warning"} />
         <Metric icon={<UsersRound size={19} />} label="Active members" value={tenant.activeMemberCount} detail="Users with active access to this workspace" tone={tenant.activeMemberCount > 0 ? "success" : "warning"} />
         <Metric icon={<Pencil size={19} />} label="Entitlement" value={tenant.entitlement ? tenant.entitlement.planId : "Not configured"} detail={tenant.entitlement ? tenant.entitlement.status : "Add a subscription from the Subscriptions panel"} tone={tenant.entitlement ? entitlementTone[tenant.entitlement.status] : "warning"} />
       </section>

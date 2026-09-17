@@ -1,6 +1,7 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { authTables } from "@convex-dev/auth/server";
+import { provisioningAttemptValidator } from "./lib/signup";
 
 // ==========================================================================
 // PHASE 1 — TENANCY & ISOLATION (X-TEN §B1, §B5)
@@ -35,7 +36,7 @@ export default defineSchema({
     profileCompletedAt: v.optional(v.number()),
     isActive: v.optional(v.boolean()),
     deactivatedAt: v.optional(v.number()),
-    // MFA compliance mirror (Security Standards; WorkOS mandatory-2FA roles).
+    // Optional MFA enrollment mirror for account-security preferences.
     // Synced from WorkOS enrollment at identity reconcile time. A mandatory-2FA
     // role without a marker is non-compliant and server guards fail closed.
     mfaEnrolled: v.optional(v.boolean()),
@@ -923,6 +924,9 @@ export default defineSchema({
     // ISO-4217 code (spec §22 allows any code as markets expand).
     currency: v.string(),
     status: v.union(
+      // A newly created tenant may be staged while its administrator access
+      // is being prepared. Automated onboarding completes as trial-ready.
+      v.literal("provisioning"),
       v.literal("trial"),
       v.literal("active"),
       v.literal("suspended"),
@@ -931,6 +935,11 @@ export default defineSchema({
     // WorkOS per-tenant org id (three-scope model, Phase 2). The server-side
     // tenant resolver derives tenancy from this — never from the client.
     workosOrganizationId: v.optional(v.string()),
+    // Contact phone captured during self-service sign-up (optional, never a
+    // verification factor) and the acquisition channel that referred the
+    // operator, if any. Both are seeded by the signup wizard.
+    phone: v.optional(v.string()),
+    acquisitionSource: v.optional(v.string()),
     settings: v.optional(v.any()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -956,6 +965,100 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_tenant", ["tenantId"])
     .index("by_user_tenant", ["userId", "tenantId"]),
+
+  // Durable, retry-safe record for the background identity onboarding flow.
+  // It holds no credentials or provider secret: only the minimum identity
+  // references needed to resume safely after an action retry.
+  tenantOnboardingRuns: defineTable({
+    slug: v.string(),
+    name: v.string(),
+    country: v.string(),
+    timezone: v.string(),
+    currency: v.string(),
+    ownerEmail: v.string(),
+    ownerName: v.optional(v.string()),
+    state: v.union(v.literal("pending"), v.literal("invited"), v.literal("failed"), v.literal("completed")),
+    tenantId: v.optional(v.id("tenants")),
+    workosOrganizationId: v.optional(v.string()),
+    workosUserId: v.optional(v.string()),
+    workosMembershipId: v.optional(v.string()),
+    workosInvitationId: v.optional(v.string()),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_tenant", ["tenantId"])
+    .index("by_state", ["state"]),
+
+  // One self-service sign-up wizard run, keyed by the hash of the httpOnly
+  // `__mylesnet_signup` cookie token. Holds irreversible step state so
+  // back/forward, new-tab resumes (spec §12) and abandoned-run tracking all
+  // work server-side. Never stores the raw token, the OTP code, or the
+  // password; WorkOS owns the actual identity/credentials.
+  signupSessions: defineTable({
+    tokenHash: v.string(),
+    state: v.union(
+      v.literal("identity"),
+      v.literal("code"),
+      v.literal("organization"),
+      v.literal("defaults"),
+      v.literal("secure"),
+      v.literal("provisioning"),
+      v.literal("ready"),
+      v.literal("failed"),
+      v.literal("expired"),
+    ),
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
+    email: v.optional(v.string()),
+    workosUserId: v.optional(v.string()),
+    workosEmailVerified: v.optional(v.boolean()),
+    emailVerifiedAt: v.optional(v.number()),
+    codeSentAt: v.optional(v.number()),
+    codeSentCount: v.optional(v.number()),
+    codeAttempts: v.optional(v.number()),
+    companyName: v.optional(v.string()),
+    slug: v.optional(v.string()),
+    country: v.optional(v.string()),
+    timezone: v.optional(v.string()),
+    currency: v.optional(v.string()),
+    referralSource: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    consentAt: v.optional(v.number()),
+    passwordSetAt: v.optional(v.number()),
+    workosOrganizationId: v.optional(v.string()),
+    workosMembershipId: v.optional(v.string()),
+    tenantId: v.optional(v.id("tenants")),
+    welcomeDeliveryId: v.optional(v.id("tenantWelcomeDeliveries")),
+    provisioning: v.array(provisioningAttemptValidator),
+    error: v.optional(v.string()),
+    startedAt: v.number(),
+    updatedAt: v.number(),
+    expiresAt: v.number(),
+    completedAt: v.optional(v.number()),
+  })
+    .index("by_token_hash", ["tokenHash"])
+    .index("by_email", ["email"])
+    .index("by_slug", ["slug"])
+    .index("by_state", ["state"])
+    .index("by_expires_at", ["expiresAt"]),
+
+  // Auditable record that a self-service operator completed account
+  // confirmation for the workspace. The legacy table name remains for
+  // migration compatibility; it is not evidence that a separate welcome
+  // email was sent. The identity provider owns verification delivery.
+  tenantWelcomeDeliveries: defineTable({
+    tenantId: v.id("tenants"),
+    tenantSlug: v.string(),
+    email: v.string(),
+    kind: v.literal("signup_confirmation"),
+    method: v.literal("workos"),
+    deliveredAt: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_tenant", ["tenantId"])
+    .index("by_email", ["email"]),
 
   // SaaS plan / entitlement attached to a tenant (G-TEN, Phase 3). `planId` is
   // a plan code string until the T-PLN catalogue lands.

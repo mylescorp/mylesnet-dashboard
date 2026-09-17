@@ -222,6 +222,55 @@ export interface WorkosInvitation {
   revoked_at: string | null;
 }
 
+export interface WorkosOrganization {
+  id: string;
+  name: string;
+  externalId: string | null;
+}
+
+function toWorkosOrganization(payload: { id?: unknown; name?: unknown; external_id?: unknown }): WorkosOrganization | null {
+  if (typeof payload.id !== "string" || typeof payload.name !== "string") return null;
+  return {
+    id: payload.id,
+    name: payload.name,
+    externalId: typeof payload.external_id === "string" ? payload.external_id : null,
+  };
+}
+
+/** Find an organization by MylesNet's deterministic external identity key. */
+export async function getWorkosOrganizationByExternalId(externalId: string): Promise<WorkosOrganization | null> {
+  // WorkOS does not support filtering the organizations endpoint by
+  // `external_id`. Page through the bounded organization directory instead;
+  // external_id is our deterministic idempotency key for a tenant workspace.
+  let after: string | undefined;
+  for (let page = 0; page < 20; page += 1) {
+    const payload = (await workosFetch(
+      `/organizations?limit=100${after ? `&after=${encodeURIComponent(after)}` : ""}`,
+    )) as {
+      data?: Array<{ id?: unknown; name?: unknown; external_id?: unknown }>;
+      list_metadata?: { after?: unknown };
+    };
+    const match = (payload.data ?? [])
+      .map((organization) => toWorkosOrganization(organization))
+      .find((organization) => organization?.externalId === externalId);
+    if (match) return match;
+    after = typeof payload.list_metadata?.after === "string" ? payload.list_metadata.after : undefined;
+    if (!after) break;
+  }
+  return null;
+}
+
+/** Create one tenant workforce organization. This never returns credentials. */
+export async function createWorkosOrganization(name: string, externalId: string): Promise<WorkosOrganization> {
+  const payload = (await workosFetch("/organizations", {
+    method: "POST",
+    body: JSON.stringify({ name, external_id: externalId }),
+  })) as { id?: unknown; name?: unknown; external_id?: unknown };
+  const organization = toWorkosOrganization(payload);
+  if (!organization) throw new Error("Identity organization creation did not return a valid result");
+  return organization;
+}
+
 /** Invite a user, auto-allocating them to the platform organization. */
 export async function createWorkosInvitation(
   email: string,
@@ -322,6 +371,82 @@ export async function createWorkosUser(email: string): Promise<string> {
   })) as { id?: unknown };
   if (typeof payload.id !== "string") throw new Error("WorkOS did not return a user id");
   return payload.id;
+}
+
+export interface WorkosUserProfile {
+  id: string;
+  email: string;
+  emailVerified: boolean;
+  firstName: string | null;
+  lastName: string | null;
+}
+
+/** Read a user's current profile from WorkOS User Management. */
+export async function getWorkosUserProfile(workosUserId: string): Promise<WorkosUserProfile> {
+  const payload = (await workosFetch(
+    `/user_management/users/${encodeURIComponent(workosUserId)}`,
+  )) as Record<string, unknown>;
+  if (typeof payload.id !== "string") throw new Error("WorkOS did not return a user");
+  return {
+    id: payload.id,
+    email: typeof payload.email === "string" ? payload.email : "",
+    emailVerified: payload.email_verified === true,
+    firstName: typeof payload.first_name === "string" ? payload.first_name : null,
+    lastName: typeof payload.last_name === "string" ? payload.last_name : null,
+  };
+}
+
+/**
+ * Create a WorkOS user for the public sign-up wizard. The account starts
+ * unverified and carries a deterministic `external_id` so the created user is
+ * attributable to this wizard session in WorkOS and idempotently reusable.
+ */
+export async function createWorkosUserWithProfile(input: {
+  email: string;
+  firstName?: string;
+  lastName?: string;
+  externalId: string;
+}): Promise<string> {
+  const payload = (await workosFetch("/user_management/users", {
+    method: "POST",
+    body: JSON.stringify({
+      email: input.email,
+      first_name: input.firstName,
+      last_name: input.lastName,
+      external_id: input.externalId,
+      email_verified: false,
+    }),
+  })) as { id?: unknown };
+  if (typeof payload.id !== "string") throw new Error("WorkOS did not return a user id");
+  return payload.id;
+}
+
+/** Email a one-time verification code to the user (WorkOS UM). */
+export async function sendWorkosEmailVerification(workosUserId: string): Promise<void> {
+  await workosFetch(
+    `/user_management/users/${encodeURIComponent(workosUserId)}/email_verification/send`,
+    { method: "POST" },
+  );
+}
+
+/** Confirm the one-time code the user entered. Throws when the code is wrong. */
+export async function verifyWorkosEmailCode(workosUserId: string, code: string): Promise<void> {
+  await workosFetch(
+    `/user_management/users/${encodeURIComponent(workosUserId)}/email_verification/confirm`,
+    { method: "POST", body: JSON.stringify({ code }) },
+  );
+}
+
+/**
+ * Set a password through WorkOS's supported User Management update endpoint.
+ * Password is a user attribute in this API; `/users/:id/password` is not a
+ * valid resource and must never be called.
+ */
+export async function setWorkosUserPassword(workosUserId: string, password: string): Promise<void> {
+  await workosFetch(
+    `/user_management/users/${encodeURIComponent(workosUserId)}`,
+    { method: "PUT", body: JSON.stringify({ password }) },
+  );
 }
 
 /**

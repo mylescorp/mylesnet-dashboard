@@ -45,6 +45,7 @@ test("WorkOS membership removal maps to a revoked local tenant membership", () =
 test("isTenantActive accepts trial and active only", () => {
   assert.equal(isTenantActive("trial"), true);
   assert.equal(isTenantActive("active"), true);
+  assert.equal(isTenantActive("provisioning"), false);
   assert.equal(isTenantActive("suspended"), false);
   assert.equal(isTenantActive("cancelled"), false);
   assert.equal(isTenantActive(undefined), false);
@@ -56,7 +57,8 @@ test("isTenantSuspended flags only suspended", () => {
   assert.equal(isTenantSuspended("cancelled"), false);
 });
 
-test("canTenantOperate blocks only explicit suspension/cancellation", () => {
+test("canTenantOperate blocks unverified provisioning and inactive lifecycles", () => {
+  assert.equal(canTenantOperate("provisioning"), false);
   assert.equal(canTenantOperate("trial"), true);
   assert.equal(canTenantOperate("active"), true);
   assert.equal(canTenantOperate("suspended"), false);

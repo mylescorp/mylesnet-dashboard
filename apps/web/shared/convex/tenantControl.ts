@@ -1,6 +1,6 @@
 import { makeFunctionReference } from "convex/server";
 
-export type TenantStatus = "trial" | "active" | "suspended" | "cancelled";
+export type TenantStatus = "provisioning" | "trial" | "active" | "suspended" | "cancelled";
 
 export type EntitlementStatus = "trial" | "active" | "expired" | "suspended";
 
@@ -96,13 +96,13 @@ export const tenantControl = {
     expiresAt?: number;
     trialEndsAt?: number;
   }, { changed: boolean }>("tenantControl:setEntitlement"),
-  registerExistingOrganization: makeFunctionReference<"action", {
+  provisionTenant: makeFunctionReference<"action", {
     name: string;
     slug: string;
     country: string;
     timezone: string;
     currency: string;
-    workosOrganizationId: string;
-    ownerWorkosUserId: string;
-  }, { tenantId: string }>("tenantControl:registerExistingOrganization"),
+    ownerEmail: string;
+    ownerName?: string;
+  }, { tenantId: string; status: "ready" } | { status: "authentication_required" | "unavailable" }>("tenantControl:provisionTenant"),
 };
