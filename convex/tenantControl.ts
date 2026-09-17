@@ -5,7 +5,6 @@ import { Id } from "./_generated/dataModel";
 import { logAudit } from "./lib/auditLog";
 import { requirePlatformAdmin, requirePlatformSubRole, requirePlatformUser, resolveRoles, resolveUserByIdentity } from "./lib/auth";
 import { PLATFORM_SUB_ROLE_MAP } from "./lib/permissions";
-import { assertMfaCompliance } from "./lib/mfa";
 import { canTenantOperate, resolveTenantFromAuth } from "./lib/tenant";
 import {
   normalizeAutomatedTenantOnboarding,
@@ -313,7 +312,6 @@ export const assertProvisioner = internalQuery({
     if (!roles.some((role) => allowed.includes(role.slug))) {
       throw new Error("Unauthorized: platform administrator required");
     }
-    assertMfaCompliance(actor, roles.map((role) => role.slug));
   },
 });
 
@@ -482,7 +480,7 @@ export const provisionTenant = action({
   },
   handler: async (ctx, args): Promise<
     | { tenantId: Id<"tenants">; status: "provisioning" }
-    | { status: "authentication_required" | "security_check_required" | "unavailable" }
+    | { status: "authentication_required" | "unavailable" }
   > => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return { status: "authentication_required" };
@@ -510,9 +508,6 @@ export const provisionTenant = action({
       const result = await ctx.runMutation(internal.tenantControl.finalizeAutomatedTenantOnboarding, { runId: run.runId });
       return { tenantId: result.tenantId, status: "provisioning" };
     } catch (error) {
-      if (error instanceof Error && /multi-factor authentication|mfa/i.test(error.message)) {
-        return { status: "security_check_required" };
-      }
       // A run is available only after authorization succeeds. Preserve it for
       // a retry, but never disclose provider diagnostics to the browser.
       const run = await ctx.runMutation(internal.tenantControl.prepareAutomatedTenantOnboarding, {

@@ -56,7 +56,7 @@ export function PlatformOverview() {
         <Metric icon={<Building2 size={19} />} label="Registered tenants" value={totals.total} detail={`${totals.active} active · ${totals.trial} trial`} />
         <Metric icon={<Link2 size={19} />} label="Workspace access" value={totals.total - totals.littleIdentity} detail={`${totals.littleIdentity} tenant(s) need secure access setup`} tone={totals.littleIdentity ? "warning" : "success"} />
         <Metric icon={<CreditCard size={19} />} label="Entitlement risk" value={totals.limitedEntitlement} detail="Expired or suspended plans that need attention" tone={totals.limitedEntitlement ? "warning" : "success"} />
-        <Metric icon={<ShieldCheck size={19} />} label="Staff MFA gaps" value={security?.staffMissingMfa ?? 0} detail={`${security?.staff.length ?? 0} platform staff on record`} tone={security && security.staffMissingMfa > 0 ? "warning" : "success"} />
+        <Metric icon={<ShieldCheck size={19} />} label="MFA enrolled" value={security?.staffMfaEnrolled ?? 0} detail={`Optional for ${security?.staff.length ?? 0} platform staff`} tone="accent" />
       </section>
 
       <section className="pf-panel" style={{ marginTop: 28 }}>

@@ -16,7 +16,6 @@ function Status({ status }: { status: TenantStatus }) {
 
 function safeErrorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : "";
-  if (/multi-factor|mfa/i.test(message)) return "Your administrator account needs a security check before a workspace can be created.";
   return "The workspace could not be prepared. Please retry or contact MylesNet support.";
 }
 
@@ -91,10 +90,6 @@ function TenantOnboardingDialog({ onClose, onCreated }: { onClose: () => void; o
       const result = await provisionTenant({ ...form, ownerName: form.ownerName.trim() || undefined });
       if (result.status === "authentication_required") {
         setError("Sign in again before creating a tenant workspace.");
-        return;
-      }
-      if (result.status === "security_check_required") {
-        setError("Complete your account security verification, then try again.");
         return;
       }
       if (result.status === "unavailable") {

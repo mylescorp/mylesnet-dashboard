@@ -35,7 +35,7 @@ export default defineSchema({
     profileCompletedAt: v.optional(v.number()),
     isActive: v.optional(v.boolean()),
     deactivatedAt: v.optional(v.number()),
-    // MFA compliance mirror (Security Standards; WorkOS mandatory-2FA roles).
+    // Optional MFA enrollment mirror for account-security preferences.
     // Synced from WorkOS enrollment at identity reconcile time. A mandatory-2FA
     // role without a marker is non-compliant and server guards fail closed.
     mfaEnrolled: v.optional(v.boolean()),

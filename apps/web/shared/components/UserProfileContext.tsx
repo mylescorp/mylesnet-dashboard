@@ -24,6 +24,7 @@ export type PlatformUser = {
   permissions: string[];
   primaryRole?: { slug: string; name: string; isPlatform: boolean } | null;
   canViewRevenue: boolean;
+  mfaEnrolled: boolean;
 };
 
 interface UserProfileContextType {
