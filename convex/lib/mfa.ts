@@ -1,17 +1,22 @@
 /**
- * Optional MFA policy for MylesNet.
+ * MFA policy for the MylesNet platform (Security Standards; WorkOS AuthKit
+ * mandatory-2FA roles).
  *
  * Enforcement model: WorkOS owns enrollment (users authenticate through
  * AuthKit and enroll factors there). This module is the app-side mirror of
- * policy: it exposes whether a user has chosen to enrol a factor and reads the
- * marker synced into the `users` row when identity is reconciled. MFA is a
- * user-controlled account-security option; it never authorizes or blocks a
- * MylesNet panel, mutation, or onboarding workflow.
+ * that policy: it decides which roles *require* a verified factor and reads
+ * the enrollment marker that is synced into the `users` row when identity is
+ * reconciled (see `convex/workos.ts` `getWorkosMfaEnrollment` +
+ * `syncActiveOrganizationMembership`). Server guards fail closed — a mandatory-2FA role
+ * without a synced enrollment marker is treated as non-compliant.
  */
 
-export const MFA_ENFORCEMENT_MODE = "optional" as const;
-/** Retained as a compatibility export; no role is mandatory in optional mode. */
-export const MANDATORY_MFA_ROLES = [] as const;
+export const MANDATORY_MFA_ROLES = [
+  "platform_owner",
+  "platform_admin",
+  "ops_manager",
+  "finance_manager",
+] as const;
 
 export type MandatoryMfaRole = (typeof MANDATORY_MFA_ROLES)[number];
 
@@ -20,41 +25,51 @@ export interface MfaGuardConfiguration {
   enforcementLevel?: string;
 }
 
-/** MFA is optional for every role. */
+/** True when the given role slug is subject to mandatory MFA enrollment. */
 export function requiresMandatory2FA(roleSlug: string | null | undefined): boolean {
-  void roleSlug;
-  return false;
+  return MANDATORY_MFA_ROLES.some((slug) => slug === roleSlug);
 }
 
 /**
- * There is no MFA compliance gate in optional mode. Enrollment is still
- * recorded and surfaced as a personal security preference.
+ * True when the account record proves MFA compliance.
+ *
+ * `user.mfaEnrolledAt` is set from WorkOS at reconcile time. A missing marker
+ * on a mandatory role is a policy violation; on non-mandatory roles a missing
+ * marker is fine (opt-in MFA is still allowed).
  */
 export function isMfaCompliant(
   roleSlugs: Array<string | null | undefined> | undefined,
   user: { mfaEnrolledAt?: number } | null | undefined,
 ): boolean {
-  void roleSlugs;
-  void user;
-  return true;
+  const needsMfa = (roleSlugs ?? []).some((slug) => requiresMandatory2FA(slug));
+  if (!needsMfa) return true;
+  return typeof user?.mfaEnrolledAt === "number" && user.mfaEnrolledAt > 0;
 }
 
-/** No role requires MFA in optional mode. */
+/** List the mandatory-2FA role slugs a set of roles actually includes. */
 export function unmetMfaRoles(roleSlugs: Array<string | null | undefined>): string[] {
-  void roleSlugs;
-  return [];
+  return MANDATORY_MFA_ROLES.filter((slug) => roleSlugs.includes(slug));
 }
 
 /**
- * Backward-compatible no-op for existing callers. Authorization remains based
- * on identity, role, active account, and tenant scope — never MFA enrollment.
+ * Guard-level enforcement shared by the Convex authorization guards. Keeping
+ * this context-free makes the real fail-closed decision directly testable.
  */
 export function assertMfaCompliance(
   enrollment: { mfaEnrolled?: boolean; mfaEnrolledAt?: number },
   roleSlugs: ReadonlyArray<string>,
   configuration: MfaGuardConfiguration = {},
 ): void {
-  void enrollment;
-  void roleSlugs;
-  void configuration;
+  if (isMfaCompliant([...roleSlugs], enrollment)) return;
+
+  const shadowMode = configuration.shadowMode ?? process.env.NEXT_PUBLIC_ENABLE_RBAC_SHADOW_MODE === "true";
+  // MFA is optional unless the deployment owner explicitly enables this
+  // server-side policy. Do not use a public client variable for enforcement.
+  const level = configuration.enforcementLevel ?? (process.env.MYLESNET_ENFORCE_MFA === "true" ? "full" : "off");
+  if (shadowMode || level === "off" || level === "partial") return;
+
+  const required = roleSlugs.filter((slug) => requiresMandatory2FA(slug));
+  throw new Error(
+    `Unauthorized: multi-factor authentication is required for role(s): ${required.join(", ")}`,
+  );
 }

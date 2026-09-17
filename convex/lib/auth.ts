@@ -2,7 +2,6 @@ import { QueryCtx, MutationCtx, ActionCtx } from "../_generated/server";
 import { Id, Doc } from "../_generated/dataModel";
 import {
   SYSTEM_ROLE_SLUGS,
-  TENANT_ROLE_PERMISSIONS,
   getSystemRoleBySlug,
   PLATFORM_SUB_ROLE_MAP,
   tenantRoleHasPermission,
@@ -45,11 +44,6 @@ export function systemRoleName(slug: string): string {
 
 /** Build a read-model role from a stored role row. */
 export function resolveRoleRow(row: Doc<"roles">): ResolvedRole {
-  // System roles are product policy. Their stored permission array may lag the
-  // current catalog after a safe product capability is added, but it must never
-  // silently reduce an owner's access. Preserve any approved local additions
-  // while applying the current system baseline at authorization time.
-  const system = row.isSystem ? getSystemRoleBySlug(row.slug) : undefined;
   return {
     _id: row._id,
     slug: row.slug,
@@ -58,9 +52,7 @@ export function resolveRoleRow(row: Doc<"roles">): ResolvedRole {
     isSystem: row.isSystem,
     isPlatform: row.isPlatform,
     rank: row.rank,
-    permissions: system
-      ? Array.from(new Set([...system.permissions, ...row.permissions]))
-      : row.permissions,
+    permissions: row.permissions,
   };
 }
 
@@ -123,49 +115,6 @@ async function getActiveTenantMembership(ctx: QueryCtx | MutationCtx, user: Doc<
     .withIndex("by_user_tenant", (q) => q.eq("userId", user._id).eq("tenantId", tenant._id))
     .first();
   return membership?.status === "active" ? membership : null;
-}
-
-export interface TenantAccess {
-  tenantId: Id<"tenants">;
-  role: string;
-  permissions: string[];
-}
-
-/**
- * Read-model of the caller's active tenant membership for the current
- * organization claim. A tenant role is a *separate* authorization namespace
- * from platform roles, so callers must merge this into any principal they build
- * for the client. Tenant permissions never grant platform access and platform
- * permissions never substitute for `requireTenantPermission`.
- */
-export async function resolveTenantAccess(
-  ctx: QueryCtx | MutationCtx,
-  user: Doc<"users">,
-): Promise<TenantAccess | null> {
-  const membership = await getActiveTenantMembership(ctx, user);
-  if (!membership) return null;
-  return {
-    tenantId: membership.tenantId,
-    role: membership.role,
-    permissions: [...(TENANT_ROLE_PERMISSIONS[membership.role] ?? [])],
-  };
-}
-
-/**
- * Project a tenant role slug into the client `ResolvedRole` shape so panel
- * access and navigation gates (which match on role slug + permissions) treat a
- * tenant administrator like the role they actually hold.
- */
-export function tenantRoleAsResolvedRole(role: string): ResolvedRole {
-  return {
-    _id: null,
-    slug: role,
-    name: systemRoleName(role),
-    isSystem: true,
-    isPlatform: false,
-    rank: 0,
-    permissions: [...(TENANT_ROLE_PERMISSIONS[role] ?? [])],
-  };
 }
 
 /**
@@ -240,6 +189,7 @@ export async function requirePlatformAdmin(ctx: QueryCtx | MutationCtx): Promise
   if (!isPlatformAdmin(roles)) {
     throw new Error("Unauthorized: admin role required");
   }
+  assertMfaCompliancePolicy(user, roles.map((role) => role.slug));
   return user;
 }
 
@@ -253,6 +203,7 @@ export async function requirePlatformOwner(ctx: QueryCtx | MutationCtx): Promise
   if (!isPlatformOwner(roles)) {
     throw new Error("Unauthorized: owner role required");
   }
+  assertMfaCompliancePolicy(user, roles.map((role) => role.slug));
   return user;
 }
 
@@ -464,8 +415,10 @@ export async function requirePlatformSubRole(
 }
 
 /**
- * MFA enrollment is optional and never part of a server authorization gate.
+ * Enforce the mandatory-2FA policy (lib/mfa). WorkOS owns enrollment; this is
+ * the app-side fail-closed check on the synced marker. Ops can dial it to
+ * shadow mode via env flags (RBAC shadow mode, doc 06); the default is full
+ * enforcement.
  */
 /** Keep the system role slugs reachable from auth consumers. */
 export { SYSTEM_ROLE_SLUGS };
-

@@ -1,18 +1,7 @@
 import { v } from "convex/values";
-import { MutationCtx, mutation, query } from "./_generated/server";
-import { requirePermission } from "./lib/auth";
+import { mutation, query } from "./_generated/server";
+import { requireTenantPermission } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
-
-async function requireUser(ctx: MutationCtx) {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) throw new Error("Unauthenticated");
-  const user = await ctx.db
-    .query("users")
-    .withIndex("by_workosUserId", (q) => q.eq("workosUserId", identity.subject))
-    .first();
-  if (!user) throw new Error("User not found");
-  return user;
-}
 
 export const list = query({
   args: {
@@ -30,9 +19,9 @@ export const list = query({
     endDate: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "invoices:read");
+    const { tenantId } = await requireTenantPermission(ctx, "invoices:read");
 
-    let invoices = await ctx.db.query("invoices").order("desc").collect();
+    let invoices = await ctx.db.query("invoices").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).order("desc").collect();
 
     if (args.status) {
       invoices = invoices.filter((i) => i.status === args.status);
@@ -59,18 +48,18 @@ export const list = query({
 export const get = query({
   args: { id: v.id("invoices") },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "invoices:read");
+    const { tenantId } = await requireTenantPermission(ctx, "invoices:read");
     const invoice = await ctx.db.get(args.id);
 
-    if (!invoice) {
+    if (!invoice || invoice.tenantId !== tenantId) {
       return null;
     }
 
     // Fetch line items
-    const lineItems = await ctx.db
+    const lineItems = (await ctx.db
       .query("invoiceLineItems")
       .withIndex("by_invoice", (q) => q.eq("invoiceId", args.id))
-      .collect();
+      .collect()).filter((item) => item.tenantId === tenantId);
 
     return {
       ...invoice,
@@ -100,13 +89,20 @@ export const create = mutation({
     ),
   },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "invoices:create");
-    const user = await requireUser(ctx);
+    const { user, tenantId } = await requireTenantPermission(ctx, "invoices:create");
+
+    if (args.subscriberId) {
+      const subscriber = await ctx.db.get(args.subscriberId);
+      if (!subscriber || subscriber.tenantId !== tenantId) {
+        throw new Error("Subscriber not found");
+      }
+    }
 
     const { lineItems, ...invoiceData } = args;
 
     const id = await ctx.db.insert("invoices", {
       ...invoiceData,
+      tenantId,
       status: "draft",
       operatorId: user._id,
       createdAt: Date.now(),
@@ -117,6 +113,7 @@ export const create = mutation({
     for (const item of lineItems) {
       await ctx.db.insert("invoiceLineItems", {
         invoiceId: id,
+        tenantId,
         ...item,
         createdAt: Date.now(),
       });
@@ -148,18 +145,24 @@ export const update = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "invoices:update");
-    const user = await requireUser(ctx);
+    const { user, tenantId } = await requireTenantPermission(ctx, "invoices:update");
 
     const { id, ...updates } = args;
     const invoice = await ctx.db.get(id);
 
-    if (!invoice) {
+    if (!invoice || invoice.tenantId !== tenantId) {
       throw new Error("Invoice not found");
     }
 
     if (invoice.status !== "draft") {
       throw new Error("Only draft invoices can be edited");
+    }
+
+    if (updates.subscriberId) {
+      const subscriber = await ctx.db.get(updates.subscriberId);
+      if (!subscriber || subscriber.tenantId !== tenantId) {
+        throw new Error("Subscriber not found");
+      }
     }
 
     await ctx.db.patch(id, {
@@ -183,12 +186,11 @@ export const update = mutation({
 export const issue = mutation({
   args: { id: v.id("invoices") },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "invoices:issue");
-    const user = await requireUser(ctx);
+    const { user, tenantId } = await requireTenantPermission(ctx, "invoices:issue");
 
     const invoice = await ctx.db.get(args.id);
 
-    if (!invoice) {
+    if (!invoice || invoice.tenantId !== tenantId) {
       throw new Error("Invoice not found");
     }
 
@@ -218,12 +220,11 @@ export const issue = mutation({
 export const markPaid = mutation({
   args: { id: v.id("invoices") },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "invoices:mark_paid");
-    const user = await requireUser(ctx);
+    const { user, tenantId } = await requireTenantPermission(ctx, "invoices:mark_paid");
 
     const invoice = await ctx.db.get(args.id);
 
-    if (!invoice) {
+    if (!invoice || invoice.tenantId !== tenantId) {
       throw new Error("Invoice not found");
     }
 
@@ -253,12 +254,11 @@ export const markPaid = mutation({
 export const cancel = mutation({
   args: { id: v.id("invoices"), reason: v.string() },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "invoices:cancel");
-    const user = await requireUser(ctx);
+    const { user, tenantId } = await requireTenantPermission(ctx, "invoices:cancel");
 
     const invoice = await ctx.db.get(args.id);
 
-    if (!invoice) {
+    if (!invoice || invoice.tenantId !== tenantId) {
       throw new Error("Invoice not found");
     }
 
@@ -293,9 +293,9 @@ export const getStats = query({
     endDate: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "invoices:read");
+    const { tenantId } = await requireTenantPermission(ctx, "invoices:read");
 
-    let invoices = await ctx.db.query("invoices").collect();
+    let invoices = await ctx.db.query("invoices").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect();
 
     const start = args.startDate;
     if (start) {
