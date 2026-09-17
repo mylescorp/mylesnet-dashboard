@@ -10,6 +10,7 @@ export function SidebarRail({
   brand,
   collapsed,
   onToggleCollapsed,
+  homeHref = "/dashboard",
   variant = "desktop",
   footer,
 }: {
@@ -18,8 +19,8 @@ export function SidebarRail({
   brand: { name: string; logo: string; mark?: ReactNode };
   collapsed: boolean;
   onToggleCollapsed: () => void;
+  homeHref?: string;
   variant?: "desktop" | "mobile";
-  can: (permission: string) => boolean;
   footer?: ReactNode;
 }) {
   return (
@@ -29,7 +30,7 @@ export function SidebarRail({
     >
       <div className="sidebar-brand">
         <div className="sidebar-brand-inner">
-          <a className="sidebar-logo-link" href="/dashboard" title={brand.name}>
+          <a className="sidebar-logo-link" href={homeHref} title={`${brand.name} home`}>
             {collapsed ? (
               <span className="sidebar-mark" aria-hidden="true">
                 {brand.mark ?? brand.name[0]}

@@ -29,7 +29,7 @@ import {
   type ThemeMode,
   type ResolvedTheme,
 } from "@/lib/theme";
-import { BOOTSTRAP_TENANT_SLUG, tenantSlugFromHost } from "@/lib/auth/tenant";
+import type { ShellPanel } from "@/lib/navigation/product-nav";
 
 function useMediaQuery(query: string): boolean {
   const [matches, setMatches] = useState(false);
@@ -84,7 +84,7 @@ function DrawerLink({ item }: { item: DrawerItem }) {
   );
 }
 
-export function AccountDrawer() {
+export function AccountDrawer({ panel = "dashboard" }: { panel?: ShellPanel }) {
   const { user } = useUserProfile();
   const { signOut } = useAuth();
   const online = useOnline();
@@ -107,9 +107,6 @@ export function AccountDrawer() {
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("")
     .slice(0, 2);
-
-  const tenantSlug =
-    typeof window !== "undefined" ? tenantSlugFromHost(window.location.hostname) ?? BOOTSTRAP_TENANT_SLUG : BOOTSTRAP_TENANT_SLUG;
 
   const toggle = () => {
     if (open) {
@@ -194,10 +191,9 @@ export function AccountDrawer() {
   const canManageAccess = permissions.includes("users:manage") || permissions.includes("roles:manage");
   const canViewAccounts = permissions.includes("users:read") || permissions.includes("users:manage");
 
-  // No fake workspace switcher — single-workspace context only (spec §5.2).
-  // Requests stay bound to the active WorkOS organization; no tenant can be
-  // selected from the browser.
-  const workspaceLabel = `${tenantSlug.charAt(0).toUpperCase()}${tenantSlug.slice(1)}`;
+  // Scope is established by the server and Convex, never inferred from a host
+  // or a browser cookie. This neutral label avoids leaking an unverified scope.
+  const workspaceLabel = panel === "platform" ? "MylesNet Platform" : "Tenant workspace";
 
   const rawRole = user?.primaryRole?.slug ?? user?.platformRole ?? "operator";
   const formattedRole = rawRole.replace("platform_", "").replace(/_/g, " ").toUpperCase();
@@ -219,23 +215,23 @@ export function AccountDrawer() {
     {
       label: "Roles & permissions",
       description: "Which functions you can open",
-      href: canManageAccess ? "/access" : "/platform/access",
+      href: panel === "platform" ? "/platform/access" : "/access",
       icon: <ShieldCheck size={16} />,
-      show: canViewAccounts || canManageAccess || isPlatform,
+      show: (panel === "platform" && (canViewAccounts || canManageAccess || isPlatform)) || (panel === "admin" && canManageAccess),
     },
     {
       label: "Audit log",
       description: "Record of every mutating action",
       href: isPlatform ? "/platform/audit" : "/audit-log",
       icon: <ScrollText size={16} />,
-      show: true,
+      show: panel === "platform" && permissions.includes("audit_log:read"),
     },
     {
       label: "Tenant administration",
       description: "Subscribers, plans, devices and tickets",
       href: "/admin",
       icon: <Users size={16} />,
-      show: true,
+      show: panel === "admin" || (panel === "dashboard" && (user?.roles ?? []).some((role) => role.slug === "tenant_admin" || role.slug === "client_admin")),
     },
   ];
 

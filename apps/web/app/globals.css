@@ -130,7 +130,7 @@
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.28); --shadow-card: 0 1px 2px #00000014; --shadow-pop: 0 8px 22px #00000033; --shadow-rail: 0 2px 10px #0000001a; --shadow-md: 0 12px 28px rgb(0 0 0 / 0.30); --shadow-lg: 0 20px 48px rgb(0 0 0 / 0.42);
   --focus-ring: color-mix(in srgb, var(--green-bright) 55%, transparent); --focus-ring-offset: var(--surface);
   --chart-grid: var(--line); --chart-label: var(--muted); --chart-cpu: var(--primary); --chart-sessions: var(--success); --chart-transmit: var(--green-bright); --chart-receive: var(--info); --chart-memory: var(--accent-light);
-  --sidebar-canvas: var(--cream); --sidebar-canvas-end: var(--surface-2); --sidebar-text: var(--ink); --sidebar-muted: var(--ink-muted); --sidebar-hover: var(--sb-hover); --sidebar-active: var(--green-bright); --sidebar-active-end: var(--green); --sidebar-logo-bg: var(--surface);
+  --sidebar-canvas: var(--cream); --sidebar-canvas-end: var(--surface-2); --sidebar-text: var(--ink); --sidebar-muted: var(--ink-muted); --sidebar-hover: var(--sb-hover); --sidebar-active: var(--primary-action); --sidebar-active-end: var(--primary-action-hover); --sidebar-logo-bg: var(--surface);
   --sb-hover: #ffffff14; --sb-surface: #262626; --sb-indicator-bg: var(--sb-surface);
   --shell-shadow: 0 8px 24px rgba(0,0,0,0.18);
   --topbar-bg: #1c1c1cd9; --field-bg: var(--inp); --tbl-scroll-bg: var(--cream);
