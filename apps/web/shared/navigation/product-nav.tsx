@@ -47,7 +47,7 @@ const platformModule: NavModule = {
     { href: "/platform/provisioning", label: "Provisioning", icon: ServerCog },
     { href: "/platform/infrastructure/devices", label: "Device fleet", icon: Cpu },
     { href: "/platform/vouchers/monitor", label: "Voucher monitor", icon: TicketCheck },
-    { href: "/platform/feature-flags", label: "Feature flags", icon: Flag },
+    { href: "/platform/feature-flags", label: "Service controls", icon: Flag },
   ],
 };
 

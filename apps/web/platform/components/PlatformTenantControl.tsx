@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Building2, CircleAlert, Link2, PauseCircle, PlayCircle, Plus, UsersRound } from "lucide-react";
 import { useAction, useMutation, useQuery } from "@/app/lib/convex";
 import { tenantControl, type PlatformTenant, type TenantStatus } from "@/lib/convex/tenantControl";
+import { userFacingMessage } from "@/shared/lib/user-facing-error";
 
 const statusTone: Record<TenantStatus, "success" | "warning" | "danger" | "neutral"> = {
   provisioning: "warning", active: "success", trial: "warning", suspended: "danger", cancelled: "neutral",
@@ -15,9 +16,7 @@ function Status({ status }: { status: TenantStatus }) {
 }
 
 function safeErrorMessage(error: unknown): string {
-  const message = error instanceof Error ? error.message : "";
-  if (/multi-factor|mfa/i.test(message)) return "Your administrator account needs a security check before a workspace can be created.";
-  return "The workspace could not be prepared. Please retry or contact MylesNet support.";
+  return userFacingMessage(error, "The workspace could not be prepared. Please retry or contact MylesNet support.");
 }
 
 export function PlatformTenantControl() {

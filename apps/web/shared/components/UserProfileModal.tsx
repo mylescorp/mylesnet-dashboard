@@ -344,7 +344,7 @@ className="profile-modal-close"
                 disabled
                 className="pf-input input-disabled"
               />
-              <span className="pf-hint">WorkOS single sign-on identity. Contact owner to change email.</span>
+              <span className="pf-hint">Your sign-in email is managed securely. Contact an owner to change it.</span>
             </div>
           </div>
 
