@@ -19,6 +19,8 @@ docs/                         Product documentation and vault mirrors
 
 Product decisions are maintained in `docs/decisions.md`; the vault holds the
 canonical long-term record and is reconciled separately when decisions change.
+All user-facing work must follow
+[`docs/no-technology-stack-exposure.md`](docs/no-technology-stack-exposure.md).
 
 The captive portal is a deferred web boundary at
 `apps/web/captive-portal/`. Its future routes are mounted under

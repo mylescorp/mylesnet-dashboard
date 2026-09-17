@@ -33,6 +33,12 @@ Before starting any coding task, check available skills in `.agents/skills/` and
 - Build work converges to the stack's monorepo shape (`apps/`, `convex/`, `services/`, `packages/`, `infrastructure/`) per the migration gates in `docs/architecture/MylesNet_Multi_Tenant_ISP_Radius_SaaS_Technical_Specification_v3.md`. The current single Next.js app is the pre-migration state, not the target.
 - Keep `docs/technology-stack.md` and `docs/architecture/MylesNet_Multi_Tenant_ISP_Radius_SaaS_Technical_Specification_v3.md` identical to their vault sources; a divergence is drift.
 
+## No technology stack exposure
+
+- Read `docs/no-technology-stack-exposure.md` before changing any UI, API response, authentication, integration, error boundary, loading state, form, notification, or panel route.
+- All user-facing failures must use the shared safe error translation boundary. Never render raw exceptions, provider responses, stack traces, source paths, endpoint URLs, environment values, internal IDs, or implementation names.
+- This is a release requirement for every panel. Validate failure paths and visible copy before claiming a change is complete.
+
 ## Captive portal (T-HOT)
 
 - Canonical scope: `docs/captive-portal/captive-portal-specification.md` (byte-identical mirror of the vault `products/mylesnet/captive-portal-specification.md`); flows: `docs/captive-portal/captive-portal-flows.md`. Read these before any captive-portal/hotspot code.
