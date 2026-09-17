@@ -10,7 +10,10 @@
 export const WORKOS_SIGNATURE_TOLERANCE_MS = 5 * 60 * 1000;
 
 export interface WorkosSignatureParts {
+  /** Timestamp normalized to milliseconds for replay protection. */
   timestamp: number | null;
+  /** The exact timestamp token WorkOS signed. */
+  signedTimestamp: string | null;
   signature: string | null;
 }
 
@@ -18,8 +21,9 @@ export interface WorkosSignatureParts {
 export function parseWorkosSignatureHeader(
   header: string | null | undefined,
 ): WorkosSignatureParts {
-  if (!header) return { timestamp: null, signature: null };
+  if (!header) return { timestamp: null, signedTimestamp: null, signature: null };
   let timestamp: number | null = null;
+  let signedTimestamp: string | null = null;
   let signature: string | null = null;
   for (const part of header.split(",")) {
     const separator = part.indexOf("=");
@@ -29,12 +33,17 @@ export function parseWorkosSignatureHeader(
     if (!value) continue;
     if (key === "t") {
       const parsed = Number(value);
-      timestamp = Number.isFinite(parsed) ? parsed * 1000 : null;
+      if (Number.isFinite(parsed) && parsed > 0) {
+        // Current WorkOS deliveries use milliseconds. Keep accepting the
+        // historical seconds form so pending retries remain verifiable.
+        timestamp = parsed >= 100_000_000_000 ? parsed : parsed * 1000;
+        signedTimestamp = value;
+      }
     } else if (key === "v1") {
       signature = value;
     }
   }
-  return { timestamp, signature };
+  return { timestamp, signedTimestamp, signature };
 }
 
 export async function hmacSha256Hex(secret: string, message: string): Promise<string> {
@@ -71,11 +80,11 @@ export async function verifyWorkosWebhook(
   now = Date.now(),
   toleranceMs = WORKOS_SIGNATURE_TOLERANCE_MS,
 ): Promise<boolean> {
-  const { timestamp, signature } = parseWorkosSignatureHeader(signatureHeader);
-  if (timestamp === null || !signature) return false;
+  const { timestamp, signedTimestamp, signature } = parseWorkosSignatureHeader(signatureHeader);
+  if (timestamp === null || signedTimestamp === null || !signature) return false;
   if (Math.abs(now - timestamp) > toleranceMs) return false;
 
-  const expected = await hmacSha256Hex(secret, `${Math.floor(timestamp / 1000)}.${rawBody}`);
+  const expected = await hmacSha256Hex(secret, `${signedTimestamp}.${rawBody}`);
   return hexBytesEqual(expected, signature.toLowerCase());
 }
 
