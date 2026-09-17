@@ -34,7 +34,7 @@ export function PlatformSecurity() {
 
       <section className="metric-grid">
         <Metric icon={<ShieldCheck size={19} />} label="Access configured" value={`${security.tenantOverview.identityMapped}/${security.tenantOverview.total}`} detail="Tenant workspaces with secure access" tone={security.tenantOverview.identityMapped === security.tenantOverview.total ? "success" : "warning"} />
-        <Metric icon={<UserCheck size={19} />} label="Staff missing MFA" value={security.staffMissingMfa} detail={`${security.staff.length} platform staff total`} tone={security.staffMissingMfa === 0 ? "success" : "danger"} />
+        <Metric icon={<UserCheck size={19} />} label="Staff missing MFA" value={security.staff.length - security.staffMfaEnrolled} detail={`${security.staff.length} platform staff total`} tone={security.staff.length === security.staffMfaEnrolled ? "success" : "danger"} />
         <Metric icon={<Webhook size={19} />} label="Secure deliveries (24h)" value={`${security.deliveries24h.processed}/${security.deliveries24h.total}`} detail={`${security.deliveries24h.signatureInvalid} verification issues`} tone={security.deliveries24h.signatureInvalid === 0 ? "success" : "warning"} />
         <Metric icon={<Flag size={19} />} label="Service controls" value={Object.values(security.featureFlags).filter(Boolean).length} detail={`${Object.keys(security.featureFlags).length} managed controls`} tone={Object.values(security.featureFlags).some(Boolean) ? "success" : "accent"} />
       </section>
@@ -54,14 +54,13 @@ export function PlatformSecurity() {
       <section className="pf-panel">
         <div className="section-heading"><div><p className="eyebrow">Identity</p><h2>Staff MFA posture</h2></div></div>
         {security.staff.length === 0 ? <p className="pf-muted">No platform staff are provisioned yet.</p> : (
-          <div className="pf-table-wrap"><table className="pf-table"><thead><tr><th>User</th><th>Roles</th><th>Mandatory MFA</th><th>Enrolled</th><th>Compliance</th></tr></thead><tbody>
+          <div className="pf-table-wrap"><table className="pf-table"><thead><tr><th>User</th><th>Roles</th><th>Enrolled</th><th>Status</th></tr></thead><tbody>
             {security.staff.map((staff: SecurityStaffEntry) => (
               <tr key={staff.userId}>
                 <td><strong>{staff.name ?? "Unnamed"}</strong><small className="table-subtext">{staff.email}</small></td>
                 <td>{staff.roles.join(", ")}</td>
-                <td>{staff.mandatoryMfa ? "Yes" : "No"}</td>
                 <td>{staff.mfaEnrolled ? <span className="tenant-linked"><CircleCheck size={14} aria-hidden="true" />Enrolled</span> : <span className="tenant-unlinked"><CircleHelp size={14} aria-hidden="true" />Not enrolled</span>}</td>
-                <td><StatusPill tone={staff.compliance === "compliant" ? "success" : staff.compliance === "missing_mfa" ? "danger" : "neutral"}>{staff.compliance}</StatusPill></td>
+                <td><StatusPill tone={staff.status === "enrolled" ? "success" : "neutral"}>{staff.status}</StatusPill></td>
               </tr>
             ))}
           </tbody></table></div>
