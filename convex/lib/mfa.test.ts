@@ -63,3 +63,9 @@ test("guard enforcement blocks mandatory roles without a synced MFA marker", () 
     assertMfaCompliance({ mfaEnrolled: false }, ["platform_admin"], { shadowMode: true }),
   );
 });
+
+test("MFA is optional unless server enforcement is explicitly enabled", () => {
+  assert.doesNotThrow(() =>
+    assertMfaCompliance({ mfaEnrolled: false }, ["platform_admin"]),
+  );
+});

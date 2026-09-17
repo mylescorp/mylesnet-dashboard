@@ -63,7 +63,9 @@ export function assertMfaCompliance(
   if (isMfaCompliant([...roleSlugs], enrollment)) return;
 
   const shadowMode = configuration.shadowMode ?? process.env.NEXT_PUBLIC_ENABLE_RBAC_SHADOW_MODE === "true";
-  const level = configuration.enforcementLevel ?? process.env.NEXT_PUBLIC_RBAC_ENFORCEMENT_LEVEL ?? "full";
+  // MFA is optional unless the deployment owner explicitly enables this
+  // server-side policy. Do not use a public client variable for enforcement.
+  const level = configuration.enforcementLevel ?? (process.env.MYLESNET_ENFORCE_MFA === "true" ? "full" : "off");
   if (shadowMode || level === "off" || level === "partial") return;
 
   const required = roleSlugs.filter((slug) => requiresMandatory2FA(slug));

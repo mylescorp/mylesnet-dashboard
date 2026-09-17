@@ -11,7 +11,6 @@ import { getTokenClaims } from "@workos-inc/authkit-nextjs";
 import { cookies } from "next/headers";
 import { TENANT_COOKIE_NAME, TENANT_COOKIE_MAX_AGE, baseCookieOptions } from "./cookies";
 import { hasAnyRole, normalizeRoleClaims, toClaimArray } from "./rbac";
-import { BOOTSTRAP_TENANT_SLUG } from "./tenant";
 
 export class AuthRequiredError extends Error {
   readonly status = 401;
@@ -78,15 +77,12 @@ export async function requireRole(requiredRoles: string[]): Promise<AuthSession>
  * Resolve the active tenant slug for the request.
  *
  * Reads the `__mylesnet_tenant` cookie set by the proxy from the hostname.
- * Falls back to the bootstrap slug while single-hostname operating (pre-
- * multi-panel); Convex re-derives the authoritative tenant from WorkOS org
- * membership.
+ * A missing cookie is intentionally not mapped to any tenant. Convex derives
+ * the authoritative tenant from the active WorkOS organization membership.
  */
-export async function getActiveTenantSlug(): Promise<string> {
+export async function getActiveTenantSlug(): Promise<string | undefined> {
   const cookieStore = await cookies();
-  const stored = cookieStore.get(TENANT_COOKIE_NAME)?.value;
-  if (stored) return stored;
-  return BOOTSTRAP_TENANT_SLUG;
+  return cookieStore.get(TENANT_COOKIE_NAME)?.value;
 }
 
 /** Persist the tenant cookie (used by the proxy; opt-in callers). */
