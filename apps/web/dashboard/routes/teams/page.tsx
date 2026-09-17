@@ -1,5 +1,7 @@
 "use client";
 
+import { userFacingMessage } from "@/shared/lib/user-facing-error";
+
 import { useState } from "react";
 import { useMutation, useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
@@ -37,7 +39,7 @@ export default function TeamsPage() {
       if (editing) await updateTeam({ teamId: editing, name: name.trim(), leaderAgentId: leaderAgentId ? leaderAgentId as Id<"agents"> : undefined });
       else await createTeam({ name: name.trim(), leaderAgentId: leaderAgentId ? leaderAgentId as Id<"agents"> : undefined });
       reset();
-    } catch (err) { setError(err instanceof Error ? err.message : "Could not save team"); }
+    } catch (err) { setError(userFacingMessage(err, "Could not save team")); }
   };
 
   return (

@@ -63,3 +63,9 @@ test("guard is a no-op in optional mode", () => {
     assertMfaCompliance({ mfaEnrolled: false }, ["platform_admin"], { shadowMode: true }),
   );
 });
+
+test("MFA is optional unless server enforcement is explicitly enabled", () => {
+  assert.doesNotThrow(() =>
+    assertMfaCompliance({ mfaEnrolled: false }, ["platform_admin"]),
+  );
+});

@@ -1,6 +1,7 @@
 "use client";
 
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { toUserFacingError } from "@/shared/lib/user-facing-error";
 
 type BoundaryProps = { children: ReactNode; onReset?: () => void };
 type BoundaryState = { error: Error | null };
@@ -18,7 +19,10 @@ export class QueryErrorBoundary extends Component<BoundaryProps, BoundaryState> 
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error("Panel surface query failed:", error, info);
+    // Intentionally do not render diagnostics. Observability integrations may
+    // consume this hook later without exposing errors through the browser UI.
+    void error;
+    void info;
   }
 
   private reset = () => {
@@ -28,14 +32,14 @@ export class QueryErrorBoundary extends Component<BoundaryProps, BoundaryState> 
 
   render() {
     if (this.state.error) {
+      const safe = toUserFacingError(this.state.error);
       return (
         <div className="workspace-page" role="alert">
           <div className="pf-panel">
-            <p className="eyebrow">Data access error</p>
-            <h2 className="page-title">This surface could not be loaded</h2>
+            <p className="eyebrow">Workspace</p>
+            <h2 className="page-title">{safe.title}</h2>
             <p className="pf-hint">
-              {this.state.error.message || "The query server rejected the request."} This usually means your
-              current role is not permitted for this surface. If the problem persists, contact a platform administrator.
+              {safe.message}
             </p>
             <button type="button" className="secondary-button" onClick={this.reset}>Retry</button>
           </div>

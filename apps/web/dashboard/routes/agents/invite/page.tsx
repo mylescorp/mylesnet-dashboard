@@ -1,5 +1,7 @@
 "use client";
 
+import { userFacingMessage } from "@/shared/lib/user-facing-error";
+
 import { useState } from "react";
 import { useMutation, useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
@@ -40,7 +42,7 @@ export default function AgentInvitePage() {
       setMessage(`Invitation created. Expires ${formatDateTime(result.expiresAt)}.`);
       setName(""); setEmail(""); setPhone(""); setTargetMarket("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create invitation");
+      setError(userFacingMessage(err, "Could not create invitation"));
     }
   };
 
@@ -50,7 +52,7 @@ export default function AgentInvitePage() {
       await revokeInvitation({ invitationId: id });
       setMessage("Invitation revoked.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not revoke invitation");
+      setError(userFacingMessage(err, "Could not revoke invitation"));
     }
   };
 
@@ -60,7 +62,7 @@ export default function AgentInvitePage() {
         <div>
           <p className="eyebrow">Platform</p>
           <h1 className="page-title">Invite Agent</h1>
-          <p className="page-subtitle">One-time link, 7-day expiry, WorkOS-backed signup redirecting to /dashboard.</p>
+          <p className="page-subtitle">A secure invitation link expires after 7 days and takes the recipient to their workspace.</p>
         </div>
       </div>
 
@@ -144,4 +146,3 @@ export default function AgentInvitePage() {
     </div>
   );
 }
-

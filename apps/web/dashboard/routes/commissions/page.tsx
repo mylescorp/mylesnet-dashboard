@@ -1,5 +1,7 @@
 "use client";
 
+import { userFacingMessage } from "@/shared/lib/user-facing-error";
+
 import { useState } from "react";
 import { useMutation, useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
@@ -54,7 +56,7 @@ export default function CommissionsPage() {
       await fn();
       setMessage(ok);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Action failed");
+      setError(userFacingMessage(err, "Action failed"));
     }
   };
 

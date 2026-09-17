@@ -15,15 +15,12 @@ export type TenantStatus =
   | "cancelled";
 
 /**
- * Choose the only safe result from the server-derived resolution paths.
- * An unknown WorkOS organization and a missing bootstrap tenant mean the
- * caller has no tenancy; callers must deny rather than select another tenant.
+ * Choose the only safe result from the server-derived organization mapping.
+ * An unknown WorkOS organization means the caller has no tenancy; callers
+ * must deny rather than select a bootstrap or another tenant.
  */
-export function resolvedTenantOrNull<T>(
-  organizationTenant: T | null | undefined,
-  bootstrapTenant: T | null | undefined,
-): T | null {
-  return organizationTenant ?? bootstrapTenant ?? null;
+export function resolvedTenantOrNull<T>(organizationTenant: T | null | undefined): T | null {
+  return organizationTenant ?? null;
 }
 
 /** Translate a WorkOS organization-membership state into local tenant scope. */

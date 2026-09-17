@@ -1,5 +1,7 @@
 "use client";
 
+import { userFacingMessage } from "@/shared/lib/user-facing-error";
+
 import { useState } from "react";
 import { useMutation, useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
@@ -49,7 +51,7 @@ export default function ProspectsPage() {
       setShowForm(false);
       setName(""); setCountry(""); setContactName(""); setContactPhone(""); setContactEmail(""); setNotes("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create prospect");
+      setError(userFacingMessage(err, "Could not create prospect"));
     }
   };
 
@@ -64,7 +66,7 @@ export default function ProspectsPage() {
         setMessage(`Advanced to ${next}.`);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not advance prospect");
+      setError(userFacingMessage(err, "Could not advance prospect"));
     }
   };
 

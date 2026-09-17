@@ -1,7 +1,7 @@
 "use client";
 
 import { ReactNode, useEffect, useState } from "react";
-import { ConvexError } from "convex/values";
+import { userFacingMessage } from "@/shared/lib/user-facing-error";
 
 export function Field({
   label,
@@ -59,16 +59,11 @@ export function FormError({ message }: { message: string | null }) {
 }
 
 /**
- * Unwrap a ConvexError thrown by the sign-up handlers into its user-facing
- * message (the backend formats every rejection with plain copy).
+ * Translate all public onboarding failures through the shared product-error
+ * boundary. Server and provider messages are not safe user-interface copy.
  */
 export function extractErrorMessage(error: unknown, fallback: string): string {
-  if (error instanceof ConvexError) {
-    const data = error.data;
-    if (typeof data === "string" && data.length > 0) return data;
-  }
-  if (error instanceof Error && error.message) return error.message;
-  return fallback;
+  return userFacingMessage(error, fallback);
 }
 
 /** Client-side replica of the server's password rules (source: convex/lib/signup.ts). */
