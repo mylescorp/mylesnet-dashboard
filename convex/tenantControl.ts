@@ -480,17 +480,20 @@ export const provisionTenant = action({
     name: v.string(), slug: v.string(), country: v.string(), timezone: v.string(), currency: v.string(),
     ownerEmail: v.string(), ownerName: v.optional(v.string()),
   },
-  handler: async (ctx, args): Promise<{ tenantId: Id<"tenants">; status: "provisioning" }> => {
+  handler: async (ctx, args): Promise<
+    | { tenantId: Id<"tenants">; status: "provisioning" }
+    | { status: "authentication_required" | "security_check_required" | "unavailable" }
+  > => {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
+    if (!identity) return { status: "authentication_required" };
     const onboarding = normalizeAutomatedTenantOnboarding(args);
-    await ctx.runQuery(internal.tenantControl.assertProvisioner, { workosUserId: identity.subject });
-    const run = await ctx.runMutation(internal.tenantControl.prepareAutomatedTenantOnboarding, {
-      actorWorkosUserId: identity.subject,
-      ...onboarding,
-    });
-    if (run.tenantId) return { tenantId: run.tenantId, status: "provisioning" };
     try {
+      await ctx.runQuery(internal.tenantControl.assertProvisioner, { workosUserId: identity.subject });
+      const run = await ctx.runMutation(internal.tenantControl.prepareAutomatedTenantOnboarding, {
+        actorWorkosUserId: identity.subject,
+        ...onboarding,
+      });
+      if (run.tenantId) return { tenantId: run.tenantId, status: "provisioning" };
       const externalId = tenantOrganizationExternalId(onboarding.slug);
       const organization = run.workosOrganizationId
         ? { id: run.workosOrganizationId }
@@ -507,9 +510,18 @@ export const provisionTenant = action({
       const result = await ctx.runMutation(internal.tenantControl.finalizeAutomatedTenantOnboarding, { runId: run.runId });
       return { tenantId: result.tenantId, status: "provisioning" };
     } catch (error) {
-      await ctx.runMutation(internal.tenantControl.markAutomatedTenantOnboardingFailed, { runId: run.runId });
+      if (error instanceof Error && /multi-factor authentication|mfa/i.test(error.message)) {
+        return { status: "security_check_required" };
+      }
+      // A run is available only after authorization succeeds. Preserve it for
+      // a retry, but never disclose provider diagnostics to the browser.
+      const run = await ctx.runMutation(internal.tenantControl.prepareAutomatedTenantOnboarding, {
+        actorWorkosUserId: identity.subject,
+        ...onboarding,
+      }).catch(() => null);
+      if (run) await ctx.runMutation(internal.tenantControl.markAutomatedTenantOnboardingFailed, { runId: run.runId });
       console.error("Tenant onboarding failed", error);
-      throw new Error("Tenant workspace could not be prepared. Please retry or contact MylesNet support.");
+      return { status: "unavailable" };
     }
   },
 });

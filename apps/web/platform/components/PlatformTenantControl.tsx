@@ -88,7 +88,19 @@ function TenantOnboardingDialog({ onClose, onCreated }: { onClose: () => void; o
     event.preventDefault(); setError(null); setWorking(true);
     try {
       if (!/^[a-z0-9-]{3,50}$/.test(form.slug)) throw new Error("Use a lowercase slug (3–50 letters, numbers, or hyphens).");
-      await provisionTenant({ ...form, ownerName: form.ownerName.trim() || undefined });
+      const result = await provisionTenant({ ...form, ownerName: form.ownerName.trim() || undefined });
+      if (result.status === "authentication_required") {
+        setError("Sign in again before creating a tenant workspace.");
+        return;
+      }
+      if (result.status === "security_check_required") {
+        setError("Complete your account security verification, then try again.");
+        return;
+      }
+      if (result.status === "unavailable") {
+        setError("The workspace could not be prepared. Please retry or contact MylesNet support.");
+        return;
+      }
       onCreated(`${form.name} is being prepared. Its administrator will receive a secure MylesNet invitation.`);
     } catch (caught) { setError(safeErrorMessage(caught)); } finally { setWorking(false); }
   };
