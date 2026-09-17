@@ -54,6 +54,7 @@ import type * as lib_workosIdentity from "../lib/workosIdentity.js";
 import type * as lib_workosVerify from "../lib/workosVerify.js";
 import type * as marketProspects from "../marketProspects.js";
 import type * as markets from "../markets.js";
+import type * as networkOps from "../networkOps.js";
 import type * as notifications from "../notifications.js";
 import type * as organizations from "../organizations.js";
 import type * as osMigrations from "../osMigrations.js";
@@ -131,6 +132,7 @@ declare const fullApi: ApiFromModules<{
   "lib/workosVerify": typeof lib_workosVerify;
   marketProspects: typeof marketProspects;
   markets: typeof markets;
+  networkOps: typeof networkOps;
   notifications: typeof notifications;
   organizations: typeof organizations;
   osMigrations: typeof osMigrations;
