@@ -437,10 +437,14 @@ export async function verifyWorkosEmailCode(workosUserId: string, code: string):
   );
 }
 
-/** Attach a password to the unverified sign-up user (WorkOS UM). */
+/**
+ * Set a password through WorkOS's supported User Management update endpoint.
+ * Password is a user attribute in this API; `/users/:id/password` is not a
+ * valid resource and must never be called.
+ */
 export async function setWorkosUserPassword(workosUserId: string, password: string): Promise<void> {
   await workosFetch(
-    `/user_management/users/${encodeURIComponent(workosUserId)}/password`,
+    `/user_management/users/${encodeURIComponent(workosUserId)}`,
     { method: "PUT", body: JSON.stringify({ password }) },
   );
 }
