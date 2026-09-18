@@ -2,9 +2,14 @@ import { QueryCtx, MutationCtx, ActionCtx } from "../_generated/server";
 import { Id, Doc } from "../_generated/dataModel";
 import {
   SYSTEM_ROLE_SLUGS,
+  TENANT_ROLE_PERMISSIONS,
   getSystemRoleBySlug,
   PLATFORM_SUB_ROLE_MAP,
+  tenantRoleHasPermission,
 } from "./permissions";
+import { assertMfaCompliance as assertMfaCompliancePolicy } from "./mfa";
+import { canTenantOperate } from "./tenantCore";
+import { organizationIdFromWorkosIdentity } from "./workosIdentity";
 
 /**
  * Platform role access is data-driven from the `roles` table via
@@ -40,6 +45,11 @@ export function systemRoleName(slug: string): string {
 
 /** Build a read-model role from a stored role row. */
 export function resolveRoleRow(row: Doc<"roles">): ResolvedRole {
+  // System roles are product policy. Their stored permission array may lag the
+  // current catalog after a safe product capability is added, but it must never
+  // silently reduce an owner's access. Preserve any approved local additions
+  // while applying the current system baseline at authorization time.
+  const system = row.isSystem ? getSystemRoleBySlug(row.slug) : undefined;
   return {
     _id: row._id,
     slug: row.slug,
@@ -48,7 +58,9 @@ export function resolveRoleRow(row: Doc<"roles">): ResolvedRole {
     isSystem: row.isSystem,
     isPlatform: row.isPlatform,
     rank: row.rank,
-    permissions: row.permissions,
+    permissions: system
+      ? Array.from(new Set([...system.permissions, ...row.permissions]))
+      : row.permissions,
   };
 }
 
@@ -66,17 +78,13 @@ function virtualRole(slug: string): ResolvedRole {
   };
 }
 
-function fallbackSlug(user: Doc<"users">): string {
-  const mirrored = getSystemRoleBySlug(user.platformRole ?? "") ? user.platformRole : undefined;
-  return mirrored ?? SYSTEM_ROLE_SLUGS.operator;
-}
-
 /**
  * Resolve the roles currently assigned to a user.
  *
  * Prefers `user.roles[]`; falls back to the `platformRole` mirror while the
  * backfill has not populated the array. Empty `roles[]` with no mirror yields
- * nothing (no platform privileges).
+ * nothing. A user must never gain an implicit operational role merely because
+ * a legacy backfill has not assigned one yet.
  */
 export async function resolveRoles(
   ctx: QueryCtx | MutationCtx,
@@ -93,7 +101,91 @@ export async function resolveRoles(
   if (user.platformRole !== undefined && user.platformRole !== null) {
     return [virtualRole(user.platformRole)];
   }
-  return [virtualRole(fallbackSlug(user))];
+  return [];
+}
+
+/**
+ * Resolve a tenant membership only from the active WorkOS organization claim.
+ * Unknown organizations and inactive memberships fail closed.
+ */
+async function getActiveTenantMembership(ctx: QueryCtx | MutationCtx, user: Doc<"users">) {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) return null;
+  const organizationId = organizationIdFromWorkosIdentity(identity);
+  if (!organizationId) return null;
+  const tenant = await ctx.db
+    .query("tenants")
+    .withIndex("by_workosOrganizationId", (q) => q.eq("workosOrganizationId", organizationId))
+    .first();
+  if (!tenant || !canTenantOperate(tenant.status)) return null;
+  const membership = await ctx.db
+    .query("tenantMemberships")
+    .withIndex("by_user_tenant", (q) => q.eq("userId", user._id).eq("tenantId", tenant._id))
+    .first();
+  return membership?.status === "active" ? membership : null;
+}
+
+export interface TenantAccess {
+  tenantId: Id<"tenants">;
+  role: string;
+  permissions: string[];
+}
+
+/**
+ * Read-model of the caller's active tenant membership for the current
+ * organization claim. A tenant role is a *separate* authorization namespace
+ * from platform roles, so callers must merge this into any principal they build
+ * for the client. Tenant permissions never grant platform access and platform
+ * permissions never substitute for `requireTenantPermission`.
+ */
+export async function resolveTenantAccess(
+  ctx: QueryCtx | MutationCtx,
+  user: Doc<"users">,
+): Promise<TenantAccess | null> {
+  const membership = await getActiveTenantMembership(ctx, user);
+  if (!membership) return null;
+  return {
+    tenantId: membership.tenantId,
+    role: membership.role,
+    permissions: [...(TENANT_ROLE_PERMISSIONS[membership.role] ?? [])],
+  };
+}
+
+/**
+ * Project a tenant role slug into the client `ResolvedRole` shape so panel
+ * access and navigation gates (which match on role slug + permissions) treat a
+ * tenant administrator like the role they actually hold.
+ */
+export function tenantRoleAsResolvedRole(role: string): ResolvedRole {
+  return {
+    _id: null,
+    slug: role,
+    name: systemRoleName(role),
+    isSystem: true,
+    isPlatform: false,
+    rank: 0,
+    permissions: [...(TENANT_ROLE_PERMISSIONS[role] ?? [])],
+  };
+}
+
+/**
+ * Require a permission inside the caller's active, mapped tenant workspace.
+ * Platform permissions never substitute for this check, so a tenant endpoint
+ * cannot be reached by changing only a URL or client-supplied tenant id.
+ */
+export async function requireTenantPermission(
+  ctx: QueryCtx | MutationCtx,
+  permission: string,
+): Promise<{ user: Doc<"users">; tenantId: Id<"tenants"> }> {
+  const user = await getCurrentUserRecord(ctx);
+  if (user.isActive === false || user.deactivatedAt !== undefined) {
+    throw new Error("Unauthorized: account is inactive");
+  }
+  const membership = await getActiveTenantMembership(ctx, user);
+  if (!membership || !tenantRoleHasPermission(membership.role, permission)) {
+    throw new Error(`Unauthorized: the ${permission} permission is required`);
+  }
+  return { user, tenantId: membership.tenantId };
 }
 
 export function hasPermission(
@@ -241,10 +333,14 @@ export async function requirePermission(
     throw new Error("Unauthorized: account is inactive");
   }
   const roles = await resolveRoles(ctx, user);
-  if (!hasPermission(roles, permission)) {
-    throw new Error(`Unauthorized: the ${permission} permission is required`);
-  }
-  return user;
+  if (hasPermission(roles, permission) && isPlatformUser(roles)) return user;
+
+  // Tenant permissions exist only within the active organization mapped to a
+  // real tenant. They never satisfy a platform-role guard.
+  const tenantMembership = await getActiveTenantMembership(ctx, user);
+  if (tenantRoleHasPermission(tenantMembership?.role, permission)) return user;
+
+  throw new Error(`Unauthorized: the ${permission} permission is required`);
 }
 
 /** Any authenticated user (works from actions too). */
@@ -372,3 +468,4 @@ export async function requirePlatformSubRole(
  */
 /** Keep the system role slugs reachable from auth consumers. */
 export { SYSTEM_ROLE_SLUGS };
+

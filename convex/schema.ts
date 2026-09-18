@@ -438,7 +438,8 @@ export default defineSchema({
     hash: v.optional(v.string()),
   })
     .index("by_entity", ["entityTable"])
-    .index("by_timestamp", ["timestamp"]),
+    .index("by_timestamp", ["timestamp"])
+    .index("by_tenant_timestamp", ["tenantId", "timestamp"]),
 
   // ==========================================================================
   // EXPANSION PIPELINE (market prospects, separate from live markets)
