@@ -13,6 +13,25 @@
 export const PERMISSIONS = [
   { slug: "dashboard:access", name: "Dashboard", group: "Overview" },
 
+  { slug: "subscribers:read", name: "View subscribers", group: "Customers" },
+  { slug: "subscribers:create", name: "Create subscribers", group: "Customers" },
+  { slug: "subscribers:update", name: "Update subscribers", group: "Customers" },
+  { slug: "subscribers:delete", name: "Archive subscribers", group: "Customers" },
+  { slug: "subscribers:financial", name: "Adjust subscriber balances", group: "Customers" },
+
+  { slug: "invoices:read", name: "View invoices", group: "Finance" },
+  { slug: "invoices:create", name: "Create invoices", group: "Finance" },
+  { slug: "invoices:update", name: "Update invoices", group: "Finance" },
+  { slug: "invoices:issue", name: "Issue invoices", group: "Finance" },
+  { slug: "invoices:mark_paid", name: "Mark invoices paid", group: "Finance" },
+  { slug: "invoices:cancel", name: "Cancel invoices", group: "Finance" },
+  { slug: "payments:read", name: "View payments", group: "Finance" },
+  { slug: "payments:create", name: "Create payments", group: "Finance" },
+  { slug: "payments:update", name: "Update payments", group: "Finance" },
+  { slug: "payments:refund", name: "Refund payments", group: "Finance" },
+  { slug: "expenses:create", name: "Create expenses", group: "Finance" },
+  { slug: "expenses:update", name: "Update expenses", group: "Finance" },
+
 
   { slug: "tickets:read", name: "View support tickets", group: "Operations" },
   { slug: "tickets:manage", name: "Manage support tickets", group: "Operations" },
@@ -54,6 +73,7 @@ export const PERMISSIONS = [
   { slug: "organizations:read", name: "View organization overview", group: "Administration" },
   { slug: "audit_log:read", name: "View audit log", group: "Administration" },
   { slug: "comms:manage", name: "Send communications", group: "Administration" },
+  { slug: "settings:manage", name: "Manage workspace settings", group: "Administration" },
 
   { slug: "reports:read", name: "View reports", group: "Reporting" },
   { slug: "reports:generate", name: "Generate report exports", group: "Reporting" },
@@ -64,6 +84,53 @@ export const PERMISSIONS = [
 export type PermissionSlug = (typeof PERMISSIONS)[number]["slug"];
 
 export const ALL_PERMISSION_SLUGS: string[] = PERMISSIONS.map((permission) => permission.slug);
+
+/**
+ * Tenant workspace roles are evaluated only with an active, organization-bound
+ * tenant membership. They are deliberately separate from platform roles: a
+ * tenant administrator can run their own ISP workspace but can never obtain
+ * MylesNet platform control-plane access through this mapping.
+ */
+const TENANT_ADMIN_EXCLUDED_PERMISSIONS = new Set<string>([
+  "roles:manage",
+  "users:manage",
+  "organizations:read",
+  "audit_log:read",
+  "investors:read",
+  "investors:manage",
+]);
+
+export const TENANT_ROLE_PERMISSIONS: Record<string, readonly string[]> = {
+  tenant_admin: ALL_PERMISSION_SLUGS.filter(
+    (permission) => !TENANT_ADMIN_EXCLUDED_PERMISSIONS.has(permission),
+  ),
+  tenant_manager: [
+    "dashboard:access", "subscribers:read", "subscribers:create", "subscribers:update",
+    "tickets:read", "tickets:manage", "markets:read", "markets:manage", "plans:read",
+    "plans:manage", "vouchers:read", "vouchers:manage", "agents:read", "agents:manage",
+    "teams:read", "teams:manage", "payments:read", "invoices:read", "expenses:read",
+    "analytics:read", "reports:read",
+  ],
+  tenant_operator: [
+    "dashboard:access", "subscribers:read", "subscribers:create", "subscribers:update",
+    "tickets:read", "tickets:manage", "markets:read", "plans:read", "vouchers:read",
+  ],
+  tenant_viewer: [
+    "dashboard:access", "subscribers:read", "tickets:read", "markets:read", "plans:read",
+    "vouchers:read", "analytics:read", "reports:read",
+  ],
+  // WorkOS assigns `member` when an administrator adds a person manually in
+  // its dashboard. Within a mapped tenant organization that is the supported
+  // full-workspace default. It still grants no platform-control-plane access.
+  member: ALL_PERMISSION_SLUGS.filter(
+    (permission) => !TENANT_ADMIN_EXCLUDED_PERMISSIONS.has(permission),
+  ),
+};
+
+/** A tenant membership role only grants permissions within its active tenant. */
+export function tenantRoleHasPermission(role: string | undefined, permission: string): boolean {
+  return role !== undefined && (TENANT_ROLE_PERMISSIONS[role] ?? []).includes(permission);
+}
 
 export function permissionInCatalog(slug: string): boolean {
   return PERMISSIONS.some((permission) => permission.slug === slug);
@@ -377,3 +444,4 @@ export const PLATFORM_SUB_ROLE_MAP: Record<string, string[]> = {
   platform_support: ["platform_support"],
   platform_readonly: ["platform_readonly"],
 };
+

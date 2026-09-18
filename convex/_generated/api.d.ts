@@ -69,6 +69,7 @@ import type * as profile from "../profile.js";
 import type * as rolesAdmin from "../rolesAdmin.js";
 import type * as rolesInternal from "../rolesInternal.js";
 import type * as scheduledReports from "../scheduledReports.js";
+import type * as seed from "../seed.js";
 import type * as signup from "../signup.js";
 import type * as subscriberDetail from "../subscriberDetail.js";
 import type * as subscriberSnapshots from "../subscriberSnapshots.js";
@@ -81,6 +82,7 @@ import type * as voucherFraud from "../voucherFraud.js";
 import type * as vouchers from "../vouchers.js";
 import type * as workos from "../workos.js";
 import type * as workosWebhook from "../workosWebhook.js";
+import type * as workspaceSettings from "../workspaceSettings.js";
 
 import type {
   ApiFromModules,
@@ -150,6 +152,7 @@ declare const fullApi: ApiFromModules<{
   rolesAdmin: typeof rolesAdmin;
   rolesInternal: typeof rolesInternal;
   scheduledReports: typeof scheduledReports;
+  seed: typeof seed;
   signup: typeof signup;
   subscriberDetail: typeof subscriberDetail;
   subscriberSnapshots: typeof subscriberSnapshots;
@@ -162,6 +165,7 @@ declare const fullApi: ApiFromModules<{
   vouchers: typeof vouchers;
   workos: typeof workos;
   workosWebhook: typeof workosWebhook;
+  workspaceSettings: typeof workspaceSettings;
 }>;
 
 /**
@@ -191,3 +195,4 @@ export declare const internal: FilterApi<
 >;
 
 export declare const components: {};
+

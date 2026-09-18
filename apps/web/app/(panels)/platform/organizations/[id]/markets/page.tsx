@@ -1,12 +1,16 @@
 import { requirePanelAccess } from "@/lib/auth/panels";
 import { QueryErrorBoundary } from "@/platform/components/QueryErrorBoundary";
-import { PlatformAccess } from "@/platform/components/PlatformAccess";
+import { PlatformMarkets } from "@/platform/components/PlatformMarkets";
 
-export default async function PlatformAccessPage() {
+export default async function PlatformOrganizationMarketsPage({
+  params,
+}: {
+  params: { id: string };
+}) {
   await requirePanelAccess("platform");
   return (
     <QueryErrorBoundary>
-      <PlatformAccess />
+      <PlatformMarkets tenantId={params.id as any} />
     </QueryErrorBoundary>
   );
 }
