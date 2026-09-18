@@ -121,30 +121,30 @@ export function NewOrganizationForm() {
         <div className="mb-8">
           <Link 
             href="/platform/organizations"
-            className="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900 transition-colors mb-4"
+            className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-muted-foreground transition-colors mb-4"
           >
             <ArrowLeft size={16} />
             Back to Organizations
           </Link>
-          <h1 className="text-3xl font-semibold text-slate-900 tracking-tight mb-2">
+          <h1 className="text-3xl font-semibold text-muted-foreground tracking-tight mb-2">
             Create New Organization
           </h1>
-          <p className="text-slate-600">
+          <p className="text-muted-foreground">
             Set up a new tenant organization. Configure basic settings before inviting team members.
           </p>
         </div>
 
         {/* Form */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
+        <div className="bg-background rounded-xl border border-border shadow-sm">
           <form onSubmit={handleSubmit} className="p-8">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Organization Name */}
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Organization Name <span className="text-red-600">*</span>
+                <label className="block text-sm font-medium text-muted-foreground mb-2">
+                  Organization Name <span className="text-foreground">*</span>
                 </label>
                 <div className="relative">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">
                     <Building2 size={20} />
                   </div>
                   <input
@@ -152,13 +152,13 @@ export function NewOrganizationForm() {
                     value={formData.name}
                     onChange={(e) => handleNameChange(e.target.value)}
                     placeholder="Enter organization name"
-                    className={`w-full pl-12 pr-4 py-3 bg-white border rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#FA8200]/20 focus:border-[#FA8200] transition-all duration-200 ${
-                      errors.name ? "border-red-500" : "border-slate-200"
+                    className={`w-full pl-12 pr-4 py-3 bg-background border rounded-lg text-muted-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200 ${
+                      errors.name ? "border-destructive" : "border-border"
                     }`}
                   />
                 </div>
                 {errors.name && (
-                  <p className="mt-1.5 text-sm text-red-600 flex items-center gap-1">
+                  <p className="mt-1.5 text-sm text-foreground flex items-center gap-1">
                     <X size={14} />
                     {errors.name}
                   </p>
@@ -167,11 +167,11 @@ export function NewOrganizationForm() {
 
               {/* Slug */}
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Organization Slug <span className="text-red-600">*</span>
+                <label className="block text-sm font-medium text-muted-foreground mb-2">
+                  Organization Slug <span className="text-foreground">*</span>
                 </label>
                 <div className="relative">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">
                     <Globe size={20} />
                   </div>
                   <input
@@ -179,32 +179,32 @@ export function NewOrganizationForm() {
                     value={formData.slug}
                     onChange={(e) => setFormData(prev => ({ ...prev, slug: e.target.value }))}
                     placeholder="organization-slug"
-                    className={`w-full pl-12 pr-4 py-3 bg-white border rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#FA8200]/20 focus:border-[#FA8200] transition-all duration-200 font-mono text-sm ${
-                      errors.slug ? "border-red-500" : "border-slate-200"
+                    className={`w-full pl-12 pr-4 py-3 bg-background border rounded-lg text-muted-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200 font-mono text-sm ${
+                      errors.slug ? "border-destructive" : "border-border"
                     }`}
                   />
                 </div>
                 {errors.slug && (
-                  <p className="mt-1.5 text-sm text-red-600 flex items-center gap-1">
+                  <p className="mt-1.5 text-sm text-foreground flex items-center gap-1">
                     <X size={14} />
                     {errors.slug}
                   </p>
                 )}
-                <p className="mt-1.5 text-sm text-slate-500">
+                <p className="mt-1.5 text-sm text-muted-foreground">
                   This will be used in URLs: {formData.slug || "organization-slug"}.mylesnetisp.mylescorptech.com
                 </p>
               </div>
 
               {/* Country */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Country <span className="text-red-600">*</span>
+                <label className="block text-sm font-medium text-muted-foreground mb-2">
+                  Country <span className="text-foreground">*</span>
                 </label>
                 <select
                   value={countries.find(c => c.name === formData.country)?.code || ""}
                   onChange={(e) => handleCountryChange(e.target.value)}
-                  className={`w-full px-4 py-3 bg-white border rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#FA8200]/20 focus:border-[#FA8200] transition-all duration-200 ${
-                    errors.country ? "border-red-500" : "border-slate-200"
+                  className={`w-full px-4 py-3 bg-background border rounded-lg text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200 ${
+                    errors.country ? "border-destructive" : "border-border"
                   }`}
                 >
                   <option value="">Select country</option>
@@ -215,7 +215,7 @@ export function NewOrganizationForm() {
                   ))}
                 </select>
                 {errors.country && (
-                  <p className="mt-1.5 text-sm text-red-600 flex items-center gap-1">
+                  <p className="mt-1.5 text-sm text-foreground flex items-center gap-1">
                     <X size={14} />
                     {errors.country}
                   </p>
@@ -224,11 +224,11 @@ export function NewOrganizationForm() {
 
               {/* Currency */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Currency <span className="text-red-600">*</span>
+                <label className="block text-sm font-medium text-muted-foreground mb-2">
+                  Currency <span className="text-foreground">*</span>
                 </label>
                 <div className="relative">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">
                     <DollarSign size={20} />
                   </div>
                   <input
@@ -236,11 +236,11 @@ export function NewOrganizationForm() {
                     value={formData.currency}
                     onChange={(e) => setFormData(prev => ({ ...prev, currency: e.target.value }))}
                     readOnly
-                    className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-600 cursor-not-allowed"
+                    className="w-full pl-12 pr-4 py-3 bg-muted border border-border rounded-lg text-muted-foreground cursor-not-allowed"
                   />
                 </div>
                 {errors.currency && (
-                  <p className="mt-1.5 text-sm text-red-600 flex items-center gap-1">
+                  <p className="mt-1.5 text-sm text-foreground flex items-center gap-1">
                     <X size={14} />
                     {errors.currency}
                   </p>
@@ -249,11 +249,11 @@ export function NewOrganizationForm() {
 
               {/* Timezone */}
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Timezone <span className="text-red-600">*</span>
+                <label className="block text-sm font-medium text-muted-foreground mb-2">
+                  Timezone <span className="text-foreground">*</span>
                 </label>
                 <div className="relative">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">
                     <Calendar size={20} />
                   </div>
                   <input
@@ -261,11 +261,11 @@ export function NewOrganizationForm() {
                     value={formData.timezone}
                     onChange={(e) => setFormData(prev => ({ ...prev, timezone: e.target.value }))}
                     readOnly
-                    className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-600 cursor-not-allowed"
+                    className="w-full pl-12 pr-4 py-3 bg-muted border border-border rounded-lg text-muted-foreground cursor-not-allowed"
                   />
                 </div>
                 {errors.timezone && (
-                  <p className="mt-1.5 text-sm text-red-600 flex items-center gap-1">
+                  <p className="mt-1.5 text-sm text-foreground flex items-center gap-1">
                     <X size={14} />
                     {errors.timezone}
                   </p>
@@ -275,27 +275,27 @@ export function NewOrganizationForm() {
 
             {/* Error Message */}
             {errors.submit && (
-              <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-sm text-red-700">{errors.submit}</p>
+              <div className="mt-6 p-4 bg-muted border border-destructive rounded-lg">
+                <p className="text-sm text-foreground">{errors.submit}</p>
               </div>
             )}
 
             {/* Actions */}
-            <div className="mt-8 flex items-center justify-end gap-4 pt-6 border-t border-slate-200">
+            <div className="mt-8 flex items-center justify-end gap-4 pt-6 border-t border-border">
               <Link
                 href="/platform/organizations"
-                className="px-5 py-2.5 text-slate-700 hover:text-slate-900 font-medium transition-colors"
+                className="px-5 py-2.5 text-muted-foreground hover:text-muted-foreground font-medium transition-colors"
               >
                 Cancel
               </Link>
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#FA8200] text-white rounded-lg font-medium hover:bg-[#C86800] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-[#FA8200]/20 hover:shadow-xl hover:shadow-[#FA8200]/30 hover:-translate-y-0.5"
+                className="inline-flex items-center gap-2 px-6 py-2.5 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30 hover:-translate-y-0.5"
               >
                 {isSubmitting ? (
                   <>
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <div className="w-4 h-4 border-2 border-border/30 border-t-white rounded-full animate-spin" />
                     Creating...
                   </>
                 ) : (
@@ -310,17 +310,17 @@ export function NewOrganizationForm() {
         </div>
 
         {/* Info Card */}
-        <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div className="mt-6 bg-muted border border-destructive rounded-lg p-4">
           <div className="flex gap-3">
             <div className="flex-shrink-0">
-              <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-                <Users size={16} className="text-blue-600" />
+              <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                <Users size={16} className="text-foreground" />
               </div>
             </div>
             <div>
-              <h3 className="text-sm font-medium text-blue-900 mb-1">Next Steps</h3>
-              <p className="text-sm text-blue-700">
-                After creating the organization, you'll need to invite the first owner and configure the WorkOS organization mapping. The organization will be in "provisioning" status until these steps are complete.
+              <h3 className="text-sm font-medium text-foreground mb-1">Next Steps</h3>
+              <p className="text-sm text-foreground">
+                After creating the organization, you&apos;ll need to invite the first owner and configure the WorkOS organization mapping. The organization will be in &quot;provisioning&quot; status until these steps are complete.
               </p>
             </div>
           </div>

@@ -43,6 +43,7 @@ export default function AuditLogPage() {
   );
   const currentUser = useQuery(api.platform.getCurrentPlatformUser, {});
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!page) return;
     setEntries((prev) =>
@@ -50,6 +51,7 @@ export default function AuditLogPage() {
     );
     setIsDone(page.isDone);
   }, [page, cursor]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   if (page === undefined || currentUser === undefined) {
     return <Loading />;

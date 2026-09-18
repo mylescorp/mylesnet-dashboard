@@ -1,4 +1,15 @@
 import { makeFunctionReference } from "convex/server";
+import type { Id } from "@/convex/_generated/dataModel";
+
+export type PlatformMarket = {
+  _id: Id<"markets">;
+  name: string;
+  country: string;
+  currency: string;
+  status: "active" | "deleted";
+  lifecycleStatus: "planned" | "active" | "paused" | "decommissioned";
+  createdAt: number;
+};
 
 /**
  * Client-side bindings for platform-specific functions that live in
@@ -12,11 +23,11 @@ export const platformMarkets = {
     tenantId?: string;
     lifecycleStatus?: "planned" | "active" | "paused" | "decommissioned";
     limit?: number;
-  }, any>("convex.markets.platformListMarkets"),
+  }, PlatformMarket[]>("convex.markets.platformListMarkets"),
   
   getMarket: makeFunctionReference<"query", {
     marketId: string;
-  }, any>("convex.markets.platformGetMarket"),
+  }, PlatformMarket | null>("convex.markets.platformGetMarket"),
   
   createMarket: makeFunctionReference<"mutation", {
     tenantId: string;

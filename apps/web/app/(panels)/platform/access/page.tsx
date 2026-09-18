@@ -1,12 +1,12 @@
 import { requirePanelAccess } from "@/lib/auth/panels";
 import { QueryErrorBoundary } from "@/platform/components/QueryErrorBoundary";
-import { PlatformAccess } from "@/platform/components/PlatformAccess";
+import AccessManagementPage from "@/dashboard/routes/access/page";
 
 export default async function PlatformAccessPage() {
   await requirePanelAccess("platform");
   return (
     <QueryErrorBoundary>
-      <PlatformAccess />
+      <AccessManagementPage />
     </QueryErrorBoundary>
   );
 }

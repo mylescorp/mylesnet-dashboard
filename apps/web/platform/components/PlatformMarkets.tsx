@@ -11,13 +11,10 @@ import {
   RefreshCw,
   Globe,
   DollarSign,
-  ArrowRight,
   Calendar,
-  ExternalLink,
-  Settings
 } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
-import { platformMarkets } from "@/shared/convex/platformMarkets";
+import { platformMarkets, type PlatformMarket } from "@/shared/convex/platformMarkets";
 import { Id } from "@/convex/_generated/dataModel";
 
 interface PlatformMarketsProps {
@@ -25,10 +22,10 @@ interface PlatformMarketsProps {
 }
 
 const lifecycleConfig = {
-  planned: { label: "Planned", color: "bg-slate-100 text-slate-700 border-slate-200" },
-  active: { label: "Active", color: "bg-emerald-100 text-emerald-700 border-emerald-200" },
-  paused: { label: "Paused", color: "bg-amber-100 text-late-700 border-amber-200" },
-  decommissioned: { label: "Decommissioned", color: "bg-red-100 text-red-700 border-red-200" },
+  planned: { label: "Planned", color: "bg-muted text-muted-foreground border-border" },
+  active: { label: "Active", color: "bg-muted text-foreground border-border" },
+  paused: { label: "Paused", color: "bg-muted text-late-700 border-border" },
+  decommissioned: { label: "Decommissioned", color: "bg-muted text-foreground border-border" },
 } as const;
 
 export function PlatformMarkets({ tenantId }: PlatformMarketsProps) {
@@ -40,8 +37,6 @@ export function PlatformMarkets({ tenantId }: PlatformMarketsProps) {
     lifecycleStatus: filterStatus || undefined,
   });
 
-  const createMarket = useMutation(platformMarkets.createMarket);
-  const updateMarket = useMutation(platformMarkets.updateMarket);
   const softDeleteMarket = useMutation(platformMarkets.softDeleteMarket);
   const restoreMarket = useMutation(platformMarkets.restoreMarket);
 
@@ -67,7 +62,7 @@ export function PlatformMarkets({ tenantId }: PlatformMarketsProps) {
     await restoreMarket({ marketId });
   };
 
-  const filteredMarkets = markets?.filter((market: any) => 
+  const filteredMarkets = markets?.filter((market: PlatformMarket) => 
     market.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     market.country.toLowerCase().includes(searchQuery.toLowerCase())
   ) || [];
@@ -77,24 +72,24 @@ export function PlatformMarkets({ tenantId }: PlatformMarketsProps) {
       <div className="max-w-7xl mx-auto px-6 py-8">
         {/* Header */}
         <div className="mb-8">
-          <div className="flex items-center gap-2 text-sm text-slate-500 mb-2">
-            <Link href="/platform/organizations" className="hover:text-slate-700 transition-colors">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+            <Link href="/platform/organizations" className="hover:text-muted-foreground transition-colors">
               <span className="font-medium">Organizations</span>
             </Link>
-            <span className="text-slate-300">/</span>
+            <span className="text-muted-foreground">/</span>
             <span>Markets</span>
           </div>
           <div className="flex items-start justify-between">
             <div>
-              <h1 className="text-3xl font-semibold text-slate-900 tracking-tight mb-2">
+              <h1 className="text-3xl font-semibold text-muted-foreground tracking-tight mb-2">
                 Organization Markets
               </h1>
-              <p className="text-slate-600 max-w-2xl">
+              <p className="text-muted-foreground max-w-2xl">
                 Manage markets for this organization. Configure location, currency, and operational status.
               </p>
             </div>
             <button 
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 transition-all duration-200 shadow-lg shadow-slate-900/20 hover:shadow-xl hover:shadow-slate-900/30 hover:-translate-y-0.5"
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-slate-800 transition-all duration-200 shadow-lg shadow-slate-900/20 hover:shadow-xl hover:shadow-slate-900/30 hover:-translate-y-0.5"
               onClick={handleCreateMarket}
             >
               <Plus size={18} aria-hidden="true" />
@@ -106,38 +101,38 @@ export function PlatformMarkets({ tenantId }: PlatformMarketsProps) {
         {/* Stats Cards */}
         {markets && markets.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-            <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+            <div className="bg-background rounded-xl border border-border p-5 shadow-sm">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-medium text-slate-600">Total</span>
-                <MapPin size={18} className="text-slate-400" />
+                <span className="text-sm font-medium text-muted-foreground">Total</span>
+                <MapPin size={18} className="text-muted-foreground" />
               </div>
-              <div className="text-2xl font-semibold text-slate-900">{markets.length}</div>
+              <div className="text-2xl font-semibold text-muted-foreground">{markets.length}</div>
             </div>
-            <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+            <div className="bg-background rounded-xl border border-border p-5 shadow-sm">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-medium text-slate-600">Active</span>
-                <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                <span className="text-sm font-medium text-muted-foreground">Active</span>
+                <div className="w-2 h-2 rounded-full bg-mylesnet-success" />
               </div>
-              <div className="text-2xl font-semibold text-slate-900">
-                {markets.filter((m: any) => m.lifecycleStatus === "active").length}
-              </div>
-            </div>
-            <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-medium text-slate-600">Countries</span>
-                <Globe size={18} className="text-slate-400" />
-              </div>
-              <div className="text-2xl font-semibold text-slate-900">
-                {new Set(markets.map((m: any) => m.country)).size}
+              <div className="text-2xl font-semibold text-muted-foreground">
+                {markets.filter((m) => m.lifecycleStatus === "active").length}
               </div>
             </div>
-            <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+            <div className="bg-background rounded-xl border border-border p-5 shadow-sm">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-medium text-slate-600">Currencies</span>
-                <DollarSign size={18} className="text-slate-400" />
+                <span className="text-sm font-medium text-muted-foreground">Countries</span>
+                <Globe size={18} className="text-muted-foreground" />
               </div>
-              <div className="text-2xl font-semibold text-slate-900">
-                {new Set(markets.map((m: any) => m.currency)).size}
+              <div className="text-2xl font-semibold text-muted-foreground">
+                {new Set(markets.map((m) => m.country)).size}
+              </div>
+            </div>
+            <div className="bg-background rounded-xl border border-border p-5 shadow-sm">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-medium text-muted-foreground">Currencies</span>
+                <DollarSign size={18} className="text-muted-foreground" />
+              </div>
+              <div className="text-2xl font-semibold text-muted-foreground">
+                {new Set(markets.map((m) => m.currency)).size}
               </div>
             </div>
           </div>
@@ -146,17 +141,17 @@ export function PlatformMarkets({ tenantId }: PlatformMarketsProps) {
         {/* Search and Filter Bar */}
         <div className="mb-6 flex gap-4">
           <div className="relative flex-1">
-            <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input 
               type="search" 
               placeholder="Search markets by name or country..." 
-              className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/20 focus:border-slate-900 transition-all duration-200"
+              className="w-full pl-12 pr-4 py-3 bg-background border border-border rounded-lg text-muted-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-slate-900/20 focus:border-slate-900 transition-all duration-200"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
           <select 
-            className="px-4 py-3 bg-white border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/20 focus:border-slate-900 transition-all duration-200"
+            className="px-4 py-3 bg-background border border-border rounded-lg text-muted-foreground focus:outline-none focus:ring-2 focus:ring-slate-900/20 focus:border-slate-900 transition-all duration-200"
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value as "planned" | "active" | "paused" | "decommissioned" | "")}
           >
@@ -169,39 +164,39 @@ export function PlatformMarkets({ tenantId }: PlatformMarketsProps) {
         </div>
 
         {/* Table */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="bg-background rounded-xl border border-border shadow-sm overflow-hidden">
           {filteredMarkets.length > 0 ? (
             <table className="w-full">
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50/50">
-                  <th className="text-left px-6 py-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                <tr className="border-b border-border bg-muted/50">
+                  <th className="text-left px-6 py-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     Market
                   </th>
-                  <th className="text-left px-6 py-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                  <th className="text-left px-6 py-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     Country
                   </th>
-                  <th className="text-left px-6 py-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                  <th className="text-left px-6 py-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     Currency
                   </th>
-                  <th className="text-left px-6 py-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                  <th className="text-left px-6 py-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     Status
                   </th>
-                  <th className="text-left px-6 py-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                  <th className="text-left px-6 py-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     Lifecycle
                   </th>
-                  <th className="text-left px-6 py-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                  <th className="text-left px-6 py-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     Created
                   </th>
-                  <th className="text-right px-6 py-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                  <th className="text-right px-6 py-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredMarkets.map((market: any) => {
+                {filteredMarkets.map((market) => {
                   const statusConfig = {
-                    active: { label: "Active", color: "bg-emerald-100 text-emerald-700 border-emerald-200" },
-                    deleted: { label: "Deleted", color: "bg-red-100 text-red-700 border-red-200" },
+                    active: { label: "Active", color: "bg-muted text-foreground border-border" },
+                    deleted: { label: "Deleted", color: "bg-muted text-foreground border-border" },
                   };
                   const status = statusConfig[market.status as keyof typeof statusConfig] || statusConfig.active;
                   const lifecycle = lifecycleConfig[market.lifecycleStatus as keyof typeof lifecycleConfig] || lifecycleConfig.planned;
@@ -209,25 +204,25 @@ export function PlatformMarkets({ tenantId }: PlatformMarketsProps) {
                   return (
                     <tr 
                       key={market._id}
-                      className="hover:bg-slate-50/50 transition-colors duration-150 group"
+                      className="hover:bg-muted/50 transition-colors duration-150 group"
                     >
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
-                            <MapPin size={20} className="text-slate-600" />
+                            <MapPin size={20} className="text-muted-foreground" />
                           </div>
-                          <span className="font-medium text-slate-900">{market.name}</span>
+                          <span className="font-medium text-muted-foreground">{market.name}</span>
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <div className="flex items-center gap-2 text-slate-700">
-                          <Globe size={16} className="text-slate-400" />
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Globe size={16} className="text-muted-foreground" />
                           <span className="font-medium">{market.country}</span>
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <div className="flex items-center gap-2 text-slate-700">
-                          <DollarSign size={16} className="text-slate-400" />
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <DollarSign size={16} className="text-muted-foreground" />
                           <span className="font-medium">{market.currency}</span>
                         </div>
                       </td>
@@ -242,8 +237,8 @@ export function PlatformMarkets({ tenantId }: PlatformMarketsProps) {
                         </span>
                       </td>
                       <td className="px-6 py-4">
-                        <div className="flex items-center gap-2 text-slate-600">
-                          <Calendar size={16} className="text-slate-400" />
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Calendar size={16} className="text-muted-foreground" />
                           <span className="text-sm">
                             {new Date(market.createdAt).toLocaleDateString("en-US", {
                               month: "short",
@@ -257,7 +252,7 @@ export function PlatformMarkets({ tenantId }: PlatformMarketsProps) {
                         <div className="flex items-center justify-end gap-2">
                           {market.status === "deleted" ? (
                             <button
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-emerald-700 hover:text-emerald-900 hover:bg-emerald-50 rounded-lg transition-all duration-150"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-foreground hover:text-emerald-900 hover:bg-emerald-50 rounded-lg transition-all duration-150"
                               onClick={() => handleRestoreMarket(market._id)}
                               title="Restore market"
                             >
@@ -267,7 +262,7 @@ export function PlatformMarkets({ tenantId }: PlatformMarketsProps) {
                           ) : (
                             <>
                               <button
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-all duration-150"
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-muted-foreground hover:bg-muted rounded-lg transition-all duration-150"
                                 onClick={() => handleUpdateMarket(market._id)}
                                 title="Edit market"
                               >
@@ -275,7 +270,7 @@ export function PlatformMarkets({ tenantId }: PlatformMarketsProps) {
                                 Edit
                               </button>
                               <button
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-600 hover:text-red-900 hover:bg-red-50 rounded-lg transition-all duration-150"
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-destructive hover:text-foreground hover:bg-muted rounded-lg transition-all duration-150"
                                 onClick={() => handleDeleteMarket(market._id)}
                                 title="Delete market"
                               >
@@ -294,19 +289,19 @@ export function PlatformMarkets({ tenantId }: PlatformMarketsProps) {
           ) : (
             <div className="flex flex-col items-center justify-center py-16 px-6">
               <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center mb-4">
-                <MapPin size={32} className="text-slate-400" />
+                <MapPin size={32} className="text-muted-foreground" />
               </div>
-              <h3 className="text-lg font-semibold text-slate-900 mb-2">
+              <h3 className="text-lg font-semibold text-muted-foreground mb-2">
                 {markets?.length === 0 ? "No markets yet" : "No markets match your search"}
               </h3>
-              <p className="text-slate-600 text-center max-w-sm mb-6">
+              <p className="text-muted-foreground text-center max-w-sm mb-6">
                 {markets?.length === 0 
                   ? "Create your first market to begin managing locations for this organization."
                   : "Try adjusting your search or filter criteria."}
               </p>
               {markets?.length === 0 && (
                 <button 
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 transition-all duration-200 shadow-lg shadow-slate-900/20"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-slate-800 transition-all duration-200 shadow-lg shadow-slate-900/20"
                   onClick={handleCreateMarket}
                 >
                   <Plus size={18} aria-hidden="true" />
