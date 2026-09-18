@@ -148,7 +148,7 @@ See `convex/schema.ts` for complete schema definition.
 
 ### Design Tokens
 
-- **Primary**: Orange `#FA8200` (Centipid parity)
+- **Primary**: Orange `#FA8200`
 - **Neutrals**: Graphite `#0E1116` (no navy)
 - **Typography**: Inter (UI), JetBrains Mono (code), Space Grotesk (display)
 - **Components**: shadcn/ui primitives with custom token mapping
