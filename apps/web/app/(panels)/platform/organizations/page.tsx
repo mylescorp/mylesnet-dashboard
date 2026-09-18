@@ -1,12 +1,12 @@
 import { requirePanelAccess } from "@/lib/auth/panels";
 import { QueryErrorBoundary } from "@/platform/components/QueryErrorBoundary";
-import { PlatformSecurity } from "@/platform/components/PlatformSecurity";
+import { PlatformOrganizationList } from "@/platform/components/PlatformOrganizationList";
 
-export default async function PlatformSecurityPage() {
+export default async function PlatformOrganizationsPage() {
   await requirePanelAccess("platform");
   return (
     <QueryErrorBoundary>
-      <PlatformSecurity />
+      <PlatformOrganizationList />
     </QueryErrorBoundary>
   );
 }

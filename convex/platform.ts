@@ -8,7 +8,9 @@ import {
   permissionsOf,
   requirePlatformUser,
   resolveRoles,
+  resolveTenantAccess,
   resolveUserByIdentity,
+  tenantRoleAsResolvedRole,
 } from "./lib/auth";
 
 /**
@@ -22,7 +24,19 @@ export const getCurrentPlatformUser = query({
     const user = await resolveUserByIdentity(ctx);
     if (!user) return null;
 
-    const roles = await resolveRoles(ctx, user);
+    const platformRoles = await resolveRoles(ctx, user);
+    // A tenant administrator is provisioned with a `tenantMemberships` row and
+    // no platform role, so their tenant role must be folded into the principal
+    // here. Without this the tenant panel evaluates as an empty principal and
+    // every permission-gated control disappears.
+    const tenantAccess = await resolveTenantAccess(ctx, user);
+    const roles = tenantAccess
+      ? [...platformRoles, tenantRoleAsResolvedRole(tenantAccess.role)]
+      : platformRoles;
+    const permissions = permissionsOf(platformRoles);
+    for (const permission of tenantAccess?.permissions ?? []) {
+      if (!permissions.includes(permission)) permissions.push(permission);
+    }
     const primary = roles.slice().sort((left, right) => right.rank - left.rank)[0] ?? null;
 
     return {
@@ -37,12 +51,14 @@ export const getCurrentPlatformUser = query({
       avatarStorageId: user.avatarStorageId ?? null,
       jobTitle: user.jobTitle,
       platformRole: user.platformRole ?? null,
-      isPlatform: isPlatformUser(roles),
+      tenantRole: tenantAccess?.role ?? null,
+      tenantId: tenantAccess?.tenantId ?? null,
+      isPlatform: isPlatformUser(platformRoles),
       canViewRevenue: roles.some((role) => role.permissions.includes("revenue:view")),
       mfaEnrolled: user.mfaEnrolled === true,
-      permissions: permissionsOf(roles),
+      permissions,
       roles: roles.map((role) => ({
-        _id: role._id,
+        _id: role._id ?? undefined,
         slug: role.slug,
         name: role.name,
         isPlatform: role.isPlatform,
@@ -255,3 +271,4 @@ export const listAuditEntityTables = query({
     return Array.from(new Set(recent.map((entry) => entry.entityTable))).sort();
   },
 });
+
