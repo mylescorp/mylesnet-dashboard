@@ -75,7 +75,7 @@ export const seedDemoData = mutation({
     for (const def of marketDefs) {
       const existing = await ctx.db
         .query("markets")
-        .withIndex("by_name", (q) => q.eq("name", def.name))
+        .filter((q) => q.eq(q.field("name"), def.name))
         .first();
       if (existing) {
         marketIds.set(def.prefix, existing._id);
@@ -146,9 +146,9 @@ export const seedDemoData = mutation({
     for (const group of agentDefs) {
       const list: Id<"agents">[] = [];
       for (const a of group.agents) {
-        const existing = await ctx.db
-          .query("agents")
-          .withIndex("by_phone", (q) => q.eq("phone", a.phone))
+      const existing = await ctx.db
+        .query("agents")
+        .filter((q) => q.eq(q.field("phone"), a.phone))
           .first();
         if (existing) {
           list.push(existing._id);

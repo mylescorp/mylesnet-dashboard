@@ -12,6 +12,7 @@ import type * as agentActivity from "../agentActivity.js";
 import type * as agentInvitations from "../agentInvitations.js";
 import type * as agents from "../agents.js";
 import type * as analytics from "../analytics.js";
+import type * as auditLogTenant from "../auditLogTenant.js";
 import type * as auditChainVerify from "../auditChainVerify.js";
 import type * as auditHashChain from "../auditHashChain.js";
 import type * as auth from "../auth.js";
@@ -95,6 +96,7 @@ declare const fullApi: ApiFromModules<{
   agentInvitations: typeof agentInvitations;
   agents: typeof agents;
   analytics: typeof analytics;
+  auditLogTenant: typeof auditLogTenant;
   auditChainVerify: typeof auditChainVerify;
   auditHashChain: typeof auditHashChain;
   auth: typeof auth;
@@ -195,4 +197,3 @@ export declare const internal: FilterApi<
 >;
 
 export declare const components: {};
-
