@@ -74,8 +74,7 @@ export const applyAvatar = internalMutation({
 export const removeAvatar = action({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
+    await requireAuthenticatedUser(ctx);
     await ctx.runMutation(internal.profile.clearAvatar, {});
     return { removed: true };
   },
@@ -95,5 +94,13 @@ export const clearAvatar = internalMutation({
         // Nothing to reclaim; mirror is already cleared.
       }
     }
+    await logAudit(ctx, {
+      action: "user.remove_avatar",
+      entityTable: "users",
+      entityId: user._id,
+      changedBy: user._id,
+      after: { avatarRemoved: true },
+    });
   },
 });
+

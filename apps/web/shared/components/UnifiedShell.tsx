@@ -54,6 +54,7 @@ function WorkspaceShellContent({ children }: { children: ReactNode }) {
           onToggleCollapsed={state.onToggleCollapsed}
           variant={state.variant}
           homeHref={homeHref}
+          showCollapseControl
         />
       )}
       topbar={({ onOpenDrawer }) => (
@@ -85,3 +86,4 @@ export function UnifiedShell({ children }: { children: ReactNode }) {
     </Suspense>
   );
 }
+

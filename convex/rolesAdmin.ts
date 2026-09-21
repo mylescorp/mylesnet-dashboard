@@ -39,6 +39,9 @@ export const seedLocalSystemRoles = internalMutation({
           updatedAt: now,
           deletedAt: undefined,
           workosRoleSlug: definition.syncToWorkos ? definition.slug : undefined,
+          // Safe forward migration: retain deliberate additions while making
+          // new catalog permissions available to existing system roles.
+          permissions: Array.from(new Set([...definition.permissions, ...existing.permissions])),
         });
       } else {
         await ctx.db.insert("roles", {
@@ -463,3 +466,4 @@ export const upsertWebhookUser = internalMutation({
     });
   },
 });
+

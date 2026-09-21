@@ -22,13 +22,19 @@ interface ShellState {
   onCloseDrawer: () => void;
 }
 
+interface TopbarState {
+  onOpenDrawer: () => void;
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
+}
+
 export function AppShell({
   renderSidebar,
   topbar,
   children,
 }: {
   renderSidebar: (state: ShellState) => ReactNode;
-  topbar: (ctx: { onOpenDrawer: () => void }) => ReactNode;
+  topbar: (ctx: TopbarState) => ReactNode;
   children: ReactNode;
 }) {
   const [viewport, setViewport] = useState<"desktop" | "tablet" | "mobile">("desktop");
@@ -121,9 +127,10 @@ export function AppShell({
         : sidebarNode}
 
       <div className="app-content">
-        {topbar({ onOpenDrawer })}
+        {topbar({ onOpenDrawer, collapsed, onToggleCollapsed })}
         <main className="app-main">{children}</main>
       </div>
     </div>
   );
 }
+

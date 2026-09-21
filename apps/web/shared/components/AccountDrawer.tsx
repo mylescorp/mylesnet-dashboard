@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @next/next/no-img-element -- authenticated Convex Storage URLs are runtime-generated. */
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -11,6 +12,7 @@ import {
   LogOut,
   Moon,
   ScrollText,
+  Settings,
   ShieldCheck,
   Settings,
   Sun,
@@ -62,7 +64,7 @@ function useOnline(): boolean {
 interface DrawerItem {
   label: string;
   description?: string;
-  href: string;
+  href?: string;
   icon: ReactNode;
   show?: boolean;
   action?: boolean;
@@ -86,10 +88,18 @@ function DrawerLink({ item }: { item: DrawerItem }) {
     </>
   );
 
-  return item.action ? (
-    <button type="button" className="acw-item" onClick={item.onNavigate}>{content}</button>
-  ) : (
-    <Link href={item.href} className="acw-item" onClick={item.onNavigate}>{content}</Link>
+  if (!item.href) {
+    return (
+      <button type="button" className="acw-item" onClick={() => item.onNavigate?.()}>
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <Link href={item.href} className="acw-item" onClick={() => item.onNavigate?.()}>
+      {content}
+    </Link>
   );
 }
 
@@ -113,6 +123,7 @@ export function AccountDrawer({ panel = "dashboard" }: { panel?: ShellPanel }) {
   const [anchor, setAnchor] = useState<{ top: number; right: number } | null>(null);
 
   const displayName = user?.name || user?.email || "Workspace user";
+  const avatarSource = trustedAvatarSource(user?.image, Boolean(user?.avatarStorageId));
   const initials = displayName
     .split(/\s+/)
     .map((part) => part[0]?.toUpperCase() ?? "")
@@ -228,6 +239,10 @@ export function AccountDrawer({ panel = "dashboard" }: { panel?: ShellPanel }) {
   const permissions = user?.permissions ?? [];
   const canManageAccess = permissions.includes("users:manage") || permissions.includes("roles:manage");
   const canViewAccounts = permissions.includes("users:read") || permissions.includes("users:manage");
+  const canOpenAccess = canViewAccounts || canManageAccess;
+  const canOpenTenantAdministration = panel === "admin" || (panel === "dashboard" && (user?.roles ?? []).some((role) => role.slug === "tenant_admin" || role.slug === "client_admin"));
+  const canOpenWorkspaceSettings = (panel === "dashboard" || panel === "admin") || (panel === "platform" && isPlatform);
+  const workspaceSettingsHref = panel === "platform" ? "/platform/settings" : "/settings";
 
   // Scope is established by the server and Convex, never inferred from a host
   // or a browser cookie. This neutral label avoids leaking an unverified scope.
@@ -246,23 +261,16 @@ export function AccountDrawer({ panel = "dashboard" }: { panel?: ShellPanel }) {
     {
       label: "Profile & photo",
       description: "Your name, avatar, phone and job title",
-      href: `/account?panel=${encodeURIComponent(panel)}`,
       icon: <User size={16} />,
       action: true,
       onNavigate: () => setProfileOpen(true),
     },
     {
-      label: "Settings",
-      description: "Workspace and account preferences",
-      href: "/settings",
-      icon: <Settings size={16} />,
-    },
-    {
-      label: "Roles & permissions",
-      description: "Which functions you can open",
-      href: "/platform/access",
+      label: "Team & access",
+      description: "People, roles and permissions",
+      href: panel === "platform" ? "/platform/access" : "/access",
       icon: <ShieldCheck size={16} />,
-      show: (panel === "platform" && (canViewAccounts || canManageAccess || isPlatform)) || (panel === "admin" && canManageAccess),
+      show: (panel === "platform" || panel === "admin" || panel === "dashboard") && canOpenAccess,
     },
     {
       label: "Audit log",
@@ -276,7 +284,14 @@ export function AccountDrawer({ panel = "dashboard" }: { panel?: ShellPanel }) {
       description: "Subscribers, plans, devices and tickets",
       href: "/admin",
       icon: <Users size={16} />,
-      show: panel === "admin" || (panel === "dashboard" && (user?.roles ?? []).some((role) => role.slug === "tenant_admin" || role.slug === "client_admin")),
+      show: canOpenTenantAdministration,
+    },
+    {
+      label: "Security",
+      description: "Workspace security posture",
+      href: "/platform/security",
+      icon: <ShieldCheck size={16} />,
+      show: panel === "platform" && isPlatform,
     },
   ];
 
@@ -305,8 +320,8 @@ export function AccountDrawer({ panel = "dashboard" }: { panel?: ShellPanel }) {
         aria-controls={titleId}
         aria-label={`Account: ${displayName}`}
       >
-        <span className="user-avatar-circle" aria-hidden="true">
-          {avatarPreview ? <img src={avatarPreview} alt="" className="user-avatar-circle-photo" /> : initials}
+        <span className="mn-avatar" aria-hidden="true">
+          {avatarSource ? <img src={avatarSource} alt="" referrerPolicy="no-referrer" /> : initials}
         </span>
         <span className="mn-topbar-user-name">{displayName}</span>
         <ChevronDown size={14} aria-hidden="true" className={`acw-trigger-chevron${open ? " acw-trigger-chevron-open" : ""}`} />
@@ -338,7 +353,7 @@ export function AccountDrawer({ panel = "dashboard" }: { panel?: ShellPanel }) {
               >
                 <div className="acw-header">
                   <span className="acw-header-avatar" aria-hidden="true">
-                    {avatarPreview ? <img src={avatarPreview} alt="" className="acw-header-avatar-photo" /> : initials}
+                    {avatarSource ? <img src={avatarSource} alt="" referrerPolicy="no-referrer" /> : initials}
                   </span>
                   <div className="acw-header-text">
                     <strong id={`${titleId}-title`} className="acw-header-name">
@@ -377,13 +392,28 @@ export function AccountDrawer({ panel = "dashboard" }: { panel?: ShellPanel }) {
                   </div>
 
                   <div className="acw-section">
-                    <SectionTitle>Profile & security</SectionTitle>
+                    <SectionTitle>Account</SectionTitle>
                     {items
                       .filter((item) => item.show !== false)
                       .map((item) => (
-                        <DrawerLink key={item.href} item={{ ...item, onNavigate: closeTo(item.onNavigate) }} />
+                        <DrawerLink key={item.href ?? item.label} item={{ ...item, onNavigate: closeTo(item.onNavigate) }} />
                       ))}
                   </div>
+
+                  {canOpenWorkspaceSettings ? (
+                    <div className="acw-section">
+                      <SectionTitle>Workspace</SectionTitle>
+                      <DrawerLink
+                        item={{
+                          label: "Settings",
+                          description: "Workspace preferences and configuration",
+                          href: workspaceSettingsHref,
+                          icon: <Settings size={16} />,
+                          onNavigate: closeTo(),
+                        }}
+                      />
+                    </div>
+                  ) : null}
 
                   <div className="acw-section">
                     <SectionTitle>Support</SectionTitle>
@@ -430,8 +460,9 @@ export function AccountDrawer({ panel = "dashboard" }: { panel?: ShellPanel }) {
           )
         : null}
 
-      {/* Profile editor — reused from the global shell; the account menu closes. */}
-      <UserProfileModal isOpen={profileOpen} onClose={() => setProfileOpen(false)} />
+      {/* Remount on every open so the editor always starts from the latest
+          reactive Convex profile, including a just-uploaded photo. */}
+      {profileOpen ? <UserProfileModal isOpen onClose={() => setProfileOpen(false)} /> : null}
 
       <ConfirmDialog
         open={confirmSignOut}
@@ -494,3 +525,4 @@ function ThemeSegmented() {
     </div>
   );
 }
+

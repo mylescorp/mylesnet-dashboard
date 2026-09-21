@@ -1,12 +1,12 @@
 import { requirePanelAccess } from "@/lib/auth/panels";
 import { QueryErrorBoundary } from "@/platform/components/QueryErrorBoundary";
-import { PlatformVoucherMonitor } from "@/platform/components/PlatformVoucherMonitor";
+import SettingsPage from "@/dashboard/routes/settings/page";
 
-export default async function PlatformVoucherMonitorPage() {
+export default async function PlatformSettingsPage() {
   await requirePanelAccess("platform");
   return (
     <QueryErrorBoundary>
-      <PlatformVoucherMonitor />
+      <SettingsPage />
     </QueryErrorBoundary>
   );
 }

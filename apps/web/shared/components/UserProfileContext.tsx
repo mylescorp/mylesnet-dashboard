@@ -19,6 +19,8 @@ export type PlatformUser = {
   avatarStorageId?: string | null;
   jobTitle?: string;
   platformRole: string | null;
+  tenantRole?: string | null;
+  tenantId?: string | null;
   isPlatform: boolean;
   roles: PlatformUserRole[];
   permissions: string[];
