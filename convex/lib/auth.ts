@@ -4,6 +4,8 @@ import {
   SYSTEM_ROLE_SLUGS,
   getSystemRoleBySlug,
   PLATFORM_SUB_ROLE_MAP,
+  TENANT_ROLE_PERMISSIONS,
+  tenantRoleHasPermission,
   tenantRoleHasPermission,
 } from "./permissions";
 import { assertMfaCompliance as assertMfaCompliancePolicy } from "./mfa";
@@ -115,6 +117,28 @@ async function getActiveTenantMembership(ctx: QueryCtx | MutationCtx, user: Doc<
     .withIndex("by_user_tenant", (q) => q.eq("userId", user._id).eq("tenantId", tenant._id))
     .first();
   return membership?.status === "active" ? membership : null;
+}
+
+export async function resolveTenantAccess(ctx: QueryCtx | MutationCtx, user: Doc<"users">) {
+  const membership = await getActiveTenantMembership(ctx, user);
+  if (!membership) return null;
+  return {
+    tenantId: membership.tenantId,
+    role: membership.role,
+    permissions: [...(TENANT_ROLE_PERMISSIONS[membership.role] ?? [])],
+  };
+}
+
+export function tenantRoleAsResolvedRole(role: string): ResolvedRole {
+  return {
+    _id: null,
+    slug: role,
+    name: role.replace(/^tenant_/, "").replace(/_/g, " "),
+    isSystem: true,
+    isPlatform: false,
+    rank: 0,
+    permissions: [...(TENANT_ROLE_PERMISSIONS[role] ?? [])],
+  };
 }
 
 /**
