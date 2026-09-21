@@ -151,7 +151,52 @@ describe("AccountDrawer", () => {
     render(<AccountDrawer />);
     fireEvent.click(screen.getByRole("button", { name: /ada lovelace/i }));
     await waitFor(() => expect(screen.getByTestId("acw-panel")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("link", { name: /profile & photo/i }));
+    fireEvent.click(screen.getByRole("button", { name: /profile & photo/i }));
     await waitFor(() => expect(screen.getByRole("heading", { name: /user profile & role access/i })).toBeInTheDocument());
   });
+
+  it("keeps workspace settings in the account menu", async () => {
+    render(<AccountDrawer />);
+    fireEvent.click(screen.getByRole("button", { name: /ada lovelace/i }));
+    await waitFor(() => expect(screen.getByTestId("acw-panel")).toBeInTheDocument());
+    expect(screen.getByRole("link", { name: /settings/i })).toBeInTheDocument();
+  });
+
+  it("does not reveal access controls without the matching RBAC permission", async () => {
+    currentUser = makeUser({ isPlatform: true, permissions: ["dashboard:access"] });
+    render(<AccountDrawer panel="platform" />);
+    fireEvent.click(screen.getByRole("button", { name: /ada lovelace/i }));
+    await waitFor(() => expect(screen.getByTestId("acw-panel")).toBeInTheDocument());
+    expect(screen.queryByRole("link", { name: /team & access/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /settings/i })).toHaveAttribute("href", "/platform/settings");
+  });
+
+  it("shows permitted account controls in the platform drawer", async () => {
+    currentUser = makeUser({ isPlatform: true, permissions: ["users:read", "audit_log:read"] });
+    render(<AccountDrawer panel="platform" />);
+    fireEvent.click(screen.getByRole("button", { name: /ada lovelace/i }));
+    await waitFor(() => expect(screen.getByTestId("acw-panel")).toBeInTheDocument());
+    expect(screen.getByRole("link", { name: /team & access/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /audit log/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /security/i })).toBeInTheDocument();
+  });
+
+  it("uses a trusted Convex Storage avatar in every drawer identity surface", async () => {
+    currentUser = makeUser({
+      image: "https://brief-otter-123.convex.cloud/api/storage/avatar.png",
+      avatarStorageId: "kg2avatar",
+    });
+    render(<AccountDrawer />);
+    expect(screen.getByRole("button", { name: /ada lovelace/i }).querySelector("img")).toHaveAttribute(
+      "src",
+      expect.stringContaining(".convex.cloud/"),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /ada lovelace/i }));
+    await waitFor(() => expect(screen.getByTestId("acw-panel")).toBeInTheDocument());
+    expect(screen.getByTestId("acw-panel").querySelector(".acw-header-avatar img")).toHaveAttribute(
+      "src",
+      expect.stringContaining(".convex.cloud/"),
+    );
+  });
 });
+

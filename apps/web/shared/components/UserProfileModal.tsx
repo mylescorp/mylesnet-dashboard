@@ -1,42 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAction } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
 import { useUserProfile } from "./UserProfileContext";
-import { avatarFallbackUrl } from "@/app/lib/avatar";
+import {
+  ALLOWED_AVATAR_MIME_TYPES,
+  avatarFallbackUrl,
+  MAX_AVATAR_SIZE_BYTES,
+  trustedAvatarSource,
+} from "@/app/lib/avatar";
 import { Check, ImagePlus, ShieldCheck, Trash2, User, X } from "lucide-react";
-
-const ALLOWED_AVATAR_MIME_TYPES = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/gif",
-]);
-const MAX_AVATAR_SIZE_BYTES = 5 * 1024 * 1024;
-const CONVEX_STORAGE_HOST_SUFFIX = ".convex.cloud";
-
-function trustedAvatarSource(url: string | undefined | null, hasStorageRecord: boolean): string | undefined {
-  if (!url || !hasStorageRecord) return undefined;
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === "https:" && parsed.hostname.endsWith(CONVEX_STORAGE_HOST_SUFFIX)
-      ? parsed.toString()
-      : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function localAvatarObjectUrl(url: string | undefined | null): string | null {
-  if (!url) return null;
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === "blob:" && parsed.origin === window.location.origin ? parsed.toString() : null;
-  } catch {
-    return null;
-  }
-}
 
 interface UserProfileModalProps {
   isOpen: boolean;
@@ -52,48 +27,36 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
   const [name, setName] = useState(user?.name || "");
   const [phone, setPhone] = useState(user?.phone || "");
   const [jobTitle, setJobTitle] = useState(user?.jobTitle || "");
-  const [avatarPreview, setAvatarPreview] = useState<{ objectUrl: string; storageId: string } | null>(null);
-  const [persistedAvatarPreview, setPersistedAvatarPreview] = useState<string | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const persistedAvatarSource = trustedAvatarSource(user?.image, Boolean(user?.avatarStorageId));
-  const avatarSrc =
-    localAvatarObjectUrl(avatarPreview?.objectUrl) ?? localAvatarObjectUrl(persistedAvatarPreview);
+  const avatarSrc = avatarPreview ?? persistedAvatarSource;
   const avatarFallback = user ? avatarFallbackUrl(user._id, user.name || user.email || "User") : undefined;
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [removingAvatar, setRemovingAvatar] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => () => {
+    if (avatarPreview?.startsWith("blob:")) URL.revokeObjectURL(avatarPreview);
+  }, [avatarPreview]);
 
   useEffect(() => {
-    const source = persistedAvatarSource;
-    if (!source) {
-      return;
-    }
-
-    let objectUrl: string | null = null;
-    let cancelled = false;
-    void fetch(source, { credentials: "omit" })
-      .then(async (response) => {
-        const contentType = response.headers.get("content-type") ?? "";
-        if (!response.ok || !contentType.startsWith("image/")) return null;
-        return response.blob();
-      })
-      .then((blob) => {
-        if (!blob || cancelled) return;
-        objectUrl = URL.createObjectURL(blob);
-        setPersistedAvatarPreview(objectUrl);
-      })
-      .catch(() => {
-        if (!cancelled) setPersistedAvatarPreview(null);
-      });
-
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    if (!isOpen) return;
+    const previous = document.activeElement as HTMLElement | null;
+    closeButtonRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
     };
-  }, [persistedAvatarSource]);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      previous?.focus?.();
+    };
+  }, [isOpen, onClose]);
 
-  if (!isOpen || !user) return null;
+  if (!isOpen || !user || typeof document === "undefined") return null;
 
   const rawRole = user.primaryRole?.slug ?? user.platformRole ?? "operator";
   const formattedRole = rawRole.replace("platform_", "").replace(/_/g, " ").toUpperCase();
@@ -126,7 +89,7 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
       if (!response.ok) throw new Error("Upload failed");
       const { storageId } = (await response.json()) as { storageId: string };
       await saveAvatar({ storageId });
-      setAvatarPreview({ objectUrl: URL.createObjectURL(file), storageId });
+      setAvatarPreview(URL.createObjectURL(file));
       setStatusMessage({ type: "success", text: "Profile photo updated." });
     } catch {
       setError("We could not upload your profile photo. Please try again.");
@@ -172,7 +135,7 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
     }
   };
 
-return (
+return createPortal(
     <div className="profile-drawer-overlay" onClick={onClose} role="presentation">
       <div
         className="profile-drawer-panel"
@@ -190,6 +153,7 @@ return (
             </h2>
           </div>
           <button
+            ref={closeButtonRef}
             type="button"
             onClick={onClose}
 className="profile-modal-close"
@@ -210,11 +174,12 @@ className="profile-modal-close"
                   src={avatarSrc}
                   alt={name || "User Avatar"}
                   className="avatar-img"
+                  referrerPolicy="no-referrer"
                 />
               ) : (
                 // DiceBear URL is generated locally from encoded identity data.
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={avatarFallback} alt="" className="avatar-img" />
+                <img src={avatarFallback} alt="" className="avatar-img" referrerPolicy="no-referrer" />
               )}
             </div>
 
@@ -243,9 +208,9 @@ className="profile-modal-close"
                 className="avatar-action-button"
               >
                 <ImagePlus size={14} />
-                <span>{uploadingAvatar ? "Uploading…" : avatarPreview || user.image ? "Change photo" : "Add photo"}</span>
+                <span>{uploadingAvatar ? "Uploading…" : avatarSrc ? "Change photo" : "Add photo"}</span>
               </button>
-              {(avatarPreview?.storageId || user.image) && (
+              {avatarSrc && (
                 <button
                   type="button"
                   onClick={handleRemoveAvatar}
@@ -264,6 +229,8 @@ className="profile-modal-close"
               className={`profile-status-alert ${
                 statusMessage.type === "success" ? "alert-success" : "alert-error"
               }`}
+              role="status"
+              aria-live="polite"
             >
               {statusMessage.type === "success" && <Check size={16} />}
               <span>{statusMessage.text}</span>
@@ -344,7 +311,7 @@ className="profile-modal-close"
                 disabled
                 className="pf-input input-disabled"
               />
-              <span className="pf-hint">WorkOS single sign-on identity. Contact owner to change email.</span>
+              <span className="pf-hint">Your sign-in email is managed securely. Contact an owner to change it.</span>
             </div>
           </div>
 
@@ -360,6 +327,8 @@ className="profile-modal-close"
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
+
