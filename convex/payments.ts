@@ -1,35 +1,8 @@
 import { v } from "convex/values";
-import { MutationCtx, mutation, query } from "./_generated/server";
-import { Doc, Id } from "./_generated/dataModel";
-import { requirePermission } from "./lib/auth";
+import { mutation, query } from "./_generated/server";
+import { requireTenantPermission } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 import { enforceTenantOnResource, readTenantList, tenantIdForWrite } from "./lib/tenant";
-
-async function requireUser(ctx: MutationCtx) {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) throw new Error("Unauthenticated");
-  const user = await ctx.db
-    .query("users")
-    .withIndex("by_workosUserId", (q) => q.eq("workosUserId", identity.subject))
-    .first();
-  if (!user) throw new Error("User not found");
-  return user;
-}
-
-async function assertPaymentReferencesTenant(
-  ctx: MutationCtx,
-  tenantId: Id<"tenants">,
-  args: { subscriberId?: Id<"subscribers">; invoiceId?: Id<"invoices">; planId?: Id<"plans"> },
-) {
-  const [subscriber, invoice, plan] = await Promise.all([
-    args.subscriberId ? ctx.db.get(args.subscriberId) : null,
-    args.invoiceId ? ctx.db.get(args.invoiceId) : null,
-    args.planId ? ctx.db.get(args.planId) : null,
-  ]);
-  if (args.subscriberId && (!subscriber || subscriber.tenantId !== tenantId)) throw new Error("Unauthorized: subscriber belongs to another tenant");
-  if (args.invoiceId && (!invoice || invoice.tenantId !== tenantId)) throw new Error("Unauthorized: invoice belongs to another tenant");
-  if (args.planId && (!plan || plan.tenantId !== tenantId)) throw new Error("Unauthorized: plan belongs to another tenant");
-}
 
 export const list = query({
   args: {
@@ -48,15 +21,9 @@ export const list = query({
     endDate: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "payments:read");
+    const { tenantId } = await requireTenantPermission(ctx, "payments:read");
 
-    let payments = await readTenantList<Doc<"payments">>(ctx, {
-      all: () => ctx.db.query("payments").order("desc").collect(),
-      tenant: (tenantId) =>
-        ctx.db.query("payments").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
-      legacy: () =>
-        ctx.db.query("payments").withIndex("by_tenant", (q) => q.eq("tenantId", undefined)).collect(),
-    });
+    let payments = await ctx.db.query("payments").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).order("desc").collect();
 
     if (args.status) {
       payments = payments.filter((p) => p.status === args.status);
@@ -91,8 +58,9 @@ export const list = query({
 export const get = query({
   args: { id: v.id("payments") },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "payments:read");
-    return await enforceTenantOnResource(ctx, await ctx.db.get(args.id), "payment");
+    const { tenantId } = await requireTenantPermission(ctx, "payments:read");
+    const payment = await ctx.db.get(args.id);
+    return payment?.tenantId === tenantId ? payment : null;
   },
 });
 
@@ -114,14 +82,23 @@ export const create = mutation({
     paymentDate: v.number(),
   },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "payments:create");
-    const user = await requireUser(ctx);
-    const tenantId = await tenantIdForWrite(ctx);
-    if (tenantId) await assertPaymentReferencesTenant(ctx, tenantId, args);
+    const { user, tenantId } = await requireTenantPermission(ctx, "payments:create");
+
+    const references = [args.subscriberId, args.invoiceId, args.planId];
+    const [subscriber, invoice, plan] = await Promise.all(
+      references.map((id) => (id ? ctx.db.get(id) : null)),
+    );
+    if (
+      (subscriber && subscriber.tenantId !== tenantId) ||
+      (invoice && invoice.tenantId !== tenantId) ||
+      (plan && plan.tenantId !== tenantId)
+    ) {
+      throw new Error("Payment references must belong to the active workspace");
+    }
 
     const id = await ctx.db.insert("payments", {
       ...args,
-      ...(tenantId ? { tenantId } : {}),
+      tenantId,
       operatorId: user._id,
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -154,13 +131,12 @@ export const update = mutation({
     reference: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "payments:update");
-    const user = await requireUser(ctx);
+    const { user, tenantId } = await requireTenantPermission(ctx, "payments:update");
 
     const { id, ...updates } = args;
     const payment = await enforceTenantOnResource(ctx, await ctx.db.get(id), "payment");
 
-    if (!payment) {
+    if (!payment || payment.tenantId !== tenantId) {
       throw new Error("Payment not found");
     }
 
@@ -188,12 +164,11 @@ export const refund = mutation({
     reason: v.string(),
   },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "payments:refund");
-    const user = await requireUser(ctx);
+    const { user, tenantId } = await requireTenantPermission(ctx, "payments:refund");
 
     const payment = await enforceTenantOnResource(ctx, await ctx.db.get(args.id), "payment");
 
-    if (!payment) {
+    if (!payment || payment.tenantId !== tenantId) {
       throw new Error("Payment not found");
     }
 
@@ -225,15 +200,9 @@ export const getStats = query({
     endDate: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "payments:read");
+    const { tenantId } = await requireTenantPermission(ctx, "payments:read");
 
-    let payments = await readTenantList<Doc<"payments">>(ctx, {
-      all: () => ctx.db.query("payments").collect(),
-      tenant: (tenantId) =>
-        ctx.db.query("payments").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
-      legacy: () =>
-        ctx.db.query("payments").withIndex("by_tenant", (q) => q.eq("tenantId", undefined)).collect(),
-    });
+    let payments = await ctx.db.query("payments").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect();
 
     const start = args.startDate;
     if (start) {

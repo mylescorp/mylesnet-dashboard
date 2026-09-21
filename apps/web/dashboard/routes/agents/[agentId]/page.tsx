@@ -1,5 +1,7 @@
 "use client";
 
+import { userFacingMessage } from "@/shared/lib/user-facing-error";
+
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
@@ -71,7 +73,7 @@ export default function AgentDetailPage() {
       setAssignMarketId("");
       setEndPreviousId("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not assign agent");
+      setError(userFacingMessage(err, "Could not assign agent"));
     }
   };
 
@@ -83,7 +85,7 @@ export default function AgentDetailPage() {
       setMessage(`Closed ${res.closedAssignments} active assignment(s).`);
       setOffboardStep(1);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not close assignments");
+      setError(userFacingMessage(err, "Could not close assignments"));
     } finally {
       setBusy(false);
     }
@@ -102,7 +104,7 @@ export default function AgentDetailPage() {
         newOwnerAgentId: disposition === "reassign" ? (reassignTarget[voucherId] as Id<"agents">) : undefined,
       });
     } catch (err) {
-      setDisposeError(err instanceof Error ? err.message : "Could not dispose voucher");
+      setDisposeError(userFacingMessage(err, "Could not dispose voucher"));
     }
   };
 
@@ -124,7 +126,7 @@ export default function AgentDetailPage() {
       setMessage("Agent offboarded. Final settlement entered the commission approval flow.");
       setTimeout(() => router.replace("/agents"), 1200);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not finalize offboarding");
+      setError(userFacingMessage(err, "Could not finalize offboarding"));
     } finally {
       setBusy(false);
     }

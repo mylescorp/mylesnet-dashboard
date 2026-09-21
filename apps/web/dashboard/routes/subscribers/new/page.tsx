@@ -1,5 +1,7 @@
 "use client";
 
+import { userFacingMessage } from "@/shared/lib/user-facing-error";
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "@/app/lib/convex";
@@ -50,7 +52,7 @@ export default function NewSubscriberPage() {
       router.push(`/subscribers/${subscriberId}`);
     } catch (err: unknown) {
       setError(
-        err instanceof Error ? err.message : "Failed to create subscriber",
+        userFacingMessage(err, "Failed to create subscriber"),
       );
       setIsSubmitting(false);
     }

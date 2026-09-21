@@ -1,5 +1,7 @@
 "use client";
 
+import { userFacingMessage } from "@/shared/lib/user-facing-error";
+
 import { useState } from "react";
 import { useMutation, useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
@@ -46,7 +48,7 @@ export default function VouchersPage() {
       });
       setMessage(`Batch #${String(batchId).slice(-6)} generated with ${quantity} voucher(s).`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not generate batch");
+      setError(userFacingMessage(err, "Could not generate batch"));
     }
   };
 
@@ -248,7 +250,7 @@ function BatchVouchers({ batchId, agents }: { batchId: string; agents: Doc<"agen
                             if (!allocAgent[v._id]) { setError("Pick an agent to allocate to."); return; }
                             try {
                               await allocateVoucher({ voucherId: v._id, agentId: allocAgent[v._id] as Id<"agents"> });
-                            } catch (err) { setError(err instanceof Error ? err.message : "Allocation failed"); }
+                            } catch (err) { setError(userFacingMessage(err, "Allocation failed")); }
                           }}
                         >
                           Allocate
@@ -261,7 +263,7 @@ function BatchVouchers({ batchId, agents }: { batchId: string; agents: Doc<"agen
                         className="secondary-button"
                         onClick={async () => {
                           try { await markSold({ voucherId: v._id }); }
-                          catch (err) { setError(err instanceof Error ? err.message : "Failed"); }
+                          catch (err) { setError(userFacingMessage(err, "Failed")); }
                         }}
                       >
                         Mark sold
@@ -274,7 +276,7 @@ function BatchVouchers({ batchId, agents }: { batchId: string; agents: Doc<"agen
                         onClick={async () => {
                           try {
                             await redeemVoucher({ voucherId: v._id, customerPhoneAtRedemption: customerPhone[v._id] || undefined });
-                          } catch (err) { setError(err instanceof Error ? err.message : "Redemption failed"); }
+                          } catch (err) { setError(userFacingMessage(err, "Redemption failed")); }
                         }}
                       >
                         Redeem

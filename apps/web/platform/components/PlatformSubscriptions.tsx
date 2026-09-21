@@ -1,5 +1,7 @@
 "use client";
 
+import { userFacingMessage } from "@/shared/lib/user-facing-error";
+
 import { useState } from "react";
 import { CreditCard } from "lucide-react";
 import { useMutation, useQuery } from "@/app/lib/convex";
@@ -36,7 +38,7 @@ export function PlatformSubscriptions() {
         <div>
           <p className="eyebrow">Platform control plane</p>
           <h1 className="page-title">Subscriptions</h1>
-          <p className="page-subtitle">Set and adjust plan entitlements per tenant. This controls product access, not payments or billing, which remain outside Convex.</p>
+          <p className="page-subtitle">Set and adjust plan entitlements per tenant. These controls determine product access and do not change payment records.</p>
         </div>
       </header>
 
@@ -67,7 +69,7 @@ export function PlatformSubscriptions() {
         )}
       </section>
 
-      {editingTenant ? <EntitlementDialog tenant={editingTenant} plans={plans ?? []} onClose={() => setEditingTenant(null)} onSave={async (planId, status, dates) => { setError(null); setNotice(null); setWorking(true); try { await setEntitlement({ tenantId: editingTenant._id, planId, status, ...dates }); setNotice(`${editingTenant.name} subscription was saved as ${planId} · ${status}.`); setEditingTenant(null); } catch (caught) { setError(caught instanceof Error ? caught.message : "Subscription could not be updated."); } finally { setWorking(false); }} } working={working} /> : null}
+      {editingTenant ? <EntitlementDialog tenant={editingTenant} onClose={() => setEditingTenant(null)} onSave={async (planId, status, dates) => { setError(null); setNotice(null); setWorking(true); try { await setEntitlement({ tenantId: editingTenant._id, planId, status, ...dates }); setNotice(`${editingTenant.name} entitlement was set to ${planId} · ${status}.`); setEditingTenant(null); } catch (caught) { setError(userFacingMessage(caught, "Entitlement could not be updated.")); } finally { setWorking(false); }} } working={working} /> : null}
     </div>
   );
 }

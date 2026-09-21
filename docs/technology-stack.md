@@ -228,6 +228,7 @@ Working notes that make each layer production-grade. Expand a section (with evid
 This is the mechanism that stops technology drift.
 
 - The technology stack is read at the start of every MylesNet session, along with the other product files (see [[AGENTS]] work rules). It is the benchmark for every dependency, service, provider, and infrastructure decision made that day.
+- [[No Technology Stack Exposure Standards]] and [[no-tech-stack-exposure|MylesNet No Technology Stack Exposure]] are also mandatory at session start. Every user-facing change must preserve the safe error, business-language, and identifier rules before it can be considered complete.
 - A change to a technology, a version policy, or a new addition is allowed only through this file: **add/update the stack entry here first (with a date and reason), mirror it to `docs/technology-stack.md`, and record the decision in `decisions.md`.** Until that happens it is drift, not an accepted change.
 - Suspicion of drift (a dependency, provider, or pattern not represented here or in the Master) is reported in the daily note and task lane; the resolution is either (a) record it here, or (b) remove/revert it. The stack file and the repo copy must not diverge.
 - The Master Technical Specification and this stack are kept consistent: a requirement change lands in one place and is reflected in the other (this file for *which* technology; the Master for *how it must behave*).
@@ -237,6 +238,7 @@ This is the mechanism that stops technology drift.
 
 - [[MylesNet_Master_Technical_Specification_v3|MylesNet Master Technical Specification - Version 3 Final]] — requirements, architecture, boundaries, and acceptance.
 - [[codebase]] — current repository state and build commands.
+- [[no-tech-stack-exposure|MylesNet No Technology Stack Exposure]] — mandatory safe user-facing error and stack-secrecy policy.
 - Repository mirror: `docs/technology-stack.md` (kept byte-identical to this file).
 
 ## Owner

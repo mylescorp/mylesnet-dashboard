@@ -1,5 +1,7 @@
 "use client";
 
+import { userFacingMessage } from "@/shared/lib/user-facing-error";
+
 import Link from "next/link";
 import { useState } from "react";
 import { useMutation, useQuery } from "@/app/lib/convex";
@@ -40,7 +42,7 @@ export default function AgentsPage() {
       setPhone("");
       setEmail("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create agent");
+      setError(userFacingMessage(err, "Could not create agent"));
     }
   };
 
@@ -55,7 +57,7 @@ export default function AgentsPage() {
       await suspendAgent({ agentId: agentId as Id<"agents">, reason });
       setMessage(`Agent "${agentName}" suspended.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not suspend agent");
+      setError(userFacingMessage(err, "Could not suspend agent"));
     }
   };
 
@@ -72,7 +74,7 @@ export default function AgentsPage() {
       setAssignAgentId("");
       setAssignMarketId("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not assign agent");
+      setError(userFacingMessage(err, "Could not assign agent"));
     }
   };
 

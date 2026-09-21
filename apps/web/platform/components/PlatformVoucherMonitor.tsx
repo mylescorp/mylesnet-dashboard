@@ -1,5 +1,7 @@
 "use client";
 
+import { userFacingMessage } from "@/shared/lib/user-facing-error";
+
 import { useMemo, useState } from "react";
 import { ShieldAlert } from "lucide-react";
 import { useMutation, useQuery } from "@/app/lib/convex";
@@ -39,7 +41,7 @@ export function PlatformVoucherMonitor() {
       await flagVoucher({ voucherId: row._id, fraudFlagStatus: status, reason });
       setNotice(`${row.code} marked ${status}.`);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Flag update failed.");
+      setError(userFacingMessage(caught, "Flag update failed."));
     }
   };
 

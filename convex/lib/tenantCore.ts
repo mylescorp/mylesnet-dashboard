@@ -15,17 +15,12 @@ export type TenantStatus =
   | "cancelled";
 
 /**
- * Resolve tenant scope without letting an explicitly scoped WorkOS identity
- * fall back into the bootstrap tenant. Bootstrap fallback is only for legacy
- * identities that carry no organization claim at all.
+ * Choose the only safe result from the server-derived organization mapping.
+ * An unknown WorkOS organization means the caller has no tenancy; callers
+ * must deny rather than select a bootstrap or another tenant.
  */
-export function resolveTenantForIdentity<T>(
-  hasOrganizationClaim: boolean,
-  organizationTenant: T | null | undefined,
-  bootstrapTenant: T | null | undefined,
-): T | null {
-  if (hasOrganizationClaim) return organizationTenant ?? null;
-  return bootstrapTenant ?? null;
+export function resolvedTenantOrNull<T>(organizationTenant: T | null | undefined): T | null {
+  return organizationTenant ?? null;
 }
 
 /** Translate a WorkOS organization-membership state into local tenant scope. */

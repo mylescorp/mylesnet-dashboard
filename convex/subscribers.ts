@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { requirePermission } from "./lib/auth";
+import { requireTenantPermission } from "./lib/auth";
 
 // ==========================================================================
 // QUERIES
@@ -25,26 +25,31 @@ export const list = query({
     search: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "subscribers:read");
+    const { tenantId } = await requireTenantPermission(ctx, "subscribers:read");
 
     let results;
 
     if (args.status) {
       results = await ctx.db
         .query("subscribers")
-        .withIndex("by_status", (q) => q.eq("status", args.status as any))
+        .withIndex("by_tenant", (q) => q.eq("tenantId", tenantId))
         .collect();
     } else if (args.planId) {
       results = await ctx.db
         .query("subscribers")
-        .withIndex("by_plan", (q) => q.eq("planId", args.planId))
+        .withIndex("by_tenant", (q) => q.eq("tenantId", tenantId))
         .collect();
     } else {
-      results = await ctx.db.query("subscribers").collect();
+      results = await ctx.db.query("subscribers").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect();
     }
 
     // Filter out soft-deleted records
-    const activeResults = results.filter((s) => s.deletedAt === undefined);
+    const activeResults = results.filter(
+      (s) =>
+        s.deletedAt === undefined &&
+        (!args.status || s.status === args.status) &&
+        (!args.planId || s.planId === args.planId),
+    );
 
     // Apply connectionType filter if provided
     let filteredResults = activeResults;
@@ -75,10 +80,10 @@ export const list = query({
 export const get = query({
   args: { id: v.id("subscribers") },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "subscribers:read");
+    const { tenantId } = await requireTenantPermission(ctx, "subscribers:read");
     const subscriber = await ctx.db.get(args.id);
 
-    if (!subscriber || subscriber.deletedAt !== undefined) {
+    if (!subscriber || subscriber.tenantId !== tenantId || subscriber.deletedAt !== undefined) {
       return null;
     }
 
@@ -89,9 +94,9 @@ export const get = query({
 export const getStats = query({
   args: {},
   handler: async (ctx) => {
-    await requirePermission(ctx, "subscribers:read");
+    const { tenantId } = await requireTenantPermission(ctx, "subscribers:read");
 
-    const allSubscribers = await ctx.db.query("subscribers").collect();
+    const allSubscribers = await ctx.db.query("subscribers").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect();
     const activeSubscribers = allSubscribers.filter(
       (s) => s.deletedAt === undefined,
     );
@@ -129,19 +134,7 @@ export const create = mutation({
     currency: v.string(),
   },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "subscribers:create");
-
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workosUserId", (q) =>
-        q.eq("workosUserId", identity.subject),
-      )
-      .first();
-
-    if (!user) throw new Error("User not found");
+    const { user, tenantId } = await requireTenantPermission(ctx, "subscribers:create");
 
     // Check if account number already exists
     const existing = await ctx.db
@@ -151,12 +144,13 @@ export const create = mutation({
       )
       .first();
 
-    if (existing) {
+    if (existing && existing.tenantId === tenantId) {
       throw new Error("Account number already exists");
     }
 
     const id = await ctx.db.insert("subscribers", {
       ...args,
+      tenantId,
       status: "active",
       walletBalance: 0,
       createdBy: user._id,
@@ -194,12 +188,12 @@ export const update = mutation({
     walletBalance: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "subscribers:update");
+    const { tenantId } = await requireTenantPermission(ctx, "subscribers:update");
 
     const { id, ...updates } = args;
     const subscriber = await ctx.db.get(id);
 
-    if (!subscriber || subscriber.deletedAt !== undefined) {
+    if (!subscriber || subscriber.tenantId !== tenantId || subscriber.deletedAt !== undefined) {
       throw new Error("Subscriber not found");
     }
 
@@ -215,22 +209,10 @@ export const update = mutation({
 export const softDelete = mutation({
   args: { id: v.id("subscribers") },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "subscribers:delete");
-
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workosUserId", (q) =>
-        q.eq("workosUserId", identity.subject),
-      )
-      .first();
-
-    if (!user) throw new Error("User not found");
+    const { user, tenantId } = await requireTenantPermission(ctx, "subscribers:delete");
 
     const subscriber = await ctx.db.get(args.id);
-    if (!subscriber || subscriber.deletedAt !== undefined) {
+    if (!subscriber || subscriber.tenantId !== tenantId || subscriber.deletedAt !== undefined) {
       throw new Error("Subscriber not found");
     }
 
@@ -246,10 +228,10 @@ export const softDelete = mutation({
 export const restore = mutation({
   args: { id: v.id("subscribers") },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "subscribers:delete");
+    const { tenantId } = await requireTenantPermission(ctx, "subscribers:delete");
 
     const subscriber = await ctx.db.get(args.id);
-    if (!subscriber || subscriber.deletedAt === undefined) {
+    if (!subscriber || subscriber.tenantId !== tenantId || subscriber.deletedAt === undefined) {
       throw new Error("Subscriber not found or not deleted");
     }
 
@@ -273,10 +255,10 @@ export const renew = mutation({
     days: v.number(),
   },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "subscribers:update");
+    const { tenantId } = await requireTenantPermission(ctx, "subscribers:update");
 
     const subscriber = await ctx.db.get(args.id);
-    if (!subscriber || subscriber.deletedAt !== undefined) {
+    if (!subscriber || subscriber.tenantId !== tenantId || subscriber.deletedAt !== undefined) {
       throw new Error("Subscriber not found");
     }
 
@@ -301,10 +283,10 @@ export const creditAccount = mutation({
     reason: v.string(),
   },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "subscribers:financial");
+    const { tenantId } = await requireTenantPermission(ctx, "subscribers:financial");
 
     const subscriber = await ctx.db.get(args.id);
-    if (!subscriber || subscriber.deletedAt !== undefined) {
+    if (!subscriber || subscriber.tenantId !== tenantId || subscriber.deletedAt !== undefined) {
       throw new Error("Subscriber not found");
     }
 

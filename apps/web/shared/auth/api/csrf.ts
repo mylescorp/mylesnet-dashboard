@@ -23,7 +23,7 @@ function issueCsrfToken(): NextResponse {
 
 function unauthorizedResponse(error: unknown): NextResponse | null {
   if (error instanceof AuthRequiredError) {
-    return NextResponse.json({ error: error.message }, { status: error.status });
+    return NextResponse.json({ success: false, message: "Please sign in again to continue." }, { status: error.status });
   }
   return null;
 }
@@ -34,7 +34,7 @@ export async function GET(): Promise<NextResponse> {
     await requireUser();
     return issueCsrfToken();
   } catch (error) {
-    return unauthorizedResponse(error) ?? NextResponse.json({ error: "Unable to issue CSRF token." }, { status: 500 });
+    return unauthorizedResponse(error) ?? NextResponse.json({ success: false, message: "We could not prepare this request. Please try again." }, { status: 500 });
   }
 }
 
@@ -49,12 +49,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const cookieToken = request.cookies.get(CSRF_COOKIE_NAME)?.value;
     const headerToken = request.headers.get(CSRF_HEADER_NAME);
     if (!verifyCsrfToken(cookieToken, headerToken)) {
-      const response = NextResponse.json({ error: "Invalid CSRF token." }, { status: 403 });
+      const response = NextResponse.json({ success: false, message: "Your session could not be verified. Please refresh and try again." }, { status: 403 });
       response.cookies.set(CSRF_COOKIE_NAME, "", clearCookieOptions(csrfCookieOptions()));
       return response;
     }
     return issueCsrfToken();
   } catch (error) {
-    return unauthorizedResponse(error) ?? NextResponse.json({ error: "Unable to rotate CSRF token." }, { status: 500 });
+    return unauthorizedResponse(error) ?? NextResponse.json({ success: false, message: "We could not prepare this request. Please try again." }, { status: 500 });
   }
 }

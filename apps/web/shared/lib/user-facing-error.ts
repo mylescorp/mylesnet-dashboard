@@ -28,7 +28,11 @@ const unexpected: UserFacingError = {
   retryable: true,
 };
 
-/** Converts untrusted client-visible failures into approved product language. */
+/**
+ * Converts an untrusted client-visible error into approved product language.
+ * Never return the source message: Convex and provider failures can include
+ * function names, identifiers, endpoints, or implementation diagnostics.
+ */
 export function toUserFacingError(cause: unknown, fallback: UserFacingError = unexpected): UserFacingError {
   const source = cause instanceof Error ? cause.message.toLowerCase() : "";
   if (/unauthenticated|session|sign in|identity/.test(source)) {

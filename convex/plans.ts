@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { requireMarketAccess, requirePermission } from "./lib/auth";
+import { requireTenantPermission } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 
 /**
@@ -11,12 +11,18 @@ import { logAudit } from "./lib/auditLog";
 export const listPlans = query({
   args: { marketId: v.optional(v.id("markets")), includeInactive: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "plans:read");
-    if (args.marketId) await requireMarketAccess(ctx, args.marketId, "viewer");
+    const { tenantId } = await requireTenantPermission(ctx, "plans:read");
+    if (args.marketId) {
+      const market = await ctx.db.get(args.marketId);
+      if (!market || market.tenantId !== tenantId) throw new Error("Market not found");
+    }
     const base = args.marketId
       ? await ctx.db.query("plans").withIndex("by_market", (q) => q.eq("marketId", args.marketId)).collect()
+      // The schema carries by_tenant for deployed query planning. Keep this
+      // compatibility path while the checked-in generated Convex metadata is
+      // refreshed by the deployment pipeline.
       : await ctx.db.query("plans").collect();
-    const rows = args.includeInactive ? base : base.filter((p) => p.status === "active");
+    const rows = base.filter((plan) => plan.tenantId === tenantId && (args.includeInactive || plan.status === "active"));
     return rows.sort((a, b) => a.priceLocal - b.priceLocal);
   },
 });
@@ -24,9 +30,11 @@ export const listPlans = query({
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    await requirePermission(ctx, "plans:read");
+    const { tenantId } = await requireTenantPermission(ctx, "plans:read");
     const plans = await ctx.db.query("plans").collect();
-    return plans.filter((p) => p.status === "active").sort((a, b) => a.priceLocal - b.priceLocal);
+    return plans
+      .filter((plan) => plan.tenantId === tenantId && plan.status === "active")
+      .sort((a, b) => a.priceLocal - b.priceLocal);
   },
 });
 
@@ -41,12 +49,16 @@ export const createPlan = mutation({
     durationLabel: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const user = await requirePermission(ctx, "plans:manage");
-    if (args.marketId) await requireMarketAccess(ctx, args.marketId, "manager");
+    const { user, tenantId } = await requireTenantPermission(ctx, "plans:manage");
+    if (args.marketId) {
+      const market = await ctx.db.get(args.marketId);
+      if (!market || market.tenantId !== tenantId) throw new Error("Market not found");
+    }
     const existing = await ctx.db.query("plans").withIndex("by_code", (q) => q.eq("code", args.code)).first();
-    if (existing && existing.status === "active") throw new Error("A plan with this code already exists");
+    if (existing && existing.tenantId === tenantId && existing.status === "active") throw new Error("A plan with this code already exists");
 
     const id = await ctx.db.insert("plans", {
+      tenantId,
       marketId: args.marketId,
       code: args.code,
       name: args.name,
@@ -79,10 +91,9 @@ export const updatePlan = mutation({
     status: v.optional(v.union(v.literal("active"), v.literal("inactive"))),
   },
   handler: async (ctx, args) => {
-    const user = await requirePermission(ctx, "plans:manage");
+    const { user, tenantId } = await requireTenantPermission(ctx, "plans:manage");
     const plan = await ctx.db.get(args.planId);
-    if (!plan) throw new Error("Plan not found");
-    if (plan.marketId) await requireMarketAccess(ctx, plan.marketId, "manager");
+    if (!plan || plan.tenantId !== tenantId) throw new Error("Plan not found");
     const patch = { name: args.name, priceLocal: args.priceLocal, currency: args.currency, durationLabel: args.durationLabel, status: args.status };
     const cleaned = Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined));
     await ctx.db.patch(args.planId, cleaned);
@@ -99,9 +110,10 @@ export const updatePlan = mutation({
 export const linkBatchToPlan = mutation({
   args: { batchId: v.id("voucherBatches"), planId: v.id("plans") },
   handler: async (ctx, args) => {
-    const user = await requirePermission(ctx, "plans:manage");
+    const { user, tenantId } = await requireTenantPermission(ctx, "plans:manage");
     const batch = await ctx.db.get(args.batchId);
-    if (!batch) throw new Error("Batch not found");
+    const plan = await ctx.db.get(args.planId);
+    if (!batch || batch.tenantId !== tenantId || !plan || plan.tenantId !== tenantId) throw new Error("Batch or plan not found");
     await ctx.db.patch(args.batchId, { planId: args.planId });
     await logAudit(ctx, {
       action: "batch.linkPlan",

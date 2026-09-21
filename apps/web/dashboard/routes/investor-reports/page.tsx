@@ -1,5 +1,7 @@
 "use client";
 
+import { userFacingMessage } from "@/shared/lib/user-facing-error";
+
 import { useState } from "react";
 import { useMutation, useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
@@ -54,7 +56,7 @@ export default function InvestorReportsPage() {
       if (editingId) await updateInvestor({ investorId: editingId, name: form.name.trim(), email: form.email.trim(), instrumentType: form.instrumentType, reportFrequency: form.reportFrequency, notes: form.notes || undefined });
       else await createInvestor({ name: form.name.trim(), email: form.email.trim(), investmentAmountUSD: Number(form.amount), investmentDate: form.date, instrumentType: form.instrumentType, reportFrequency: form.reportFrequency, notes: form.notes || undefined });
       resetForm();
-    } catch (err) { setError(err instanceof Error ? err.message : "Could not save investor"); }
+    } catch (err) { setError(userFacingMessage(err, "Could not save investor")); }
   };
 
   return (

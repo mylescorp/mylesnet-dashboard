@@ -1,5 +1,7 @@
 "use client";
 
+import { userFacingMessage } from "@/shared/lib/user-facing-error";
+
 import { useMemo, useState } from "react";
 import { useQuery, useMutation } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
@@ -97,7 +99,7 @@ export default function SubscriberDetailPage({
       window.location.reload();
     } catch (err: unknown) {
       setError(
-        err instanceof Error ? err.message : "Failed to renew subscription",
+        userFacingMessage(err, "Failed to renew subscription"),
       );
       setIsRenewing(false);
     }
@@ -114,7 +116,7 @@ export default function SubscriberDetailPage({
       });
       window.location.reload();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to credit account");
+      setError(userFacingMessage(err, "Failed to credit account"));
       setIsCrediting(false);
     }
   };

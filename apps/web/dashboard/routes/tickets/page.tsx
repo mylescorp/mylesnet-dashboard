@@ -1,5 +1,7 @@
 "use client";
 
+import { userFacingMessage } from "@/shared/lib/user-facing-error";
+
 import { useState } from "react";
 import { useMutation, useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
@@ -66,7 +68,7 @@ export default function TicketsPage() {
       setShowForm(false);
       setSubject(""); setDescription(""); setMarketId(""); setAgentId("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create ticket");
+      setError(userFacingMessage(err, "Could not create ticket"));
     }
   };
 
@@ -75,7 +77,7 @@ export default function TicketsPage() {
       await update({ ticketId: ticketId as Id<"supportTickets">, ticketStatus: newStatus as "open" | "in_progress" | "waiting_on_customer" | "resolved" | "closed" });
       setMessage(`Ticket updated to ${newStatus}.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not update ticket");
+      setError(userFacingMessage(err, "Could not update ticket"));
     }
   };
 

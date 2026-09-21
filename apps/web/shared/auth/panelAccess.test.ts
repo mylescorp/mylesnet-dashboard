@@ -8,6 +8,7 @@ test("panel access maps current WorkOS system and organization role slugs", () =
   assert.equal(hasPanelAccess(["org-platform_admin"], "platform"), true);
   assert.equal(hasPanelAccess(["org-client_admin"], "admin"), true);
   assert.equal(hasPanelAccess(["agent"], "dashboard"), true);
+  assert.equal(hasPanelAccess(["member"], "dashboard"), true);
   assert.equal(hasPanelAccess(["network_operator"], "network"), true);
 });
 

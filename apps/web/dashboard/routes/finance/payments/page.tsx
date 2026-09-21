@@ -1,5 +1,7 @@
 "use client";
 
+import { userFacingMessage } from "@/shared/lib/user-facing-error";
+
 import { useState } from "react";
 import { useMutation, useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
@@ -59,7 +61,7 @@ export default function PaymentsPage() {
       });
       reset();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not record payment");
+      setError(userFacingMessage(err, "Could not record payment"));
     }
   };
 
@@ -71,7 +73,7 @@ export default function PaymentsPage() {
       if (!reason.trim()) throw new Error("A reason is required to refund");
       await refundPayment({ id, reason: reason.trim() });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not refund payment");
+      setError(userFacingMessage(err, "Could not refund payment"));
     }
   };
 

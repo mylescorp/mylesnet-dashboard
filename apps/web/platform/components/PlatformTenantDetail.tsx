@@ -1,19 +1,22 @@
 ﻿"use client";
 
+import { userFacingMessage } from "@/shared/lib/user-facing-error";
+
+import { useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
   Building2,
   Link2,
+  PauseCircle,
+  PlayCircle,
   Pencil,
   UsersRound,
 } from "lucide-react";
 import { useMutation, useQuery } from "@/app/lib/convex";
-import { useState } from "react";
 import { tenantControl, type EntitlementStatus, type TenantStatus } from "@/lib/convex/tenantControl";
 import { useUserProfile } from "@/shared/components/UserProfileContext";
 import { StatusPill, EmptyState, formatDateTime } from "@/shared/components/ui";
-import { canManagePlatformTenants } from "@/platform/permissions";
 
 const formatTs = (ts: number | null | undefined) => formatDateTime(ts ?? undefined);
 
@@ -35,33 +38,46 @@ const statusTone: Record<TenantStatus, "success" | "warning" | "danger" | "neutr
 export function PlatformTenantDetail({ tenantId }: { tenantId: string }) {
   const { user } = useUserProfile();
   const detail = useQuery(tenantControl.getTenantDetail, { tenantId });
-  const updateTenant = useMutation(tenantControl.updateTenant);
-  const [editing, setEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const setStatus = useMutation(tenantControl.setStatus);
+  const [working, setWorking] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const canManage = canManagePlatformTenants(user?.roles.map((role) => role.slug));
+  const canManage = user?.roles.some((role) => ["platform_owner", "platform_admin"].includes(role.slug));
 
   const tenant = detail;
   if (tenant === undefined) return <p className="pf-muted">Loading tenant detail…</p>;
   if (tenant === null) return <EmptyState title="Tenant not found" body="This tenant does not exist in the platform directory." />;
 
-
+  const changeStatus = async (status: "active" | "suspended") => {
+    setError(null); setNotice(null); setWorking(true);
+    try {
+      await setStatus({ tenantId, status });
+      setNotice(`${tenant.name} is now ${status}.`);
+    } catch (caught) {
+      setError(userFacingMessage(caught, "Tenant status could not be changed."));
+    } finally { setWorking(false); }
+  };
 
   return (
     <div className="workspace-page">
       <header className="page-heading">
         <div>
-          <p className="eyebrow"><Link href="/platform/organizations" className="platform-back-link"><ArrowLeft size={15} aria-hidden="true" />Tenants</Link></p>
+          <p className="eyebrow"><Link href="/platform/tenants" className="platform-back-link"><ArrowLeft size={15} aria-hidden="true" />Tenants</Link></p>
           <h1 className="page-title">{tenant.name}</h1>
           <p className="page-subtitle">Tenant detail: identity mapping, lifecycle state, entitlement, and the members with access to this workspace.</p>
         </div>
-        {canManage && tenant.status !== "cancelled" && tenant.status !== "provisioning" ? (
-          <Link href={`/platform/organizations/${tenantId}/${tenant.status === "suspended" ? "restore" : "suspend"}`} className="secondary-button">{tenant.status === "suspended" ? "Restore organization" : "Suspend organization"}</Link>
+        {canManage ? (
+          <div style={{ display: "flex", gap: 8 }}>
+            {tenant.status === "suspended"
+              ? <button type="button" className="secondary-button" disabled={working} onClick={() => void changeStatus("active")}><PlayCircle size={15} aria-hidden="true" />Activate</button>
+              : <button type="button" className="secondary-button" disabled={working || tenant.status === "cancelled" || tenant.status === "provisioning"} onClick={() => void changeStatus("suspended")}><PauseCircle size={15} aria-hidden="true" />Suspend</button>}
+          </div>
         ) : null}
       </header>
 
+      {notice ? <p className="platform-claim-message ok" role="status">{notice}</p> : null}
+      {error ? <p className="platform-claim-message" role="alert">{error}</p> : null}
 
       <section className="metric-grid">
         <Metric icon={<Building2 size={19} />} label="Lifecycle status" value={<StatusPill tone={statusTone[tenant.status]}>{tenant.status}</StatusPill>} detail="Tenant directory state" />

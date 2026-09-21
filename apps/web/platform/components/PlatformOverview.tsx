@@ -69,9 +69,9 @@ export function PlatformOverview() {
           {user?.canViewRevenue ? <PlaneCard href="/platform/billing" icon={<CreditCard size={20} />} title="Revenue" body="Read contracted MRR and ARR from active platform plan entitlements." /> : null}
           <PlaneCard href="/platform/access" icon={<Users size={20} />} title="Access & roles" body="Manage platform staff, roles, permissions, and invitations in one place." />
           <PlaneCard href="/platform/audit" icon={<ScrollText size={20} />} title="Audit log" body="Searchable, paginated trail of every entity change across the platform." />
-          <PlaneCard href="/platform/security" icon={<ShieldCheck size={20} />} title="Security" body="Access coverage, staff MFA posture, webhook health, and feature flags." />
+          <PlaneCard href="/platform/security" icon={<ShieldCheck size={20} />} title="Security" body="Access coverage, staff MFA posture, secure delivery health, and service controls." />
           <PlaneCard href="/platform/vouchers/monitor" icon={<TicketCheck size={20} />} title="Voucher monitor" body="Duplicate, velocity, and geo-anomaly signals on redeemed vouchers." />
-          <PlaneCard href="/platform/feature-flags" icon={<Flag size={20} />} title="Feature flags" body="Global toggles, percentage rollouts, and per-tenant overrides." />
+          <PlaneCard href="/platform/feature-flags" icon={<Flag size={20} />} title="Service controls" body="Availability controls, targeted releases, and workspace-specific settings." />
         </div>
       </section>
 

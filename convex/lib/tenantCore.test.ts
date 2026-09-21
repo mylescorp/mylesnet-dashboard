@@ -13,15 +13,10 @@ import {
   tenantMembershipStatusFromWorkos,
 } from "./tenantCore.ts";
 
-test("tenant resolution uses a mapped WorkOS organization and never falls back for an unknown org claim", () => {
-  assert.equal(resolveTenantForIdentity(true, "tenant_from_org", "bootstrap_tenant"), "tenant_from_org");
-  assert.equal(resolveTenantForIdentity(true, undefined, "bootstrap_tenant"), null);
-  assert.equal(resolveTenantForIdentity(true, null, "bootstrap_tenant"), null);
-});
-
-test("tenant resolution uses bootstrap only when the identity has no organization claim", () => {
-  assert.equal(resolveTenantForIdentity(false, undefined, "bootstrap_tenant"), "bootstrap_tenant");
-  assert.equal(resolveTenantForIdentity(false, undefined, undefined), null);
+test("tenant resolution denies an unresolved organization instead of selecting a bootstrap tenant", () => {
+  assert.equal(resolvedTenantOrNull(undefined), null);
+  assert.equal(resolvedTenantOrNull(null), null);
+  assert.equal(resolvedTenantOrNull("tenant_from_org"), "tenant_from_org");
 });
 
 test("bootstrapTenant owner selection refuses an empty or ownerless database before tenant creation", () => {
