@@ -6,7 +6,6 @@ import {
   PLATFORM_SUB_ROLE_MAP,
   TENANT_ROLE_PERMISSIONS,
   tenantRoleHasPermission,
-  tenantRoleHasPermission,
 } from "./permissions";
 import { assertMfaCompliance as assertMfaCompliancePolicy } from "./mfa";
 import { canTenantOperate } from "./tenantCore";
