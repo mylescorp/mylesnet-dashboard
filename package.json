@@ -21,7 +21,7 @@
   "dependencies": {
     "@convex-dev/auth": "^0.0.95",
     "convex": "~1.44.0",
-    "zod": "^4.4.3"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "^20",
