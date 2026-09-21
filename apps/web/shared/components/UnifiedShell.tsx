@@ -8,7 +8,7 @@ import { useConvexAuth } from "@/app/lib/convex";
 import { UserProfileProvider, useUserProfile } from "./UserProfileContext";
 import { AccountDrawer } from "./AccountDrawer";
 import { ThemeToggle } from "./ThemeToggle";
-import { panelForPathname, panelHome, productNavGroups, productRouteIndex } from "@/lib/navigation/product-nav";
+import { panelForPathname, panelHome, productNavGroups, productRouteIndex } from "@/shared/navigation/product-nav";
 import { isRouteActive } from "@mylesnet/ui";
 
 const brand = {
@@ -82,4 +82,3 @@ export function UnifiedShell({ children }: { children: ReactNode }) {
     </UserProfileProvider>
   );
 }
-
