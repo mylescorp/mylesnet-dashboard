@@ -1,5 +1,7 @@
 "use client";
 
+import { userFacingMessage } from "@/shared/lib/user-facing-error";
+
 import { useEffect, useMemo, useState } from "react";
 import { useAction, useQuery } from "@/app/lib/convex";
 import {
@@ -160,7 +162,7 @@ export default function AccessManagementPage() {
           <h1 className="page-title">Access management</h1>
           <p className="page-subtitle">
             Manage who can reach the MylesNet Platform: accounts, roles, invitations and memberships.
-            The role registry is Convex-authoritative and mirrored to WorkOS so sign-in tokens stay consistent.
+            Access changes are applied securely to keep account permissions consistent.
           </p>
         </div>
       </header>
@@ -240,7 +242,7 @@ function UsersTab({ currentUser }: { currentUser: PlatformUser }) {
       setNotice(`Account removed (soft-delete).`);
       if (editing?._id === user._id) setEditing(null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "We could not remove the account.");
+      setError(userFacingMessage(caught, "We could not remove the account."));
     }
   };
 
@@ -251,7 +253,7 @@ function UsersTab({ currentUser }: { currentUser: PlatformUser }) {
       await restoreUser({ userId: user._id });
       setNotice(`${user.email ?? "The account"} was restored. Reassign roles to grant access again.`);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "We could not restore the account.");
+      setError(userFacingMessage(caught, "We could not restore the account."));
     }
   };
 
@@ -510,7 +512,7 @@ function UserFormModal({
       }
       onClose();
     } catch (caught) {
-      setLocalError(caught instanceof Error ? caught.message : "That action failed. Please try again.");
+      setLocalError(userFacingMessage(caught, "That action failed. Please try again."));
     } finally {
       setWorking(false);
     }
@@ -558,7 +560,7 @@ function UserFormModal({
             placeholder="name@example.com"
             maxLength={200}
           />
-          {mode === "edit" ? <small className="pf-hint">WorkOS identity — not editable here.</small> : null}
+          {mode === "edit" ? <small className="pf-hint">This email address is managed securely and cannot be edited here.</small> : null}
         </label>
         <label className="pf-field">
           <span className="pf-label">Full name</span>
@@ -576,7 +578,7 @@ function UserFormModal({
 
       <section className="modal-section">
         <p className="pf-label">Assigned roles</p>
-        <p className="pf-hint">The highest-ranked role becomes the primary role and mirrors to the WorkOS membership.</p>
+        <p className="pf-hint">The highest-ranked role becomes the account’s primary access level.</p>
         <div className="access-role-checklist">
           {roles.length === 0 ? (
             <p className="pf-muted">No assignable roles yet — create a role in the Roles tab first.</p>
@@ -658,7 +660,7 @@ function RolesTab() {
       await ensureRoles();
       setNotice("System roles and user backfill are up to date.");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "The sync failed. Please try again.");
+      setError(userFacingMessage(caught, "The sync failed. Please try again."));
     } finally {
       setWorking(false);
     }
@@ -673,7 +675,7 @@ function RolesTab() {
       await deleteRole({ roleId: role._id });
       setNotice(`Role "${role.name}" deleted.`);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "We could not delete the role.");
+      setError(userFacingMessage(caught, "We could not delete the role."));
     } finally {
       setWorking(false);
     }
@@ -693,7 +695,7 @@ function RolesTab() {
         <div className="access-toolbar-spacer" />
         <span className="pf-muted">{roles.length} roles · {roles.filter((role) => !role.isSystem).length} custom</span>
         <button type="button" className="secondary-button" onClick={() => void syncNow()} disabled={working}>
-          <RefreshCw size={15} aria-hidden="true" />Sync with WorkOS
+          <RefreshCw size={15} aria-hidden="true" />Refresh access settings
         </button>
         <button type="button" className="primary-button" onClick={() => { setError(null); setNotice(null); setCreating(true); }} disabled={working}>
           <Plus size={16} aria-hidden="true" />New role
@@ -722,7 +724,7 @@ function RolesTab() {
                 <div><dt>Assigned</dt><dd>{role.assignedCount}</dd></div>
                 <div><dt>Rank</dt><dd>{role.rank}</dd></div>
                 <div>
-                  <dt>WorkOS</dt>
+                  <dt>Access directory</dt>
                   <dd className={role.syncedToWorkos ? "role-sync-ok" : "role-sync-off"}>{role.syncedToWorkos ? "Synced" : "Local only"}</dd>
                 </div>
               </dl>
@@ -838,7 +840,7 @@ function RoleEditorModal({
       }
       onClose();
     } catch (caught) {
-      setLocalError(caught instanceof Error ? caught.message : "That action failed. Please try again.");
+      setLocalError(userFacingMessage(caught, "That action failed. Please try again."));
     } finally {
       setWorking(false);
     }
@@ -969,7 +971,7 @@ function InvitationsTab() {
       setEmail("");
       setRoleId("");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "We could not send the invitation.");
+      setError(userFacingMessage(caught, "We could not send the invitation."));
     } finally {
       setSending(false);
     }
@@ -983,7 +985,7 @@ function InvitationsTab() {
       await revokeInvitation({ invitationId: invitation._id });
       setNotice(`Invitation to ${invitation.email} revoked.`);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "We could not revoke the invitation.");
+      setError(userFacingMessage(caught, "We could not revoke the invitation."));
     }
   };
 

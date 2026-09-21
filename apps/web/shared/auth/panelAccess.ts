@@ -44,6 +44,7 @@ export const PANEL_ROLE_REQUIREMENTS = {
     "finance",
     "noc",
     "viewer",
+    "member",
     "org-client_admin",
     "org-tenant_admin",
     "org-tenant_manager",

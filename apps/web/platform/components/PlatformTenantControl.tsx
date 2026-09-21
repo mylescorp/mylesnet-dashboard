@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Building2, CircleAlert, Link2, PauseCircle, PlayCircle, Plus, UsersRound } from "lucide-react";
 import { useAction, useMutation, useQuery } from "@/app/lib/convex";
 import { tenantControl, type PlatformTenant, type TenantStatus } from "@/lib/convex/tenantControl";
+import { userFacingMessage } from "@/shared/lib/user-facing-error";
 
 const statusTone: Record<TenantStatus, "success" | "warning" | "danger" | "neutral"> = {
   provisioning: "warning", active: "success", trial: "warning", suspended: "danger", cancelled: "neutral",
@@ -15,8 +16,7 @@ function Status({ status }: { status: TenantStatus }) {
 }
 
 function safeErrorMessage(error: unknown): string {
-  const message = error instanceof Error ? error.message : "";
-  return "The workspace could not be prepared. Please retry or contact MylesNet support.";
+  return userFacingMessage(error, "The workspace could not be prepared. Please retry or contact MylesNet support.");
 }
 
 export function PlatformTenantControl() {
@@ -75,7 +75,7 @@ function Metric({ icon, label, value, detail, tone = "accent" }: { icon: ReactNo
 }
 
 function EmptyTenantState({ onCreate }: { onCreate: () => void }) {
-  return <div className="tenant-empty-state"><Building2 size={26} aria-hidden="true" /><h3>No tenant is registered yet</h3><p>Create a workspace with the operator’s details and administrator email. MylesNet prepares secure administrator access automatically.</p><button type="button" className="primary-button" onClick={onCreate}>Create tenant workspace</button></div>;
+  return <div className="tenant-empty-state"><Building2 size={26} aria-hidden="true" /><h3>No tenant is registered yet</h3><p>Create a workspace with the operator’s details and administrator email. MylesNet securely prepares access and sends the administrator an invitation automatically.</p><button type="button" className="primary-button" onClick={onCreate}>Create tenant workspace</button></div>;
 }
 
 function TenantOnboardingDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (message: string) => void }) {
@@ -86,17 +86,10 @@ function TenantOnboardingDialog({ onClose, onCreated }: { onClose: () => void; o
   const save = async (event: FormEvent) => {
     event.preventDefault(); setError(null); setWorking(true);
     try {
-      const result = await provisionTenant({ ...form, ownerName: form.ownerName.trim() || undefined });
-      if (result.status === "authentication_required") {
-        setError("Sign in again before creating a tenant workspace.");
-        return;
-      }
-      if (result.status === "unavailable") {
-        setError("The workspace could not be prepared. Please retry or contact MylesNet support.");
-        return;
-      }
-      onCreated(`${form.name} is ready. Its administrator can sign in with the email address provided.`);
+      if (!/^[a-z0-9-]{3,50}$/.test(form.slug)) throw new Error("Use a lowercase slug (3–50 letters, numbers, or hyphens).");
+      await provisionTenant({ ...form, ownerName: form.ownerName.trim() || undefined });
+      onCreated(`${form.name} is being prepared. Its administrator will receive a secure MylesNet invitation.`);
     } catch (caught) { setError(safeErrorMessage(caught)); } finally { setWorking(false); }
   };
-  return <div className="profile-modal-overlay" role="dialog" aria-modal="true" aria-label="Create tenant workspace" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}><form className="profile-modal-dialog" onSubmit={save}><header className="profile-modal-header"><div><p className="eyebrow">Tenant onboarding</p><h2 className="page-title">Create a tenant workspace</h2></div><button type="button" className="profile-modal-close" onClick={onClose} aria-label="Close dialog">×</button></header><div className="modal-body"><p className="pf-hint">MylesNet creates the workspace and prepares secure administrator access in the background. No technical identity setup is needed here.</p>{error ? <p className="platform-claim-message" role="alert">{error}</p> : null}<div className="form-grid"><label className="pf-field"><span className="pf-label">Tenant name</span><input className="pf-input" required value={form.name} onChange={(event) => change("name", event.target.value)} /></label><label className="pf-field"><span className="pf-label">Workspace address</span><input className="pf-input" required value={form.slug} onChange={(event) => change("slug", event.target.value.toLowerCase())} placeholder="example-isp" /></label><label className="pf-field"><span className="pf-label">Administrator email</span><input className="pf-input" type="email" required value={form.ownerEmail} onChange={(event) => change("ownerEmail", event.target.value)} /></label><label className="pf-field"><span className="pf-label">Administrator name <small>(optional)</small></span><input className="pf-input" value={form.ownerName} onChange={(event) => change("ownerName", event.target.value)} /></label><label className="pf-field"><span className="pf-label">Country</span><input className="pf-input" required maxLength={2} value={form.country} onChange={(event) => change("country", event.target.value.toUpperCase())} /></label><label className="pf-field"><span className="pf-label">Currency</span><input className="pf-input" required maxLength={3} value={form.currency} onChange={(event) => change("currency", event.target.value.toUpperCase())} /></label><label className="pf-field"><span className="pf-label">Timezone</span><input className="pf-input" required value={form.timezone} onChange={(event) => change("timezone", event.target.value)} /></label></div></div><footer className="profile-modal-actions"><button type="button" className="secondary-button" onClick={onClose} disabled={working}>Cancel</button><button type="submit" className="primary-button" disabled={working}>{working ? "Preparing workspace…" : "Create workspace"}</button></footer></form></div>;
+  return <div className="profile-modal-overlay" role="dialog" aria-modal="true" aria-label="Create tenant workspace" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}><form className="profile-modal-dialog" onSubmit={save}><header className="profile-modal-header"><div><p className="eyebrow">Tenant onboarding</p><h2 className="page-title">Create a tenant workspace</h2></div><button type="button" className="profile-modal-close" onClick={onClose} aria-label="Close dialog">×</button></header><div className="modal-body"><p className="pf-hint">MylesNet creates the workspace, configures secure access, and sends the administrator invitation in the background. No technical identity setup is needed here.</p>{error ? <p className="platform-claim-message" role="alert">{error}</p> : null}<div className="form-grid"><label className="pf-field"><span className="pf-label">Tenant name</span><input className="pf-input" required value={form.name} onChange={(event) => change("name", event.target.value)} /></label><label className="pf-field"><span className="pf-label">Workspace address</span><input className="pf-input" required value={form.slug} onChange={(event) => change("slug", event.target.value.toLowerCase())} placeholder="example-isp" /></label><label className="pf-field"><span className="pf-label">Administrator email</span><input className="pf-input" type="email" required value={form.ownerEmail} onChange={(event) => change("ownerEmail", event.target.value)} /></label><label className="pf-field"><span className="pf-label">Administrator name <small>(optional)</small></span><input className="pf-input" value={form.ownerName} onChange={(event) => change("ownerName", event.target.value)} /></label><label className="pf-field"><span className="pf-label">Country</span><input className="pf-input" required maxLength={2} value={form.country} onChange={(event) => change("country", event.target.value.toUpperCase())} /></label><label className="pf-field"><span className="pf-label">Currency</span><input className="pf-input" required maxLength={3} value={form.currency} onChange={(event) => change("currency", event.target.value.toUpperCase())} /></label><label className="pf-field"><span className="pf-label">Timezone</span><input className="pf-input" required value={form.timezone} onChange={(event) => change("timezone", event.target.value)} /></label></div></div><footer className="profile-modal-actions"><button type="button" className="secondary-button" onClick={onClose} disabled={working}>Cancel</button><button type="submit" className="primary-button" disabled={working}>{working ? "Preparing workspace…" : "Create workspace"}</button></footer></form></div>;
 }

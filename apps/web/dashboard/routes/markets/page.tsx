@@ -1,5 +1,7 @@
 "use client";
 
+import { userFacingMessage } from "@/shared/lib/user-facing-error";
+
 import Link from "next/link";
 import { useState } from "react";
 import { useMutation, useQuery } from "@/app/lib/convex";
@@ -40,7 +42,7 @@ export default function MarketsPage() {
       setName("");
       setCountry("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create market");
+      setError(userFacingMessage(err, "Could not create market"));
     } finally {
       setCreating(false);
     }
@@ -51,7 +53,7 @@ export default function MarketsPage() {
     try {
       await updateStatus({ marketId: marketId as Id<"markets">, lifecycleStatus });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not update status");
+      setError(userFacingMessage(err, "Could not update status"));
     }
   };
 

@@ -807,6 +807,7 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_market", ["marketId"])
+    .index("by_tenant", ["tenantId"])
     .index("by_code", ["code"])
     .index("by_status", ["status"]),
 

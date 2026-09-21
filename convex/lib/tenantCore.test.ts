@@ -13,11 +13,10 @@ import {
   tenantMembershipStatusFromWorkos,
 } from "./tenantCore.ts";
 
-test("resolveTenantFromAuth's candidate resolver denies unresolved identities instead of selecting another tenant", () => {
-  assert.equal(resolvedTenantOrNull(undefined, undefined), null);
-  assert.equal(resolvedTenantOrNull(null, null), null);
-  assert.equal(resolvedTenantOrNull("tenant_from_org", "bootstrap_tenant"), "tenant_from_org");
-  assert.equal(resolvedTenantOrNull(undefined, "bootstrap_tenant"), "bootstrap_tenant");
+test("tenant resolution denies an unresolved organization instead of selecting a bootstrap tenant", () => {
+  assert.equal(resolvedTenantOrNull(undefined), null);
+  assert.equal(resolvedTenantOrNull(null), null);
+  assert.equal(resolvedTenantOrNull("tenant_from_org"), "tenant_from_org");
 });
 
 test("bootstrapTenant owner selection refuses an empty or ownerless database before tenant creation", () => {

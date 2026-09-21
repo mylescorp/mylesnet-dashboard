@@ -1,5 +1,7 @@
 "use client";
 
+import { userFacingMessage } from "@/shared/lib/user-facing-error";
+
 import { useState } from "react";
 import { useMutation, useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
@@ -58,7 +60,7 @@ export default function ExpensesPage() {
       setAmount("");
       setNotes("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to record expense.");
+      setError(userFacingMessage(err, "Failed to record expense."));
     } finally {
       setSaving(false);
     }

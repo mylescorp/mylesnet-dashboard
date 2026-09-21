@@ -1,5 +1,7 @@
 "use client";
 
+import { userFacingMessage } from "@/shared/lib/user-facing-error";
+
 import { useState } from "react";
 import { useMutation, useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
@@ -45,7 +47,7 @@ export default function InvoicesPage() {
 
   const run = async (fn: () => Promise<unknown>) => {
     setError(null);
-    try { await fn(); } catch (err) { setError(err instanceof Error ? err.message : "Invoice action failed"); }
+    try { await fn(); } catch (err) { setError(userFacingMessage(err, "Invoice action failed")); }
   };
 
   const create = async () => {
@@ -71,7 +73,7 @@ export default function InvoicesPage() {
       });
       reset();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create invoice");
+      setError(userFacingMessage(err, "Could not create invoice"));
     }
   };
 

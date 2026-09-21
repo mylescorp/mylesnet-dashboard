@@ -1,5 +1,7 @@
 ﻿"use client";
 
+import { userFacingMessage } from "@/shared/lib/user-facing-error";
+
 import { useState } from "react";
 import Link from "next/link";
 import {
@@ -53,7 +55,7 @@ export function PlatformTenantDetail({ tenantId }: { tenantId: string }) {
       await setStatus({ tenantId, status });
       setNotice(`${tenant.name} is now ${status}.`);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Tenant status could not be changed.");
+      setError(userFacingMessage(caught, "Tenant status could not be changed."));
     } finally { setWorking(false); }
   };
 
