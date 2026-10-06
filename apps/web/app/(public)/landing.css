@@ -448,7 +448,6 @@
 
 .landing-audience-pill {
   border-radius: 9999px;
-  border: 1px solid var(--line);
   background: var(--surface);
   color: var(--text);
   padding: 9px 18px;
@@ -2105,6 +2104,9 @@ a.landing-card:hover {
   width: min(var(--landing-container), 100%);
   margin-inline: auto;
   padding: clamp(40px, 6vw, 72px);
+  border: none;
+  background: transparent;
+  box-shadow: none;
 }
 
 .landing-home-hero-card::after {
@@ -2128,7 +2130,7 @@ a.landing-card:hover {
 .landing-home-hero-card .landing-card-eyebrow {
   align-self: flex-start;
   margin: 0;
-  border: 1px solid color-mix(in srgb, var(--primary) 38%, transparent);
+  border: none;
   border-radius: var(--radius-full);
   background: color-mix(in srgb, var(--primary) 12%, transparent);
   color: var(--primary-text);
@@ -2194,7 +2196,7 @@ a.landing-card:hover {
 
 .landing-home-preview-section {
   padding: var(--space-8) var(--space-4) var(--landing-section-padding-md);
-  border-block: 1px solid var(--line);
+  border-block: none;
   background: var(--canvas);
   color: var(--text);
 }
@@ -2207,13 +2209,97 @@ a.landing-card:hover {
 
 .landing-home-audiences { display: grid; align-items: center; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-6); }
 .landing-home-audiences .landing-audiences-label { margin: 0; }
+.landing-home-audiences .landing-audience-pill {
+  border: none;
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface));
+  box-shadow: none;
+}
+.landing-home-audiences .landing-audience-pill:hover {
+  border-color: transparent;
+  box-shadow: none;
+  background: color-mix(in srgb, var(--primary) 14%, var(--surface));
+  transform: translateY(-2px);
+}
+
 .landing-home-section { scroll-margin-top: calc(var(--space-16) + var(--space-4)); }
-.landing-home-feature-grid { display: grid; align-items: start; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-4); }
-.landing-home-feature-grid .landing-card { min-height: 17rem; height: 100%; }
+.landing-home-feature-grid { display: grid; align-items: start; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-6); }
 .landing-home-feature-grid .landing-card-title { font-size: var(--font-size-500); }
 .landing-home-feature-grid .landing-card-body { max-width: 42rem; }
 .landing-home-feature-grid .landing-card-footer { color: var(--primary-text); }
 .landing-home-faq-inner { max-width: 54rem; }
+
+/* Unboxed layout for homepage sections: remove card container boxes, borders, and shadows */
+.landing-home-section .landing-card {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  padding: var(--space-3) 0;
+  min-height: 0;
+}
+
+.landing-home-section .landing-card:hover,
+.landing-home-section .landing-card[href]:hover,
+.landing-home-section a.landing-card:hover {
+  transform: none;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.landing-home-section .landing-card-interactive:hover .landing-card-title,
+.landing-home-section a.landing-card:hover .landing-card-title {
+  color: var(--primary-action);
+}
+
+.landing-home-section .landing-card-interactive:hover .landing-card-footer,
+.landing-home-section a.landing-card:hover .landing-card-footer {
+  color: var(--primary-hover);
+}
+
+.landing-home-section .landing-card-tags li {
+  border: none;
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface-muted));
+}
+
+.landing-home-section .landing-card-step {
+  padding-top: var(--space-2);
+}
+
+.landing-home-section .landing-card-step::before {
+  display: none;
+  content: none;
+}
+
+.landing-home-section .landing-honesty {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  padding: var(--space-2) 0;
+}
+
+.landing-home-section .landing-solutions-grid {
+  gap: var(--space-8);
+}
+
+.landing-home-section .landing-process {
+  gap: var(--space-6);
+}
+
+.landing-home-section .landing-trust-grid {
+  gap: var(--space-6);
+}
+
+/* FAQ unboxed: remove divider lines between items */
+.landing-home-faq-inner .landing-faq [data-radix-collection-item],
+.landing-home-faq-inner .landing-faq > div {
+  border-bottom: none;
+  border: none;
+}
+
+.landing-home-faq-inner .landing-faq {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
 
 .landing-home-visual-section {
   padding: var(--landing-section-padding-md) var(--space-4);
@@ -2225,15 +2311,16 @@ a.landing-card:hover {
   width: min(var(--landing-container), 100%);
   margin-inline: auto;
   overflow: hidden;
-  align-items: stretch;
+  align-items: center;
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-xl);
-  background: var(--surface);
-  box-shadow: var(--shadow-lg);
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 .landing-home-visual-photo {
   min-height: 26rem;
+  border-radius: var(--radius-xl);
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--surface-inverse) 4%, transparent), color-mix(in srgb, var(--surface-inverse) 36%, transparent)),
     url("https://upload.wikimedia.org/wikipedia/commons/0/06/InformationTechnologyWork_08.jpg") center / cover no-repeat,

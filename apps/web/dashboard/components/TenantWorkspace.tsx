@@ -48,7 +48,7 @@ export function TenantWorkspace() {
     );
 
   if (workspace.status === "setup_required") {
-    return <TenantWorkspaceSetup />;
+    return <TenantWorkspaceSetup suspended={workspace.reason === "tenant_suspended"} />;
   }
 
   const tenantWorkspace = workspace.workspace;
@@ -209,20 +209,18 @@ function LaunchChecklist({ setup }: { setup: SetupStatus | undefined }) {
   );
 }
 
-function TenantWorkspaceSetup() {
+function TenantWorkspaceSetup({ suspended = false }: { suspended?: boolean }) {
   return (
     <div className="workspace-page">
       <section className="workspace-card tenant-workspace-summary" aria-live="polite">
         <p className="eyebrow">Workspace</p>
         <div>
-          <h1 className="page-title">Your workspace is nearly ready</h1>
-          <p className="page-subtitle">Continue in the control centre while the workspace is prepared.</p>
+          <h1 className="page-title">{suspended ? "Workspace access is suspended" : "Your workspace is nearly ready"}</h1>
+          <p className="page-subtitle">{suspended ? "This organization is temporarily unavailable. Contact your service provider for help." : "Continue in the control centre while the workspace is prepared."}</p>
         </div>
-        <form action={openControlCentre}>
-          <button type="submit" className="primary-button">
-            Open control centre
-          </button>
-        </form>
+        {!suspended ? <form action={openControlCentre}>
+          <button type="submit" className="primary-button">Open control centre</button>
+        </form> : null}
       </section>
     </div>
   );

@@ -12,8 +12,8 @@ export type ProvisioningTransition = "approved" | "rejected" | "deployed";
  *   pending → approved | rejected
  *   approved → deployed
  * A request leaves its pending state exactly once via an operator decision,
- * and only an approved request may be marked deployed when the device reports
- * back provisioned. No-ops and illegal transitions return null.
+ * and only an approved request may be marked deployed after external
+ * operator verification. No-ops and illegal transitions return null.
  */
 export function nextProvisioningStatus(
   status: ProvisioningStatus,

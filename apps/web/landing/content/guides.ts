@@ -258,4 +258,115 @@ export const guides: Guide[] = [
       },
     ],
   },
+  {
+    slug: "free-isp-billing-software",
+    title: "Free ISP billing software",
+    kicker: "Guide",
+    intro:
+      "Free billing software is a real option, and for a certain network it is the right one. This guide is about the cost it does not show you — and the point where 'free' quietly becomes the most expensive line in the operation.",
+    sections: [
+      {
+        heading: "What free actually means",
+        paragraphs: [
+          "Most free billing options are one of three things: an open-source project maintained by one or two people, a hosted free tier with a paid ceiling, or a vendor's community edition that leaves the hard parts — payments, integrations, support — on the paid side. All three are legitimate. None of them is free.",
+          "The licence costs nothing. The install, the database, the upgrades, and the hours you spend reading forums to fix a broken migration do not. If you have an engineer on staff who enjoys this work, the price is time. If you do not, the price is outages.",
+        ],
+      },
+      {
+        heading: "Where the free option stops",
+        paragraphs: [
+          "It stops, almost always, at money movement. Free software can record that a subscriber owes you, but it rarely knows how to take a payment over M-Pesa, match it to the right invoice, and extend the right service — because that work depends on a payment provider's API, a commercial agreement, and someone maintaining it as the provider changes.",
+          "It also stops at the network. Synchronising a subscriber's service state with a MikroTik or a RADIUS server is where billing becomes operations: the customer is connected or they are not, and the billing system is the thing that decides. Software without that bridge leaves you typing credentials by hand for every suspension and every reconnection.",
+        ],
+      },
+      {
+        heading: "The real calculation",
+        paragraphs: [
+          "Count honestly for a year: setup days, upgrade weekends, the cost of one bad migration, the hours spent on reconciliations that a matching rule would have done, and the revenue lost when a payment path silently broke for a week. That number, against a subscription that includes the payment flow, the router bridge, and support that answers, is the comparison.",
+          "If you are a solo operator with forty subscribers, free may win for a while — and that is a fair choice. The calculation changes the moment money is collected every day and people are waiting on your network to be up.",
+        ],
+      },
+      {
+        heading: "How to choose either way",
+        paragraphs: [
+          "Start with the questions that are uncomfortable to answer later: who owns the data if you leave, can you export it in a usable form, what happens when the maintainer stops maintaining, and does the tool handle your payment method the way your customers actually pay.",
+          "Then decide deliberately, in writing, rather than drifting into it. A billing system is a load-bearing wall. Walls should be chosen, not inherited.",
+        ],
+      },
+    ],
+  },
+  {
+    slug: "internet-billing-system",
+    title: "Internet billing systems",
+    kicker: "Guide",
+    intro:
+      "An internet billing system is the part of an ISP that turns network access into a recordable, chargeable, collectable service. This guide walks what it holds — from the subscriber's record down to the router — and why each piece has to agree with the others.",
+    sections: [
+      {
+        heading: "The subscriber record is the spine",
+        paragraphs: [
+          "Everything else hangs off one record per customer: who they are, where they are, what they bought, what they owe, and how they pay. Plans, vouchers, invoices, sessions, and support tickets are all references back to that record. When two departments keep their own copy of a customer, reconciliation becomes a permanent job.",
+          "The record should also carry identity on the network side — the address or username they authenticate with — so that a person in support can see, without asking anyone, whether the customer complaining about a slow connection is actually connected.",
+        ],
+      },
+      {
+        heading: "From plan to session",
+        paragraphs: [
+          "A billing system earns its keep in the loop between money and access. A subscriber pays, the payment posts, the service extends, and the network device applies it — a suspension on expiry, a reconnection on renewal. Every step leaves a trace that can answer a dispute.",
+          "Where that loop is manual, the drift starts: someone forgets to re-enable an account, or a service extends in the billing record but not on the router. The subscriber's real experience is defined by what the router does, so the router is the thing that must be kept in step.",
+        ],
+      },
+      {
+        heading: "Prepaid, postpaid, and vouchers",
+        paragraphs: [
+          "Prepaid captures payment before delivery and expires on a computed date. Postpaid invoices a period and carries a balance until paid. Vouchers are prepaid with a code — useful when the seller is a counter, an agent, or a printed leaflet, and dangerous if codes can be guessed or reused.",
+          "Mixing models is normal and fine, as long as each one has a single owner of truth for the expiry or due date. The moment two systems can set a subscriber's expiry, they will eventually disagree.",
+        ],
+      },
+      {
+        heading: "Reconciliation and reporting",
+        paragraphs: [
+          "Money arrives through channels that move at their own speed — instant on mobile money, slow on bank transfer. Reconciliation is the practice of matching every statement line to a posted payment, and treating anything unmatched as an open item until it resolves.",
+          "Reporting is reconciliation's public face: daily revenue, renewals due against renewals done, overdue balances, active subscribers. An operator who can read those four numbers each morning already knows most of what their business is about to do.",
+        ],
+      },
+    ],
+  },
+  {
+    slug: "mikrotik-router-monitoring",
+    title: "MikroTik router monitoring",
+    kicker: "Guide",
+    intro:
+      "A RouterBOARD behind a wall is the part of the network that decides whether subscribers are actually online. This guide covers what to watch on MikroTik hardware, which signals warn first, and how monitoring connects to billing rather than sitting beside it.",
+    sections: [
+      {
+        heading: "The five-minute watchlist",
+        paragraphs: [
+          "Start with what a router reports about itself: CPU load, memory use, uptime, interface state, and storage. Uptime is the most human of them — a router that rebooted last night tells you more than a slow trend line, because a reboot is an event with a time and, usually, a cause.",
+          "Interface state catches the failures that subscribers feel first: a port that is up but flapping, traffic on an interface that should be idle, or one interface carrying far more than it should. These are visible long before anyone files a ticket.",
+        ],
+      },
+      {
+        heading: "Watch capacity, not just health",
+        paragraphs: [
+          "A healthy router can still be the bottleneck. Compare throughput against the link it serves and watch the trend, not the peak: saturation at the same hour every evening is a pricing and shaping conversation; saturation that grows week over week is a capacity one.",
+          "Track address table size and DHCP pool usage as well. Both fail in ways that look like 'the internet is down' from the subscriber's side while every individual process on the router is still reporting green.",
+        ],
+      },
+      {
+        heading: "Configuration backups and change history",
+        paragraphs: [
+          "The second part of monitoring is knowing what the router was configured to do. A scheduled configuration backup means a replaced device is a hardware swap instead of an afternoon of reconstruction, and a bad change is a diff instead of a mystery.",
+          "Keep the backups somewhere the router itself cannot wipe them, and treat a router whose configuration has changed without a matching change record as an incident, not a curiosity.",
+        ],
+      },
+      {
+        heading: "Monitoring connected to billing",
+        paragraphs: [
+          "Router monitoring earns more when it shares data with billing. An outage credited back to affected subscribers needs to know who was affected; a subscriber who is 'active' in the billing record but absent from the router's sessions has a problem that neither team can see alone.",
+          "Start with the two links that are cheapest to build: session presence per subscriber, and uptime per device feeding an outage record. From there, monitoring stops being a dashboard and becomes part of the money.",
+        ],
+      },
+    ],
+  },
 ];

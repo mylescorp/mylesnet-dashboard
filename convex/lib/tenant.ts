@@ -2,7 +2,7 @@ import { QueryCtx, MutationCtx } from "../_generated/server";
 import { Id } from "../_generated/dataModel";
 import { resolveUserByIdentity } from "./auth";
 import { TENANT_FEATURE_FLAGS } from "./tenantMigration";
-import { assertNoClientOverride, assertTenantMatch, canTenantOperate, resolvedTenantOrNull } from "./tenantCore";
+import { assertNoClientOverride, assertTenantMatch, canTenantOperate, resolveTenantForIdentity } from "./tenantCore";
 import { organizationIdFromWorkosIdentity } from "./workosIdentity";
 
 export {
@@ -54,8 +54,9 @@ export interface ReadScope {
  * migration: while `tenant.readPath` is OFF this returns `{ tenantId: null,
  * enforced: false }` so every handler keeps its exact current behavior. The
  * moment the flag flips, reads narrow to the caller's tenant (membership
- * required) and legacy rows keyed `tenantId: undefined` — only reachable
- * through the `by_tenant` index on that state — pass through unchanged.
+ * required). Legacy rows without an owner are excluded until the reviewed
+ * backfill assigns them; returning them would make cross-tenant isolation
+ * impossible to prove.
  *
  * Handlers apply indexed tenant filtering via the `by_tenant` index added in
  * the schema cohort, never by scanning the whole table.
@@ -68,13 +69,22 @@ export async function readScopedTenant(ctx: QueryCtx | MutationCtx): Promise<Rea
 }
 
 /**
+ * Resolve the server-derived tenant for a new tenant-owned record only after
+ * the write-path rollout is enabled. Until then writes retain the additive
+ * migration behavior; callers must never supply this value themselves.
+ */
+export async function tenantIdForWrite(
+  ctx: QueryCtx | MutationCtx,
+): Promise<Id<"tenants"> | undefined> {
+  const enabled = await isTenantStageFlagOn(ctx, TENANT_FEATURE_FLAGS.writePath);
+  return enabled ? await requireTenantMember(ctx) : undefined;
+}
+
+/**
  * Collect a tenant-owned table's rows through the read-path scope. When
- * enforcement is off this calls `load.all` (a plain full-table scan — current
- * behavior, bit for bit); when on it merges the tenant's rows (`by_tenant`
- * index match) with legacy rows whose `tenantId` is still undefined
- * (pre-backfill pass-through). Both enforcement branches are indexed — never a
- * full scan of the tenant partition. Loaders are provided per table so the
- * `by_tenant` index is type-checked against that table's schema.
+ * enforcement is off this calls `load.all` (the pre-migration behavior).
+ * Once enabled it uses only the caller's `by_tenant` partition. Unassigned
+ * legacy rows remain hidden until the reviewed backfill completes.
  */
 export async function readTenantList<T>(
   ctx: QueryCtx,
@@ -86,9 +96,7 @@ export async function readTenantList<T>(
 ): Promise<T[]> {
   const scope = await readScopedTenant(ctx);
   if (!scope.enforced) return load.all();
-  const scoped = await load.tenant(scope.tenantId!);
-  const legacy = await load.legacy();
-  return [...legacy, ...scoped];
+  return load.tenant(scope.tenantId!);
 }
 
 /**
@@ -97,7 +105,7 @@ export async function readTenantList<T>(
  * tenant (legacy rows with no tenantId remain readable during the migration).
  */
 export async function enforceTenantOnResource<T extends { tenantId?: Id<"tenants"> | null }>(
-  ctx: QueryCtx,
+  ctx: QueryCtx | MutationCtx,
   resource: T | null,
   label: string,
 ): Promise<T | null> {
@@ -119,8 +127,12 @@ export async function resolveTenantFromAuth(
   if (!identity) return null;
 
   // Primary path: WorkOS per-tenant org claim (Phase 2 wiring, additive today).
+  const hasOrganizationClaim = Object.prototype.hasOwnProperty.call(identity, "org_id");
   const orgId = organizationIdFromWorkosIdentity(identity);
   let organizationTenantId: Id<"tenants"> | null = null;
+  // A malformed or unmapped org claim is an explicit unresolved scope. Do not
+  // attach that identity to the legacy bootstrap tenant.
+  if (hasOrganizationClaim && !orgId) return null;
   if (typeof orgId === "string" && orgId.length > 0) {
     const byOrg = await ctx.db
       .query("tenants")
@@ -140,7 +152,7 @@ export async function resolveTenantFromAuth(
     .first();
   // Never fall back to an arbitrary tenant. An unresolved identity must be
   // denied by the caller rather than silently attached to another ISP.
-  return resolvedTenantOrNull(organizationTenantId, bootstrap?._id);
+  return resolveTenantForIdentity(hasOrganizationClaim, organizationTenantId, bootstrap?._id);
 }
 
 /**
@@ -177,6 +189,32 @@ export async function requireTenantMember(
     throw new Error("Unauthorized: tenant membership required");
   }
   return target;
+}
+
+/**
+ * Lifecycle guard for permission-protected tenant endpoints. This deliberately
+ * checks lifecycle without requiring a tenant membership, preserving the
+ * additive migration's current membership rollout while ensuring a suspended
+ * tenant cannot keep using APIs through a direct Convex call.
+ */
+export async function assertCurrentTenantOperable(
+  ctx: QueryCtx | MutationCtx,
+): Promise<void> {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) throw new Error("Unauthenticated");
+  const tenantId = await resolveTenantFromAuth(ctx);
+  // Preserve legacy identities without an org claim before bootstrap exists,
+  // but never let an explicit, unresolved organization bypass lifecycle gates.
+  if (!tenantId) {
+    if (Object.prototype.hasOwnProperty.call(identity, "org_id")) {
+      throw new Error("Unauthorized: tenancy not configured for this identity");
+    }
+    return;
+  }
+  const tenant = await ctx.db.get(tenantId);
+  if (!tenant || !canTenantOperate(tenant.status)) {
+    throw new Error("Unauthorized: tenant is suspended or cancelled");
+  }
 }
 
 /**

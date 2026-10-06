@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAction } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
 import { useUserProfile } from "./UserProfileContext";
-import { avatarFallbackUrl } from "@/app/lib/avatar";
+import { avatarFallbackUrl, trustedAvatarSource } from "@/app/lib/avatar";
 import { Check, ImagePlus, ShieldCheck, Trash2, User, X } from "lucide-react";
 
 const ALLOWED_AVATAR_MIME_TYPES = new Set([
@@ -14,19 +15,6 @@ const ALLOWED_AVATAR_MIME_TYPES = new Set([
   "image/gif",
 ]);
 const MAX_AVATAR_SIZE_BYTES = 5 * 1024 * 1024;
-const CONVEX_STORAGE_HOST_SUFFIX = ".convex.cloud";
-
-function trustedAvatarSource(url: string | undefined | null, hasStorageRecord: boolean): string | undefined {
-  if (!url || !hasStorageRecord) return undefined;
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === "https:" && parsed.hostname.endsWith(CONVEX_STORAGE_HOST_SUFFIX)
-      ? parsed.toString()
-      : undefined;
-  } catch {
-    return undefined;
-  }
-}
 
 function localAvatarObjectUrl(url: string | undefined | null): string | null {
   if (!url) return null;
@@ -41,9 +29,10 @@ function localAvatarObjectUrl(url: string | undefined | null): string | null {
 interface UserProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
+  presentation?: "drawer" | "page";
 }
 
-export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
+export function UserProfileModal({ isOpen, onClose, presentation = "drawer" }: UserProfileModalProps) {
   const { user, updateProfile } = useUserProfile();
   const generateUploadUrl = useAction(api.profile.generateAvatarUploadUrl);
   const saveAvatar = useAction(api.profile.saveAvatar);
@@ -163,7 +152,7 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
       setStatusMessage({ type: "success", text: "Your profile has been saved." });
       setTimeout(() => {
         setStatusMessage(null);
-        onClose();
+        if (presentation === "drawer") onClose();
       }, 1000);
     } catch {
       setError("We could not save your profile. Please try again.");
@@ -172,13 +161,12 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
     }
   };
 
-return (
-    <div className="profile-drawer-overlay" onClick={onClose} role="presentation">
+const profilePanel = (
       <div
-        className="profile-drawer-panel"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
+        className={`profile-drawer-panel${presentation === "page" ? " account-profile-panel" : ""}`}
+        onClick={presentation === "drawer" ? (event) => event.stopPropagation() : undefined}
+        role={presentation === "drawer" ? "dialog" : undefined}
+        aria-modal={presentation === "drawer" ? "true" : undefined}
         aria-labelledby="profile-modal-title"
       >
         {/* Header */}
@@ -189,14 +177,16 @@ return (
               User Profile & Role Access
             </h2>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-className="profile-modal-close"
-            aria-label="Close account panel"
-          >
-            <X size={18} />
-          </button>
+          {presentation === "drawer" ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="profile-modal-close"
+              aria-label="Close account panel"
+            >
+              <X size={18} />
+            </button>
+          ) : null}
         </div>
 
         {/* Form Content */}
@@ -351,7 +341,7 @@ className="profile-modal-close"
           {/* Actions */}
           <div className="profile-modal-actions">
             <button type="button" onClick={onClose} className="secondary-button">
-              Cancel
+              {presentation === "page" ? "Back to workspace" : "Cancel"}
             </button>
             <button type="submit" disabled={saving} className="primary-button">
               <User size={16} />
@@ -360,6 +350,27 @@ className="profile-modal-close"
           </div>
         </form>
       </div>
-    </div>
+  );
+
+  if (presentation === "page") {
+    return (
+      <section className="workspace-page account-profile-page">
+        <header className="page-heading">
+          <div>
+            <p className="eyebrow">Account</p>
+            <h1 className="page-title">Profile & account</h1>
+            <p className="page-subtitle">Manage your profile photo, contact details, and access.</p>
+          </div>
+        </header>
+        {profilePanel}
+      </section>
+    );
+  }
+
+  return createPortal(
+    <div className="profile-drawer-overlay" onClick={onClose} role="presentation">
+      {profilePanel}
+    </div>,
+    document.body,
   );
 }

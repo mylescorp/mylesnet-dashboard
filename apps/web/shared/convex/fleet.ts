@@ -1,4 +1,5 @@
 import { makeFunctionReference } from "convex/server";
+import type { PaginationResult } from "convex/server";
 
 export type DeviceProvisioningStatus =
   | "unprovisioned"
@@ -21,6 +22,7 @@ export type FleetRow = {
   lifecycleStatus: string;
   registeredBy: string | null;
   registeredAt: number | null;
+  deletedAt: number | null;
 };
 
 /**
@@ -31,8 +33,8 @@ export type FleetRow = {
 export const fleet = {
   list: makeFunctionReference<
     "query",
-    { marketId?: string; provisioningStatus?: string },
-    FleetRow[]
+    { paginationOpts: { numItems: number; cursor: string | null }; provisioningStatus?: DeviceProvisioningStatus; includeArchived?: boolean },
+    PaginationResult<FleetRow>
   >("fleet:listDeviceFleet"),
   get: makeFunctionReference<
     "query",
@@ -43,10 +45,15 @@ export const fleet = {
     "mutation",
     {
       deviceId: string;
+      name?: string;
+      deviceKind?: string;
       firmwareVersion?: string;
-      uptimePercent?: number;
       provisioningStatus?: DeviceProvisioningStatus;
     },
     void
   >("fleet:updateDeviceFleetRow"),
+  listMarkets: makeFunctionReference<"query", Record<string, never>, Array<{ _id: string; name: string; tenantId: string | null }>>("fleet:listMarketsForFleetManagement"),
+  register: makeFunctionReference<"mutation", { marketId: string; name: string; deviceKind: string; macAddress?: string; firmwareVersion?: string }, string>("fleet:registerDevice"),
+  archive: makeFunctionReference<"mutation", { deviceId: string; reason: string }, void>("fleet:archiveDevice"),
+  restore: makeFunctionReference<"mutation", { deviceId: string }, void>("fleet:restoreDevice"),
 };

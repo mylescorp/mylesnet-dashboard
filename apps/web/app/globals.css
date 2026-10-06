@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: light;
   /* MylesNet design tokens. Semantic tokens are the UI contract; legacy aliases
      remain only while active routes still consume them. */
   --mn-orange-50: #fff7ee; --mn-orange-100: #ffeddb; --mn-orange-200: #ffc37a; --mn-orange-300: #ffab4d; --mn-orange-400: #ff9d3d; --mn-orange-500: #fa8200; --mn-orange-600: #d96e00; --mn-orange-700: #c86800; --mn-orange-800: #a84a00;
@@ -52,6 +53,9 @@
   --primary-text: #a84a00; --primary-action: var(--green); --primary-action-hover: var(--accent-2); --primary-action-foreground: var(--text-on-brand);
   --accent: var(--green); --accent-light: var(--green-bright); --accent-bg: color-mix(in srgb, var(--accent) 10%, var(--surface));
   --success: var(--online); --success-bg: color-mix(in srgb, var(--online) 12%, var(--surface));
+  /* Text-safe green. --success is a UI/mark colour; at 11-12px it only reaches
+     3.0:1 on --success-bg, so small text must use this instead. */
+  --success-text: #0a7a52;
   --warning: var(--warn); --warning-bg: color-mix(in srgb, var(--warn) 14%, var(--surface));
   --danger: var(--error); --danger-bg: color-mix(in srgb, var(--error) 8%, var(--surface)); --danger-foreground: var(--mn-white);
   --info: #4a5a6a; --info-bg: color-mix(in srgb, var(--info) 10%, var(--surface));
@@ -98,7 +102,9 @@
   --ui-primary: var(--primary-action);
   --ui-primary-foreground: var(--primary-action-foreground);
   --ui-secondary: var(--accent);
-  --ui-secondary-foreground: var(--surface);
+  /* --accent is a saturated brand colour, so pairing it with --surface gave
+     white-on-orange at 2.5:1. Use the on-brand text colour instead. */
+  --ui-secondary-foreground: var(--text-on-brand);
   --ui-muted: var(--surface-muted);
   --ui-muted-foreground: var(--muted);
   --ui-accent: var(--accent-bg);
@@ -111,6 +117,7 @@
 }
 
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --ink: #e5e5e5; --ink-soft: #c4c4c4; --ink-muted: #a1a1a1; --ink-subtle: #7a7a7a; --ink-faint: #e5e5e51a;
   --cream: #202020; --paper: #1c1c1c; --surface-2: #2a2a2a; --bg: #1c1c1c; --popover: #262626;
   --sand: #ffffff12; --sand-mid: #ffffff1f;
@@ -124,6 +131,7 @@
   --primary-action: var(--green); --primary-action-hover: var(--green-bright); --primary-action-foreground: var(--text-on-brand);
   --accent: var(--green); --accent-light: var(--green-bright); --accent-bg: color-mix(in srgb, var(--accent) 18%, var(--surface));
   --success: var(--online); --success-bg: color-mix(in srgb, var(--online) 18%, var(--surface));
+  --success-text: #4ade9f;
   --warning: var(--warn); --warning-bg: color-mix(in srgb, var(--warn) 18%, var(--surface));
   --danger: #ff9b9b; --danger-bg: color-mix(in srgb, #b53636 22%, var(--surface)); --danger-foreground: #3b1010;
   --info: #9fb4c4; --info-bg: color-mix(in srgb, var(--info) 18%, var(--surface));
@@ -368,7 +376,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .user-profile-dropdown { position: relative; }
 .user-avatar-btn { display: flex; align-items: center; gap: 10px; padding: 4px 12px 4px 5px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--text); cursor: pointer; font: inherit; text-align: left; transition: all 150ms ease; }
 .user-avatar-btn:hover { border-color: var(--line-strong); background: var(--surface-muted); box-shadow: var(--shadow-sm); }
-.user-avatar-circle { display: grid; height: 34px; width: 34px; place-items: center; border-radius: 999px; background: var(--primary-action); color: var(--primary-action-foreground); font-size: 12.5px; font-weight: 800; box-shadow: 0 2px 8px color-mix(in srgb, var(--primary-action) 30%, transparent); overflow: hidden; }
+.user-avatar-circle { display: grid; height: 34px; width: 34px; flex: none; place-items: center; border-radius: 999px; background: var(--primary-action); color: var(--primary-action-foreground); font-size: 12.5px; font-weight: 800; box-shadow: 0 2px 8px color-mix(in srgb, var(--primary-action) 30%, transparent); overflow: hidden; }
+.user-avatar-circle-photo { display: block; height: 100%; width: 100%; border-radius: inherit; object-fit: cover; }
 .user-avatar-info { display: flex; flex-direction: column; text-align: left; }
 .user-avatar-name { font-size: 13px; font-weight: 750; line-height: 1.15; color: var(--text); }
 .user-avatar-role { font-size: 9.5px; font-weight: 800; color: var(--muted); letter-spacing: 0.05em; margin-top: 1px; }
@@ -466,6 +475,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 @keyframes acwSlideUp { from { opacity: 0; transform: translateY(32px); } to { opacity: 1; transform: translateY(0); } }
 .acw-header { position: relative; display: flex; align-items: center; gap: 14px; padding: 18px 18px 14px; }
 .acw-header-avatar { display: grid; height: 44px; width: 44px; flex: none; place-items: center; border-radius: 12px; background: var(--primary-action); color: var(--primary-action-foreground); font-size: 16px; font-weight: 800; box-shadow: 0 4px 12px color-mix(in srgb, var(--primary-action) 30%, transparent); overflow: hidden; }
+.acw-header-avatar-photo { display: block; height: 100%; width: 100%; border-radius: inherit; object-fit: cover; }
 .acw-header-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .acw-header-name { font-size: 14px; font-weight: 800; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .acw-header-email { font-size: 11.5px; color: var(--muted); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1660,3 +1670,59 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .search-palette-item-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .search-palette-item-group { flex: none; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: 0.03em; }
 .search-palette-empty { padding: 18px 16px; color: var(--muted); font-size: 13px; text-align: center; }
+
+.pf-revenue-chart { margin: 18px 0 8px; }
+.pf-revenue-chart svg { display: block; width: 100%; height: 180px; overflow: visible; }
+.pf-revenue-chart > div { display: flex; justify-content: space-between; color: var(--muted); font-size: .8rem; }
+
+
+/* Sidebar header controls stay reachable at the top of the navigation rail. */
+.sidebar-brand { min-height: 158px; padding: 12px 14px; }
+.sidebar-brand-inner { align-items: center; gap: 8px; }
+.sidebar-brand-toolbar { display: flex; width: 100%; min-height: 32px; align-items: center; justify-content: flex-end; }
+.sidebar-collapse-top { display: grid; width: 32px; height: 32px; flex: none; place-items: center; border: 1px solid color-mix(in srgb, var(--sidebar-muted) 35%, transparent); border-radius: 9px; background: color-mix(in srgb, var(--sidebar-text) 5%, transparent); color: var(--sidebar-text); cursor: pointer; transition: background-color var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out); }
+.sidebar-collapse-top:hover { border-color: color-mix(in srgb, var(--sidebar-muted) 60%, transparent); background: var(--sidebar-hover); }
+.sidebar-logo-link { display: flex; width: 100%; min-width: 0; align-items: center; justify-content: center; }
+.sidebar-logo { max-height: 92px; }
+.sidebar-mobile .sidebar-brand-toolbar { display: none; }
+.sidebar-collapsed .sidebar-brand { min-height: 96px; padding: 8px; }
+.sidebar-collapsed .sidebar-brand-inner { align-items: center; gap: 5px; }
+.sidebar-collapsed .sidebar-brand-toolbar { justify-content: center; }
+.sidebar-collapsed .sidebar-logo-link { width: auto; }
+.sidebar-collapsed .sidebar-mark { width: 32px; height: 32px; }
+.sidebar-mobile .sidebar-brand { min-height: 112px; }
+
+/* The direct account route uses the same workspace surface and form system as its drawer. */
+.account-profile-page { min-height: 100%; }
+.account-profile-page .account-profile-panel { width: min(900px, 100%); height: auto; max-width: none; min-height: 0; overflow: visible; margin-inline: auto; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shell-shadow); padding: 24px; animation: none; }
+.account-profile-page .profile-modal-header { align-items: center; }
+
+.pf-detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 20px; }
+.pf-detail-grid dt { margin-bottom: 4px; color: var(--muted); font-size: 12px; font-weight: 700; }
+.pf-detail-grid dd { margin: 0; overflow-wrap: anywhere; }
+
+@media (max-width: 640px) {
+  .account-profile-page .account-profile-panel { padding: 18px; }
+  .account-profile-page .profile-badge-card { align-items: flex-start; flex-wrap: wrap; }
+  .account-profile-page .profile-badge-details { flex: 1 1 calc(100% - 68px); }
+  .account-profile-page .avatar-actions { width: 100%; padding-left: 68px; }
+}
+
+/* Keep navigation hover feedback identical in every panel and sidebar width. */
+.sidebar .sidebar-link {
+  transform: none;
+  transition: background-color var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
+}
+.sidebar .sidebar-link:not(.sidebar-link-active):hover {
+  border-color: transparent;
+  background: var(--sidebar-hover);
+  color: var(--sidebar-text);
+  box-shadow: none;
+  transform: none;
+}
+.sidebar .sidebar-link-active:hover {
+  border-color: color-mix(in srgb, var(--primary-action-foreground) 30%, transparent);
+  background: linear-gradient(100deg, var(--sidebar-active) 0%, var(--sidebar-active-end) 100%);
+  color: var(--primary-action-foreground);
+  transform: none;
+}

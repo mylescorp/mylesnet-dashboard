@@ -3,8 +3,10 @@
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { Building2, CircleAlert, Link2, PauseCircle, PlayCircle, Plus, UsersRound } from "lucide-react";
-import { useAction, useMutation, useQuery } from "@/app/lib/convex";
-import { tenantControl, type PlatformTenant, type TenantStatus } from "@/lib/convex/tenantControl";
+import { useAction, useQuery } from "@/app/lib/convex";
+import { tenantControl, type TenantStatus } from "@/lib/convex/tenantControl";
+import { canManagePlatformTenants } from "@/platform/permissions";
+import { useUserProfile } from "@/shared/components/UserProfileContext";
 
 const statusTone: Record<TenantStatus, "success" | "warning" | "danger" | "neutral"> = {
   provisioning: "warning", active: "success", trial: "warning", suspended: "danger", cancelled: "neutral",
@@ -15,15 +17,15 @@ function Status({ status }: { status: TenantStatus }) {
 }
 
 function safeErrorMessage(error: unknown): string {
-  const message = error instanceof Error ? error.message : "";
+  void error;
   return "The workspace could not be prepared. Please retry or contact MylesNet support.";
 }
 
 export function PlatformTenantControl() {
+  const { user } = useUserProfile();
+  const canManage = canManagePlatformTenants(user?.roles.map((role) => role.slug));
   const tenants = useQuery(tenantControl.listForPlatform, {});
-  const setStatus = useMutation(tenantControl.setStatus);
   const [creating, setCreating] = useState(false);
-  const [workingId, setWorkingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const counts = useMemo(() => ({
@@ -32,20 +34,10 @@ export function PlatformTenantControl() {
     preparing: tenants?.filter((tenant) => tenant.status === "provisioning").length ?? 0,
   }), [tenants]);
 
-  const changeStatus = async (tenant: PlatformTenant, status: "active" | "suspended") => {
-    setError(null); setNotice(null); setWorkingId(tenant._id);
-    try {
-      await setStatus({ tenantId: tenant._id, status });
-      setNotice(`${tenant.name} is now ${status}.`);
-    } catch (caught) {
-      setError(safeErrorMessage(caught));
-    } finally { setWorkingId(null); }
-  };
-
   return <div className="workspace-page tenant-control-page">
     <header className="page-heading">
       <div><p className="eyebrow">Platform control centre</p><h1 className="page-title">Tenant management</h1><p className="page-subtitle">Create, prepare, and manage customer workspaces without exposing identity-provider setup.</p></div>
-      <button type="button" className="primary-button" onClick={() => { setError(null); setNotice(null); setCreating(true); }}><Plus size={17} aria-hidden="true" />Create tenant</button>
+      {canManage ? <button type="button" className="primary-button" onClick={() => { setError(null); setNotice(null); setCreating(true); }}><Plus size={17} aria-hidden="true" />Create tenant</button> : null}
     </header>
 
     <section className="metric-grid" aria-label="Tenant estate summary">
@@ -60,9 +52,9 @@ export function PlatformTenantControl() {
 
     <section className="pf-panel">
       <div className="section-heading"><div><p className="eyebrow">Tenant estate</p><h2>Registered operators</h2></div><span className="section-count">{counts.total} total</span></div>
-      {tenants === undefined ? <p className="pf-muted">Loading tenant inventory…</p> : tenants.length === 0 ? <EmptyTenantState onCreate={() => setCreating(true)} /> : (
+      {tenants === undefined ? <p className="pf-muted">Loading tenant inventory…</p> : tenants.length === 0 ? <EmptyTenantState onCreate={canManage ? () => setCreating(true) : undefined} /> : (
         <div className="pf-table-wrap"><table className="pf-table"><thead><tr><th>Tenant</th><th>Workspace</th><th>Members</th><th>Plan</th><th>Status</th><th /></tr></thead><tbody>
-          {tenants.map((tenant) => <tr key={tenant._id}><td><Link href={`/platform/tenants/${tenant._id}`} className="tenant-name-link"><strong>{tenant.name}</strong></Link><small className="table-subtext">{tenant.slug} · {tenant.country}</small></td><td>{tenant.workosOrganizationId ? <span className="tenant-linked"><Link2 size={14} aria-hidden="true" />Ready</span> : <span className="tenant-unlinked"><CircleAlert size={14} aria-hidden="true" />Action needed</span>}</td><td>{tenant.membershipCount}</td><td>{tenant.entitlement ? `${tenant.entitlement.planId} · ${tenant.entitlement.status}` : "Not configured"}</td><td><Status status={tenant.status} /></td><td><div className="cell-actions">{tenant.status === "provisioning" ? <span className="pf-muted">Preparing</span> : tenant.status === "suspended" ? <button type="button" className="secondary-button" disabled={workingId === tenant._id} onClick={() => void changeStatus(tenant, "active")}><PlayCircle size={14} aria-hidden="true" />Activate</button> : <button type="button" className="secondary-button" disabled={workingId === tenant._id || tenant.status === "cancelled"} onClick={() => void changeStatus(tenant, "suspended")}><PauseCircle size={14} aria-hidden="true" />Suspend</button>}</div></td></tr>)}
+          {tenants.map((tenant) => <tr key={tenant._id}><td><Link href={`/platform/organizations/${tenant._id}`} className="tenant-name-link"><strong>{tenant.name}</strong></Link><small className="table-subtext">{tenant.slug} · {tenant.country}</small></td><td>{tenant.workosOrganizationId ? <span className="tenant-linked"><Link2 size={14} aria-hidden="true" />Ready</span> : <span className="tenant-unlinked"><CircleAlert size={14} aria-hidden="true" />Action needed</span>}</td><td>{tenant.membershipCount}</td><td>{tenant.entitlement ? `${tenant.entitlement.planId} · ${tenant.entitlement.status}` : "Not configured"}</td><td><Status status={tenant.status} /></td><td><div className="cell-actions">{tenant.status === "provisioning" ? <span className="pf-muted">Preparing</span> : canManage && tenant.status !== "cancelled" ? <Link href={`/platform/organizations/${tenant._id}/${tenant.status === "suspended" ? "restore" : "suspend"}`} className="secondary-button">{tenant.status === "suspended" ? <><PlayCircle size={14} aria-hidden="true" />Restore</> : <><PauseCircle size={14} aria-hidden="true" />Suspend</>}</Link> : null}</div></td></tr>)}
         </tbody></table></div>
       )}
     </section>
@@ -74,8 +66,8 @@ function Metric({ icon, label, value, detail, tone = "accent" }: { icon: ReactNo
   return <article className={`metric-card workspace-card metric-card-${tone}`}><span className="metric-icon">{icon}</span><p>{label}</p><strong>{value}</strong><small>{detail}</small></article>;
 }
 
-function EmptyTenantState({ onCreate }: { onCreate: () => void }) {
-  return <div className="tenant-empty-state"><Building2 size={26} aria-hidden="true" /><h3>No tenant is registered yet</h3><p>Create a workspace with the operator’s details and administrator email. MylesNet prepares secure administrator access automatically.</p><button type="button" className="primary-button" onClick={onCreate}>Create tenant workspace</button></div>;
+function EmptyTenantState({ onCreate }: { onCreate?: () => void }) {
+  return <div className="tenant-empty-state"><Building2 size={26} aria-hidden="true" /><h3>No tenant is registered yet</h3><p>{onCreate ? "Create a workspace with the operator’s details and administrator email. MylesNet prepares secure administrator access automatically." : "There are no tenant workspaces to show yet."}</p>{onCreate ? <button type="button" className="primary-button" onClick={onCreate}>Create tenant workspace</button> : null}</div>;
 }
 
 function TenantOnboardingDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (message: string) => void }) {

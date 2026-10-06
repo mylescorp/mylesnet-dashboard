@@ -1,20 +1,19 @@
 ﻿"use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
   Building2,
   Link2,
-  PauseCircle,
-  PlayCircle,
   Pencil,
   UsersRound,
 } from "lucide-react";
 import { useMutation, useQuery } from "@/app/lib/convex";
+import { useState } from "react";
 import { tenantControl, type EntitlementStatus, type TenantStatus } from "@/lib/convex/tenantControl";
 import { useUserProfile } from "@/shared/components/UserProfileContext";
 import { StatusPill, EmptyState, formatDateTime } from "@/shared/components/ui";
+import { canManagePlatformTenants } from "@/platform/permissions";
 
 const formatTs = (ts: number | null | undefined) => formatDateTime(ts ?? undefined);
 
@@ -36,46 +35,33 @@ const statusTone: Record<TenantStatus, "success" | "warning" | "danger" | "neutr
 export function PlatformTenantDetail({ tenantId }: { tenantId: string }) {
   const { user } = useUserProfile();
   const detail = useQuery(tenantControl.getTenantDetail, { tenantId });
-  const setStatus = useMutation(tenantControl.setStatus);
-  const [working, setWorking] = useState(false);
+  const updateTenant = useMutation(tenantControl.updateTenant);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const canManage = user?.roles.some((role) => ["platform_owner", "platform_admin"].includes(role.slug));
+  const canManage = canManagePlatformTenants(user?.roles.map((role) => role.slug));
 
   const tenant = detail;
   if (tenant === undefined) return <p className="pf-muted">Loading tenant detail…</p>;
   if (tenant === null) return <EmptyState title="Tenant not found" body="This tenant does not exist in the platform directory." />;
 
-  const changeStatus = async (status: "active" | "suspended") => {
-    setError(null); setNotice(null); setWorking(true);
-    try {
-      await setStatus({ tenantId, status });
-      setNotice(`${tenant.name} is now ${status}.`);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Tenant status could not be changed.");
-    } finally { setWorking(false); }
-  };
+
 
   return (
     <div className="workspace-page">
       <header className="page-heading">
         <div>
-          <p className="eyebrow"><Link href="/platform/tenants" className="platform-back-link"><ArrowLeft size={15} aria-hidden="true" />Tenants</Link></p>
+          <p className="eyebrow"><Link href="/platform/organizations" className="platform-back-link"><ArrowLeft size={15} aria-hidden="true" />Tenants</Link></p>
           <h1 className="page-title">{tenant.name}</h1>
           <p className="page-subtitle">Tenant detail: identity mapping, lifecycle state, entitlement, and the members with access to this workspace.</p>
         </div>
-        {canManage ? (
-          <div style={{ display: "flex", gap: 8 }}>
-            {tenant.status === "suspended"
-              ? <button type="button" className="secondary-button" disabled={working} onClick={() => void changeStatus("active")}><PlayCircle size={15} aria-hidden="true" />Activate</button>
-              : <button type="button" className="secondary-button" disabled={working || tenant.status === "cancelled" || tenant.status === "provisioning"} onClick={() => void changeStatus("suspended")}><PauseCircle size={15} aria-hidden="true" />Suspend</button>}
-          </div>
+        {canManage && tenant.status !== "cancelled" && tenant.status !== "provisioning" ? (
+          <Link href={`/platform/organizations/${tenantId}/${tenant.status === "suspended" ? "restore" : "suspend"}`} className="secondary-button">{tenant.status === "suspended" ? "Restore organization" : "Suspend organization"}</Link>
         ) : null}
       </header>
 
-      {notice ? <p className="platform-claim-message ok" role="status">{notice}</p> : null}
-      {error ? <p className="platform-claim-message" role="alert">{error}</p> : null}
 
       <section className="metric-grid">
         <Metric icon={<Building2 size={19} />} label="Lifecycle status" value={<StatusPill tone={statusTone[tenant.status]}>{tenant.status}</StatusPill>} detail="Tenant directory state" />
@@ -85,7 +71,32 @@ export function PlatformTenantDetail({ tenantId }: { tenantId: string }) {
       </section>
 
       <section className="pf-panel" style={{ marginTop: 24 }}>
-        <div className="section-heading"><div><p className="eyebrow">Identity</p><h2>Workspace record</h2></div></div>
+        <div className="section-heading"><div><p className="eyebrow">Organization</p><h2>Markets</h2><p className="pf-muted">Manage market locations within this tenant.</p></div><Link href={`/platform/organizations/${tenantId}/markets`} className="pf-button pf-button-compact">Manage markets</Link></div>
+      </section>
+
+      <section className="pf-panel" style={{ marginTop: 24 }}>
+        <div className="section-heading"><div><p className="eyebrow">Identity</p><h2>Workspace record</h2></div>{canManage ? <button type="button" className="secondary-button" onClick={() => { setEditing(value => !value); setError(null); setNotice(null); }}>{editing ? "Cancel edit" : "Edit details"}</button> : null}</div>
+        {notice ? <p className="platform-claim-message ok" role="status">{notice}</p> : null}
+        {error ? <p className="platform-claim-message" role="alert">{error}</p> : null}
+        {editing ? <form className="pf-panel" onSubmit={async event => {
+          event.preventDefault();
+          const data = new FormData(event.currentTarget);
+          setSaving(true); setError(null); setNotice(null);
+          try {
+            await updateTenant({ tenantId, name: String(data.get("name") ?? ""), country: String(data.get("country") ?? ""), timezone: String(data.get("timezone") ?? ""), currency: String(data.get("currency") ?? "") });
+            setEditing(false); setNotice("Organization details updated.");
+          } catch (caught) {
+            setError(caught instanceof Error ? caught.message : "Organization details could not be updated.");
+          } finally { setSaving(false); }
+        }}>
+          <div className="form-grid">
+            <label className="pf-field"><span className="pf-label">Name</span><input className="pf-input" name="name" required maxLength={120} defaultValue={tenant.name} /></label>
+            <label className="pf-field"><span className="pf-label">Country (ISO code)</span><input className="pf-input" name="country" required minLength={2} maxLength={2} defaultValue={tenant.country} /></label>
+            <label className="pf-field"><span className="pf-label">Timezone</span><input className="pf-input" name="timezone" required defaultValue={tenant.timezone} /></label>
+            <label className="pf-field"><span className="pf-label">Currency (ISO code)</span><input className="pf-input" name="currency" required minLength={3} maxLength={3} defaultValue={tenant.currency} /></label>
+          </div>
+          <button className="pf-button" disabled={saving}>{saving ? "Saving…" : "Save organization details"}</button>
+        </form> : null}
         <dl className="tenant-detail-fields">
           <dt>Slug</dt><dd><code>{tenant.slug}</code></dd>
           <dt>Country</dt><dd>{tenant.country}</dd>

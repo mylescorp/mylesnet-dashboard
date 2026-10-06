@@ -5,6 +5,8 @@ import {
   getSystemRoleBySlug,
   PLATFORM_SUB_ROLE_MAP,
 } from "./permissions";
+import { hasAllowedRole, resolveAllowedRoleSlugs } from "./platformRoleCore";
+import { assertCurrentTenantOperable } from "./tenant";
 
 /**
  * Platform role access is data-driven from the `roles` table via
@@ -174,7 +176,7 @@ export async function requireAnyRole(
     throw new Error("Unauthorized: account is inactive");
   }
   const roles = await resolveRoles(ctx, user);
-  if (!slugs.some((slug) => roles.some((role) => role.slug === slug))) {
+  if (!hasAllowedRole(roles.map((role) => role.slug), slugs)) {
     throw new Error("Unauthorized: insufficient role");
   }
   return user;
@@ -243,6 +245,9 @@ export async function requirePermission(
   const roles = await resolveRoles(ctx, user);
   if (!hasPermission(roles, permission)) {
     throw new Error(`Unauthorized: the ${permission} permission is required`);
+  }
+  if (!isPlatformUser(roles)) {
+    await assertCurrentTenantOperable(ctx);
   }
   return user;
 }
@@ -361,9 +366,7 @@ export async function requirePlatformSubRole(
   ctx: QueryCtx | MutationCtx,
   allowedSubRoles: string[],
 ): Promise<Doc<"users">> {
-  const mappedSlugs = allowedSubRoles
-    .flatMap((sub) => PLATFORM_SUB_ROLE_MAP[sub] ?? [sub])
-    .filter((slug, index, arr) => arr.indexOf(slug) === index);
+  const mappedSlugs = resolveAllowedRoleSlugs(allowedSubRoles, PLATFORM_SUB_ROLE_MAP);
   return requireAnyRole(ctx, mappedSlugs);
 }
 

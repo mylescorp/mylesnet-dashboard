@@ -1,9 +1,14 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { ConvexProvider } from "convex/react";
+import { ConvexReactClient } from "@/app/lib/convex";
+import { useQuery } from "@/app/lib/convex";
 import Link from "next/link";
+import { platformPlans, type PublicPlatformPlan } from "@/shared/convex/platformPlans";
+import { DEFAULT_PLATFORM_PLANS } from "@/convex/lib/platformRevenueCore";
 import { ArrowRight, Check } from "lucide-react";
 import { Button } from "@/shared/ui/button";
+import LandingCard from "@/landing/components/LandingCard";
 import {
   Select,
   SelectContent,
@@ -16,8 +21,9 @@ import {
   formatPrice,
   type CurrencyCode,
 } from "../content/rates";
+import { useDisplayCurrency } from "@/landing/hooks/useDisplayCurrency";
 
-type Plan = {
+export type Plan = {
   id: string;
   name: string;
   audience: string;
@@ -27,12 +33,17 @@ type Plan = {
   features: string[];
 };
 
+const baselinePriceKES = (code: string) => {
+  const plan = DEFAULT_PLATFORM_PLANS.find((candidate) => candidate.code === code);
+  return plan ? plan.monthlyPriceMinor / 100 : 0;
+};
+
 const PLANS: Plan[] = [
   {
     id: "starter",
     name: "Starter",
     audience: "For single-site operators",
-    priceKES: 500,
+    priceKES: baselinePriceKES("starter"),
     cta: "Get started with Starter",
     features: [
       "One location",
@@ -47,7 +58,7 @@ const PLANS: Plan[] = [
     id: "growth",
     name: "Growth",
     audience: "For growing operators",
-    priceKES: 1400,
+    priceKES: baselinePriceKES("growth"),
     popular: true,
     cta: "Get started with Growth",
     features: [
@@ -63,7 +74,7 @@ const PLANS: Plan[] = [
     id: "pro",
     name: "Pro",
     audience: "For multi-site or franchise operators",
-    priceKES: 3500,
+    priceKES: baselinePriceKES("pro"),
     cta: "Talk to us about Pro",
     features: [
       "Unlimited locations",
@@ -75,49 +86,49 @@ const PLANS: Plan[] = [
   },
 ];
 
-/** No store to subscribe to — the "store" is the immutable browser locale. */
-const subscribeNoop = () => () => {};
-
-function clientLanguage(): string {
-  return navigator.language;
-}
-
-function serverLanguage(): string {
-  return "";
-}
+export const publicConvexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
+export const publicConvex = publicConvexUrl ? new ConvexReactClient(publicConvexUrl) : null;
 
 /**
- * Map a BCP-47 language tag to the displayed currency: KES is the approved
- * base (and the fallback when no region is known, e.g. during SSR), UGX for
- * Uganda, USD elsewhere.
+ * The plan list as displayed: the approved list-price fallback (static, used
+ * during SSR and when Convex is unreachable) or the live Convex override.
  */
-function currencyFromLanguage(language: string): CurrencyCode {
-  try {
-    const region = new Intl.Locale(language).region?.toUpperCase();
-    if (region === "KE") return "KES";
-    if (region === "UG") return "UGX";
-    if (region) return "USD";
-  } catch {
-    // Malformed or unavailable locale — fall through to the KES base.
-  }
-  return "KES";
+export function toPlans(publicPlans: PublicPlatformPlan[] | undefined): Plan[] {
+  if (publicPlans === undefined) return PLANS;
+  return publicPlans.map((plan) => {
+    const existing = PLANS.find((candidate) => candidate.id === plan.code);
+    return {
+      id: plan.code,
+      name: plan.name,
+      audience: existing?.audience ?? "For operators building reliable connectivity",
+      priceKES: plan.monthlyPriceMinor / 100,
+      popular: existing?.popular,
+      cta: existing?.cta ?? `Get started with ${plan.name}`,
+      features: existing?.features ?? [],
+    };
+  });
 }
 
 export default function PricingPlans() {
-  const [currencyChoice, setCurrencyChoice] = useState<CurrencyCode | null>(null);
+  if (!publicConvex) return <PricingPlansView publicPlans={undefined} />;
+  return <ConvexProvider client={publicConvex}><ConnectedPricingPlans /></ConvexProvider>;
+}
 
-  // The browser region only exists on the client: read it via
-  // useSyncExternalStore so the server renders the KES base and the client
-  // settles on the visitor's region after hydration, without a mismatch.
-  const language = useSyncExternalStore(subscribeNoop, clientLanguage, serverLanguage);
-  const currency = currencyChoice ?? currencyFromLanguage(language);
+function ConnectedPricingPlans() {
+  const publicPlans = useQuery(platformPlans.listPublic, {});
+  return <PricingPlansView publicPlans={publicPlans} />;
+}
+
+function PricingPlansView({ publicPlans }: { publicPlans: PublicPlatformPlan[] | undefined }) {
+  const [currency, setCurrency] = useDisplayCurrency();
+  const plans: Plan[] = toPlans(publicPlans);
 
   return (
     <div className="landing-pricing">
       <div className="flex justify-center mb-8">
         <Select
           value={currency}
-          onValueChange={(value) => setCurrencyChoice(value as CurrencyCode)}
+          onValueChange={(value) => setCurrency(value as CurrencyCode)}
         >
           <SelectTrigger className="w-[200px]">
             <SelectValue placeholder="Currency" />
@@ -133,20 +144,27 @@ export default function PricingPlans() {
       </div>
 
       <div className="landing-plans-grid">
-        {PLANS.map((plan) => (
-          <article
+        {plans.length === 0 ? <p className="text-center">Plan pricing is temporarily unavailable. Please contact the MylesNet team.</p> : plans.map((plan) => (
+          <LandingCard
             key={plan.id}
-            className={
-              plan.popular
-                ? "landing-plan-card landing-plan-card-popular"
-                : "landing-plan-card"
+            className="landing-plan-card"
+            popular={plan.popular}
+            meta={
+              plan.popular ? (
+                <span className="landing-plan-badge">Most popular</span>
+              ) : null
+            }
+            title={<span className="landing-plan-name">{plan.name}</span>}
+            body={<span className="landing-plan-audience">{plan.audience}</span>}
+            footer={
+              <Button asChild className="landing-plan-cta w-full">
+                <Link href="/get-started">
+                  {plan.cta}
+                  <ArrowRight size={15} aria-hidden="true" />
+                </Link>
+              </Button>
             }
           >
-            {plan.popular ? (
-              <span className="landing-plan-badge">Most popular</span>
-            ) : null}
-            <h3 className="landing-plan-name">{plan.name}</h3>
-            <p className="landing-plan-audience">{plan.audience}</p>
             <div className="landing-plan-price">
               <span className="landing-plan-price-value">
                 {formatPrice(plan.priceKES, currency)}
@@ -161,13 +179,7 @@ export default function PricingPlans() {
                 </li>
               ))}
             </ul>
-            <Button asChild className="landing-plan-cta w-full">
-              <Link href="/get-started">
-                {plan.cta}
-                <ArrowRight size={15} aria-hidden="true" />
-              </Link>
-            </Button>
-          </article>
+          </LandingCard>
         ))}
       </div>
     </div>

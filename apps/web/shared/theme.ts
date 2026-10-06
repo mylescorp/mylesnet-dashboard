@@ -27,15 +27,16 @@ function applyMode(mode: ThemeMode) {
 }
 
 export function useTheme() {
-  const [mode, setModeState] = useState<ThemeMode | null>(() => {
-    if (typeof window === "undefined") return null;
-    return getStoredMode();
-  });
+  const [mode, setModeState] = useState<ThemeMode | null>(null);
 
   const resolved = mode === null ? "light" : resolveMode(mode);
 
   useEffect(() => {
-    if (mode !== null) applyMode(mode);
+    if (mode === null) {
+      setModeState(getStoredMode());
+      return;
+    }
+    applyMode(mode);
   }, [mode]);
 
   useEffect(() => {

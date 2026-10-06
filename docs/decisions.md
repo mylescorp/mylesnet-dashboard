@@ -498,6 +498,54 @@ counts/data did not.
   no invented metrics, no internal stack/provider names. Manual checks still
   pending: 390px mobile pass + a11y keyboard pass (existing standing item).
 
+## Build decisions — 2026-10-06: public pricing switched to usage-based (supersedes 2026-09-10)
+
+> **2026-10-06:** [[Jonathan Myles]] directed the public pricing page onto
+> usage-based pricing, explicitly mirroring the Centipid benchmark page
+> (structure and rates; the competitor is still never named in public copy).
+> This **supersedes the 2026-09-10 public pricing contract above** for the
+> public surface: the Starter/Growth/Pro flat plans are no longer presented at
+> `/pricing`. Authority is this agent session
+> (`ses_eef24959effeDJ74GPvR59tDpX`); the vault decision log
+> `products/mylesnet/decisions.md` still needs the matching entry (vault
+> canonical — this is the build-side record until mirrored).
+
+- **Published rates:** Hotspot **3% of the hotspot revenue MylesNet confirms
+  in a month**; PPPoE **$0.25 per subscriber active during the month**
+  (suspended/expired accounts free); **Enterprise — custom volume pricing**
+  (10,000+ subscribers, multiple regions, regulatory requirements). No
+  per-router, per-seat or per-site charges. **14-day free trial, no card.**
+  Display stays KES/UGX/USD through the cached FX snapshot
+  (`content/rates.ts`, asOf 2026-09-10): the $0.25 rate is USD and converts
+  through it; 3% is currency-neutral. The 20% referral commission section was
+  removed from the page (the referral program itself is not re-ruled here).
+- **Implementation (`apps/web/landing/`).** `routes/pricing/page.tsx` renders,
+  in benchmark order: banner, 3 usage-tier cards (`.landing-plan-card`),
+  comparison table (new `.landing-compare*` styles), calculator, "how each
+  rate is counted", invoice explainer, payment-method cards, FAQ + FAQPage
+  JSON-LD, CTA. New `components/PricingCalculator.tsx` (client) computes
+  3% × revenue + $0.25 × active subscribers in the display currency with no
+  runtime FX call; new `hooks/useDisplayCurrency.ts` holds the shared
+  locale→currency seeding extracted from `PricingPlans.tsx`. The flat-plan
+  components (`PricingPlans.tsx`, Convex `platformPlans.listPublic` public
+  prices, `DEFAULT_PLATFORM_PLANS`) are no longer rendered on `/pricing` but
+  remain in the codebase and in the platform panel.
+- **Claims mirrored from the benchmark that still need owner verification**
+  (flagged by the agent, not independently documented): invoice mechanics
+  (no card on file, month-in-arrears invoicing, grace period), MylesNet-held
+  balance settlement, payment methods (M-PESA/PayPal/cards/bank transfer),
+  "unlimited routers/staff/vouchers", and the Enterprise SLA/24-7 wording.
+  The home-page FAQ ("What does MylesNet cost?") still says pricing is
+  confirmed with the team and needs a follow-up edit.
+- **Gates:** `tsc --noEmit` 0; eslint 0 on all touched files (pre-existing
+  errors remain in unrelated uncommitted work); `tokens:check` green;
+  `node --test` 167/167; runtime verification on the dev server (`/pricing`
+  200): calculator reproduces the benchmark example $30 + $25 = $55 and
+  converts correctly to KES (KSh 30 + KSh 3,250), plan/currency selects and
+  the FAQ accordion exercised, FAQPage JSON-LD emitted. `pnpm build` not run
+  (dev server holds `.next`); `jest` has one pre-existing unrelated failure
+  (`AccountDrawer.test.tsx`).
+
 # Phase 1 tenancy (X-TEN) — build log 2026-09-11
 
 > **2026-09-11:** Phase 1 (Tenant Schema and Data Isolation) is the active
@@ -737,3 +785,9 @@ Routes: `/platform/feature-flags` (list + create/edit/delete),
   `myles/vercel-production-redeploy`).
 - **L2 audit hash chain deferred** by authorization: starts as its own deploy
   only after Batch 1 lands green. Option A only.
+
+## Platform Canonical Module Inventory - 2026-10-01
+
+- The owner-provided platform list A1–O2 is authoritative and tracked in `docs/development/platform-module-register-2026-10-01.md`. It contains 45 IDs, with C2 tenant SaaS invoices explicitly excluded (44 build modules). This supersedes the earlier 36-ID rollup. The supplied historical verification snapshot must be rechecked against current `main` before completion claims.
+- C1 is platform revenue visibility (MRR/ARR); do not implement tenant invoice issuance/payment capture under C2.
+- A2 implementation started at `/platform/organizations/[id]/markets`; it is incomplete pending full CRUD and authorization/isolation evidence.

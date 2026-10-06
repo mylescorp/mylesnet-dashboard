@@ -2,6 +2,9 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  experimental: {
+    authInterrupts: true,
+  },
   transpilePackages: ["@mylesnet/ui"],
   async headers() {
     return [{

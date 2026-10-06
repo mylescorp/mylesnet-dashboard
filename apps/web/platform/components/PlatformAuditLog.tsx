@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@/app/lib/convex";
 import { platformPanel, type AuditLogEntry } from "@/lib/convex/platformPanel";
 import { formatDateTime } from "@/shared/components/ui";
+import Link from "next/link";
 
 export function PlatformAuditLog() {
   const [entityTable, setEntityTable] = useState<string | undefined>(undefined);
@@ -69,7 +70,7 @@ export function PlatformAuditLog() {
               {audit.items.map((entry: AuditLogEntry) => (
                 <tr key={entry._id}>
                   <td>{formatDateTime(entry.timestamp)}</td>
-                  <td><code>{entry.action}</code></td>
+                  <td><Link href={`/platform/audit-log/${entry._id}`}><code>{entry.action}</code></Link></td>
                   <td><span className="table-subtext">{entry.entityTable}</span>{entry.entityId}</td>
                   <td><span className="table-subtext">{entry.changedBy}</span></td>
                   <td><span className="table-subtext">{entry.ip ?? "—"}</span></td>

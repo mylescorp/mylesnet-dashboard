@@ -1,7 +1,9 @@
 import { v } from "convex/values";
 import { MutationCtx, mutation, query } from "./_generated/server";
+import { Doc, Id } from "./_generated/dataModel";
 import { requirePermission } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
+import { enforceTenantOnResource, readTenantList, tenantIdForWrite } from "./lib/tenant";
 
 async function requireUser(ctx: MutationCtx) {
   const identity = await ctx.auth.getUserIdentity();
@@ -12,6 +14,21 @@ async function requireUser(ctx: MutationCtx) {
     .first();
   if (!user) throw new Error("User not found");
   return user;
+}
+
+async function assertPaymentReferencesTenant(
+  ctx: MutationCtx,
+  tenantId: Id<"tenants">,
+  args: { subscriberId?: Id<"subscribers">; invoiceId?: Id<"invoices">; planId?: Id<"plans"> },
+) {
+  const [subscriber, invoice, plan] = await Promise.all([
+    args.subscriberId ? ctx.db.get(args.subscriberId) : null,
+    args.invoiceId ? ctx.db.get(args.invoiceId) : null,
+    args.planId ? ctx.db.get(args.planId) : null,
+  ]);
+  if (args.subscriberId && (!subscriber || subscriber.tenantId !== tenantId)) throw new Error("Unauthorized: subscriber belongs to another tenant");
+  if (args.invoiceId && (!invoice || invoice.tenantId !== tenantId)) throw new Error("Unauthorized: invoice belongs to another tenant");
+  if (args.planId && (!plan || plan.tenantId !== tenantId)) throw new Error("Unauthorized: plan belongs to another tenant");
 }
 
 export const list = query({
@@ -33,7 +50,13 @@ export const list = query({
   handler: async (ctx, args) => {
     await requirePermission(ctx, "payments:read");
 
-    let payments = await ctx.db.query("payments").order("desc").collect();
+    let payments = await readTenantList<Doc<"payments">>(ctx, {
+      all: () => ctx.db.query("payments").order("desc").collect(),
+      tenant: (tenantId) =>
+        ctx.db.query("payments").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
+      legacy: () =>
+        ctx.db.query("payments").withIndex("by_tenant", (q) => q.eq("tenantId", undefined)).collect(),
+    });
 
     if (args.status) {
       payments = payments.filter((p) => p.status === args.status);
@@ -69,7 +92,7 @@ export const get = query({
   args: { id: v.id("payments") },
   handler: async (ctx, args) => {
     await requirePermission(ctx, "payments:read");
-    return await ctx.db.get(args.id);
+    return await enforceTenantOnResource(ctx, await ctx.db.get(args.id), "payment");
   },
 });
 
@@ -93,9 +116,12 @@ export const create = mutation({
   handler: async (ctx, args) => {
     await requirePermission(ctx, "payments:create");
     const user = await requireUser(ctx);
+    const tenantId = await tenantIdForWrite(ctx);
+    if (tenantId) await assertPaymentReferencesTenant(ctx, tenantId, args);
 
     const id = await ctx.db.insert("payments", {
       ...args,
+      ...(tenantId ? { tenantId } : {}),
       operatorId: user._id,
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -132,7 +158,7 @@ export const update = mutation({
     const user = await requireUser(ctx);
 
     const { id, ...updates } = args;
-    const payment = await ctx.db.get(id);
+    const payment = await enforceTenantOnResource(ctx, await ctx.db.get(id), "payment");
 
     if (!payment) {
       throw new Error("Payment not found");
@@ -165,7 +191,7 @@ export const refund = mutation({
     await requirePermission(ctx, "payments:refund");
     const user = await requireUser(ctx);
 
-    const payment = await ctx.db.get(args.id);
+    const payment = await enforceTenantOnResource(ctx, await ctx.db.get(args.id), "payment");
 
     if (!payment) {
       throw new Error("Payment not found");
@@ -201,7 +227,13 @@ export const getStats = query({
   handler: async (ctx, args) => {
     await requirePermission(ctx, "payments:read");
 
-    let payments = await ctx.db.query("payments").collect();
+    let payments = await readTenantList<Doc<"payments">>(ctx, {
+      all: () => ctx.db.query("payments").collect(),
+      tenant: (tenantId) =>
+        ctx.db.query("payments").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
+      legacy: () =>
+        ctx.db.query("payments").withIndex("by_tenant", (q) => q.eq("tenantId", undefined)).collect(),
+    });
 
     const start = args.startDate;
     if (start) {

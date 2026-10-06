@@ -12,6 +12,7 @@ import {
   Moon,
   ScrollText,
   ShieldCheck,
+  Settings,
   Sun,
   User,
   Users,
@@ -22,6 +23,7 @@ import {
 import { ConfirmDialog } from "@mylesnet/ui";
 import { useUserProfile } from "./UserProfileContext";
 import { UserProfileModal } from "./UserProfileModal";
+import { trustedAvatarSource } from "@/app/lib/avatar";
 import {
   setThemeMode,
   readStoredThemeMode,
@@ -63,6 +65,7 @@ interface DrawerItem {
   href: string;
   icon: ReactNode;
   show?: boolean;
+  action?: boolean;
   onNavigate?: () => void;
 }
 
@@ -71,8 +74,8 @@ function SectionTitle({ children }: { children: ReactNode }) {
 }
 
 function DrawerLink({ item }: { item: DrawerItem }) {
-  return (
-    <Link href={item.href} className="acw-item" onClick={() => item.onNavigate?.()}>
+  const content = (
+    <>
       <span className="acw-item-icon" aria-hidden="true">
         {item.icon}
       </span>
@@ -80,7 +83,13 @@ function DrawerLink({ item }: { item: DrawerItem }) {
         <span className="acw-item-label">{item.label}</span>
         {item.description ? <small className="acw-item-desc">{item.description}</small> : null}
       </span>
-    </Link>
+    </>
+  );
+
+  return item.action ? (
+    <button type="button" className="acw-item" onClick={item.onNavigate}>{content}</button>
+  ) : (
+    <Link href={item.href} className="acw-item" onClick={item.onNavigate}>{content}</Link>
   );
 }
 
@@ -95,6 +104,8 @@ export function AccountDrawer({ panel = "dashboard" }: { panel?: ShellPanel }) {
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState<string | null>(null);
+  const persistedAvatarSource = trustedAvatarSource(user?.image, Boolean(user?.avatarStorageId));
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
 
   const titleId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -107,6 +118,33 @@ export function AccountDrawer({ panel = "dashboard" }: { panel?: ShellPanel }) {
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("")
     .slice(0, 2);
+
+  useEffect(() => {
+    setAvatarPreview(null);
+    if (!persistedAvatarSource) return;
+
+    let objectUrl: string | null = null;
+    let cancelled = false;
+    void fetch(persistedAvatarSource, { credentials: "omit" })
+      .then(async (response) => {
+        const contentType = response.headers.get("content-type") ?? "";
+        if (!response.ok || !contentType.startsWith("image/")) return null;
+        return response.blob();
+      })
+      .then((blob) => {
+        if (!blob || cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setAvatarPreview(objectUrl);
+      })
+      .catch(() => {
+        if (!cancelled) setAvatarPreview(null);
+      });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [persistedAvatarSource]);
 
   const toggle = () => {
     if (open) {
@@ -208,14 +246,21 @@ export function AccountDrawer({ panel = "dashboard" }: { panel?: ShellPanel }) {
     {
       label: "Profile & photo",
       description: "Your name, avatar, phone and job title",
-      href: "/account",
+      href: `/account?panel=${encodeURIComponent(panel)}`,
       icon: <User size={16} />,
+      action: true,
       onNavigate: () => setProfileOpen(true),
+    },
+    {
+      label: "Settings",
+      description: "Workspace and account preferences",
+      href: "/settings",
+      icon: <Settings size={16} />,
     },
     {
       label: "Roles & permissions",
       description: "Which functions you can open",
-      href: panel === "platform" ? "/platform/access" : "/access",
+      href: "/platform/access",
       icon: <ShieldCheck size={16} />,
       show: (panel === "platform" && (canViewAccounts || canManageAccess || isPlatform)) || (panel === "admin" && canManageAccess),
     },
@@ -260,8 +305,8 @@ export function AccountDrawer({ panel = "dashboard" }: { panel?: ShellPanel }) {
         aria-controls={titleId}
         aria-label={`Account: ${displayName}`}
       >
-        <span className="mn-avatar" aria-hidden="true">
-          {initials}
+        <span className="user-avatar-circle" aria-hidden="true">
+          {avatarPreview ? <img src={avatarPreview} alt="" className="user-avatar-circle-photo" /> : initials}
         </span>
         <span className="mn-topbar-user-name">{displayName}</span>
         <ChevronDown size={14} aria-hidden="true" className={`acw-trigger-chevron${open ? " acw-trigger-chevron-open" : ""}`} />
@@ -293,7 +338,7 @@ export function AccountDrawer({ panel = "dashboard" }: { panel?: ShellPanel }) {
               >
                 <div className="acw-header">
                   <span className="acw-header-avatar" aria-hidden="true">
-                    {initials}
+                    {avatarPreview ? <img src={avatarPreview} alt="" className="acw-header-avatar-photo" /> : initials}
                   </span>
                   <div className="acw-header-text">
                     <strong id={`${titleId}-title`} className="acw-header-name">

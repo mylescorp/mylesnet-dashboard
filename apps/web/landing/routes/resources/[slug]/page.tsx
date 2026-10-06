@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowRight } from "lucide-react";
+import { ArrowUpRight, LayoutDashboard } from "lucide-react";
 import { guides } from "@/landing/content/guides";
 import { pageMetadata } from "@/landing/content/seo";
+import LandingCtaSection from "@/landing/components/LandingCtaSection";
+import LandingCard from "@/landing/components/LandingCard";
 
 export function generateStaticParams() {
   return guides.map((guide) => ({ slug: guide.slug }));
@@ -30,9 +32,13 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
     <>
       <section className="landing-page-banner">
         <div className="landing-page-banner-inner">
-          <p className="landing-section-kicker">{guide.kicker}</p>
-          <h1>{guide.title}</h1>
-          <p className="landing-banner-lead">{guide.intro}</p>
+          <LandingCard
+            variant="hero"
+            titleAs="h1"
+            eyebrow={guide.kicker}
+            title={guide.title}
+            body={guide.intro}
+          />
         </div>
       </section>
 
@@ -61,18 +67,31 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
                 <Link href="/resources">All resources</Link>
               </li>
             </ul>
-            <div className="landing-hero-actions landing-hero-actions-start">
-              <Link className="landing-cta-button" href="/get-started">
-                Get started
-                <ArrowRight size={17} aria-hidden="true" />
-              </Link>
-              <Link className="landing-secondary-button" href="/resources">
-                All resources
-              </Link>
-            </div>
           </div>
         </div>
       </section>
+
+      <LandingCtaSection
+        kicker="Resources"
+        title="Ready to put this into practice?"
+        subtitle="This guide covers the approach — the platform is where you run it day to day."
+        items={[
+          {
+            href: "/get-started",
+            icon: <ArrowUpRight size={19} aria-hidden="true" />,
+            title: "Get started",
+            body: "Walk through the platform with our team on your own setup.",
+            action: "Start a conversation",
+          },
+          {
+            href: "/resources",
+            icon: <LayoutDashboard size={19} aria-hidden="true" />,
+            title: "All resources",
+            body: "Browse every guide and playbook we have published.",
+            action: "Browse guides",
+          },
+        ]}
+      />
     </>
   );
 }

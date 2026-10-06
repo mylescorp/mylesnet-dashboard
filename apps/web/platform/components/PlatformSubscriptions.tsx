@@ -4,8 +4,10 @@ import { useState } from "react";
 import { CreditCard } from "lucide-react";
 import { useMutation, useQuery } from "@/app/lib/convex";
 import { tenantControl, type PlatformTenant, type EntitlementStatus } from "@/lib/convex/tenantControl";
+import { platformPlans, type PlatformPlan } from "@/shared/convex/platformPlans";
 import { useUserProfile } from "@/shared/components/UserProfileContext";
-import { StatusPill, Field, TextInput } from "@/shared/components/ui";
+import { Field, StatusPill, TextInput } from "@/shared/components/ui";
+import { canDeletePlatformTenant, canManagePlatformTenants } from "@/platform/permissions";
 
 const entitlementTone: Record<EntitlementStatus, "success" | "warning" | "danger" | "neutral"> = {
   active: "success",
@@ -17,13 +19,16 @@ const entitlementTone: Record<EntitlementStatus, "success" | "warning" | "danger
 export function PlatformSubscriptions() {
   const { user } = useUserProfile();
   const tenants = useQuery(tenantControl.listForPlatform, {});
+  const plans = useQuery(platformPlans.list, {});
   const setEntitlement = useMutation(tenantControl.setEntitlement);
+  const removeEntitlement = useMutation(tenantControl.removeEntitlement);
   const [editingTenant, setEditingTenant] = useState<PlatformTenant | null>(null);
   const [working, setWorking] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const canManage = user?.roles.some((role) => ["platform_owner", "platform_admin"].includes(role.slug));
+  const canManage = canManagePlatformTenants(user?.roles.map((role) => role.slug));
+  const canDelete = canDeletePlatformTenant(user?.roles.map((role) => role.slug));
 
   return (
     <div className="workspace-page tenant-control-page">
@@ -48,14 +53,21 @@ export function PlatformSubscriptions() {
                 <td><code>{tenant.slug}</code></td>
                 <td>{tenant.entitlement ? tenant.entitlement.planId : "Not configured"}</td>
                 <td>{tenant.entitlement ? <StatusPill tone={entitlementTone[tenant.entitlement.status]}>{tenant.entitlement.status}</StatusPill> : <span className="pf-muted">—</span>}</td>
-                <td>{canManage ? <button type="button" className="secondary-button" onClick={() => { setError(null); setNotice(null); setEditingTenant(tenant); }}><CreditCard size={14} aria-hidden="true" />Set entitlement</button> : null}</td>
+                <td>{canManage ? <div className="cell-actions"><button type="button" className="secondary-button" onClick={() => { setError(null); setNotice(null); setEditingTenant(tenant); }}><CreditCard size={14} aria-hidden="true" />{tenant.entitlement ? "Edit subscription" : "Create subscription"}</button>{canDelete && tenant.entitlement ? <button type="button" className="secondary-button" onClick={async () => {
+                  const reason = window.prompt(`Reason for removing ${tenant.name}'s product subscription? This does not affect invoices or payment data.`)?.trim();
+                  if (!reason) return;
+                  setError(null); setNotice(null); setWorking(true);
+                  try { await removeEntitlement({ tenantId: tenant._id, reason }); setNotice(`${tenant.name} product subscription removed.`); }
+                  catch (caught) { setError(caught instanceof Error ? caught.message : "Subscription could not be removed."); }
+                  finally { setWorking(false); }
+                }}>Remove</button> : null}</div> : null}</td>
               </tr>
             ))}
           </tbody></table></div>
         )}
       </section>
 
-      {editingTenant ? <EntitlementDialog tenant={editingTenant} onClose={() => setEditingTenant(null)} onSave={async (planId, status, dates) => { setError(null); setNotice(null); setWorking(true); try { await setEntitlement({ tenantId: editingTenant._id, planId, status, ...dates }); setNotice(`${editingTenant.name} entitlement was set to ${planId} · ${status}.`); setEditingTenant(null); } catch (caught) { setError(caught instanceof Error ? caught.message : "Entitlement could not be updated."); } finally { setWorking(false); }} } working={working} /> : null}
+      {editingTenant ? <EntitlementDialog tenant={editingTenant} plans={plans ?? []} onClose={() => setEditingTenant(null)} onSave={async (planId, status, dates) => { setError(null); setNotice(null); setWorking(true); try { await setEntitlement({ tenantId: editingTenant._id, planId, status, ...dates }); setNotice(`${editingTenant.name} subscription was saved as ${planId} · ${status}.`); setEditingTenant(null); } catch (caught) { setError(caught instanceof Error ? caught.message : "Subscription could not be updated."); } finally { setWorking(false); }} } working={working} /> : null}
     </div>
   );
 }
@@ -72,7 +84,7 @@ function parseLocalInput(value: string): number | undefined {
   return value ? new Date(value).getTime() : undefined;
 }
 
-function EntitlementDialog({ tenant, onClose, onSave, working }: { tenant: PlatformTenant; onClose: () => void; onSave: (planId: string, status: EntitlementStatus, dates: EntitlementDates) => Promise<void>; working: boolean }) {
+function EntitlementDialog({ tenant, plans, onClose, onSave, working }: { tenant: PlatformTenant; plans: PlatformPlan[]; onClose: () => void; onSave: (planId: string, status: EntitlementStatus, dates: EntitlementDates) => Promise<void>; working: boolean }) {
   const [planId, setPlanId] = useState(tenant.entitlement?.planId ?? "");
   const [status, setStatus] = useState<EntitlementStatus>(tenant.entitlement?.status ?? "trial");
   const [startsAt, setStartsAt] = useState(tenant.entitlement?.startsAt ? toLocalInput(tenant.entitlement.startsAt) : "");
@@ -94,9 +106,9 @@ function EntitlementDialog({ tenant, onClose, onSave, working }: { tenant: Platf
       <form className="profile-modal-dialog" onSubmit={submit}>
         <header className="profile-modal-header"><div><p className="eyebrow">Subscription control</p><h2 className="page-title">{tenant.name}</h2></div><button type="button" className="profile-modal-close" onClick={onClose} aria-label="Close dialog">×</button></header>
         <div className="modal-body">
-          <p className="pf-hint">Set the entitlement planId and lifecycle status for this tenant, and optionally its start, expiry, and trial-end timestamps (in your local timezone). This does not create or process invoices — use billing tools for payments.</p>
+          <p className="pf-hint">Set the entitlement planId and lifecycle status for this tenant, and optionally its start, expiry, and trial-end timestamps (in your local timezone). This changes plan entitlements only. Tenant invoices and payment collection are outside this panel’s approved scope (C2 is deferred).</p>
           <div className="form-grid">
-            <Field label="Plan ID"><TextInput required value={planId} onChange={(event) => setPlanId(event.target.value)} placeholder="e.g. starter, standard, premium" /></Field>
+            <label className="pf-field"><span className="pf-label">Plan</span><select className="pf-input" required value={planId} onChange={(event) => setPlanId(event.target.value)}><option value="">Choose a plan</option>{plans.filter(plan => plan.status === "active" || plan.code === tenant.entitlement?.planId).map(plan => <option key={plan.code} value={plan.code}>{plan.name} · {plan.code}{plan.status === "archived" ? " (current, archived)" : ""}</option>)}</select></label>
             <label className="pf-field"><span className="pf-label">Status</span>
               <select className="pf-input" value={status} onChange={(event) => setStatus(event.target.value as EntitlementStatus)}>
                 <option value="trial">Trial</option>

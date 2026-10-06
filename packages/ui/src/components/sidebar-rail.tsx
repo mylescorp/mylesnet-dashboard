@@ -12,7 +12,6 @@ export function SidebarRail({
   onToggleCollapsed,
   homeHref = "/dashboard",
   variant = "desktop",
-  footer,
 }: {
   groups: NavGroup[];
   pathname: string;
@@ -21,8 +20,16 @@ export function SidebarRail({
   onToggleCollapsed: () => void;
   homeHref?: string;
   variant?: "desktop" | "mobile";
-  footer?: ReactNode;
 }) {
+  const normalizedPathname = pathname.replace(/\/+$/, "") || "/";
+  const activeItem = groups
+    .flatMap((group) => group.items)
+    .filter((item) => {
+      const href = item.href.replace(/\/+$/, "") || "/";
+      return normalizedPathname === href || (!item.exact && href !== "/" && normalizedPathname.startsWith(`${href}/`));
+    })
+    .sort((a, b) => b.href.length - a.href.length)[0];
+
   return (
     <aside
       className={`sidebar${collapsed ? " sidebar-collapsed" : ""}${variant === "mobile" ? " sidebar-mobile" : ""}`}
@@ -30,6 +37,22 @@ export function SidebarRail({
     >
       <div className="sidebar-brand">
         <div className="sidebar-brand-inner">
+          <div className="sidebar-brand-toolbar">
+            <button
+              type="button"
+              className="sidebar-collapse-top"
+              onClick={onToggleCollapsed}
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-expanded={!collapsed}
+              title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              {collapsed ? (
+                <PanelLeftOpen size={18} aria-hidden="true" />
+              ) : (
+                <PanelLeftClose size={18} aria-hidden="true" />
+              )}
+            </button>
+          </div>
           <a className="sidebar-logo-link" href={homeHref} title={`${brand.name} home`}>
             {collapsed ? (
               <span className="sidebar-mark" aria-hidden="true">
@@ -54,44 +77,23 @@ export function SidebarRail({
             <SidebarSection
               key={group.id}
               group={group}
-              pathname={pathname}
+              activeItem={activeItem}
               collapsed={collapsed}
             />
           ))
         )}
       </nav>
-
-      <div className="sidebar-footer">
-        {footer}
-        <button
-          type="button"
-          className="sidebar-collapse-row"
-          onClick={onToggleCollapsed}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          aria-expanded={!collapsed}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          {collapsed ? (
-            <PanelLeftOpen size={18} aria-hidden="true" />
-          ) : (
-            <PanelLeftClose size={18} aria-hidden="true" />
-          )}
-          <span className="sidebar-link-text">
-            <span>{collapsed ? "Expand" : "Collapse"}</span>
-          </span>
-        </button>
-      </div>
     </aside>
   );
 }
 
 function SidebarSection({
   group,
-  pathname,
+  activeItem,
   collapsed,
 }: {
   group: NavGroup;
-  pathname: string;
+  activeItem?: NavItem;
   collapsed: boolean;
 }) {
   const [open, setOpen] = useState(true);
@@ -119,7 +121,7 @@ function SidebarSection({
             <SidebarLink
               key={item.href}
               item={item}
-              pathname={pathname}
+              activeItem={activeItem}
               collapsed={collapsed}
             />
           ))}
@@ -131,18 +133,14 @@ function SidebarSection({
 
 function SidebarLink({
   item,
-  pathname,
+  activeItem,
   collapsed,
 }: {
   item: NavItem;
-  pathname: string;
+  activeItem?: NavItem;
   collapsed: boolean;
 }) {
-  const active =
-    pathname === item.href ||
-    (!item.exact &&
-      item.href !== "/" &&
-      (pathname === `${item.href}/` || pathname.startsWith(`${item.href}/`)));
+  const active = activeItem === item;
 
   return (
     <a

@@ -8,16 +8,20 @@ import {
   isClientTenantOverride,
   isTenantActive,
   isTenantSuspended,
-  resolvedTenantOrNull,
+  resolveTenantForIdentity,
   selectBootstrapOwner,
   tenantMembershipStatusFromWorkos,
 } from "./tenantCore.ts";
 
-test("resolveTenantFromAuth's candidate resolver denies unresolved identities instead of selecting another tenant", () => {
-  assert.equal(resolvedTenantOrNull(undefined, undefined), null);
-  assert.equal(resolvedTenantOrNull(null, null), null);
-  assert.equal(resolvedTenantOrNull("tenant_from_org", "bootstrap_tenant"), "tenant_from_org");
-  assert.equal(resolvedTenantOrNull(undefined, "bootstrap_tenant"), "bootstrap_tenant");
+test("tenant resolution uses a mapped WorkOS organization and never falls back for an unknown org claim", () => {
+  assert.equal(resolveTenantForIdentity(true, "tenant_from_org", "bootstrap_tenant"), "tenant_from_org");
+  assert.equal(resolveTenantForIdentity(true, undefined, "bootstrap_tenant"), null);
+  assert.equal(resolveTenantForIdentity(true, null, "bootstrap_tenant"), null);
+});
+
+test("tenant resolution uses bootstrap only when the identity has no organization claim", () => {
+  assert.equal(resolveTenantForIdentity(false, undefined, "bootstrap_tenant"), "bootstrap_tenant");
+  assert.equal(resolveTenantForIdentity(false, undefined, undefined), null);
 });
 
 test("bootstrapTenant owner selection refuses an empty or ownerless database before tenant creation", () => {

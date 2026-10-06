@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 
 export function AppBootstrapLoader({ label = "Loading…" }: { label?: string }) {
   return (
-    <div className="app-bootstrap" role="status" aria-live="polite">
+    <div className="app-bootstrap" role="status" aria-live="polite" suppressHydrationWarning>
       <img
         className="app-bootstrap-logo"
         src="/brand/mylesnet-logo.png"
