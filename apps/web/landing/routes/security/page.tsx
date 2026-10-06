@@ -1,8 +1,9 @@
-import Link from "next/link";
-import { ArrowRight, CheckCircle2 } from "lucide-react";
+import { CheckCircle2, Mail, ShieldCheck } from "lucide-react";
 import { securityPillars } from "@/landing/content/home";
 import { pageMetadata } from "@/landing/content/seo";
 import { Icon } from "@/landing/components/LandingIcon";
+import LandingCard from "@/landing/components/LandingCard";
+import LandingCtaSection from "@/landing/components/LandingCtaSection";
 
 export const metadata = pageMetadata(
   "Security & trust",
@@ -48,19 +49,25 @@ export default function SecurityPage() {
     <>
       <section className="landing-page-banner">
         <div className="landing-page-banner-inner">
-          <p className="landing-section-kicker">Security &amp; trust</p>
-          <h1>Serious about your data and your money</h1>
-          <p className="landing-banner-lead">
-            Running a network means owning real customer records, real router credentials,
-            and real money. MylesNet treats all three with the care they deserve — and we
-            are explicit about the boundary.
-          </p>
-          <div className="landing-banner-meta">
-            <span className="landing-banner-meta-item">Role-based access</span>
-            <span className="landing-banner-meta-item">Audit trail</span>
-            <span className="landing-banner-meta-item">Encrypted credentials</span>
-            <span className="landing-banner-meta-item">Append-only ledger</span>
-          </div>
+          <LandingCard
+            variant="hero"
+            titleAs="h1"
+            eyebrow="Security & trust"
+            title="Serious about your data and your money"
+            body={
+              <>
+                Running a network means owning real customer records, real router credentials,
+                and real money. MylesNet treats all three with the care they deserve — and we
+                are explicit about the boundary.
+              </>
+            }
+            tags={[
+              "Role-based access",
+              "Audit trail",
+              "Encrypted credentials",
+              "Append-only ledger",
+            ]}
+          />
         </div>
       </section>
 
@@ -68,13 +75,12 @@ export default function SecurityPage() {
         <div className="landing-section-inner">
           <div className="landing-trust-grid">
             {securityPillars.map((pillar) => (
-              <article className="landing-trust-card" key={pillar.title}>
-                <span className="landing-trust-icon">
-                  <Icon name={pillar.icon} size={21} />
-                </span>
-                <h3>{pillar.title}</h3>
-                <p>{pillar.description}</p>
-              </article>
+              <LandingCard
+                key={pillar.title}
+                icon={<Icon name={pillar.icon} size={21} />}
+                title={pillar.title}
+                body={pillar.description}
+              />
             ))}
           </div>
         </div>
@@ -84,36 +90,43 @@ export default function SecurityPage() {
         <div className="landing-section-inner">
           <div className="landing-prose">
             <h2>What that means in practice</h2>
-            <ul className="landing-checklist">
-              {securityDetail.map((item) => (
-                <li className="landing-checklist-item" key={item.title}>
-                  <CheckCircle2 size={17} aria-hidden="true" />
-                  <span>
-                    <strong>{item.title}.</strong> {item.description}
-                  </span>
-                </li>
-              ))}
-            </ul>
           </div>
+          <ul className="landing-checklist">
+            {securityDetail.map((item) => (
+              <li key={item.title}>
+                <LandingCard
+                  variant="compact"
+                  icon={<CheckCircle2 size={17} aria-hidden="true" />}
+                  title={item.title}
+                  body={item.description}
+                />
+              </li>
+            ))}
+          </ul>
         </div>
       </section>
 
-      <section className="landing-cta-band">
-        <div className="landing-cta-inner">
-          <p className="landing-section-kicker">Security &amp; trust</p>
-          <h2>Questions about how your data is handled?</h2>
-          <p>Ask us directly — we would rather explain the boundary than blur it.</p>
-          <div className="landing-hero-actions">
-            <Link className="landing-cta-button" href="/contact">
-              Talk to us
-              <ArrowRight size={17} aria-hidden="true" />
-            </Link>
-            <Link className="landing-secondary-button" href="/get-started">
-              Get started
-            </Link>
-          </div>
-        </div>
-      </section>
+      <LandingCtaSection
+        kicker="Security & trust"
+        title="Questions about how your data is handled?"
+        subtitle="Ask us directly — we would rather explain the boundary than blur it."
+        items={[
+          {
+            href: "/contact",
+            icon: <Mail size={19} aria-hidden="true" />,
+            title: "Talk to us",
+            body: "Ask us anything about data handling, access, or retention.",
+            action: "Ask a question",
+          },
+          {
+            href: "/get-started",
+            icon: <ShieldCheck size={19} aria-hidden="true" />,
+            title: "Get started",
+            body: "Set up your network with access controls in place from the start.",
+            action: "Start a conversation",
+          },
+        ]}
+      />
     </>
   );
 }
