@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import { ArrowUpRight, LayoutDashboard, Globe, Shield, Wifi, Cpu, Network } from "lucide-react";
 import { pageMetadata } from "@/landing/content/seo";
 import LandingCard from "@/landing/components/LandingCard";
