@@ -155,27 +155,17 @@ if (violations.length > 0) {
 
 // ---- 4. Landing.css demolition manifest (REPORT-ONLY) ----
 const landingCssClasses = [
-  // Phase 2: Partially migrated (retained for page-level usage)
-  "landing-cta-button",
   // Phase 3: Slated for migration
   "landing-card",
-  "landing-bento-card",
-  "landing-solution-card",
   "landing-plan-card",
-  "landing-stat-card",
-  "landing-process-step",
-  "landing-trust-card",
-  "landing-attribute-chip",
   "landing-audience-pill",
   "landing-plan-badge",
   "landing-section-kicker",
   "landing-nav-link",
-  "landing-cta-band",
   "landing-prose",
   "landing-preview-wrap",
   "landing-preview",
   "landing-preview-body",
-  "landing-int-tiles",
   "landing-legend",
   "landing-roadmap",
   "landing-how-steps",
@@ -187,12 +177,30 @@ console.log("  - .landing-status-chip → shadcn Badge");
 console.log("  - .landing-pricing-switch → shadcn Select");
 console.log("  - .landing-nav-toggle → shadcn Sheet trigger");
 console.log("  - .landing-mobile-menu → shadcn Sheet content");
-console.log("\nPhase 2 (RETAINED for page-level usage):");
-console.log("  - .landing-cta-button (CTA band styling)");
 console.log("\nPhase 3 Batch 1 (MIGRATED/DELETED):");
 console.log("  - .landing-text-link → shadcn Button (link variant)");
 console.log("  - .landing-secondary-button → shadcn Button (outline variant)");
 console.log("  - .landing-faq → shadcn Accordion");
+console.log("\nPhase 3 Batch 2 (MIGRATED/DELETED):");
+console.log("  - .landing-bento-card, .landing-solution-card, .landing-trust-card,");
+console.log("    .landing-process-step, .landing-resource-card, .landing-stat-card,");
+console.log("    .landing-checklist-item, .landing-int-row, .landing-lifecycle-step,");
+console.log("    .landing-problem-item, .landing-attribute-chip, .landing-int-tiles,");
+console.log("    .landing-hero*, .landing-compare* → LandingCard (apps/web/landing/components/LandingCard.tsx)");
+console.log("\nPhase 3 Batch 3 (MIGRATED/DELETED):");
+console.log("  - .landing-cta-band, .landing-cta-inner, .landing-home-cta,");
+console.log("    .landing-cta-button, .landing-secondary-button, .landing-hero-actions*");
+console.log("    → LandingCtaSection (apps/web/landing/components/LandingCtaSection.tsx)");
+console.log("    Closing CTA is now one card per next step; the dark full-width band is gone.");
+console.log("\nPhase 3 Batch 4 (MIGRATED/DELETED):");
+console.log("  - .landing-page-banner band chrome (.landing-page-banner h1,");
+console.log("    .landing-banner-lead, .landing-banner-meta*) → LandingCard variant=\"hero\"");
+console.log("    on all 18 route banners; the band is now a thin wrapper around the card.");
+console.log("  - .landing-home-hero::before/::after, .landing-home-hero-inner/copy,");
+console.log("    .landing-home-eyebrow, .landing-home-title, .landing-home-lead");
+console.log("    → LandingCard variant=\"hero\" (className .landing-home-hero-card),");
+console.log("    with the photo crossfade clipped inside the card.");
+console.log("  - Footer markup → .landing-footer-card: one card holds masthead, sitemap,");
 console.log("\nPhase 3 (SLATED for migration):");
 for (const className of landingCssClasses) {
   console.log(`  - .${className}`);
