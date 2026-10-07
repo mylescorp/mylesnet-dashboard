@@ -546,6 +546,28 @@ counts/data did not.
   (dev server holds `.next`); `jest` has one pre-existing unrelated failure
   (`AccountDrawer.test.tsx`).
 
+### 2026-10-07 follow-up — pricing claim cleanup and tenancy endpoint checks
+
+- The comparison table, free-trial/no-card language, included-limit claims,
+  payment-method list, invoice timing/grace-period promises, and Enterprise
+  support/package promises were removed from the public pricing surface because
+  they had no verified commercial approval. Quotes now state the applicable
+  billing and support terms. The usage rates and worked estimate remain
+  published as indicative rates.
+- The home-page pricing FAQ, pricing release note, and public Terms now describe
+  estimates and defer applicable fees, payment schedule, trial arrangements,
+  implementation, and support scope to the accepted written quote/order.
+- Currency display uses the CBK commercial-bank average closing rates dated
+  2026-10-06 (KES/UGX 31.21; USD/KES 129.89) as an indicative cached snapshot;
+  the pricing page links to CBK's rates page and labels conversions as estimates.
+- Added endpoint-level tests for active workspace scope, suspended tenants,
+  revoked membership, cross-tenant subscriber reads, and rejected cross-tenant
+  subscriber updates. Local Jest execution is blocked by the installed Next/Jest
+  setup failing while parsing TypeScript `--showConfig`; see validation notes.
+- Production Convex functions/schema remain undeployed pending the approved
+  production target and deployment credential described in the production
+  deployment runbook.
+
 # Phase 1 tenancy (X-TEN) — build log 2026-09-11
 
 > **2026-09-11:** Phase 1 (Tenant Schema and Data Isolation) is the active
