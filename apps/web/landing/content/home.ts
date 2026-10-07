@@ -190,7 +190,7 @@ export const faqItems: FaqItem[] = [
   {
     question: "What does MylesNet cost?",
     answer:
-      "Usage-based pricing: 3% of the hotspot revenue MylesNet confirms in a month, or $0.25 for each PPPoE subscriber active during the month, with custom volume pricing for Enterprise. Routers, staff and vouchers are never metered — there are no per-device, per-seat or per-site charges. Every plan starts with a 14-day free trial, with no card required, and the pricing page has worked examples.",
+      "Indicative usage rates are 3% of confirmed hotspot revenue or $0.25 per PPPoE subscriber active during the month. Estimates and currency conversions are shown on the pricing page; confirm applicable rates, billing schedule, payment method and other terms in a written quote before proceeding.",
   },
 ];
 

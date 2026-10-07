@@ -1,19 +1,6 @@
-import type { ReactNode } from "react";
 import {
   ArrowRight,
   ArrowUpRight,
-  CalendarCheck,
-  Check,
-  CreditCard,
-  Gift,
-  Landmark,
-  MessageSquare,
-  Minus,
-  Percent,
-  Router,
-  Smartphone,
-  Users,
-  Wallet,
 } from "lucide-react";
 import SectionHead from "@/landing/components/SectionHead";
 import JsonLd from "@/landing/components/JsonLd";
@@ -32,7 +19,7 @@ import { pageMetadata } from "@/landing/content/seo";
 
 export const metadata = pageMetadata(
   "Pricing — 3% Hotspot, $0.25 per active PPPoE user",
-  "MylesNet costs 3% of hotspot revenue or $0.25 per active PPPoE user a month, with custom Enterprise pricing. No per-router, per-seat or per-site charges; 14-day free trial, no card.",
+  "MylesNet pricing is based on hotspot revenue or active PPPoE subscribers. See the indicative rates and estimate a monthly fee; confirm billing terms with our team.",
   { canonical: "/pricing" }
 );
 
@@ -55,25 +42,24 @@ const USAGE_PLANS: UsagePlan[] = [
     lede: "The fee is 3% of the hotspot revenue MylesNet confirms in a month.",
     value: "3%",
     period: "of hotspot revenue",
-    cta: "Start free trial",
-    href: "/get-started",
+    cta: "Discuss your setup",
+    href: "/contact",
   },
   {
     id: "pppoe",
     name: "PPPoE",
     audience: "For fibre and wireless broadband subscribers on monthly plans.",
     lede:
-      "The fee is $0.25 for each subscriber who was active during the month. Suspended and expired accounts are not charged.",
+      "The indicative fee is $0.25 per subscriber active during the month.",
     value: "$0.25",
     period: "per active user / month",
-    cta: "Start free trial",
-    href: "/get-started",
+    cta: "Discuss your setup",
+    href: "/contact",
   },
   {
     id: "enterprise",
     name: "Enterprise",
-    audience:
-      "For operators with 10,000+ subscribers, operations in multiple regions or regulatory requirements.",
+    audience: "For operators who need a tailored commercial arrangement.",
     lede: "Volume pricing is agreed with the team against the network you operate.",
     value: "Custom",
     period: "volume pricing",
@@ -82,86 +68,16 @@ const USAGE_PLANS: UsagePlan[] = [
   },
 ];
 
-const SHARED_ROWS: { label: string; cells: string[] }[] = [
-  { label: "Unlimited customers, vouchers and revenue", cells: ["Included", "Included", "Included"] },
-  { label: "Router, network and hotspot monitoring", cells: ["Included", "Included", "Included"] },
-  { label: "Packages, vouchers and free-trial selling", cells: ["Included", "Included", "Included"] },
-  { label: "Invoices, payments and an audit-safe ledger", cells: ["Included", "Included", "Included"] },
-  { label: "Data usage and heavy-user visibility", cells: ["Included", "Included", "Included"] },
-  { label: "Support tickets and in-portal notifications", cells: ["Included", "Included", "Included"] },
-  { label: "No per-router, per-seat or per-site charges", cells: ["Included", "Included", "Included"] },
-  { label: "Email support and guided onboarding", cells: ["Included", "Included", "Included"] },
-];
-
-const ENTERPRISE_ROWS: { label: string; cells: string[] }[] = [
-  { label: "Dedicated resources", cells: ["Not included", "Not included", "Included"] },
-  { label: "A dedicated account manager and onboarding", cells: ["Not included", "Not included", "Included"] },
-  { label: "A written uptime SLA and 24/7 support", cells: ["Not included", "Not included", "Included"] },
-  { label: "Data migration from your current system", cells: ["Not included", "Not included", "Included"] },
-  { label: "Custom integrations, API limits and branding", cells: ["Not included", "Not included", "Included"] },
-  { label: "Invoicing in local currency and annual contracts", cells: ["Not included", "Not included", "Included"] },
-];
-
-const HOW_RATES_ARE_COUNTED: { icon: ReactNode; title: string; body: string }[] = [
-  {
-    icon: <Percent size={19} aria-hidden="true" />,
-    title: "Hotspot is 3% of what you collect",
-    body: "The fee follows the hotspot revenue MylesNet confirms in a month. A quiet month costs less. A month that sells nothing costs nothing.",
-  },
-  {
-    icon: <Users size={19} aria-hidden="true" />,
-    title: "PPPoE is $0.25 per active subscriber",
-    body: "The fee counts only the subscribers who were active during the month. Suspended and expired accounts stay in the system for free.",
-  },
-  {
-    icon: <Router size={19} aria-hidden="true" />,
-    title: "Routers and staff are not metered",
-    body: "Every plan includes unlimited routers, staff accounts and vouchers. MylesNet does not charge per device, per seat or per site.",
-  },
-  {
-    icon: <Gift size={19} aria-hidden="true" />,
-    title: "The 14-day free trial comes first",
-    body: "You get the whole product for fourteen days with no card required. Your real subscribers can be running on MylesNet before you are charged anything.",
-  },
-];
-
-const PAY_METHODS: { icon: ReactNode; title: string; body: string }[] = [
-  {
-    icon: <Smartphone size={19} aria-hidden="true" />,
-    title: "M-PESA and mobile money",
-    body: "Pay in your own shillings from the same phone your network already collects on.",
-  },
-  {
-    icon: <Wallet size={19} aria-hidden="true" />,
-    title: "Your MylesNet balance",
-    body: "If you collect payments through MylesNet, you can settle the invoice from the balance you already hold. You don't need to withdraw it first.",
-  },
-  {
-    icon: <CreditCard size={19} aria-hidden="true" />,
-    title: "PayPal and cards",
-    body: "This option suits operators paying in dollars or from outside the region. You send the payment each month, and MylesNet does not keep your card.",
-  },
-  {
-    icon: <Landmark size={19} aria-hidden="true" />,
-    title: "Bank transfer",
-    body: "Send the payment from your business account, and MylesNet reconciles it against your invoice.",
-  },
-];
-
 const FAQ_ITEMS: { question: string; answer: string }[] = [
-  {
-    question: "Is there a free trial of MylesNet?",
-    answer: "Yes. You get the whole product for fourteen days, and no card is required.",
-  },
   {
     question: "How is the MylesNet PPPoE fee counted?",
     answer:
-      "The fee is $0.25 for each subscriber who was active during the month. Suspended and expired accounts are free.",
+      "The indicative rate is $0.25 for each PPPoE subscriber active during the month. Your quote confirms the applicable billing terms.",
   },
   {
     question: "How is the MylesNet Hotspot fee counted?",
     answer:
-      "The fee is 3% of the hotspot revenue MylesNet confirms in a month. A Hotspot month with no sales costs nothing.",
+      "The indicative rate is 3% of Hotspot revenue confirmed for the month. Your quote confirms the revenue basis and any other billing terms.",
   },
   {
     question: "What if I run both Hotspot and PPPoE?",
@@ -169,19 +85,9 @@ const FAQ_ITEMS: { question: string; answer: string }[] = [
       "The two fees are added together. For example, a 3% fee on $1,000 of hotspot revenue ($30) plus 100 active PPPoE users ($25) comes to $55 per month.",
   },
   {
-    question: "Does MylesNet charge per router, staff account or voucher?",
+    question: "How are billing terms confirmed?",
     answer:
-      "No. Routers, staff accounts and vouchers are not metered, and there are no per-device, per-seat or per-site charges.",
-  },
-  {
-    question: "Does MylesNet charge me automatically?",
-    answer:
-      "No. MylesNet sends you an invoice for the month just past, with a grace period, and you pay it. No card is kept on file.",
-  },
-  {
-    question: "Who is the Enterprise plan for?",
-    answer:
-      "The Enterprise plan is for operators with 10,000+ subscribers, multiple regions or regulatory requirements. It uses custom volume pricing and adds a written uptime SLA, 24/7 support, a dedicated account manager, data migration, custom integrations, local-currency invoicing and annual contracts.",
+      "Your written quote will confirm the applicable fees, invoice timing, payment method and any other commercial terms before you proceed. Contact our team to discuss your network.",
   },
 ];
 
@@ -195,48 +101,6 @@ const faqJsonLd = {
   })),
 };
 
-function CompareCell({ value }: { value: string }) {
-  if (value === "Included") {
-    return (
-      <span className="landing-compare-yes">
-        <Check size={15} aria-hidden="true" />
-        Included
-      </span>
-    );
-  }
-  if (value === "Not included") {
-    return (
-      <span className="landing-compare-no">
-        <Minus size={15} aria-hidden="true" />
-        Not included
-      </span>
-    );
-  }
-  return <span className="landing-compare-value">{value}</span>;
-}
-
-function CompareGroup({ title, rows }: { title: string; rows: { label: string; cells: string[] }[] }) {
-  return (
-    <>
-      <tr className="landing-compare-group">
-        <th scope="rowgroup" colSpan={4}>
-          {title}
-        </th>
-      </tr>
-      {rows.map((row) => (
-        <tr key={row.label}>
-          <th scope="row">{row.label}</th>
-          {row.cells.map((cell, index) => (
-            <td key={`${row.label}-${index}`}>
-              <CompareCell value={cell} />
-            </td>
-          ))}
-        </tr>
-      ))}
-    </>
-  );
-}
-
 export default function PricingPage() {
   return (
     <>
@@ -249,24 +113,13 @@ export default function PricingPage() {
             title="MylesNet pricing plans"
             body={
               <>
-                Three ways to pay: 3% of the hotspot revenue MylesNet confirms in a
-                month, $0.25 for each PPPoE subscriber active during the month, or
-                custom Enterprise pricing. Routers, staff and vouchers are not
-                metered — and every plan starts with a 14-day free trial, with no
-                card required.
+                Indicative usage rates are 3% of confirmed hotspot revenue or
+                $0.25 per active PPPoE subscriber per month. Custom pricing is
+                available by quote. Contact us to confirm billing terms for your
+                network.
               </>
             }
-            tags={[
-              <>
-                <CalendarCheck size={14} aria-hidden="true" />
-                14-day free trial
-              </>,
-              <>
-                <CreditCard size={14} aria-hidden="true" />
-                No card required
-              </>,
-              "KES · UGX · USD",
-            ]}
+            tags={["KES · UGX · USD", "Indicative estimates"]}
           />
         </div>
       </section>
@@ -309,42 +162,14 @@ export default function PricingPage() {
           </div>
 
           <p className="landing-plans-footnote">
-            The PPPoE rate is set in USD and shown against the approved
-            reference-rate snapshot for KES and UGX. Currency is chosen
-            automatically from your browser region and you can switch it any time.
+            The PPPoE rate is set in USD. KES and UGX conversions are estimates
+            based on the CBK commercial-bank average closing rates for 6 Oct
+            2026; your quote confirms the applicable amount. See the
+            <a href="https://www.centralbank.go.ke/forex/" target="_blank" rel="noreferrer">
+              CBK rates and methodology
+            </a>
+            .
           </p>
-        </div>
-      </section>
-
-      <section className="landing-section landing-section-alt">
-        <div className="landing-section-inner">
-          <SectionHead
-            kicker="Compare"
-            title="Compare the three plans"
-            subtitle="Every plan runs the same core platform — Enterprise adds the guarantees large operations need."
-          />
-          <div className="landing-compare-wrap">
-            <table className="landing-compare">
-              <caption className="landing-compare-caption">
-                What every MylesNet plan includes, and what Enterprise adds
-              </caption>
-              <thead>
-                <tr>
-                  <th scope="col">
-                    <span className="sr-only">Feature</span>
-                  </th>
-                  <th scope="col">Hotspot</th>
-                  <th scope="col">PPPoE</th>
-                  <th scope="col">Enterprise</th>
-                </tr>
-              </thead>
-              <tbody>
-                <CompareGroup title="What every MylesNet plan includes" rows={SHARED_ROWS} />
-                <CompareGroup title="Enterprise adds" rows={ENTERPRISE_ROWS} />
-              </tbody>
-            </table>
-          </div>
-          <p className="landing-compare-hint">Scroll sideways to see every plan.</p>
         </div>
       </section>
 
@@ -362,75 +187,26 @@ export default function PricingPage() {
       <section className="landing-section landing-section-alt">
         <div className="landing-section-inner">
           <SectionHead
-            kicker="How it works"
-            title="How each rate is counted"
-            subtitle="Both rates follow what your network earns and carries, so your MylesNet bill moves with it."
+            kicker="Billing terms"
+            title="Confirm the details before you proceed"
+            subtitle="The calculator is an estimate. Your written quote sets the fees and billing terms that apply to your network."
           />
-          <div className="landing-grid">
-            {HOW_RATES_ARE_COUNTED.map((item) => (
-              <LandingCard key={item.title} icon={item.icon} title={item.title} body={item.body} />
-            ))}
+          <div className="landing-prose">
+            <p>
+              We will confirm the applicable rate, invoice schedule, payment
+              method, and any implementation or support charges in writing
+              before you proceed. The displayed currency conversions are
+              indicative estimates and may differ from your final quote.
+            </p>
+            <p>
+              <Link href="/contact">Contact our team</Link> to discuss your setup.
+            </p>
           </div>
         </div>
       </section>
 
       <section className="landing-section">
         <div className="landing-section-inner">
-          <SectionHead kicker="Billing" title="MylesNet invoices you, and you pay" />
-          <div className="landing-prose">
-            <p>
-              <strong>MylesNet does not bill you automatically:</strong>
-            </p>
-            <ul>
-              <li>No card is kept on file.</li>
-              <li>Nothing is taken on a schedule.</li>
-              <li>
-                Nothing is drawn from your MylesNet balance on MylesNet&apos;s
-                own initiative.
-              </li>
-            </ul>
-            <p>
-              The invoice arrives and you send the payment. MylesNet&apos;s
-              automation works on your subscribers, not on you.
-            </p>
-            <p>
-              Each invoice covers the month just past, so you are never asked to
-              pay before your network has earned the money. Every invoice
-              includes a grace period, and the MylesNet team contacts you before
-              anything about your access changes.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section className="landing-section landing-section-alt">
-        <div className="landing-section-inner">
-          <SectionHead
-            kicker="Payments"
-            title="Ways to pay your MylesNet invoice"
-            subtitle="Send the payment each month through the channel that suits your business — nothing is kept on file."
-          />
-          <div className="landing-grid">
-            {PAY_METHODS.map((method) => (
-              <LandingCard
-                key={method.title}
-                icon={method.icon}
-                title={method.title}
-                body={method.body}
-              />
-            ))}
-            <LandingCard
-              href="/contact"
-              icon={<MessageSquare size={19} aria-hidden="true" />}
-              title="Ask about billing"
-              body="Questions about rates, invoices, or moving to volume pricing — the team answers them directly."
-              footer={
-                <span className="landing-card-link landing-card-link-plain">
-                  Contact the team <ArrowRight size={15} aria-hidden="true" />
-                </span>
-              }
-            />
-          </div>
         </div>
       </section>
 
@@ -439,7 +215,7 @@ export default function PricingPage() {
           <SectionHead
             kicker="FAQ"
             title="Questions operators ask about pricing"
-            subtitle="Straight answers about how each rate is counted, trials, and Enterprise."
+            subtitle="Answers about the published indicative rates and estimates."
           />
           <Accordion type="single" collapsible className="landing-faq">
             {FAQ_ITEMS.map((item) => (
@@ -464,7 +240,7 @@ export default function PricingPage() {
             href: "/get-started",
             icon: <ArrowUpRight size={19} aria-hidden="true" />,
             title: "Get started",
-            body: "Run the whole platform free for 14 days, with our team alongside while you set up.",
+            body: "Discuss your network and receive a written quote with the applicable commercial terms.",
             action: "Start a conversation",
           },
         ]}
