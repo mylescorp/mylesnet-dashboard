@@ -3344,12 +3344,30 @@ a.landing-card:hover .landing-card-title,
 .landing-card-link,
 .landing-card-footer { transition: color var(--duration-fast) var(--ease-out); }
 
-/* ---- Status chips are labels, not buttons: pin the resting fill so the
-       bridge's hover: utilities cannot imply clickability. ---- */
-.landing-status-chip {
+/* ---- Product status badges have explicit, stable tones. Keep them distinct
+       from the sample-data chips used by the homepage dashboard illustration. ---- */
+.landing-status-badge {
   border-radius: var(--radius-full);
   font-size: var(--font-size-50);
-  transition: background-color var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+  transition: none;
 }
-.landing-status-chip.bg-primary:hover,
-.landing-status-chip.bg-secondary:hover { background: var(--primary-action); }
+.landing-status-badge[data-status="available"],
+.landing-status-badge[data-status="available"]:hover {
+  border-color: var(--success);
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+.landing-status-badge[data-status="beta"],
+.landing-status-badge[data-status="beta"]:hover {
+  border-color: var(--warning);
+  background: var(--warning-bg);
+  color: var(--text-strong);
+}
+.landing-status-badge[data-status="planned"],
+.landing-status-badge[data-status="planned"]:hover,
+.landing-status-badge[data-status="custom"],
+.landing-status-badge[data-status="custom"]:hover {
+  border-color: var(--line);
+  background: var(--surface-muted);
+  color: var(--muted);
+}
