@@ -7,7 +7,7 @@
 
 :root {
   /* Component-scope tokens derived from the shared contract */
-  --landing-container: 1140px;
+  --landing-container: 1440px;
   --landing-radius: 20px;
   --landing-radius-lg: 26px;
   --landing-glass: color-mix(in srgb, var(--surface) 78%, transparent);
@@ -35,7 +35,7 @@
 .landing-container {
   width: min(var(--landing-container), 100%);
   margin: 0 auto;
-  padding-inline: clamp(20px, 4.5vw, 48px);
+  padding-inline: clamp(20px, 3vw, 40px);
 }
 
 /* ============================================================
@@ -478,7 +478,7 @@
 .landing-section-inner {
   width: min(var(--landing-container), 100%);
   margin: 0 auto;
-  padding-inline: clamp(20px, 4.5vw, 48px);
+  padding-inline: clamp(20px, 3vw, 40px);
 }
 
 .landing-section-head {
@@ -622,7 +622,7 @@
   z-index: 1;
   width: min(var(--landing-container), 100%);
   margin: 0 auto;
-  padding-inline: clamp(20px, 4.5vw, 48px);
+  padding-inline: clamp(20px, 3vw, 40px);
 }
 
 .landing-prose {
@@ -1048,7 +1048,7 @@ a.landing-card:hover {
 .landing-footer-inner {
   width: min(var(--landing-container), 100%);
   margin: 0 auto;
-  padding-inline: clamp(20px, 4.5vw, 48px);
+  padding-inline: clamp(20px, 3vw, 40px);
 }
 
 /* The whole footer is one card: masthead, sitemap, and legal bar inside a
