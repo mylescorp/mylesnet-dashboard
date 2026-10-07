@@ -17,6 +17,9 @@ export type AuditLogEntry = {
   afterJson?: string;
   timestamp: number;
   ip?: string;
+  chainSequence?: number;
+  prevHash?: string;
+  hash?: string;
 };
 
 export type AuditLogPage = {
@@ -69,6 +72,7 @@ export type PlatformSecurityOverview = {
 };
 
 export const platformPanel = {
+  getAuditLogEntry: makeFunctionReference<"query", { auditId: string }, AuditLogEntry | null>("platform:getAuditLogEntry"),
   listAuditLogPage: makeFunctionReference<"query", {
     entityTable?: string;
     limit?: number;

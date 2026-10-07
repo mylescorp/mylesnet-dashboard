@@ -22,6 +22,7 @@ import {
 import { api } from "@/convex/_generated/api";
 import { avatarFallbackUrl } from "@/app/lib/avatar";
 import type { Id } from "@/convex/_generated/dataModel";
+import { PlatformAccess } from "@/platform/components/PlatformAccess";
 
 type PlatformUser = NonNullable<ReturnType<typeof useQuery<typeof api.platform.getCurrentPlatformUser>>>;
 type UserRow = NonNullable<ReturnType<typeof useQuery<typeof api.platformUsers.listUsers>>>[number];
@@ -136,6 +137,9 @@ export default function AccessManagementPage() {
     );
   }
   if (currentUser == null || !currentUser.permissions.includes("users:manage")) {
+    if (currentUser?.permissions.includes("users:read")) {
+      return <PlatformAccess canReadInvitations={currentUser.permissions.includes("invitations:manage")} />;
+    }
     return (
       <div className="workspace-page">
         <div className="pf-panel">

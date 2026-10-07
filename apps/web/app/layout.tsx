@@ -1,4 +1,5 @@
 import { Bricolage_Grotesque, Hanken_Grotesk, Inter, JetBrains_Mono } from "next/font/google";
+import Script from "next/script";
 import "@mylesnet/ui/styles.css";
 import "./globals.css";
 
@@ -31,24 +32,14 @@ const hanken = Hanken_Grotesk({
  * surface — landing and app panels alike — so dark mode never flashes light.
  * "system" resolves against the live OS preference at render time.
  */
-function ThemeScript() {
-  return (
-    <script
-      dangerouslySetInnerHTML={{
-        __html: `
-          (function() {
-            const storageKey = 'mylesnet-dashboard-theme';
-            const stored = localStorage.getItem(storageKey);
-            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-            const theme = stored === 'light' || stored === 'dark' ? stored : (prefersDark ? 'dark' : 'light');
-            document.documentElement.dataset.theme = theme;
-            document.documentElement.style.colorScheme = theme;
-          })();
-        `,
-      }}
-    />
-  );
-}
+const themeScript = `(function() {
+  const storageKey = 'mylesnet-dashboard-theme';
+  const stored = localStorage.getItem(storageKey);
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const theme = stored === 'light' || stored === 'dark' ? stored : (prefersDark ? 'dark' : 'light');
+  document.documentElement.dataset.theme = theme;
+  document.documentElement.style.colorScheme = theme;
+})();`;
 
 export default function RootLayout({
   children,
@@ -56,14 +47,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <head>
-        <ThemeScript />
-      </head>
-      <body
-        className={`${inter.variable} ${jetbrainsMono.variable} ${bricolage.variable} ${hanken.variable} antialiased`}
-      >
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${inter.variable} ${jetbrainsMono.variable} ${bricolage.variable} ${hanken.variable}`}
+    >
+      <body className="antialiased">
         {children}
+        <Script
+          id="theme-init"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{ __html: themeScript }}
+        />
       </body>
     </html>
   );

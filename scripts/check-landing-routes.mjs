@@ -25,7 +25,7 @@ const landingRouteFiles = [
   "solutions/[slug]/page.tsx",
 ];
 
-const root = resolve("apps/web/app/(landing)");
+const root = resolve("apps/web/app/(public)");
 const missing = [];
 
 for (const routeFile of landingRouteFiles) {

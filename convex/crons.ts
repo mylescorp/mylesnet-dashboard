@@ -1,4 +1,4 @@
-import { cronJobs } from "convex/server";
+import { anyApi, cronJobs } from "convex/server";
 import { internal } from "./_generated/api";
 
 const crons = cronJobs();
@@ -17,6 +17,14 @@ crons.hourly(
   "refresh FX rates",
   { minuteUTC: 20 },
   internal.forex.refreshExchangeRates,
+  {},
+);
+
+// Aggregate-only platform contracted-revenue history for C1.
+crons.daily(
+  "platform revenue snapshot",
+  { hourUTC: 3, minuteUTC: 10 },
+  anyApi.platformRevenue.captureDailySnapshot,
   {},
 );
 

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./landing.css";
 import Header from "@/landing/components/Header";
 import Footer from "@/landing/components/Footer";
+import WhatsAppInquiry from "@/landing/components/WhatsAppInquiry";
 import JsonLd from "@/landing/components/JsonLd";
 import { MYLESCORP_SOCIAL_LINKS } from "@/landing/content/contact";
 import { SITE_URL } from "@/landing/content/seo";
@@ -56,6 +57,7 @@ export default function LandingLayout({
       <Header />
       <main className="landing-main">{children}</main>
       <Footer />
+      <WhatsAppInquiry />
     </>
   );
 }

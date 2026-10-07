@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowRight, CheckCircle2 } from "lucide-react";
+import { ArrowRight, ArrowUpRight, CheckCircle2, CreditCard } from "lucide-react";
 import { features } from "@/landing/content/pages";
 import { pageMetadata } from "@/landing/content/seo";
 import { Icon } from "@/landing/components/LandingIcon";
+import LandingCard from "@/landing/components/LandingCard";
+import LandingCtaSection from "@/landing/components/LandingCtaSection";
 
 export function generateStaticParams() {
   return features.map((feature) => ({ slug: feature.slug }));
@@ -31,19 +32,19 @@ export default async function FeaturePage({ params }: { params: Promise<{ slug: 
     <>
       <section className="landing-page-banner">
         <div className="landing-page-banner-inner">
-          <p className="landing-section-kicker">Features</p>
-          <h1>{feature.title}</h1>
-          <p className="landing-banner-lead">
-            {feature.tagline}. {feature.summary}
-          </p>
-          <div className="landing-banner-meta">
-            {feature.highlights.slice(0, 3).map((highlight) => (
-              <span className="landing-banner-meta-item" key={highlight.title}>
+          <LandingCard
+            variant="hero"
+            titleAs="h1"
+            eyebrow="Features"
+            title={feature.title}
+            body={<>{feature.tagline}. {feature.summary}</>}
+            tags={feature.highlights.slice(0, 3).map((highlight) => (
+              <>
                 <CheckCircle2 size={15} aria-hidden="true" />
                 {highlight.title}
-              </span>
+              </>
             ))}
-          </div>
+          />
         </div>
       </section>
 
@@ -52,17 +53,19 @@ export default async function FeaturePage({ params }: { params: Promise<{ slug: 
           <div className="landing-prose">
             <blockquote>{feature.whyMatters}</blockquote>
             <h2>What you get</h2>
-            <ul className="landing-checklist">
-              {feature.highlights.map((highlight) => (
-                <li className="landing-checklist-item" key={highlight.title}>
-                  <CheckCircle2 size={17} aria-hidden="true" />
-                  <span>
-                    <strong>{highlight.title}.</strong> {highlight.description}
-                  </span>
-                </li>
-              ))}
-            </ul>
           </div>
+          <ul className="landing-checklist">
+            {feature.highlights.map((highlight) => (
+              <li key={highlight.title}>
+                <LandingCard
+                  variant="compact"
+                  icon={<CheckCircle2 size={17} aria-hidden="true" />}
+                  title={highlight.title}
+                  body={highlight.description}
+                />
+              </li>
+            ))}
+          </ul>
         </div>
       </section>
 
@@ -78,38 +81,46 @@ export default async function FeaturePage({ params }: { params: Promise<{ slug: 
           </div>
           <div className="landing-grid">
             {others.map((other) => (
-              <Link className="landing-card" key={other.slug} href={`/features/${other.slug}`}>
-                <span className="landing-card-icon">
-                  <Icon name={other.icon} size={19} />
-                </span>
-                <h3 className="landing-card-title">{other.title}</h3>
-                <p className="landing-card-body">{other.summary}</p>
-                <span className="landing-card-link">
-                  Explore {other.title.toLowerCase()}
-                  <ArrowRight size={15} aria-hidden="true" />
-                </span>
-              </Link>
+              <LandingCard
+                key={other.slug}
+                href={`/features/${other.slug}`}
+                variant="link"
+                icon={<Icon name={other.icon} size={19} />}
+                title={other.title}
+                body={other.summary}
+                footer={
+                  <>
+                    Explore {other.title.toLowerCase()}
+                    <ArrowRight size={15} aria-hidden="true" />
+                  </>
+                }
+              />
             ))}
           </div>
         </div>
       </section>
 
-      <section className="landing-cta-band">
-        <div className="landing-cta-inner">
-          <p className="landing-section-kicker">Features</p>
-          <h2>Want to see {feature.title.toLowerCase()} in action?</h2>
-          <p>We can show you how it fits your network and walk you through a pilot.</p>
-          <div className="landing-hero-actions">
-            <Link className="landing-cta-button" href="/get-started">
-              Get started
-              <ArrowRight size={17} aria-hidden="true" />
-            </Link>
-            <Link className="landing-secondary-button" href="/pricing">
-              See pricing
-            </Link>
-          </div>
-        </div>
-      </section>
+      <LandingCtaSection
+        kicker="Features"
+        title={`Want to see ${feature.title.toLowerCase()} in action?`}
+        subtitle="We can show you how it fits your network and walk you through a pilot."
+        items={[
+          {
+            href: "/get-started",
+            icon: <ArrowUpRight size={19} aria-hidden="true" />,
+            title: "Get started",
+            body: `Walk through ${feature.title.toLowerCase()} on your own setup before you commit.`,
+            action: "Start a conversation",
+          },
+          {
+            href: "/pricing",
+            icon: <CreditCard size={19} aria-hidden="true" />,
+            title: "See pricing",
+            body: "Compare plans and what each one includes.",
+            action: "Compare plans",
+          },
+        ]}
+      />
     </>
   );
 }

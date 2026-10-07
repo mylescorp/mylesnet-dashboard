@@ -39,6 +39,7 @@ export type TenantWorkspaceSetupReason =
   | "authentication_required"
   | "tenant_unconfigured"
   | "tenant_unavailable"
+  | "tenant_suspended"
   | "account_inactive"
   | "tenant_membership_required";
 
@@ -64,6 +65,7 @@ export type TenantDetail = {
   timezone: string;
   currency: string;
   status: TenantStatus;
+  statusBeforeSuspension: "trial" | "active" | null;
   workosOrganizationId: string | null;
   createdAt: number;
   updatedAt: number;
@@ -86,7 +88,8 @@ export type TenantDetail = {
 export const tenantControl = {
   listForPlatform: makeFunctionReference<"query", Record<string, never>, PlatformTenant[]>("tenantControl:listForPlatform"),
   getCurrentWorkspace: makeFunctionReference<"query", Record<string, never>, TenantWorkspaceResult>("tenantControl:getCurrentWorkspace"),
-  setStatus: makeFunctionReference<"mutation", { tenantId: string; status: TenantStatus }, { changed: boolean }>("tenantControl:setStatus"),
+  setStatus: makeFunctionReference<"mutation", { tenantId: string; status: "active" | "suspended" }, { changed: boolean; status: TenantStatus }>("tenantControl:setStatus"),
+  updateTenant: makeFunctionReference<"mutation", { tenantId: string; name: string; country: string; timezone: string; currency: string }, { updated: boolean }>("tenantControl:updateTenant"),
   getTenantDetail: makeFunctionReference<"query", { tenantId: string }, TenantDetail | null>("tenantControl:getTenantDetail"),
   setEntitlement: makeFunctionReference<"mutation", {
     tenantId: string;
@@ -96,6 +99,7 @@ export const tenantControl = {
     expiresAt?: number;
     trialEndsAt?: number;
   }, { changed: boolean }>("tenantControl:setEntitlement"),
+  removeEntitlement: makeFunctionReference<"mutation", { tenantId: string; reason: string }, { removed: boolean }>("tenantControl:removeEntitlement"),
   provisionTenant: makeFunctionReference<"action", {
     name: string;
     slug: string;

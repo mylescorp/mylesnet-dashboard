@@ -1,7 +1,8 @@
-import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowUpRight, LayoutDashboard } from "lucide-react";
 import { howItWorksSteps } from "@/landing/content/how-it-works";
 import { pageMetadata } from "@/landing/content/seo";
+import LandingCard from "@/landing/components/LandingCard";
+import LandingCtaSection from "@/landing/components/LandingCtaSection";
 
 export const metadata = pageMetadata(
   "How MylesNet works",
@@ -14,12 +15,18 @@ export default function HowItWorksPage() {
     <>
       <section className="landing-page-banner">
         <div className="landing-page-banner-inner">
-          <p className="landing-section-kicker">Resources</p>
-          <h1>How MylesNet works</h1>
-          <p className="landing-banner-lead">
-            A plain-language look at how the platform supports the day-to-day work of
-            running an internet service — and what each area means in practice.
-          </p>
+          <LandingCard
+            variant="hero"
+            titleAs="h1"
+            eyebrow="Resources"
+            title="How MylesNet works"
+            body={
+              <>
+                A plain-language look at how the platform supports the day-to-day work of
+                running an internet service — and what each area means in practice.
+              </>
+            }
+          />
         </div>
       </section>
 
@@ -27,16 +34,18 @@ export default function HowItWorksPage() {
         <div className="landing-section-inner">
           <div className="landing-how-steps">
             {howItWorksSteps.map((step) => (
-              <article className="landing-how-step" key={step.step}>
-                <span className="landing-how-num">{step.step}</span>
-                <div>
-                  <h3>{step.title}</h3>
-                  <p>
+              <LandingCard
+                key={step.step}
+                variant="step"
+                step={step.step}
+                title={step.title}
+                body={
+                  <>
                     {step.about}{" "}
                     <strong>In practice:</strong> {step.inPractice}
-                  </p>
-                </div>
-              </article>
+                  </>
+                }
+              />
             ))}
           </div>
 
@@ -46,18 +55,31 @@ export default function HowItWorksPage() {
               separate systems bolted on. That shared record of truth is what keeps an
               operation running smoothly as it grows.
             </p>
-            <div className="landing-hero-actions landing-hero-actions-start">
-              <Link className="landing-cta-button" href="/get-started">
-                Get started
-                <ArrowRight size={17} aria-hidden="true" />
-              </Link>
-              <Link className="landing-secondary-button" href="/features/customer-management">
-                Browse features
-              </Link>
-            </div>
           </div>
         </div>
       </section>
+
+      <LandingCtaSection
+        kicker="How it works"
+        title="See it on your own network"
+        subtitle="These areas work together as one platform — that shared record of truth is what keeps an operation running smoothly as it grows."
+        items={[
+          {
+            href: "/get-started",
+            icon: <ArrowUpRight size={19} aria-hidden="true" />,
+            title: "Get started",
+            body: "Walk through the platform with our team on your own setup.",
+            action: "Start a conversation",
+          },
+          {
+            href: "/features/customer-management",
+            icon: <LayoutDashboard size={19} aria-hidden="true" />,
+            title: "Browse features",
+            body: "Read what each area covers and where it stands today.",
+            action: "See all features",
+          },
+        ]}
+      />
     </>
   );
 }

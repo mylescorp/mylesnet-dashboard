@@ -1,8 +1,9 @@
-import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, LayoutDashboard, Mail } from "lucide-react";
 import { resourceItems } from "@/landing/content/resources";
 import { pageMetadata } from "@/landing/content/seo";
 import StatusChip from "@/landing/components/StatusChip";
+import LandingCard from "@/landing/components/LandingCard";
+import LandingCtaSection from "@/landing/components/LandingCtaSection";
 
 export const metadata = pageMetadata(
   "Resources",
@@ -15,12 +16,18 @@ export default function ResourcesPage() {
     <>
       <section className="landing-page-banner">
         <div className="landing-page-banner-inner">
-          <p className="landing-section-kicker">Resources</p>
-          <h1>Guides built for the operator&apos;s day</h1>
-          <p className="landing-banner-lead">
-            Practical guides on billing, payment automation, network operations, and the
-            realities of running a small internet service in East Africa.
-          </p>
+          <LandingCard
+            variant="hero"
+            titleAs="h1"
+            eyebrow="Resources"
+            title="Guides built for the operator's day"
+            body={
+              <>
+                Practical guides on billing, payment automation, network operations, and the
+                realities of running a small internet service in East Africa.
+              </>
+            }
+          />
         </div>
       </section>
 
@@ -29,27 +36,37 @@ export default function ResourcesPage() {
           <div className="landing-resource-grid">
             {resourceItems.map((item) =>
               item.href ? (
-                <Link className="landing-resource-card" href={item.href} key={item.title}>
-                  <span className="landing-resource-meta">
-                    <StatusChip status="Available" />
-                    <span>{item.meta}</span>
-                  </span>
-                  <h3>{item.title}</h3>
-                  <p>{item.description}</p>
-                  <span className="landing-bento-cta">
-                    Read the guide
-                    <ArrowRight size={16} aria-hidden="true" />
-                  </span>
-                </Link>
+                <LandingCard
+                  key={item.title}
+                  href={item.href}
+                  variant="link"
+                  title={item.title}
+                  body={item.description}
+                  meta={
+                    <>
+                      <StatusChip status="Available" />
+                      <span>{item.meta}</span>
+                    </>
+                  }
+                  footer={
+                    <>
+                      Read the guide
+                      <ArrowRight size={16} aria-hidden="true" />
+                    </>
+                  }
+                />
               ) : (
-                <article className="landing-resource-card landing-resource-card-soon" key={item.title}>
-                  <span className="landing-resource-meta">
-                    <span className="landing-soon-chip">{item.meta}</span>
-                    <span>On the editorial plan</span>
-                  </span>
-                  <h3>{item.title}</h3>
-                  <p>{item.description}</p>
-                </article>
+                <LandingCard
+                  key={item.title}
+                  title={item.title}
+                  body={item.description}
+                  meta={
+                    <>
+                      <span className="landing-soon-chip">{item.meta}</span>
+                      <span>On the editorial plan</span>
+                    </>
+                  }
+                />
               )
             )}
           </div>
@@ -59,18 +76,31 @@ export default function ResourcesPage() {
               Want a guide you don&apos;t see here? Tell us what would help — we publish
               what we find useful, not filler.
             </p>
-            <div className="landing-hero-actions landing-hero-actions-start">
-              <Link className="landing-cta-button" href="/contact">
-                Request a guide
-                <ArrowRight size={17} aria-hidden="true" />
-              </Link>
-              <Link className="landing-secondary-button" href="/resources/how-it-works">
-                How MylesNet works
-              </Link>
-            </div>
           </div>
         </div>
       </section>
+
+      <LandingCtaSection
+        kicker="Resources"
+        title="Want a guide you do not see here?"
+        subtitle="Tell us what would help — we publish what we find useful, not filler."
+        items={[
+          {
+            href: "/contact",
+            icon: <Mail size={19} aria-hidden="true" />,
+            title: "Request a guide",
+            body: "Tell us the topic you are stuck on and we will write it up.",
+            action: "Ask for a guide",
+          },
+          {
+            href: "/resources/how-it-works",
+            icon: <LayoutDashboard size={19} aria-hidden="true" />,
+            title: "How MylesNet works",
+            body: "See how the areas fit together as one shared record of truth.",
+            action: "Read the guide",
+          },
+        ]}
+      />
     </>
   );
 }

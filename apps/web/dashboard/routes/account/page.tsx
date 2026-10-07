@@ -1,10 +1,19 @@
-import { redirect } from "next/navigation";
+"use client";
 
-/**
- * Account management is a drawer opened from the topbar avatar, not a page.
- * Direct visits are sent back to the tenant dashboard so the workspace
- * sidebar is never rendered in the account context.
- */
+import { useRouter, useSearchParams } from "next/navigation";
+import { UserProfileModal } from "@/shared/components/UserProfileModal";
+import { panelForPathname, panelHome } from "@/shared/navigation/product-nav";
+
 export default function AccountPage() {
-  redirect("/dashboard");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const panel = panelForPathname(`/${searchParams.get("panel") ?? "dashboard"}`);
+  const returnTo = panelHome(panel);
+
+  return (
+    <UserProfileModal
+      isOpen
+      onClose={() => router.push(returnTo)}
+    />
+  );
 }

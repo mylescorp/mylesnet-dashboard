@@ -311,6 +311,62 @@ export default defineSchema({
     .index("by_market_month", ["marketId", "yearMonth"])
     .index("by_market", ["marketId"]),
 
+  /** New tenant-owned B1 registry; retired legacy `devices` remains retired. */
+  platformDevices: defineTable({
+    ...tenantScope,
+    marketId: v.id("markets"),
+    parentDeviceId: v.optional(v.id("platformDevices")),
+    name: v.string(),
+    deviceKind: v.string(),
+    serialOrMac: v.optional(v.string()),
+    lifecycleStatus: v.string(),
+    status: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+    deletedBy: v.optional(v.id("users")),
+    deleteReason: v.optional(v.string()),
+    deviceType: v.optional(v.union(v.literal("mikrotik"), v.literal("outdoor_ap"), v.literal("indoor_ap"), v.literal("extender"))),
+    role: v.optional(v.string()),
+    macAddress: v.optional(v.string()),
+    lastSeenAt: v.optional(v.number()),
+    registeredBy: v.optional(v.union(v.literal("self"), v.id("users"))),
+    firmwareVersion: v.optional(v.string()),
+    uptimePercent: v.optional(v.number()),
+    provisioningStatus: v.optional(v.union(v.literal("unprovisioned"), v.literal("pending"), v.literal("provisioned"), v.literal("failed"))),
+  })
+    .index("by_tenant", ["tenantId"])
+    .index("by_market", ["marketId"])
+    .index("by_parent", ["parentDeviceId"])
+    .index("by_status", ["status"])
+    .index("by_macAddress", ["macAddress"])
+    .index("by_provisioningStatus", ["provisioningStatus"]),
+
+  /** Requests remain untrusted until an SA/OPS platform operator approves. */
+  provisioningRequests: defineTable({
+    ...tenantScope,
+    marketId: v.id("markets"),
+    deviceId: v.optional(v.id("platformDevices")),
+    requestedFirmware: v.optional(v.string()),
+    requesterId: v.id("users"),
+    requestedAt: v.number(),
+    status: v.union(v.literal("pending"), v.literal("approved"), v.literal("rejected"), v.literal("deployed")),
+    decidedBy: v.optional(v.id("users")),
+    decidedAt: v.optional(v.number()),
+    decisionNote: v.optional(v.string()),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_tenant", ["tenantId"])
+    .index("by_tenant_status", ["tenantId", "status"])
+    .index("by_market", ["marketId"])
+    .index("by_market_requestedAt", ["marketId", "requestedAt"])
+    .index("by_market_status_requestedAt", ["marketId", "status", "requestedAt"])
+    .index("by_status", ["status"])
+    .index("by_status_requestedAt", ["status", "requestedAt"])
+    .index("by_device_status", ["deviceId", "status"]),
+
   agents: defineTable({
     ...tenantScope,
     name: v.string(),
@@ -936,6 +992,8 @@ export default defineSchema({
     ),
     // WorkOS per-tenant org id (three-scope model, Phase 2). The server-side
     // tenant resolver derives tenancy from this — never from the client.
+    // Preserves the pre-suspension trial/active state for safe restoration.
+    statusBeforeSuspension: v.optional(v.union(v.literal("trial"), v.literal("active"))),
     workosOrganizationId: v.optional(v.string()),
     // Contact phone captured during self-service sign-up (optional, never a
     // verification factor) and the acquisition channel that referred the
@@ -1062,8 +1120,8 @@ export default defineSchema({
     .index("by_tenant", ["tenantId"])
     .index("by_email", ["email"]),
 
-  // SaaS plan / entitlement attached to a tenant (G-TEN, Phase 3). `planId` is
-  // a plan code string until the T-PLN catalogue lands.
+  // SaaS plan / entitlement attached to a tenant (G-TEN, Phase 3). `planId`
+  // maps to the global platformPlanCatalog code used by platform C1/C3.
   entitlements: defineTable({
     tenantId: v.id("tenants"),
     planId: v.string(),
@@ -1079,7 +1137,43 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
-    .index("by_tenant", ["tenantId"]),
+    .index("by_tenant", ["tenantId"])
+    .index("by_planId", ["planId"]),
+
+  /** Global SaaS subscription catalogue shared by C3 management and C1 MRR. */
+  platformPlanCatalog: defineTable({
+    code: v.string(),
+    name: v.string(),
+    currency: v.literal("KES"),
+    monthlyPriceMinor: v.number(),
+    status: v.union(v.literal("active"), v.literal("archived")),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedBy: v.id("users"),
+    updatedAt: v.number(),
+  })
+    .index("by_code", ["code"])
+    .index("by_status", ["status"]),
+
+  /** Records intentional initialization so deleting the final plan stays deleted. */
+  platformPlanCatalogMeta: defineTable({
+    initializedBy: v.id("users"),
+    initializedAt: v.number(),
+  }),
+
+  // Aggregate-only historical series for C1 platform contracted revenue.
+  // Tenant invoices and cash collection are deliberately outside this record.
+  platformRevenueSnapshots: defineTable({
+    snapshotDate: v.string(),
+    currency: v.literal("KES"),
+    mrrMinor: v.number(),
+    arrMinor: v.number(),
+    activeTenants: v.number(),
+    trialTenants: v.number(),
+    suspendedTenants: v.number(),
+    unpricedActiveTenants: v.number(),
+    generatedAt: v.number(),
+  }).index("by_snapshot_date", ["snapshotDate"]),
 
   // ==========================================================================
   // PHASE 0 — MIGRATION RUN INFRASTRUCTURE (§B2)

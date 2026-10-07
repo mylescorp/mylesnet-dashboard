@@ -1,7 +1,5 @@
 "use client";
 
-import Link from "next/link";
-import { ExternalLink } from "lucide-react";
 import { useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
 import { formatDateTime } from "@/shared/components/ui";
@@ -10,10 +8,11 @@ type RoleRow = NonNullable<ReturnType<typeof useQuery<typeof api.rolesAdmin.list
 type UserRow = NonNullable<ReturnType<typeof useQuery<typeof api.platformUsers.listUsers>>>[number];
 type InvitationRow = NonNullable<ReturnType<typeof useQuery<typeof api.invitations.listInvitations>>>[number];
 
-export function PlatformAccess() {
+export function PlatformAccess({ canReadInvitations }: { canReadInvitations: boolean }) {
   const roles = useQuery(api.rolesAdmin.listRoles, {});
   const users = useQuery(api.platformUsers.listUsers, {});
-  const invitations = useQuery(api.invitations.listInvitations, {});
+  const invitations = useQuery(api.invitations.listInvitations, canReadInvitations ? {} : "skip");
+  const platformUsers = (users ?? []).filter((user) => user.roles.some((role) => role.isPlatform));
 
   return (
     <div className="workspace-page">
@@ -21,9 +20,8 @@ export function PlatformAccess() {
         <div>
           <p className="eyebrow">Platform control plane</p>
           <h1 className="page-title">Access & roles</h1>
-          <p className="page-subtitle">Read-only summary of platform staff, role definitions, and pending invitations. Full create and edit operations remain on the /access surface.</p>
+          <p className="page-subtitle">Read-only summary of platform staff, roles, and pending invitations.</p>
         </div>
-        <Link className="secondary-button" href="/access"><ExternalLink size={16} aria-hidden="true" />Full management</Link>
       </header>
 
       <section className="pf-panel">
@@ -44,10 +42,10 @@ export function PlatformAccess() {
       </section>
 
       <section className="pf-panel">
-        <div className="section-heading"><div><p className="eyebrow">Staff</p><h2>Platform users</h2></div><span className="section-count">{users?.length ?? 0} users</span></div>
-        {users === undefined ? <p className="pf-muted">Loading users…</p> : users.length === 0 ? <p className="pf-muted">No users have been provisioned yet.</p> : (
+        <div className="section-heading"><div><p className="eyebrow">Staff</p><h2>Platform users</h2></div><span className="section-count">{platformUsers.length} users</span></div>
+        {users === undefined ? <p className="pf-muted">Loading users…</p> : platformUsers.length === 0 ? <p className="pf-muted">No platform staff have been provisioned yet.</p> : (
           <div className="pf-table-wrap"><table className="pf-table"><thead><tr><th>User</th><th>Email</th><th>Roles</th></tr></thead><tbody>
-            {users.map((platformUser: UserRow) => (
+            {platformUsers.map((platformUser: UserRow) => (
               <tr key={platformUser._id}>
                 <td><strong>{platformUser.name ?? "Unnamed user"}</strong></td>
                 <td>{platformUser.email}</td>
@@ -60,7 +58,7 @@ export function PlatformAccess() {
 
       <section className="pf-panel">
         <div className="section-heading"><div><p className="eyebrow">Invitations</p><h2>Pending invites</h2></div><span className="section-count">{invitations?.length ?? 0} pending</span></div>
-        {invitations === undefined ? <p className="pf-muted">Loading invitations…</p> : invitations.length === 0 ? <p className="pf-muted">No pending invitations.</p> : (
+        {!canReadInvitations ? <p className="pf-muted">Invitation details require invitation management access.</p> : invitations === undefined ? <p className="pf-muted">Loading invitations…</p> : invitations.length === 0 ? <p className="pf-muted">No pending invitations.</p> : (
           <div className="pf-table-wrap"><table className="pf-table"><thead><tr><th>Email</th><th>Role</th><th>Status</th><th>Sent</th></tr></thead><tbody>
             {invitations.map((invitation: InvitationRow) => (
               <tr key={invitation._id}>

@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowUpRight, LayoutDashboard } from "lucide-react";
 import { pageMetadata } from "@/landing/content/seo";
 import {
   customersIntro,
@@ -8,6 +7,8 @@ import {
   earlyOperatorPerks,
   customersRoadmap,
 } from "@/landing/content/customers";
+import LandingCard from "@/landing/components/LandingCard";
+import LandingCtaSection from "@/landing/components/LandingCtaSection";
 
 export const metadata = pageMetadata(
   "Customers",
@@ -20,9 +21,13 @@ export default function CustomersPage() {
     <>
       <section className="landing-page-banner">
         <div className="landing-page-banner-inner">
-          <p className="landing-section-kicker">{customersIntro.kicker}</p>
-          <h1>{customersIntro.title}</h1>
-          <p className="landing-banner-lead">{customersIntro.subtitle}</p>
+          <LandingCard
+            variant="hero"
+            titleAs="h1"
+            eyebrow={customersIntro.kicker}
+            title={customersIntro.title}
+            body={customersIntro.subtitle}
+          />
         </div>
       </section>
 
@@ -53,10 +58,11 @@ export default function CustomersPage() {
           <h2 className="landing-section-title">What early operators get</h2>
           <div className="landing-grid">
             {earlyOperatorPerks.map((perk) => (
-              <article className="landing-card" key={perk.title}>
-                <h3 className="landing-card-title">{perk.title}</h3>
-                <p className="landing-card-body">{perk.description}</p>
-              </article>
+              <LandingCard
+                key={perk.title}
+                title={perk.title}
+                body={perk.description}
+              />
             ))}
           </div>
         </div>
@@ -70,34 +76,38 @@ export default function CustomersPage() {
           </p>
           <div className="landing-roadmap">
             {customersRoadmap.map((item) => (
-              <article className="landing-roadmap-item" key={item.title}>
-                <h3>{item.title}</h3>
-                <p>{item.note}</p>
-              </article>
+              <LandingCard
+                key={item.title}
+                variant="compact"
+                title={item.title}
+                body={item.note}
+              />
             ))}
           </div>
         </div>
       </section>
 
-      <section className="landing-cta-band">
-        <div className="landing-cta-inner">
-          <p className="landing-section-kicker">Customers</p>
-          <h2>Talk to us about being an early operator</h2>
-          <p>
-            If honest statuses and a shared build roadmap appeal to you, we would value a
-            conversation about your network.
-          </p>
-          <div className="landing-hero-actions">
-            <Link className="landing-cta-button" href="/get-started">
-              Get started
-              <ArrowRight size={17} aria-hidden="true" />
-            </Link>
-            <Link className="landing-secondary-button" href="/product">
-              See the product
-            </Link>
-          </div>
-        </div>
-      </section>
+      <LandingCtaSection
+        kicker="Customers"
+        title="Talk to us about being an early operator"
+        subtitle="If honest statuses and a shared build roadmap appeal to you, we would value a conversation about your network."
+        items={[
+          {
+            href: "/get-started",
+            icon: <ArrowUpRight size={19} aria-hidden="true" />,
+            title: "Get started",
+            body: "Tell us about your network and how you operate today.",
+            action: "Start a conversation",
+          },
+          {
+            href: "/product",
+            icon: <LayoutDashboard size={19} aria-hidden="true" />,
+            title: "See the product",
+            body: "Check what is live today and what is on the roadmap.",
+            action: "Browse modules",
+          },
+        ]}
+      />
     </>
   );
 }

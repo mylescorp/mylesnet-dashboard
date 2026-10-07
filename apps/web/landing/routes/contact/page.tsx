@@ -1,6 +1,10 @@
-import { CheckCircle2, Mail, Phone } from "lucide-react";
+import { Building2, Mail, Phone, ShieldCheck } from "lucide-react";
+import Link from "next/link";
 import { getCompanyContact } from "@/landing/content/contact";
+import { COMPANY_LEADERSHIP, MYLESCORP } from "@/landing/content/company";
 import { pageMetadata } from "@/landing/content/seo";
+import LandingCard from "@/landing/components/LandingCard";
+import LandingCtaSection from "@/landing/components/LandingCtaSection";
 
 export const metadata = pageMetadata(
   "Contact us",
@@ -8,77 +12,101 @@ export const metadata = pageMetadata(
   { canonical: "/contact" }
 );
 
+/** Canonical contact paths, per Contact Page Standards. Values come from env. */
+const CONTACT_PATHS = [
+  {
+    key: "contactEmail" as const,
+    icon: <Mail size={18} aria-hidden="true" />,
+    title: "General contact",
+    body: "Anything that does not fit the other two paths. We will route it to the right person.",
+  },
+  {
+    key: "infoEmail" as const,
+    icon: <Building2 size={18} aria-hidden="true" />,
+    title: "Company and product information",
+    body: `Questions about ${MYLESCORP.legalName} or the wider product portfolio.`,
+  },
+  {
+    key: "salesEmail" as const,
+    icon: <Phone size={18} aria-hidden="true" />,
+    title: "Sales and demos",
+    body: "Pricing, demos, and getting a new network started on MylesNet.",
+  },
+];
+
 export default function ContactPage() {
   const contact = getCompanyContact();
-  const hasContact = Boolean(
-    contact.salesEmail || contact.infoEmail || contact.salesPhone || contact.technicalPhone
+  const configuredPaths = CONTACT_PATHS.filter((path) => contact[path.key]);
+  const configuredLeaders = COMPANY_LEADERSHIP.filter(
+    (leader) => contact[leader.emailKey] || contact[leader.phoneKey]
   );
+  const hasAnyContact = configuredPaths.length > 0 || configuredLeaders.length > 0;
 
   return (
     <>
       <section className="landing-page-banner">
         <div className="landing-page-banner-inner">
-          <p className="landing-section-kicker">Contact</p>
-          <h1>Contact us</h1>
-          <p className="landing-banner-lead">
-            Questions about MylesNet, a demo of your own numbers, or support on
-            an existing network — we are happy to help.
-          </p>
-          <div className="landing-banner-meta">
-            <span className="landing-banner-meta-item">
-              <CheckCircle2 size={15} aria-hidden="true" />
-              Sales enquiries
-            </span>
-            <span className="landing-banner-meta-item">
-              <CheckCircle2 size={15} aria-hidden="true" />
-              Product information
-            </span>
-            <span className="landing-banner-meta-item">
-              <CheckCircle2 size={15} aria-hidden="true" />
-              Technical support
-            </span>
-          </div>
+          <LandingCard
+            variant="hero"
+            titleAs="h1"
+            eyebrow="Contact"
+            title="Talk to the people who build it"
+            body={
+              <>
+                Questions about MylesNet, a demo run against your own numbers, or
+                support on an existing network — every path below reaches a named
+                person at {MYLESCORP.legalName}, not a shared inbox.
+              </>
+            }
+            tags={[
+              <>
+                <ShieldCheck size={15} aria-hidden="true" />
+                Named owners per path
+              </>,
+              <>
+                <Building2 size={15} aria-hidden="true" />
+                Based in {MYLESCORP.location}
+              </>,
+              <>
+                <Mail size={15} aria-hidden="true" />
+                Replies from {MYLESCORP.domain}
+              </>,
+            ]}
+          />
         </div>
       </section>
 
       <section className="landing-section">
         <div className="landing-section-inner">
           <div className="landing-prose">
-            <h2>Send us a message</h2>
+            <h2>Choose the right path</h2>
             <p>
-              Email is the fastest way for us to understand your network and get
-              back to you with the right next step.
+              Each address below is monitored by the person who owns that area,
+              so your question reaches the right desk the first time.
             </p>
+            {!hasAnyContact ? (
+              <p className="landing-prose-note">
+                Contact details are configured per deployment environment. If
+                these cards are empty, the company contact variables are not set
+                for this environment.
+              </p>
+            ) : null}
           </div>
+
           <div className="landing-grid landing-grid-spaced">
-            {contact.salesEmail ? (
-              <div className="landing-card">
-                <h3 className="landing-card-title">
-                  <Mail className="landing-icon-inline" size={16} aria-hidden="true" />
-                  Sales enquiries
-                </h3>
-                <p className="landing-card-body">
-                  Demos, pricing, and getting a new network started on MylesNet.
-                </p>
-                <a className="landing-card-link" href={`mailto:${contact.salesEmail}`}>
-                  {contact.salesEmail}
-                </a>
-              </div>
-            ) : null}
-            {contact.infoEmail ? (
-              <div className="landing-card">
-                <h3 className="landing-card-title">
-                  <Mail className="landing-icon-inline" size={16} aria-hidden="true" />
-                  Product information
-                </h3>
-                <p className="landing-card-body">
-                  Company and product questions outside a specific sale.
-                </p>
-                <a className="landing-card-link" href={`mailto:${contact.infoEmail}`}>
-                  {contact.infoEmail}
-                </a>
-              </div>
-            ) : null}
+            {configuredPaths.map((path) => (
+              <LandingCard
+                key={path.key}
+                icon={path.icon}
+                title={path.title}
+                body={path.body}
+                footer={
+                  <a className="landing-card-link" href={`mailto:${contact[path.key]}`}>
+                    {contact[path.key]}
+                  </a>
+                }
+              />
+            ))}
           </div>
         </div>
       </section>
@@ -86,58 +114,62 @@ export default function ContactPage() {
       <section className="landing-section landing-section-alt">
         <div className="landing-section-inner">
           <div className="landing-prose">
-            <h2>Talk to a person</h2>
+            <h2>Who you will hear from</h2>
             <p>
-              Prefer a call? Reach the right person directly during business
-              hours.
+              {MYLESCORP.legalName} is led by {COMPANY_LEADERSHIP.map((l) => l.name).join(" and ")}.
+              Calls and escalations go straight to them.
             </p>
           </div>
+
           <div className="landing-grid landing-grid-spaced">
-            {contact.salesPhone ? (
-              <div className="landing-card">
-                <h3 className="landing-card-title">
-                  <Phone className="landing-icon-inline" size={16} aria-hidden="true" />
-                  Sales and marketing
-                </h3>
-                <p className="landing-card-body">
-                  Pauline — sales conversations, demos, and onboarding questions.
-                </p>
-                <a className="landing-card-link" href={`tel:${contact.salesPhone}`}>
-                  {contact.salesPhone}
-                </a>
-              </div>
-            ) : null}
-            {contact.technicalPhone ? (
-              <div className="landing-card">
-                <h3 className="landing-card-title">
-                  <Phone className="landing-icon-inline" size={16} aria-hidden="true" />
-                  Technical support
-                </h3>
-                <p className="landing-card-body">
-                  Jonathan — implementation, technical, and existing-network
-                  questions.
-                </p>
-                <a className="landing-card-link" href={`tel:${contact.technicalPhone}`}>
-                  {contact.technicalPhone}
-                </a>
-              </div>
-            ) : null}
-          </div>
-          {hasContact ? (
-            <p className="landing-prose landing-prose-note">
-              <CheckCircle2
-                size={16}
-                className="landing-icon-inline landing-icon-success"
+            {configuredLeaders.map((leader) => (
+              <LandingCard
+                key={leader.name}
+                icon={<Phone size={18} aria-hidden="true" />}
+                eyebrow={leader.role}
+                title={leader.name}
+                body={leader.scope}
+                outcomes={[
+                  contact[leader.phoneKey]
+                    ? `Direct line ${contact[leader.phoneKey]}`
+                    : null,
+                  contact[leader.emailKey] ? `Email ${contact[leader.emailKey]}` : null,
+                ].filter((line): line is string => Boolean(line))}
               />
-              We aim to respond to every enquiry promptly.
-            </p>
-          ) : (
-            <p className="landing-prose landing-prose-note">
-              Contact details are being prepared. Please check back shortly.
-            </p>
-          )}
+            ))}
+          </div>
         </div>
       </section>
+
+      <LandingCtaSection
+        kicker="Next step"
+        title="Prefer to see it first?"
+        subtitle="If you would rather look at the platform than read about it, these are the fastest routes in."
+        items={[
+          {
+            href: "/get-started",
+            icon: <ShieldCheck size={19} aria-hidden="true" />,
+            title: "Start a rollout",
+            body: "Walk through onboarding with our team and scope your own network.",
+            action: "Get started",
+          },
+          {
+            href: "/pricing",
+            icon: <Building2 size={19} aria-hidden="true" />,
+            title: "Check pricing",
+            body: "Plan tiers and what each one includes before you talk to anyone.",
+            action: "See pricing",
+          },
+        ]}
+        alt={true}
+        altText={
+          <>
+            Prefer email? Write to{" "}
+            <Link href="/company/about">the company</Link> to learn more about who
+            builds MylesNet.
+          </>
+        }
+      />
     </>
   );
 }

@@ -1,7 +1,21 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
-import { requirePermission } from "./lib/auth";
+import { MutationCtx, mutation, query } from "./_generated/server";
+import { Doc, Id } from "./_generated/dataModel";
+import { requirePermission, requireTenantPermission } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
+import { enforceTenantOnResource, readTenantList } from "./lib/tenant";
+
+async function assertMarketTenant(
+  ctx: MutationCtx,
+  tenantId: Id<"tenants">,
+  marketId: Id<"markets"> | undefined,
+) {
+  if (!marketId) return;
+  const market = await ctx.db.get(marketId);
+  if (!market || market.tenantId !== tenantId) {
+    throw new Error("Unauthorized: market belongs to another tenant");
+  }
+}
 
 export const list = query({
   args: {
@@ -21,7 +35,13 @@ export const list = query({
   handler: async (ctx, args) => {
     await requirePermission(ctx, "expenses:read");
     
-    let expenses = await ctx.db.query("expenses").order("desc").collect();
+    let expenses = await readTenantList<Doc<"expenses">>(ctx, {
+      all: () => ctx.db.query("expenses").order("desc").collect(),
+      tenant: (tenantId) =>
+        ctx.db.query("expenses").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
+      legacy: () =>
+        ctx.db.query("expenses").withIndex("by_tenant", (q) => q.eq("tenantId", undefined)).collect(),
+    });
     
     if (args.category) {
       expenses = expenses.filter(e => e.category === args.category);
@@ -43,7 +63,7 @@ export const get = query({
   args: { id: v.id("expenses") },
   handler: async (ctx, args) => {
     await requirePermission(ctx, "expenses:read");
-    return await ctx.db.get(args.id);
+    return await enforceTenantOnResource(ctx, await ctx.db.get(args.id), "expense");
   },
 });
 
@@ -69,20 +89,12 @@ export const create = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "expenses:create");
-    
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
-    
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workosUserId", (q) => q.eq("workosUserId", identity.subject))
-      .first();
-    
-    if (!user) throw new Error("User not found");
+    const { user, tenantId } = await requireTenantPermission(ctx, "expenses:create");
+    await assertMarketTenant(ctx, tenantId, args.marketId);
     
     const id = await ctx.db.insert("expenses", {
       ...args,
+      tenantId,
       enteredBy: user._id,
       enteredAt: Date.now(),
     });
@@ -121,26 +133,17 @@ export const update = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "expenses:update");
+    const { user, tenantId } = await requireTenantPermission(ctx, "expenses:update");
     
     const { id, ...updates } = args;
-    const expense = await ctx.db.get(id);
+    const expense = await enforceTenantOnResource(ctx, await ctx.db.get(id), "expense");
     
     if (!expense) {
       throw new Error("Expense not found");
     }
+    if (expense.tenantId !== tenantId) throw new Error("Unauthorized: expense belongs to another tenant");
     
     await ctx.db.patch(id, updates);
-    
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
-    
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workosUserId", (q) => q.eq("workosUserId", identity.subject))
-      .first();
-    
-    if (!user) throw new Error("User not found");
     
     await logAudit(ctx, {
       action: "expense_updated",
@@ -159,25 +162,24 @@ export const listAllFinancials = query({
   args: {},
   handler: async (ctx) => {
     await requirePermission(ctx, "expenses:read");
-    return await ctx.db.query("marketFinancials").order("desc").collect();
+    return await readTenantList<Doc<"marketFinancials">>(ctx, {
+      all: () => ctx.db.query("marketFinancials").order("desc").collect(),
+      tenant: (tenantId) =>
+        ctx.db.query("marketFinancials").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
+      legacy: () =>
+        ctx.db.query("marketFinancials").withIndex("by_tenant", (q) => q.eq("tenantId", undefined)).collect(),
+    });
   },
 });
 
 export const remove = mutation({
   args: { id: v.id("expenses") },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "expenses:update");
+    const { user, tenantId } = await requireTenantPermission(ctx, "expenses:update");
 
-    const expense = await ctx.db.get(args.id);
+    const expense = await enforceTenantOnResource(ctx, await ctx.db.get(args.id), "expense");
     if (!expense) throw new Error("Expense not found");
-
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_workosUserId", (q) => q.eq("workosUserId", identity.subject))
-      .first();
-    if (!user) throw new Error("User not found");
+    if (expense.tenantId !== tenantId) throw new Error("Unauthorized: expense belongs to another tenant");
 
     await ctx.db.delete(args.id);
 
@@ -200,7 +202,13 @@ export const getStats = query({
   handler: async (ctx, args) => {
     await requirePermission(ctx, "expenses:read");
     
-    let expenses = await ctx.db.query("expenses").collect();
+    let expenses = await readTenantList<Doc<"expenses">>(ctx, {
+      all: () => ctx.db.query("expenses").collect(),
+      tenant: (tenantId) =>
+        ctx.db.query("expenses").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
+      legacy: () =>
+        ctx.db.query("expenses").withIndex("by_tenant", (q) => q.eq("tenantId", undefined)).collect(),
+    });
     
     if (args.month) {
       expenses = expenses.filter(e => e.month === args.month);

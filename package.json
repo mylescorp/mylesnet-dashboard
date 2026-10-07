@@ -27,5 +27,10 @@
     "@types/node": "^20",
     "turbo": "^2",
     "typescript": "^5"
+  },
+  "pnpm": {
+    "overrides": {
+      "source-map-js": "1.2.2"
+    }
   }
 }
