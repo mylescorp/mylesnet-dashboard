@@ -13,9 +13,9 @@ const customJestConfig = {
   },
   testMatch: [
     '**/shared/components/**/*.test.[jt]s?(x)',
+    '**/shared/auth/*.integration.ts',
   ],
   testPathIgnorePatterns: [
-    '<rootDir>/convex/',
     '<rootDir>/node_modules/',
   ],
 }
