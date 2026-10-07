@@ -70,6 +70,33 @@ const decode = (value: string | null): string | null => {
   }
 };
 
+type AddressKind = "loopback" | "link-local" | "private" | "public" | "unknown";
+
+/** Classify IPv4 and IPv6 addresses the way an operator would. */
+const classifyAddress = (value: string | null): AddressKind => {
+  if (!value) return "unknown";
+  const addr = value.toLowerCase().split("%")[0]; // strip any zone id
+
+  // IPv4-mapped IPv6 (::ffff:1.2.3.4) classifies as its IPv4 address.
+  const mapped = addr.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/);
+  if (mapped) return classifyAddress(mapped[1]);
+
+  if (!addr.includes(":")) {
+    if (addr.startsWith("127.")) return "loopback";
+    if (addr.startsWith("169.254.")) return "link-local";
+    if (/^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(addr))
+      return "private";
+    if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(addr)) return "public";
+    return "unknown";
+  }
+
+  if (addr === "::1") return "loopback";
+  if (addr === "::") return "unknown";
+  if (addr.startsWith("fe80:")) return "link-local";
+  if (addr.startsWith("fc") || addr.startsWith("fd")) return "private"; // ULA fc00::/7
+  return "public";
+};
+
 export default async function WhatIsMyIpPage() {
   const headerStore = await headers();
 
@@ -101,12 +128,16 @@ export default async function WhatIsMyIpPage() {
     { label: "Forwarded for", value: forwarded },
   ];
 
-  // Determine connection context for the guidance section
-  const isPrivateRange = ip?.match(
-    /^(10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|192\.168\.|127\.|169\.254\.)/
-  );
+  // Determine connection context for the guidance section.
+  const addressKind = classifyAddress(ip);
+  const isPrivateRange =
+    addressKind === "private" ||
+    addressKind === "link-local" ||
+    addressKind === "loopback";
+  const isV6 = ip?.includes(":") ?? false;
   const hasMultipleForwards = forwarded && forwarded.split(",").length > 1;
-  const looksLikeCgnat = ip && !isPrivateRange && hasMultipleForwards;
+  const looksLikeCgnat =
+    ip !== null && addressKind === "public" && hasMultipleForwards;
 
   return (
     <>
@@ -148,27 +179,53 @@ export default async function WhatIsMyIpPage() {
             <div className="landing-grid" style={{ marginTop: "var(--space-4)" }}>
               <LandingCard
                 icon={<Shield size={20} aria-hidden="true" />}
-                title={isPrivateRange ? "Private / LAN address" : "Public address"}
+                title={
+                  addressKind === "loopback"
+                    ? "Loopback address"
+                    : addressKind === "link-local"
+                      ? "Link-local address"
+                      : addressKind === "private"
+                        ? "Private / LAN address"
+                        : addressKind === "public"
+                          ? "Public address"
+                          : "Address unavailable"
+                }
                 body={
-                  isPrivateRange
-                    ? "This IP is from a private range (RFC 1918). You are likely behind a NAT — the address above is what the internet sees, not your local LAN address."
-                    : "This is a publicly routable IPv4 address. It can be reached directly from the internet unless firewalled."
+                  addressKind === "loopback"
+                    ? "The request never left this machine — the server saw a loopback address (localhost), which is what happens when you run the site locally or behind a local proxy."
+                    : addressKind === "link-local"
+                      ? "An automatically assigned address (169.254.0.0/16 or fe80::/10) that only works on the local network segment. It is never routed."
+                      : addressKind === "private"
+                        ? "This IP is from a private range (RFC 1918 or an IPv6 ULA). You are likely behind a NAT — the address above is your local side, not what the internet sees."
+                        : addressKind === "public"
+                          ? "This is a publicly routable address. It can be reached directly from the internet unless firewalled."
+                          : "No address could be read from this request."
                 }
               />
               <LandingCard
                 icon={looksLikeCgnat ? <Wifi size={20} aria-hidden="true" /> : <Globe size={20} aria-hidden="true" />}
-                title={looksLikeCgnat ? "Likely carrier-grade NAT" : "Direct or ISP NAT"}
+                title={
+                  looksLikeCgnat
+                    ? "Likely carrier-grade NAT"
+                    : isPrivateRange
+                      ? "Behind NAT"
+                      : "Direct or ISP NAT"
+                }
                 body={
                   looksLikeCgnat
                     ? "Multiple addresses in X-Forwarded-For suggest you are behind carrier-grade NAT (common on mobile networks). Many subscribers share one public IP."
-                    : "No carrier-grade NAT detected in the forwarding chain. Your ISP likely assigns a unique public IP per connection."
+                    : isPrivateRange
+                      ? "Carrier-grade NAT does not apply to a local address — the translation happens on your own router or upstream, one hop at a time."
+                      : "No carrier-grade NAT detected in the forwarding chain. Your ISP likely assigns a unique public IP per connection."
                 }
               />
               <LandingCard
                 icon={<Network size={20} aria-hidden="true" />}
                 title="IPv6"
                 body={
-                  "This tool shows IPv4 only. If your network supports IPv6, the address above may not be the one used for modern destinations — check your router status for the IPv6 prefix."
+                  isV6
+                    ? "The address above is IPv6. Modern destinations may reach you here even when IPv4 still works — firewall and allow-list rules should cover both."
+                    : "The address above is IPv4. If your network also has IPv6, destinations may reach you over a different address — check your router status for the IPv6 prefix."
                 }
               />
             </div>

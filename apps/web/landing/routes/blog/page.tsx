@@ -1,10 +1,4 @@
-import {
-  ArrowRight,
-  ArrowUpRight,
-  CalendarClock,
-  LayoutDashboard,
-  ScrollText,
-} from "lucide-react";
+import { ArrowRight, ArrowUpRight, ScrollText } from "lucide-react";
 import { posts, formatPostDate } from "@/landing/content/blog";
 import { pageMetadata } from "@/landing/content/seo";
 import LandingCard from "@/landing/components/LandingCard";

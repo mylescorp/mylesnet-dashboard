@@ -115,12 +115,24 @@ const measureDownload = async (
 const measureUpload = async (signal: AbortSignal): Promise<number> => {
   const payload = new ArrayBuffer(UPLOAD_BYTES);
   const started = performance.now();
-  const response = await fetch(`/api/speedtest?op=upload`, {
-    method: "POST",
-    body: payload,
-    cache: "no-store",
-    signal,
-  });
+  const timeoutController = new AbortController();
+  const timeout = setTimeout(() => timeoutController.abort(), MAX_UPLOAD_DURATION);
+  const linkedSignal = AbortSignal.any([signal, timeoutController.signal]);
+
+  let response: Response;
+  try {
+    response = await fetch(`/api/speedtest?op=upload`, {
+      method: "POST",
+      body: payload,
+      cache: "no-store",
+      signal: linkedSignal,
+    });
+  } catch (err) {
+    if (timeoutController.signal.aborted) throw new Error("upload timeout");
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
   if (!response.ok) throw new Error(`upload failed: ${response.status}`);
   await response.json();
 

@@ -11,12 +11,14 @@ import {
   PauseCircle,
   PlayCircle,
   Pencil,
+  Trash2,
   UsersRound,
 } from "lucide-react";
 import { useMutation, useQuery } from "@/app/lib/convex";
 import { tenantControl, type EntitlementStatus, type TenantStatus } from "@/lib/convex/tenantControl";
 import { useUserProfile } from "@/shared/components/UserProfileContext";
 import { StatusPill, EmptyState, formatDateTime } from "@/shared/components/ui";
+import { canDeletePlatformTenant, canManagePlatformTenants } from "@/platform/permissions";
 
 const formatTs = (ts: number | null | undefined) => formatDateTime(ts ?? undefined);
 
@@ -32,6 +34,7 @@ const statusTone: Record<TenantStatus, "success" | "warning" | "danger" | "neutr
   active: "success",
   trial: "warning",
   suspended: "danger",
+  pending_deletion: "danger",
   cancelled: "neutral",
 };
 
@@ -39,15 +42,22 @@ export function PlatformTenantDetail({ tenantId }: { tenantId: string }) {
   const { user } = useUserProfile();
   const detail = useQuery(tenantControl.getTenantDetail, { tenantId });
   const setStatus = useMutation(tenantControl.setStatus);
+  const scheduleDeletion = useMutation(tenantControl.scheduleDeletion);
+  const restoreDeletion = useMutation(tenantControl.restoreScheduledDeletion);
+  const updateTenant = useMutation(tenantControl.updateTenant);
   const [working, setWorking] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const canManage = user?.roles.some((role) => ["platform_owner", "platform_admin"].includes(role.slug));
+  const canManage = canManagePlatformTenants(user?.roles.map((role) => role.slug));
+  const canDelete = canDeletePlatformTenant(user?.roles.map((role) => role.slug));
 
   const tenant = detail;
   if (tenant === undefined) return <p className="pf-muted">Loading tenant detail…</p>;
   if (tenant === null) return <EmptyState title="Tenant not found" body="This tenant does not exist in the platform directory." />;
+  const accountOwner = tenant.members.find((member) => member.role === "tenant_admin" && member.status === "active");
 
   const changeStatus = async (status: "active" | "suspended") => {
     setError(null); setNotice(null); setWorking(true);
@@ -59,11 +69,31 @@ export function PlatformTenantDetail({ tenantId }: { tenantId: string }) {
     } finally { setWorking(false); }
   };
 
+  const requestDeletion = async () => {
+    const reason = window.prompt(`Reason for scheduling deletion of ${tenant.name}? The workspace will be blocked now and recoverable for 30 days.`)?.trim();
+    if (!reason) return;
+    setError(null); setNotice(null); setWorking(true);
+    try {
+      const result = await scheduleDeletion({ tenantId, reason });
+      setNotice(`Deletion is scheduled. The workspace can be restored until ${formatTs(result.scheduledDeletionAt)}.`);
+    } catch (caught) { setError(userFacingMessage(caught, "Deletion could not be scheduled.")); }
+    finally { setWorking(false); }
+  };
+
+  const cancelDeletion = async () => {
+    setError(null); setNotice(null); setWorking(true);
+    try {
+      const result = await restoreDeletion({ tenantId });
+      setNotice(`Deletion cancelled. The organization is restored to ${result.status}.`);
+    } catch (caught) { setError(userFacingMessage(caught, "Deletion could not be cancelled.")); }
+    finally { setWorking(false); }
+  };
+
   return (
     <div className="workspace-page">
       <header className="page-heading">
         <div>
-          <p className="eyebrow"><Link href="/platform/tenants" className="platform-back-link"><ArrowLeft size={15} aria-hidden="true" />Tenants</Link></p>
+          <p className="eyebrow"><Link href="/platform/organizations" className="platform-back-link"><ArrowLeft size={15} aria-hidden="true" />Organizations</Link></p>
           <h1 className="page-title">{tenant.name}</h1>
           <p className="page-subtitle">Tenant detail: identity mapping, lifecycle state, entitlement, and the members with access to this workspace.</p>
         </div>
@@ -71,7 +101,12 @@ export function PlatformTenantDetail({ tenantId }: { tenantId: string }) {
           <div style={{ display: "flex", gap: 8 }}>
             {tenant.status === "suspended"
               ? <button type="button" className="secondary-button" disabled={working} onClick={() => void changeStatus("active")}><PlayCircle size={15} aria-hidden="true" />Activate</button>
-              : <button type="button" className="secondary-button" disabled={working || tenant.status === "cancelled" || tenant.status === "provisioning"} onClick={() => void changeStatus("suspended")}><PauseCircle size={15} aria-hidden="true" />Suspend</button>}
+              : tenant.status === "pending_deletion"
+                ? <button type="button" className="secondary-button" disabled={working} onClick={() => void cancelDeletion()}><PlayCircle size={15} aria-hidden="true" />Cancel deletion</button>
+                : tenant.status !== "cancelled" && tenant.status !== "provisioning"
+                  ? <button type="button" className="secondary-button" disabled={working} onClick={() => void changeStatus("suspended")}><PauseCircle size={15} aria-hidden="true" />Suspend</button>
+                  : null}
+            {canDelete && ["trial", "active", "suspended"].includes(tenant.status) ? <button type="button" className="secondary-button" disabled={working} onClick={() => void requestDeletion()}><Trash2 size={15} aria-hidden="true" />Schedule deletion</button> : null}
           </div>
         ) : null}
       </header>
@@ -80,11 +115,13 @@ export function PlatformTenantDetail({ tenantId }: { tenantId: string }) {
       {error ? <p className="platform-claim-message" role="alert">{error}</p> : null}
 
       <section className="metric-grid">
-        <Metric icon={<Building2 size={19} />} label="Lifecycle status" value={<StatusPill tone={statusTone[tenant.status]}>{tenant.status}</StatusPill>} detail="Tenant directory state" />
+        <Metric icon={<Building2 size={19} />} label="Lifecycle status" value={<StatusPill tone={statusTone[tenant.status]}>{tenant.status === "pending_deletion" ? "pending deletion" : tenant.status}</StatusPill>} detail="Tenant directory state" />
         <Metric icon={<Link2 size={19} />} label="Workspace access" value={tenant.workosOrganizationId ? "Ready" : "Preparing"} detail={tenant.workosOrganizationId ? "Secure access configured" : "Access setup is in progress"} tone={tenant.workosOrganizationId ? "success" : "warning"} />
         <Metric icon={<UsersRound size={19} />} label="Active members" value={tenant.activeMemberCount} detail="Users with active access to this workspace" tone={tenant.activeMemberCount > 0 ? "success" : "warning"} />
         <Metric icon={<Pencil size={19} />} label="Entitlement" value={tenant.entitlement ? tenant.entitlement.planId : "Not configured"} detail={tenant.entitlement ? tenant.entitlement.status : "Add a subscription from the Subscriptions panel"} tone={tenant.entitlement ? entitlementTone[tenant.entitlement.status] : "warning"} />
       </section>
+
+      {tenant.status === "pending_deletion" ? <section className="pf-panel" style={{ marginTop: 20 }}><div className="section-heading"><div><p className="eyebrow">Recovery window</p><h2>Deletion scheduled</h2></div><StatusPill tone="danger">Access blocked</StatusPill></div><p>This workspace is blocked while deletion is pending. Restore it before {formatTs(tenant.scheduledDeletionAt)} to cancel the request.</p>{tenant.deletionReason ? <p className="pf-muted">Reason: {tenant.deletionReason}</p> : null}<p className="pf-hint">After 30 days, the workspace record is archived and access remains blocked. Tenant data is retained for the separate data-retention workflow.</p></section> : null}
 
       <section className="pf-panel" style={{ marginTop: 24 }}>
         <div className="section-heading"><div><p className="eyebrow">Organization</p><h2>Markets</h2><p className="pf-muted">Manage market locations within this tenant.</p></div><Link href={`/platform/organizations/${tenantId}/markets`} className="pf-button pf-button-compact">Manage markets</Link></div>
@@ -102,7 +139,7 @@ export function PlatformTenantDetail({ tenantId }: { tenantId: string }) {
             await updateTenant({ tenantId, name: String(data.get("name") ?? ""), country: String(data.get("country") ?? ""), timezone: String(data.get("timezone") ?? ""), currency: String(data.get("currency") ?? "") });
             setEditing(false); setNotice("Organization details updated.");
           } catch (caught) {
-            setError(caught instanceof Error ? caught.message : "Organization details could not be updated.");
+            setError(userFacingMessage(caught, "Organization details could not be updated."));
           } finally { setSaving(false); }
         }}>
           <div className="form-grid">
@@ -115,9 +152,12 @@ export function PlatformTenantDetail({ tenantId }: { tenantId: string }) {
         </form> : null}
         <dl className="tenant-detail-fields">
           <dt>Slug</dt><dd><code>{tenant.slug}</code></dd>
+          <dt>Account owner</dt><dd>{accountOwner ? `${accountOwner.name ?? "Unnamed owner"}${accountOwner.email ? ` · ${accountOwner.email}` : ""}` : "Unassigned"}</dd>
           <dt>Country</dt><dd>{tenant.country}</dd>
           <dt>Timezone</dt><dd>{tenant.timezone}</dd>
           <dt>Currency</dt><dd>{tenant.currency}</dd>
+          <dt>Markets</dt><dd>{tenant.marketCount}</dd>
+          <dt>Subscribers</dt><dd>{tenant.subscriberCount.toLocaleString("en")}</dd>
           <dt>Created</dt><dd>{formatTs(tenant.createdAt)}</dd>
           <dt>Last updated</dt><dd>{formatTs(tenant.updatedAt)}</dd>
         </dl>

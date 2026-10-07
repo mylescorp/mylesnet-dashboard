@@ -6,6 +6,7 @@ import { platformPlans } from "@/shared/convex/platformPlans";
 import { useUserProfile } from "@/shared/components/UserProfileContext";
 import { EmptyState, StatusPill } from "@/shared/components/ui";
 import { canManagePlatformPlans } from "@/platform/permissions";
+import { userFacingMessage } from "@/shared/lib/user-facing-error";
 
 const priceLabel = (minor: number) => `KES ${(minor / 100).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -47,7 +48,7 @@ export function PlatformPlanCatalog() {
       setName("");
       setPrice("");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Plan could not be saved.");
+      setMessage(userFacingMessage(error, "Plan could not be saved."));
     } finally {
       setBusy(false);
     }
@@ -69,7 +70,7 @@ export function PlatformPlanCatalog() {
       await changeStatus({ code: plan.code, status });
       setMessage(status === "archived" ? "Plan archived. Existing entitlements remain priced." : "Plan reactivated.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Plan status could not be changed.");
+      setMessage(userFacingMessage(error, "Plan status could not be changed."));
     }
   }
 
@@ -80,7 +81,7 @@ export function PlatformPlanCatalog() {
       await removePlan({ code: plan.code });
       setMessage("Plan deleted.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Plan could not be deleted.");
+      setMessage(userFacingMessage(error, "Plan could not be deleted."));
     }
   }
 

@@ -14,6 +14,10 @@ const PLATFORM_PLAN_MANAGEMENT_ROLES = new Set([
   "platform_admin",
   "finance_manager",
 ]);
+const PLATFORM_INFRASTRUCTURE_ROLES = new Set([
+  "platform_super_admin", "platform_ops", "platform_owner", "platform_admin", "ops_manager",
+]);
+const PLATFORM_WHITE_LABEL_ROLES = new Set(["platform_super_admin", "platform_owner", "platform_admin"]);
 
 export function canManagePlatformTenants(
   roleSlugs: readonly string[] | undefined,
@@ -27,4 +31,12 @@ export function canDeletePlatformTenant(roleSlugs: readonly string[] | undefined
 
 export function canManagePlatformPlans(roleSlugs: readonly string[] | undefined): boolean {
   return roleSlugs?.some((slug) => PLATFORM_PLAN_MANAGEMENT_ROLES.has(slug)) ?? false;
+}
+
+export function canManagePlatformInfrastructure(roleSlugs: readonly string[] | undefined): boolean {
+  return roleSlugs?.some((slug) => PLATFORM_INFRASTRUCTURE_ROLES.has(slug)) ?? false;
+}
+
+export function canManagePlatformWhiteLabel(roleSlugs: readonly string[] | undefined): boolean {
+  return roleSlugs?.some((slug) => PLATFORM_WHITE_LABEL_ROLES.has(slug)) ?? false;
 }

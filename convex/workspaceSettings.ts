@@ -39,19 +39,22 @@ function wholeNumber(value: unknown, fallback: number, min: number, max: number)
   return typeof value === "number" && Number.isInteger(value) && value >= min && value <= max ? value : fallback;
 }
 
-function normalize(settings: unknown, tenantName?: string) {
+type BrandingDefaults = { supportEmail: string; supportPhone: string; brandColor: string };
+
+function normalize(settings: unknown, tenantName?: string, platformBranding?: BrandingDefaults) {
   const source = settings && typeof settings === "object" ? settings as Record<string, unknown> : {};
   const branding = source.branding && typeof source.branding === "object" ? source.branding as Record<string, unknown> : {};
   const operations = source.operations && typeof source.operations === "object" ? source.operations as Record<string, unknown> : {};
   const billing = source.billing && typeof source.billing === "object" ? source.billing as Record<string, unknown> : {};
   const communications = source.communications && typeof source.communications === "object" ? source.communications as Record<string, unknown> : {};
-  const color = text(branding.brandColor, 7, defaultSettings.branding.brandColor).toUpperCase();
+  const defaultBrandColor = platformBranding?.brandColor ?? defaultSettings.branding.brandColor;
+  const color = text(branding.brandColor, 7, defaultBrandColor).toUpperCase();
   return {
     branding: {
       networkName: text(branding.networkName, 120, tenantName ?? defaultSettings.branding.networkName),
-      supportEmail: text(branding.supportEmail, 160),
-      supportPhone: text(branding.supportPhone, 20),
-      brandColor: /^#[0-9A-F]{6}$/.test(color) ? color : defaultSettings.branding.brandColor,
+      supportEmail: text(branding.supportEmail, 160, platformBranding?.supportEmail ?? ""),
+      supportPhone: text(branding.supportPhone, 20, platformBranding?.supportPhone ?? ""),
+      brandColor: /^#[0-9A-F]{6}$/.test(color) ? color : defaultBrandColor,
       termsAccepted: branding.termsAccepted === true,
     },
     operations: {
@@ -86,9 +89,10 @@ export const get = query({
     const { tenantId } = access;
     const tenant = await ctx.db.get(tenantId);
     if (!tenant) return { workspace: null, settings: normalize(undefined), canManage: false };
+    const platformBranding = await ctx.db.query("platformWhiteLabelDefaults").withIndex("by_key", q => q.eq("key", "default")).first();
     return {
       workspace: { name: tenant.name, country: tenant.country, timezone: tenant.timezone, currency: tenant.currency },
-      settings: normalize(tenant.settings, tenant.name),
+      settings: normalize(tenant.settings, tenant.name, platformBranding ?? undefined),
       canManage: tenantRoleHasPermission(access.role, "settings:manage"),
     };
   },
@@ -103,10 +107,12 @@ export const update = mutation({
     const { tenantId, user } = await requireTenantPermission(ctx, "settings:manage");
     const tenant = await ctx.db.get(tenantId);
     if (!tenant) throw new Error("Workspace unavailable");
-    const settings = normalize(tenant.settings, tenant.name);
+    const currentSettings = tenant.settings && typeof tenant.settings === "object" ? tenant.settings as Record<string, unknown> : {};
     const incoming = args.value && typeof args.value === "object" ? args.value as Record<string, unknown> : {};
-    const next = normalize({ ...settings, [args.section]: incoming }, tenant.name);
-    await ctx.db.patch(tenantId, { settings: next, updatedAt: Date.now() });
+    const platformBranding = await ctx.db.query("platformWhiteLabelDefaults").withIndex("by_key", q => q.eq("key", "default")).first();
+    const nextSection = normalize({ [args.section]: incoming }, tenant.name, platformBranding ?? undefined)[args.section];
+    const nextSettings = { ...currentSettings, [args.section]: nextSection };
+    await ctx.db.patch(tenantId, { settings: nextSettings, updatedAt: Date.now() });
     await logAudit(ctx, {
       action: "workspace.settings.update",
       entityTable: "tenants",
@@ -114,7 +120,7 @@ export const update = mutation({
       changedBy: user._id,
       after: { section: args.section },
     });
-    return next[args.section];
+    return nextSection;
   },
 });
 
@@ -127,6 +133,7 @@ export const reset = mutation({
     const current = tenant.settings && typeof tenant.settings === "object" ? tenant.settings as Record<string, unknown> : {};
     const { [args.section]: _removed, ...remaining } = current;
     await ctx.db.patch(tenantId, { settings: remaining, updatedAt: Date.now() });
+    const platformBranding = await ctx.db.query("platformWhiteLabelDefaults").withIndex("by_key", q => q.eq("key", "default")).first();
     await logAudit(ctx, {
       action: "workspace.settings.reset",
       entityTable: "tenants",
@@ -134,6 +141,6 @@ export const reset = mutation({
       changedBy: user._id,
       after: { section: args.section },
     });
-    return normalize(remaining, tenant.name)[args.section];
+    return normalize(remaining, tenant.name, platformBranding ?? undefined)[args.section];
   },
 });

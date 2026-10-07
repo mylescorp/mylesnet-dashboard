@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
-import { requirePlatformSubRole, requirePlatformUser } from "./lib/auth";
+import { requirePlatformSubRole, requirePlatformUser, resolveRoles } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 import { rolloutPercentOf, isFlagEnabledForTenant } from "./lib/featureFlagCore";
 
@@ -10,8 +10,8 @@ const FLAG_KEY_PATTERN = /^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9]*)*$/;
  * Platform feature-flag store (spec K).
  *
  * Reads are open to any platform user. Create and delete require
- * platform_super_admin; updating an existing flag additionally admits
- * platform_ops ("ops can flip infra flags").
+ * platform_super_admin; platform_ops may update only an existing flag explicitly
+ * classified as infrastructure. Legacy unclassified flags are not ops-writable.
  *
  * valueJson is a JSON-encoded payload; an integer `rolloutPercent` (0-100)
  * inside it drives percentage rollouts when tenantIds is absent.
@@ -77,17 +77,26 @@ export const setFeatureFlag = mutation({
     enabled: v.boolean(),
     description: v.optional(v.string()),
     tenantIds: v.optional(v.array(v.id("tenants"))),
+    category: v.optional(v.union(v.literal("infrastructure"), v.literal("general"))),
   },
   handler: async (ctx, args) => {
-    const user = await requirePlatformSubRole(ctx, [
-      "platform_super_admin",
-      "platform_ops",
-    ]);
+    const user = await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_ops"]);
 
     if (!FLAG_KEY_PATTERN.test(args.key)) {
       throw new Error("Flag key must start lowercase and use [a-z0-9] with dots only");
     }
     if (args.key.length > 80) throw new Error("Flag key is too long");
+    const existing = await ctx.db.query("featureFlags").withIndex("by_key", q => q.eq("key", args.key)).first();
+    const roles = await resolveRoles(ctx, user);
+    const isSuperAdmin = roles.some(role => ["platform_super_admin", "platform_owner", "platform_admin"].includes(role.slug));
+    const isOps = roles.some(role => ["platform_ops", "ops_manager"].includes(role.slug));
+    if (!isSuperAdmin) {
+      if (!isOps || !existing || existing.category !== "infrastructure") {
+        throw new Error("Platform ops can update infrastructure controls only; super-admin approval is required to create or classify controls");
+      }
+      if (args.category !== undefined) throw new Error("Only a platform super-admin can classify a service control");
+    }
+    const category = args.category ?? existing?.category ?? "general";
     if (args.description !== undefined && args.description.length > 240) {
       throw new Error("Flag description is too long");
     }
@@ -112,13 +121,9 @@ export const setFeatureFlag = mutation({
     }
 
     const now = Date.now();
-    const existing = await ctx.db
-      .query("featureFlags")
-      .withIndex("by_key", (q) => q.eq("key", args.key))
-      .first();
-
     if (existing) {
       await ctx.db.patch(existing._id, {
+        category,
         valueJson: args.valueJson,
         enabled: args.enabled,
         description: args.description,
@@ -131,14 +136,15 @@ export const setFeatureFlag = mutation({
         entityTable: "featureFlags",
         entityId: existing._id,
         changedBy: user._id,
-        before: { enabled: existing.enabled },
-        after: { enabled: args.enabled, key: args.key },
+        before: { enabled: existing.enabled, category: existing.category ?? null },
+        after: { enabled: args.enabled, key: args.key, category },
       });
       return existing._id;
     }
 
     const id = await ctx.db.insert("featureFlags", {
       key: args.key,
+      category,
       valueJson: args.valueJson,
       enabled: args.enabled,
       description: args.description,
@@ -153,7 +159,7 @@ export const setFeatureFlag = mutation({
       entityTable: "featureFlags",
       entityId: id,
       changedBy: user._id,
-      after: { key: args.key, enabled: args.enabled },
+      after: { key: args.key, enabled: args.enabled, category },
     });
     return id;
   },
@@ -174,7 +180,7 @@ export const removeFeatureFlag = mutation({
       entityTable: "featureFlags",
       entityId: existing._id,
       changedBy: user._id,
-      after: { key: existing.key },
+      after: { key: existing.key, category: existing.category ?? null },
     });
   },
 });

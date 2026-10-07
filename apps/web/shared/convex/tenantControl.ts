@@ -1,6 +1,7 @@
 import { makeFunctionReference } from "convex/server";
+import type { PaginationResult } from "convex/server";
 
-export type TenantStatus = "provisioning" | "trial" | "active" | "suspended" | "cancelled";
+export type TenantStatus = "provisioning" | "trial" | "active" | "suspended" | "pending_deletion" | "cancelled";
 
 export type EntitlementStatus = "trial" | "active" | "expired" | "suspended";
 
@@ -14,8 +15,12 @@ export type PlatformTenant = {
   timezone: string;
   currency: string;
   status: TenantStatus;
+  scheduledDeletionAt: number | null;
   workosOrganizationId: string | null;
   membershipCount: number;
+  accountOwner: { name: string | null; email: string | null } | null;
+  marketCount: number;
+  subscriberCount: number;
   entitlement: EntitlementSummary;
   createdAt: number;
 };
@@ -47,6 +52,18 @@ export type TenantWorkspaceResult =
   | { status: "ready"; workspace: TenantWorkspace }
   | { status: "setup_required"; reason: TenantWorkspaceSetupReason };
 
+export type SubscriptionTenant = Pick<PlatformTenant, "_id" | "name" | "slug" | "country" | "status" | "entitlement">;
+export type PlatformOverview = {
+  total: number;
+  active: number;
+  trial: number;
+  suspended: number;
+  pendingDeletion: number;
+  missingIdentity: number;
+  entitlementRisk: number;
+  latest: Array<Pick<PlatformTenant, "_id" | "name" | "slug" | "country" | "status" | "workosOrganizationId" | "entitlement">>;
+};
+
 export type TenantDetailMember = {
   userId: string;
   name: string | null;
@@ -66,6 +83,8 @@ export type TenantDetail = {
   currency: string;
   status: TenantStatus;
   statusBeforeSuspension: "trial" | "active" | null;
+  scheduledDeletionAt: number | null;
+  deletionReason: string | null;
   workosOrganizationId: string | null;
   createdAt: number;
   updatedAt: number;
@@ -77,6 +96,8 @@ export type TenantDetail = {
     trialEndsAt: number | null;
   } | null;
   activeMemberCount: number;
+  marketCount: number;
+  subscriberCount: number;
   members: TenantDetailMember[];
 };
 
@@ -87,8 +108,15 @@ export type TenantDetail = {
  */
 export const tenantControl = {
   listForPlatform: makeFunctionReference<"query", Record<string, never>, PlatformTenant[]>("tenantControl:listForPlatform"),
+  listForPlatformPage: makeFunctionReference<"query", { paginationOpts: { numItems: number; cursor: string | null } }, PaginationResult<PlatformTenant>>("tenantControl:listForPlatformPage"),
+  listSubscriptionsPage: makeFunctionReference<"query", { paginationOpts: { numItems: number; cursor: string | null } }, PaginationResult<SubscriptionTenant>>("tenantControl:listSubscriptionsPage"),
+  listPlatformTenantTargets: makeFunctionReference<"query", Record<string, never>, Array<{ _id: string; name: string }>>("tenantControl:listPlatformTenantTargets"),
+  listPlatformTenantTargetsPage: makeFunctionReference<"query", { paginationOpts: { numItems: number; cursor: string | null } }, PaginationResult<{ _id: string; name: string }>>("tenantControl:listPlatformTenantTargetsPage"),
+  getPlatformOverview: makeFunctionReference<"query", Record<string, never>, PlatformOverview>("tenantControl:getPlatformOverview"),
   getCurrentWorkspace: makeFunctionReference<"query", Record<string, never>, TenantWorkspaceResult>("tenantControl:getCurrentWorkspace"),
   setStatus: makeFunctionReference<"mutation", { tenantId: string; status: "active" | "suspended" }, { changed: boolean; status: TenantStatus }>("tenantControl:setStatus"),
+  scheduleDeletion: makeFunctionReference<"mutation", { tenantId: string; reason: string }, { scheduledDeletionAt: number }>("tenantControl:scheduleDeletion"),
+  restoreScheduledDeletion: makeFunctionReference<"mutation", { tenantId: string }, { restored: boolean; status: TenantStatus }>("tenantControl:restoreScheduledDeletion"),
   updateTenant: makeFunctionReference<"mutation", { tenantId: string; name: string; country: string; timezone: string; currency: string }, { updated: boolean }>("tenantControl:updateTenant"),
   getTenantDetail: makeFunctionReference<"query", { tenantId: string }, TenantDetail | null>("tenantControl:getTenantDetail"),
   setEntitlement: makeFunctionReference<"mutation", {

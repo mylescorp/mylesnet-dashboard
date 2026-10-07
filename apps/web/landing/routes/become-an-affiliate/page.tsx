@@ -1,4 +1,5 @@
 import { ArrowUpRight, LayoutDashboard, Handshake, CreditCard, Users, CheckCircle2 } from "lucide-react";
+import Link from "next/link";
 import { pageMetadata } from "@/landing/content/seo";
 import LandingCard from "@/landing/components/LandingCard";
 import LandingCtaSection from "@/landing/components/LandingCtaSection";
@@ -81,6 +82,11 @@ export default function BecomeAnAffiliatePage() {
                 <li key={term.slice(0, 40)}>{term}</li>
               ))}
             </ul>
+            <p>
+              The full programme policy — commission basis, attribution, payouts, conduct,
+              and how either side ends the relationship — is published in{" "}
+              <Link href="/legal/affiliate-policy">the affiliate programme policy</Link>.
+            </p>
           </div>
         </div>
       </section>

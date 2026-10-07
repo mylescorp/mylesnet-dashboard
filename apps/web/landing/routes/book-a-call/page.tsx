@@ -5,8 +5,6 @@ import {
   CheckCircle2,
   CreditCard,
   LayoutDashboard,
-  Mail,
-  Phone,
   Users,
 } from "lucide-react";
 import { pageMetadata } from "@/landing/content/seo";

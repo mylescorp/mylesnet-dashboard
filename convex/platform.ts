@@ -253,6 +253,7 @@ export const getPlatformSecurityOverview = query({
         active: tenants.filter((tenant) => tenant.status === "active").length,
         trial: tenants.filter((tenant) => tenant.status === "trial").length,
         suspended: tenants.filter((tenant) => tenant.status === "suspended").length,
+        pendingDeletion: tenants.filter((tenant) => tenant.status === "pending_deletion").length,
         cancelled: tenants.filter((tenant) => tenant.status === "cancelled").length,
         identityMapped: tenants.filter((tenant) => tenant.workosOrganizationId !== undefined).length,
       },
@@ -280,4 +281,3 @@ export const listAuditEntityTables = query({
     return Array.from(new Set(recent.map((entry) => entry.entityTable))).sort();
   },
 });
-

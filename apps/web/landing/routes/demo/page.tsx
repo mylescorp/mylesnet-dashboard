@@ -1,8 +1,6 @@
 import {
   Activity,
-  ArrowUpRight,
   CalendarClock,
-  CirclePlay,
   ChartColumn,
   CreditCard,
   LayoutDashboard,

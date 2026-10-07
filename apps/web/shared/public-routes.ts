@@ -2,6 +2,8 @@ import { features, solutions } from "@/landing/content/pages";
 import { guides } from "@/landing/content/guides";
 import { releases } from "@/landing/content/changelog";
 import { posts } from "@/landing/content/blog";
+import { countries } from "@/landing/content/countries";
+import { comparisons } from "@/landing/content/comparisons";
 
 /**
  * Every path an anonymous visitor must be able to reach without a session.
@@ -45,7 +47,17 @@ export const PUBLIC_PATHS: string[] = [
   // Free tools (no account needed)
   "/speedtest",
   "/what-is-my-ip",
+  "/bandwidth-calculator",
+  "/subnet-calculator",
   "/demo",
+
+  // Comparison pages
+  "/vs",
+  ...comparisons.map((comparison) => `/vs/${comparison.slug}`),
+
+  // Country guides
+  "/country",
+  ...countries.map((country) => `/country/${country.slug}`),
 
   // Publishing surfaces
   "/docs",
@@ -61,8 +73,10 @@ export const PUBLIC_PATHS: string[] = [
   // Company & legal
   "/company",
   "/company/about",
+  "/company/mylescorp",
   "/legal/privacy",
   "/legal/terms",
+  "/legal/affiliate-policy",
 
   // Conversion
   "/get-started",

@@ -46,6 +46,7 @@ export function PlatformSecurity() {
           <dt>Active</dt><dd>{security.tenantOverview.active}</dd>
           <dt>Trial</dt><dd>{security.tenantOverview.trial}</dd>
           <dt>Suspended</dt><dd>{security.tenantOverview.suspended}</dd>
+          <dt>Pending deletion</dt><dd>{security.tenantOverview.pendingDeletion}</dd>
           <dt>Cancelled</dt><dd>{security.tenantOverview.cancelled}</dd>
           <dt>Access configured</dt><dd>{security.tenantOverview.identityMapped}</dd>
         </dl>

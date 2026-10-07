@@ -59,6 +59,7 @@ export type PlatformSecurityOverview = {
     active: number;
     trial: number;
     suspended: number;
+    pendingDeletion: number;
     cancelled: number;
     identityMapped: number;
   };

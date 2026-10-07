@@ -1,4 +1,4 @@
-import { ArrowUpRight, LayoutDashboard, Wifi } from "lucide-react";
+import { ArrowUpRight, Wifi } from "lucide-react";
 import { pageMetadata } from "@/landing/content/seo";
 import LandingCard from "@/landing/components/LandingCard";
 import LandingCtaSection from "@/landing/components/LandingCtaSection";

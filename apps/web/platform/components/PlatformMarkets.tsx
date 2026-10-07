@@ -2,316 +2,102 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { 
-  MapPin, 
-  Plus, 
-  Search, 
-  Edit, 
-  Trash2, 
-  RefreshCw,
-  Globe,
-  DollarSign,
-  Calendar,
-} from "lucide-react";
-import { useMutation, useQuery } from "convex/react";
-import { platformMarkets, type PlatformMarket } from "@/shared/convex/platformMarkets";
-import { Id } from "@/convex/_generated/dataModel";
+import { useMutation, useQuery } from "@/app/lib/convex";
+import { platformMarkets, type PlatformMarket, type MarketLifecycle } from "@/shared/convex/platformMarkets";
+import { useUserProfile } from "@/shared/components/UserProfileContext";
+import { EmptyState, StatusPill } from "@/shared/components/ui";
+import { userFacingMessage } from "@/shared/lib/user-facing-error";
+import type { Id } from "@/convex/_generated/dataModel";
 
-interface PlatformMarketsProps {
-  tenantId: Id<"tenants">;
-}
+const lifecycleOptions: MarketLifecycle[] = ["planned", "active", "paused", "decommissioned"];
+const managerRoles = new Set(["platform_super_admin", "platform_ops", "platform_owner", "platform_admin", "ops_manager"]);
 
-const lifecycleConfig = {
-  planned: { label: "Planned", color: "bg-muted text-muted-foreground border-border" },
-  active: { label: "Active", color: "bg-muted text-foreground border-border" },
-  paused: { label: "Paused", color: "bg-muted text-late-700 border-border" },
-  decommissioned: { label: "Decommissioned", color: "bg-muted text-foreground border-border" },
-} as const;
+export function PlatformMarkets({ tenantId }: { tenantId: Id<"tenants"> }) {
+  const { user } = useUserProfile();
+  const [includeArchived, setIncludeArchived] = useState(false);
+  const [editing, setEditing] = useState<PlatformMarket | null>(null);
+  const [form, setForm] = useState({ name: "", country: "", currency: "" });
+  const [working, setWorking] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+  const markets = useQuery(platformMarkets.listForTenant, { tenantId, includeArchived });
+  const createMarket = useMutation(platformMarkets.createForTenant);
+  const updateMarket = useMutation(platformMarkets.updateForTenant);
+  const setLifecycle = useMutation(platformMarkets.setLifecycle);
+  const archiveMarket = useMutation(platformMarkets.softDeleteForTenant);
+  const restoreMarket = useMutation(platformMarkets.restoreForTenant);
+  const canManage = user?.roles.some(role => managerRoles.has(role.slug)) ?? false;
 
-export function PlatformMarkets({ tenantId }: PlatformMarketsProps) {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filterStatus, setFilterStatus] = useState<"planned" | "active" | "paused" | "decommissioned" | "">("");
-  
-  const markets = useQuery(platformMarkets.listMarkets, {
-    tenantId,
-    lifecycleStatus: filterStatus || undefined,
-  });
+  async function saveMarket(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const input = form;
+    setWorking(true); setError(""); setNotice("");
+    try {
+      if (editing) {
+        await updateMarket({ tenantId, marketId: editing._id, ...input });
+        setNotice("Market details updated.");
+      } else {
+        await createMarket({ tenantId, ...input });
+        setNotice("Market created.");
+      }
+      setEditing(null);
+      setForm({ name: "", country: "", currency: "" });
+    } catch (cause) {
+      setError(userFacingMessage(cause, "Market details could not be saved."));
+    } finally { setWorking(false); }
+  }
 
-  const softDeleteMarket = useMutation(platformMarkets.softDeleteMarket);
-  const restoreMarket = useMutation(platformMarkets.restoreMarket);
+  async function changeLifecycle(market: PlatformMarket, lifecycleStatus: MarketLifecycle) {
+    setWorking(true); setError(""); setNotice("");
+    try {
+      await setLifecycle({ tenantId, marketId: market._id, lifecycleStatus });
+      setNotice(`Market status changed to ${lifecycleStatus}.`);
+    } catch (cause) { setError(userFacingMessage(cause, "Market status could not be changed.")); }
+    finally { setWorking(false); }
+  }
 
-  const handleCreateMarket = async () => {
-    console.log("Create market for tenant:", tenantId);
-  };
+  async function archive(market: PlatformMarket) {
+    const reason = window.prompt(`Why are you archiving ${market.name}?`)?.trim();
+    if (!reason) return;
+    setWorking(true); setError(""); setNotice("");
+    try {
+      await archiveMarket({ tenantId, marketId: market._id, reason });
+      setNotice("Market archived.");
+    } catch (cause) { setError(userFacingMessage(cause, "Market could not be archived.")); }
+    finally { setWorking(false); }
+  }
 
-  const handleUpdateMarket = async (marketId: Id<"markets">) => {
-    console.log("Update market:", marketId);
-  };
-
-  const handleDeleteMarket = async (marketId: Id<"markets">) => {
-    if (confirm("Are you sure you want to delete this market?")) {
-      await softDeleteMarket({ 
-        marketId, 
-        deleteReason: "Deleted by platform admin",
-        forceCascade: false 
-      });
-    }
-  };
-
-  const handleRestoreMarket = async (marketId: Id<"markets">) => {
-    await restoreMarket({ marketId });
-  };
-
-  const filteredMarkets = markets?.filter((market: PlatformMarket) => 
-    market.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    market.country.toLowerCase().includes(searchQuery.toLowerCase())
-  ) || [];
+  async function restore(market: PlatformMarket) {
+    setWorking(true); setError(""); setNotice("");
+    try {
+      await restoreMarket({ tenantId, marketId: market._id });
+      setNotice("Market restored.");
+    } catch (cause) { setError(userFacingMessage(cause, "Market could not be restored.")); }
+    finally { setWorking(false); }
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-            <Link href="/platform/organizations" className="hover:text-muted-foreground transition-colors">
-              <span className="font-medium">Organizations</span>
-            </Link>
-            <span className="text-muted-foreground">/</span>
-            <span>Markets</span>
-          </div>
-          <div className="flex items-start justify-between">
-            <div>
-              <h1 className="text-3xl font-semibold text-muted-foreground tracking-tight mb-2">
-                Organization Markets
-              </h1>
-              <p className="text-muted-foreground max-w-2xl">
-                Manage markets for this organization. Configure location, currency, and operational status.
-              </p>
-            </div>
-            <button 
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-slate-800 transition-all duration-200 shadow-lg shadow-slate-900/20 hover:shadow-xl hover:shadow-slate-900/30 hover:-translate-y-0.5"
-              onClick={handleCreateMarket}
-            >
-              <Plus size={18} aria-hidden="true" />
-              New Market
-            </button>
-          </div>
-        </div>
-
-        {/* Stats Cards */}
-        {markets && markets.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-            <div className="bg-background rounded-xl border border-border p-5 shadow-sm">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-medium text-muted-foreground">Total</span>
-                <MapPin size={18} className="text-muted-foreground" />
-              </div>
-              <div className="text-2xl font-semibold text-muted-foreground">{markets.length}</div>
-            </div>
-            <div className="bg-background rounded-xl border border-border p-5 shadow-sm">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-medium text-muted-foreground">Active</span>
-                <div className="w-2 h-2 rounded-full bg-mylesnet-success" />
-              </div>
-              <div className="text-2xl font-semibold text-muted-foreground">
-                {markets.filter((m) => m.lifecycleStatus === "active").length}
-              </div>
-            </div>
-            <div className="bg-background rounded-xl border border-border p-5 shadow-sm">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-medium text-muted-foreground">Countries</span>
-                <Globe size={18} className="text-muted-foreground" />
-              </div>
-              <div className="text-2xl font-semibold text-muted-foreground">
-                {new Set(markets.map((m) => m.country)).size}
-              </div>
-            </div>
-            <div className="bg-background rounded-xl border border-border p-5 shadow-sm">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-medium text-muted-foreground">Currencies</span>
-                <DollarSign size={18} className="text-muted-foreground" />
-              </div>
-              <div className="text-2xl font-semibold text-muted-foreground">
-                {new Set(markets.map((m) => m.currency)).size}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Search and Filter Bar */}
-        <div className="mb-6 flex gap-4">
-          <div className="relative flex-1">
-            <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <input 
-              type="search" 
-              placeholder="Search markets by name or country..." 
-              className="w-full pl-12 pr-4 py-3 bg-background border border-border rounded-lg text-muted-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-slate-900/20 focus:border-slate-900 transition-all duration-200"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-          <select 
-            className="px-4 py-3 bg-background border border-border rounded-lg text-muted-foreground focus:outline-none focus:ring-2 focus:ring-slate-900/20 focus:border-slate-900 transition-all duration-200"
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value as "planned" | "active" | "paused" | "decommissioned" | "")}
-          >
-            <option value="">All Status</option>
-            <option value="planned">Planned</option>
-            <option value="active">Active</option>
-            <option value="paused">Paused</option>
-            <option value="decommissioned">Decommissioned</option>
-          </select>
-        </div>
-
-        {/* Table */}
-        <div className="bg-background rounded-xl border border-border shadow-sm overflow-hidden">
-          {filteredMarkets.length > 0 ? (
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border bg-muted/50">
-                  <th className="text-left px-6 py-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Market
-                  </th>
-                  <th className="text-left px-6 py-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Country
-                  </th>
-                  <th className="text-left px-6 py-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Currency
-                  </th>
-                  <th className="text-left px-6 py-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="text-left px-6 py-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Lifecycle
-                  </th>
-                  <th className="text-left px-6 py-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Created
-                  </th>
-                  <th className="text-right px-6 py-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredMarkets.map((market) => {
-                  const statusConfig = {
-                    active: { label: "Active", color: "bg-muted text-foreground border-border" },
-                    deleted: { label: "Deleted", color: "bg-muted text-foreground border-border" },
-                  };
-                  const status = statusConfig[market.status as keyof typeof statusConfig] || statusConfig.active;
-                  const lifecycle = lifecycleConfig[market.lifecycleStatus as keyof typeof lifecycleConfig] || lifecycleConfig.planned;
-                  
-                  return (
-                    <tr 
-                      key={market._id}
-                      className="hover:bg-muted/50 transition-colors duration-150 group"
-                    >
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
-                            <MapPin size={20} className="text-muted-foreground" />
-                          </div>
-                          <span className="font-medium text-muted-foreground">{market.name}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                          <Globe size={16} className="text-muted-foreground" />
-                          <span className="font-medium">{market.country}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                          <DollarSign size={16} className="text-muted-foreground" />
-                          <span className="font-medium">{market.currency}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium border ${status.color}`}>
-                          {status.label}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium border ${lifecycle.color}`}>
-                          {lifecycle.label}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                          <Calendar size={16} className="text-muted-foreground" />
-                          <span className="text-sm">
-                            {new Date(market.createdAt).toLocaleDateString("en-US", {
-                              month: "short",
-                              day: "numeric",
-                              year: "numeric"
-                            })}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center justify-end gap-2">
-                          {market.status === "deleted" ? (
-                            <button
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-foreground hover:text-emerald-900 hover:bg-emerald-50 rounded-lg transition-all duration-150"
-                              onClick={() => handleRestoreMarket(market._id)}
-                              title="Restore market"
-                            >
-                              <RefreshCw size={14} />
-                              Restore
-                            </button>
-                          ) : (
-                            <>
-                              <button
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-muted-foreground hover:bg-muted rounded-lg transition-all duration-150"
-                                onClick={() => handleUpdateMarket(market._id)}
-                                title="Edit market"
-                              >
-                                <Edit size={14} />
-                                Edit
-                              </button>
-                              <button
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-destructive hover:text-foreground hover:bg-muted rounded-lg transition-all duration-150"
-                                onClick={() => handleDeleteMarket(market._id)}
-                                title="Delete market"
-                              >
-                                <Trash2 size={14} />
-                                Delete
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          ) : (
-            <div className="flex flex-col items-center justify-center py-16 px-6">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center mb-4">
-                <MapPin size={32} className="text-muted-foreground" />
-              </div>
-              <h3 className="text-lg font-semibold text-muted-foreground mb-2">
-                {markets?.length === 0 ? "No markets yet" : "No markets match your search"}
-              </h3>
-              <p className="text-muted-foreground text-center max-w-sm mb-6">
-                {markets?.length === 0 
-                  ? "Create your first market to begin managing locations for this organization."
-                  : "Try adjusting your search or filter criteria."}
-              </p>
-              {markets?.length === 0 && (
-                <button 
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-slate-800 transition-all duration-200 shadow-lg shadow-slate-900/20"
-                  onClick={handleCreateMarket}
-                >
-                  <Plus size={18} aria-hidden="true" />
-                  Create Market
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+    <main className="workspace-page">
+      <header className="page-heading">
+        <div><p className="eyebrow"><Link href={`/platform/organizations/${tenantId}`}>Organization</Link></p><h1 className="page-title">Markets</h1><p className="page-subtitle">Manage the markets assigned to this organization.</p></div>
+        <Link href={`/platform/organizations/${tenantId}`} className="secondary-button">Back to organization</Link>
+      </header>
+      {notice ? <p className="platform-claim-message ok" role="status">{notice}</p> : null}
+      {error ? <p className="platform-claim-message" role="alert">{error}</p> : null}
+      {canManage ? <form className="pf-panel" onSubmit={event => void saveMarket(event)} style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", marginBottom: 20 }}>
+        <div className="section-heading" style={{ gridColumn: "1 / -1" }}><div><p className="eyebrow">{editing ? "Update" : "Create"}</p><h2>{editing ? "Edit market" : "New market"}</h2></div></div>
+        <label className="pf-field"><span className="pf-label">Market name</span><input className="pf-input" name="name" required maxLength={120} value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} /></label>
+        <label className="pf-field"><span className="pf-label">Country</span><input className="pf-input" name="country" required maxLength={120} value={form.country} onChange={event => setForm({ ...form, country: event.target.value })} /></label>
+        <label className="pf-field"><span className="pf-label">Currency code</span><input className="pf-input" name="currency" required minLength={3} maxLength={3} pattern="[A-Za-z]{3}" value={form.currency} onChange={event => setForm({ ...form, currency: event.target.value })} /></label>
+        <div style={{ display: "flex", alignItems: "end", gap: 8 }}><button className="pf-button" disabled={working}>{working ? "Saving…" : editing ? "Save changes" : "Create market"}</button>{editing ? <button type="button" className="secondary-button" onClick={() => { setEditing(null); setForm({ name: "", country: "", currency: "" }); }}>Cancel</button> : null}</div>
+      </form> : null}
+      <section className="pf-panel">
+        <div className="section-heading"><div><p className="eyebrow">Organization locations</p><h2>Market directory</h2></div><span className="section-count">{markets?.length ?? 0} markets</span></div>
+        <label className="access-role-check"><input type="checkbox" checked={includeArchived} onChange={event => setIncludeArchived(event.target.checked)} /><span>Include archived markets</span></label>
+        {markets === undefined ? <p className="pf-muted">Loading markets…</p> : markets.length === 0 ? <EmptyState title="No markets found" body="Markets created for this organization will appear here." /> : <div className="pf-table-wrap"><table className="pf-table"><thead><tr><th>Name</th><th>Country</th><th>Currency</th><th>Lifecycle</th><th>Record</th>{canManage ? <th>Actions</th> : null}</tr></thead><tbody>
+          {markets.map(market => <tr key={market._id}><td><strong>{market.name}</strong></td><td>{market.country}</td><td>{market.currency}</td><td>{market.status === "active" && canManage ? <select className="pf-input" aria-label={`Lifecycle for ${market.name}`} value={market.lifecycleStatus} disabled={working} onChange={event => void changeLifecycle(market, event.target.value as MarketLifecycle)}>{lifecycleOptions.map(value => <option key={value} value={value}>{value}</option>)}</select> : <StatusPill tone="neutral">{market.lifecycleStatus}</StatusPill>}</td><td><StatusPill tone={market.status === "active" ? "success" : "neutral"}>{market.status === "active" ? "Active" : "Archived"}</StatusPill></td>{canManage ? <td><div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{market.status === "active" ? <><button type="button" className="secondary-button" disabled={working} onClick={() => { setEditing(market); setForm({ name: market.name, country: market.country, currency: market.currency }); }}>Edit</button><button type="button" className="secondary-button" disabled={working} onClick={() => void archive(market)}>Archive</button></> : <button type="button" className="secondary-button" disabled={working} onClick={() => void restore(market)}>Restore</button>}</div></td> : null}</tr>)}
+        </tbody></table></div>}
+      </section>
+    </main>
   );
 }

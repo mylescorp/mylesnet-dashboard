@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { ArrowRight, ArrowUpRight, LayoutDashboard, ShieldCheck } from "lucide-react";
+import Image from "next/image";
+import { ArrowRight, ArrowUpRight, Calculator, Globe, LayoutDashboard, Network, ShieldCheck, Wifi } from "lucide-react";
 import SectionHead from "@/landing/components/SectionHead";
 import JsonLd from "@/landing/components/JsonLd";
 import ProductPreview from "@/landing/components/ProductPreview";
@@ -15,6 +16,7 @@ import {
 } from "@/shared/ui/accordion";
 import { pageMetadata } from "@/landing/content/seo";
 import { features, solutions } from "@/landing/content/pages";
+import { productModules } from "@/landing/content/product";
 import {
   audiences,
   processSteps,
@@ -39,41 +41,6 @@ const faqJsonLd = {
   })),
 };
 
-const HERO_PHOTOS = [
-  {
-    src: "https://images.unsplash.com/photo-1742167523399-0d63f6da7d9c?auto=format&fit=crop&w=1920&q=85",
-  },
-  {
-    src: "https://images.unsplash.com/photo-1768716957251-09c1afa17ad3?auto=format&fit=crop&w=1920&q=85",
-  },
-  {
-    src: "https://images.unsplash.com/photo-1750711731797-25c3f2551ff8?auto=format&fit=crop&w=1920&q=85",
-  },
-  {
-    src: "https://images.unsplash.com/photo-1564457461758-8ff96e439e83?auto=format&fit=crop&w=1920&q=85",
-  },
-  {
-    src: "https://images.unsplash.com/photo-1681383064412-171e5bee5f6e?auto=format&fit=crop&w=1920&q=85",
-  },
-];
-
-function HeroImageBackdrop() {
-  return (
-    <div className="landing-home-hero-slideshow" aria-hidden="true">
-      {HERO_PHOTOS.map((photo, index) => (
-        <div
-          className="landing-home-hero-slide"
-          key={photo.src}
-          style={{
-            backgroundImage: `url("${photo.src}")`,
-            animationDelay: `-${index * 8}s`,
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
 export default function LandingHome() {
   return (
     <>
@@ -86,32 +53,41 @@ export default function LandingHome() {
           eyebrow="ISP BILLING & NETWORK OPERATIONS"
           title={
             <>
-              Smarter billing for <span>growing ISPs</span>
+              One workspace for <span>ISP operations</span>
             </>
           }
           body={
             <>
-              Keep subscribers connected and operations in step. Manage customers,
-              packages, payments, and network activity in one place.
+              Bring subscriber records, billing, and network operations into one
+              workspace built for connectivity providers across East Africa.
             </>
           }
         >
-          <div className="landing-home-hero-background"><HeroImageBackdrop /></div>
+          <div className="landing-home-hero-background" aria-hidden="true">
+            <Image
+              src="/images/landing/network-cables-unsplash.jpg"
+              alt=""
+              fill
+              priority
+              sizes="(max-width: 760px) 100vw, 1200px"
+              className="landing-home-hero-image"
+            />
+          </div>
           <div className="landing-home-actions">
             <Button asChild variant="default" size="lg">
-              <Link href="/signup">
-                Get started <ArrowRight size={17} aria-hidden="true" />
+              <Link href="/get-started">
+                Talk to our team <ArrowRight size={17} aria-hidden="true" />
               </Link>
             </Button>
             <Button asChild variant="outline" size="lg">
-              <Link href="/resources/how-it-works">See how it works</Link>
+              <Link href="/customers">Check pilot status</Link>
             </Button>
           </div>
           <p className="landing-home-note">
-            For WISPs, estates, hotspots, hospitality, and community networks.
+            For WISPs, estates, hospitality, and community networks.
           </p>
-          <a className="landing-home-photo-credit landing-home-hero-credit" href="https://unsplash.com/" target="_blank" rel="noopener noreferrer">
-            Photography via Unsplash
+          <a className="landing-home-photo-credit landing-home-hero-credit" href="https://unsplash.com/photos/a-bunch-of-wires-that-are-connected-to-a-server-T-IN5o3kxyA" target="_blank" rel="noopener noreferrer">
+            Photo by NADDOD on Unsplash
           </a>
         </LandingCard>
       </section>
@@ -130,6 +106,10 @@ export default function LandingHome() {
               <span className="landing-audience-pill" key={audience}>{audience}</span>
             ))}
           </div>
+          <p className="landing-home-pilot-note">
+            <strong>Pre-launch:</strong> onboarding a small number of operators through controlled pilots.{" "}
+            <Link href="/customers">See current availability and roadmap</Link>.
+          </p>
         </div>
       </section>
 
@@ -149,22 +129,33 @@ export default function LandingHome() {
             </Button>
           </div>
           <div className="landing-home-feature-grid">
-            {features.map((feature) => (
-              <LandingCard
-                key={feature.slug}
-                href={`/features/${feature.slug}`}
-                variant="link"
-                icon={<Icon name={feature.icon} size={22} />}
-                title={feature.title}
-                body={feature.summary}
-                tags={feature.highlights.slice(0, 3).map((highlight) => highlight.title)}
-                footer={
-                  <>
-                    Explore feature <ArrowRight size={16} aria-hidden="true" />
-                  </>
-                }
-              />
-            ))}
+            {features.map((feature) => {
+              const status = productModules.find((module) => module.slug === feature.slug)?.status;
+              const statusLabel = status === "Available"
+                ? "Available"
+                : status === "Beta"
+                  ? "Controlled operator pilots"
+                  : status === "Planned"
+                    ? "On the roadmap"
+                    : "Availability confirmed with our team";
+              return (
+                <LandingCard
+                  key={feature.slug}
+                  href={`/features/${feature.slug}`}
+                  variant="link"
+                  icon={<Icon name={feature.icon} size={22} />}
+                  title={feature.title}
+                  body={feature.summary}
+                  meta={<span>Current status: {statusLabel}</span>}
+                  tags={feature.highlights.slice(0, 3).map((highlight) => highlight.title)}
+                  footer={
+                    <>
+                      Explore feature <ArrowRight size={16} aria-hidden="true" />
+                    </>
+                  }
+                />
+              );
+            })}
           </div>
         </div>
       </section>
@@ -271,7 +262,7 @@ export default function LandingHome() {
           <SectionHead
             kicker="TRUST & CONTROL"
             title="Your customer records and money deserve care"
-            subtitle="Clear access controls and traceable financial records support the work your team does every day."
+            subtitle="Security and financial workflows are validated with pilot operators. Ask our team what is available for your setup before onboarding."
           />
           <div className="landing-trust-grid">
             {securityPillars.map((pillar) => (
@@ -305,25 +296,93 @@ export default function LandingHome() {
         </div>
       </section>
 
+      <section id="tools" className="landing-section landing-section-alt landing-home-section">
+        <div className="landing-section-inner">
+          <div className="landing-kicker-row">
+            <SectionHead
+              align="left"
+              kicker="FREE TOOLS"
+              title="Utilities that need no account"
+              subtitle="Quick calculators and tests — useful whether or not you run on the platform."
+            />
+            <Button asChild variant="link" size="sm">
+              <Link href="/country">
+                Browse by country <ArrowRight size={16} aria-hidden="true" />
+              </Link>
+            </Button>
+          </div>
+          <div className="landing-home-feature-grid">
+            <LandingCard
+              href="/speedtest"
+              variant="link"
+              icon={<Wifi size={22} aria-hidden="true" />}
+              title="Speed test"
+              body="Download, upload, ping and jitter in one run — no account, nothing stored."
+              footer={
+                <>
+                  Run the test <ArrowRight size={16} aria-hidden="true" />
+                </>
+              }
+            />
+            <LandingCard
+              href="/bandwidth-calculator"
+              variant="link"
+              icon={<Calculator size={22} aria-hidden="true" />}
+              title="Bandwidth calculator"
+              body="Transfer time, capacity, and the speed a plan actually needs, in your browser."
+              footer={
+                <>
+                  Calculate <ArrowRight size={16} aria-hidden="true" />
+                </>
+              }
+            />
+            <LandingCard
+              href="/subnet-calculator"
+              variant="link"
+              icon={<Network size={22} aria-hidden="true" />}
+              title="Subnet calculator"
+              body="CIDR to network, usable range, mask, and host counts — plus pool sizing."
+              footer={
+                <>
+                  Calculate <ArrowRight size={16} aria-hidden="true" />
+                </>
+              }
+            />
+            <LandingCard
+              href="/what-is-my-ip"
+              variant="link"
+              icon={<Globe size={22} aria-hidden="true" />}
+              title="What is my IP"
+              body="Your public address as this site sees it, with the coarse location it reports."
+              footer={
+                <>
+                  Look it up <ArrowRight size={16} aria-hidden="true" />
+                </>
+              }
+            />
+          </div>
+        </div>
+      </section>
+
       <LandingCtaSection
         className="landing-home-section"
-        kicker="Ready when you are"
-        title="Bring your network operations together"
-        subtitle="Tell us how your network runs and we’ll help you find the right next step."
+        kicker="Early operator access"
+        title="Explore whether MylesNet fits your network"
+        subtitle="We are onboarding through controlled pilots. Talk with our team about current availability, capabilities, and rollout timing."
         items={[
           {
-            href: "/signup",
+            href: "/get-started",
             icon: <ArrowUpRight size={19} aria-hidden="true" />,
-            title: "Get started",
-            body: "Create an account and run any plan free for your first 14 days.",
-            action: "Create an account",
+            title: "Talk to our team",
+            body: "Tell us how your network operates and ask about joining a pilot.",
+            action: "Discuss early access",
           },
           {
-            href: "/get-started",
+            href: "/customers",
             icon: <LayoutDashboard size={19} aria-hidden="true" />,
-            title: "Talk to our team",
-            body: "Walk us through your network and we will map the starting point.",
-            action: "Start a conversation",
+            title: "Check current status",
+            body: "See what is available in pilots and what remains on the roadmap.",
+            action: "View pilot status",
           },
         ]}
       />

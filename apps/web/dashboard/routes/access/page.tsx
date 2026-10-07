@@ -137,8 +137,8 @@ export default function AccessManagementPage() {
     );
   }
   if (currentUser == null || !currentUser.permissions.includes("users:manage")) {
-    if (currentUser?.permissions.includes("users:read")) {
-      return <PlatformAccess canReadInvitations={currentUser.permissions.includes("invitations:manage")} />;
+    if (currentUser?.isPlatform) {
+      return <PlatformAccess canReadUsers={currentUser.permissions.includes("users:read")} canReadInvitations={currentUser.permissions.includes("invitations:manage")} />;
     }
     return (
       <div className="workspace-page">

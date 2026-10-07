@@ -46,6 +46,11 @@ export async function readScopedTenant(ctx: QueryCtx | MutationCtx): Promise<Rea
   return { tenantId, enforced: true };
 }
 
+/** Derive the tenant for a new tenant-owned record from the active identity. */
+export async function tenantIdForWrite(ctx: MutationCtx): Promise<Id<"tenants">> {
+  return requireTenantMember(ctx);
+}
+
 /**
  * Collect tenant-owned rows through the active membership scope. Rows without
  * a tenantId are legacy data and are never exposed to tenant users.

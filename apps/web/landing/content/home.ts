@@ -138,15 +138,15 @@ export const securityPillars: TrustPillar[] = [
   },
   {
     icon: "Lock",
-    title: "Encrypted & secure",
+    title: "Security controls",
     description:
-      "Connections encrypted in transit and credentials stored securely, following platform security practice.",
+      "Access to operator workspaces is controlled. Ask our team for the current security and data-handling details before onboarding.",
   },
   {
     icon: "Receipt",
-    title: "Trustworthy money records",
+    title: "Traceable money records",
     description:
-      "An append-only financial ledger with an FX snapshot on every posting — no silent edits.",
+      "Billing and payment workflows are being validated with pilot operators. We will explain current coverage and reconciliation before onboarding.",
   },
   {
     icon: "Server",
@@ -170,27 +170,27 @@ export const faqItems: FaqItem[] = [
   {
     question: "Can we sell access through vouchers and QR codes?",
     answer:
-      "Yes. You can create voucher batches with redeemable codes and QR support, in addition to selling packages directly to accounts. Voucher redemption is live in operator pilots today, and suits market hotspots, guest Wi-Fi, trials, and giveaways.",
+      "Voucher workflows are being validated with pilot operators. The captive portal and hotspot roadmap is still in progress, so ask our team which voucher and QR flows are available for your network today.",
   },
   {
     question: "How are payments tracked?",
     answer:
-      "Prepaid and postpaid billing are both built in, running in operator pilots as they are hardened. Invoices, payments, and receipts flow through a verified end-to-end process into an append-only ledger, so you can always see daily revenue, MRR, ARPU, and overdue balances.",
+      "Billing and payment workflows are being hardened with pilot operators. Ask us which invoice, payment, receipt, and reconciliation workflows are currently available before planning a rollout.",
   },
   {
     question: "Who is responsible for our customers' data?",
     answer:
-      "You are. Your network operator account owns the customer and billing records you manage. MylesNet stores and serves them securely on that basis, and end customers direct data questions to you first.",
+      "Your team remains responsible for how it collects and uses customer information. Before onboarding, review our privacy notice and ask us how the current pilot handles access, storage, and customer requests.",
   },
   {
     question: "How long until we are live?",
     answer:
-      "Most networks start with customers, plans, and payments configured and go live within days once we understand your setup — and we stay with you through the launch so operations continue cleanly.",
+      "Timing depends on pilot availability, your network setup, and the workflows you need. We will review those details with you and agree on a realistic onboarding plan before you commit.",
   },
   {
     question: "What does MylesNet cost?",
     answer:
-      "Usage-based pricing: 3% of the hotspot revenue MylesNet confirms in a month, or $0.25 for each PPPoE subscriber active during the month, with custom volume pricing for Enterprise. Routers, staff and vouchers are never metered — there are no per-device, per-seat or per-site charges. Every plan starts with a 14-day free trial, with no card required, and the pricing page has worked examples.",
+      "Published rates are 3% of confirmed hotspot revenue or $0.25 per active PPPoE subscriber each month, with custom Enterprise pricing. MylesNet is onboarding through controlled pilots, so contact our team to confirm access and applicable pricing. Approved new operator workspaces receive a 14-day free trial; no card is required.",
   },
 ];
 
@@ -295,9 +295,9 @@ export const lifecycleSteps: { step: string; title: string; description: string 
 ];
 
 export const lifecycleHonesty = {
-  lead: "When payment is verified, the service follows it.",
+  lead: "Onboarding starts with an honest view of what is ready.",
   detail:
-    "MylesNet never claims automatic reconnection on an unconfirmed request. Entitlements move only after the money is confirmed, and automatic network reconnection is rolled out as it is verified with pilots.",
+    "MylesNet is pre-launch and onboarding through controlled pilots. We confirm which billing, payment, and network workflows are available for your setup before agreeing on a rollout.",
 };
 
 export const integrationHighlights: { name: string; status: "Available" | "Beta" | "Planned" | "Custom" }[] = [

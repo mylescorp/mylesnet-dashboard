@@ -122,8 +122,8 @@ export const remove = mutation({
     await ensureDefaultPlans(ctx, actor._id);
     const existing = await ctx.db.query("platformPlanCatalog").withIndex("by_code", q => q.eq("code", args.code)).first();
     if (!existing) throw new Error("Plan not found");
-    const entitlements = await ctx.db.query("entitlements").withIndex("by_planId", q => q.eq("planId", existing.code)).collect();
-    if (entitlements.length > 0) throw new Error("This plan is referenced by tenant subscription records. Archive it to preserve the subscription and audit history.");
+    const entitlement = await ctx.db.query("entitlements").withIndex("by_planId", q => q.eq("planId", existing.code)).first();
+    if (entitlement) throw new Error("This plan is referenced by tenant subscription records. Archive it to preserve the subscription and audit history.");
     await ctx.db.delete(existing._id);
     await logAudit(ctx, { action: "platform.plan.deleted", entityTable: "platformPlanCatalog", entityId: existing._id, changedBy: actor._id, before: { code: existing.code, name: existing.name, monthlyPriceMinor: existing.monthlyPriceMinor, status: existing.status } });
     return { deleted: true, code: existing.code };

@@ -32,7 +32,7 @@ import { pageMetadata } from "@/landing/content/seo";
 
 export const metadata = pageMetadata(
   "Pricing — 3% Hotspot, $0.25 per active PPPoE user",
-  "MylesNet costs 3% of hotspot revenue or $0.25 per active PPPoE user a month, with custom Enterprise pricing. No per-router, per-seat or per-site charges; 14-day free trial, no card.",
+  "Published MylesNet rates: 3% of hotspot revenue or $0.25 per active PPPoE user a month, with custom Enterprise pricing. Ask our team about controlled pilot availability. Approved new operator workspaces receive a 14-day free trial with no card required.",
   { canonical: "/pricing" }
 );
 
@@ -55,7 +55,7 @@ const USAGE_PLANS: UsagePlan[] = [
     lede: "The fee is 3% of the hotspot revenue MylesNet confirms in a month.",
     value: "3%",
     period: "of hotspot revenue",
-    cta: "Start free trial",
+    cta: "Ask about pilot access",
     href: "/get-started",
   },
   {
@@ -66,7 +66,7 @@ const USAGE_PLANS: UsagePlan[] = [
       "The fee is $0.25 for each subscriber who was active during the month. Suspended and expired accounts are not charged.",
     value: "$0.25",
     period: "per active user / month",
-    cta: "Start free trial",
+    cta: "Ask about pilot access",
     href: "/get-started",
   },
   {
@@ -120,8 +120,8 @@ const HOW_RATES_ARE_COUNTED: { icon: ReactNode; title: string; body: string }[] 
   },
   {
     icon: <Gift size={19} aria-hidden="true" />,
-    title: "The 14-day free trial comes first",
-    body: "You get the whole product for fourteen days with no card required. Your real subscribers can be running on MylesNet before you are charged anything.",
+    title: "Confirm access before you plan a rollout",
+    body: "MylesNet is pre-launch and onboarding through controlled pilots. Talk with our team to confirm current availability, capabilities, and applicable pricing. Approved new operator workspaces receive a 14-day free trial with no card required.",
   },
 ];
 
@@ -150,8 +150,8 @@ const PAY_METHODS: { icon: ReactNode; title: string; body: string }[] = [
 
 const FAQ_ITEMS: { question: string; answer: string }[] = [
   {
-    question: "Is there a free trial of MylesNet?",
-    answer: "Yes. You get the whole product for fourteen days, and no card is required.",
+    question: "Can I start using MylesNet today?",
+    answer: "MylesNet is pre-launch and onboarding through controlled pilots. Contact our team to confirm availability, current capabilities, and a realistic rollout plan for your network. Approved new operator workspaces receive a 14-day free trial with no card required.",
   },
   {
     question: "How is the MylesNet PPPoE fee counted?",
@@ -249,17 +249,18 @@ export default function PricingPage() {
             title="MylesNet pricing plans"
             body={
               <>
-                Three ways to pay: 3% of the hotspot revenue MylesNet confirms in a
+                Published rates are 3% of the hotspot revenue MylesNet confirms in a
                 month, $0.25 for each PPPoE subscriber active during the month, or
-                custom Enterprise pricing. Routers, staff and vouchers are not
-                metered — and every plan starts with a 14-day free trial, with no
-                card required.
+                custom Enterprise pricing. MylesNet is pre-launch; contact our team
+                to confirm pilot availability, current capabilities, and applicable
+                pricing before planning a rollout. Approved new operator workspaces
+                receive a 14-day free trial, with no card required.
               </>
             }
             tags={[
               <>
                 <CalendarCheck size={14} aria-hidden="true" />
-                14-day free trial
+                14-day trial after approval
               </>,
               <>
                 <CreditCard size={14} aria-hidden="true" />
@@ -311,7 +312,10 @@ export default function PricingPage() {
           <p className="landing-plans-footnote">
             The PPPoE rate is set in USD and shown against the approved
             reference-rate snapshot for KES and UGX. Currency is chosen
-            automatically from your browser region and you can switch it any time.
+            automatically from your browser region and you can switch it any
+            time. Accounts in Kenya carry a minimum monthly payment of KES 500,
+            and accounts in other regions a minimum of USD 5, covering basic
+            functionality.
           </p>
         </div>
       </section>

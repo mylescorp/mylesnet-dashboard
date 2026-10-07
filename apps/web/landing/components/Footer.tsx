@@ -42,8 +42,10 @@ export default function Footer() {
           <div className="landing-footer-masthead">
             <div className="landing-footer-head">
               <Link className="landing-brand" href="/" aria-label="MylesNet home">
-                <Image className="landing-logo" src={logo} alt="" width={48} height={48} />
-                <span className="landing-brand-name">MylesNet</span>
+                <Image className="landing-logo" src={logo} alt="" width={48} height={32} />
+                <span className="landing-brand-name">
+                  Myles<span className="landing-brand-accent">Net</span>
+                </span>
               </Link>
 
               <div className="landing-footer-actions">

@@ -1,12 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import {
-  ArrowUpRight,
-  CalendarClock,
-  LayoutDashboard,
-  ScrollText,
-} from "lucide-react";
+import { ArrowUpRight, ScrollText } from "lucide-react";
 import { posts, formatPostDate } from "@/landing/content/blog";
 import { pageMetadata } from "@/landing/content/seo";
 import LandingCtaSection from "@/landing/components/LandingCtaSection";

@@ -69,8 +69,8 @@ export const softDeleteForTenant = mutation({
     const market = await ctx.db.get(args.marketId);
     assertMarketBelongsToTenant(market, args.tenantId);
     if (market.status === "deleted") throw new Error("Market is already archived");
-    const assignments = await ctx.db.query("agentMarketAssignments").withIndex("by_market", q => q.eq("marketId", args.marketId)).filter(q => q.eq(q.field("assignmentStatus"), "active")).collect();
-    assertNoActiveMarketAssignments(assignments.length);
+    const activeAssignment = await ctx.db.query("agentMarketAssignments").withIndex("by_market", q => q.eq("marketId", args.marketId)).filter(q => q.eq(q.field("assignmentStatus"), "active")).first();
+    assertNoActiveMarketAssignments(activeAssignment ? 1 : 0);
     const now = Date.now();
     await ctx.db.patch(args.marketId, { status: "deleted", deletedAt: now, deletedBy: user._id, deleteReason: args.reason.trim() || "Archived from platform organization markets", updatedAt: now });
     await logAudit(ctx, { action: "platform.market.archive", entityTable: "markets", entityId: args.marketId, changedBy: user._id, before: { status: market.status }, after: { status: "deleted" } });

@@ -38,6 +38,7 @@ export default function TicketsPage() {
 
   const [subject, setSubject] = useState("");
   const [description, setDescription] = useState("");
+  const [category, setCategory] = useState<"network" | "billing" | "account">("account");
   const [priority, setPriority] = useState<"low" | "medium" | "high" | "urgent">("medium");
   const [marketId, setMarketId] = useState("");
   const [agentId, setAgentId] = useState("");
@@ -60,13 +61,14 @@ export default function TicketsPage() {
       await create({
         subject,
         description,
+        category,
         priority,
         marketId: marketId ? (marketId as Id<"markets">) : undefined,
         agentId: agentId ? (agentId as Id<"agents">) : undefined,
       });
       setMessage("Ticket created.");
       setShowForm(false);
-      setSubject(""); setDescription(""); setMarketId(""); setAgentId("");
+      setSubject(""); setDescription(""); setCategory("account"); setMarketId(""); setAgentId("");
     } catch (err) {
       setError(userFacingMessage(err, "Could not create ticket"));
     }
@@ -103,6 +105,7 @@ export default function TicketsPage() {
           <form onSubmit={handleCreate} className="pf-form-grid" style={{ marginTop: 12 }}>
             <Field label="Subject"><TextInput value={subject} onChange={(e) => setSubject(e.target.value)} required /></Field>
             <Field label="Description"><textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} required className="mn-input" /></Field>
+            <Field label="Category"><Select value={category} onChange={(e) => setCategory(e.target.value as typeof category)}><option value="network">Network</option><option value="billing">Billing</option><option value="account">Account</option></Select></Field>
             <Field label="Priority">
               <Select value={priority} onChange={(e) => setPriority(e.target.value as typeof priority)}>
                 <option value="low">Low</option>

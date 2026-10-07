@@ -535,8 +535,11 @@ counts/data did not.
   (no card on file, month-in-arrears invoicing, grace period), MylesNet-held
   balance settlement, payment methods (M-PESA/PayPal/cards/bank transfer),
   "unlimited routers/staff/vouchers", and the Enterprise SLA/24-7 wording.
-  The home-page FAQ ("What does MylesNet cost?") still says pricing is
-  confirmed with the team and needs a follow-up edit.
+  **Done 2026-10-07 (follow-up):** the home FAQ now states the usage rates, and
+  `/pricing` gained the minimum-monthly-payment footnote (KES 500 Kenya /
+  USD 5 other regions) matching `legal/terms` so both surfaces agree. The
+  one-off $10 MikroTik installation fee from the terms page remains
+  terms-only by design.
 - **Gates:** `tsc --noEmit` 0; eslint 0 on all touched files (pre-existing
   errors remain in unrelated uncommitted work); `tokens:check` green;
   `node --test` 167/167; runtime verification on the dev server (`/pricing`

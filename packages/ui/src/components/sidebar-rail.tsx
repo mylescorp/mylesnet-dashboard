@@ -97,7 +97,7 @@ export function SidebarRail({
               <SidebarSection
                 key={group.id}
                 group={group}
-                pathname={pathname}
+                activeItem={group.items.filter((item) => pathname === item.href || (item.href !== "/" && pathname.startsWith(`${item.href}/`))).sort((left, right) => right.href.length - left.href.length)[0]}
                 collapsed={visuallyCollapsed}
               />
             ))
@@ -183,4 +183,3 @@ function SidebarLink({
     </a>
   );
 }
-

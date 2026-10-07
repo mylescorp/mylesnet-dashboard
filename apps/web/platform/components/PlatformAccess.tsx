@@ -8,9 +8,9 @@ type RoleRow = NonNullable<ReturnType<typeof useQuery<typeof api.rolesAdmin.list
 type UserRow = NonNullable<ReturnType<typeof useQuery<typeof api.platformUsers.listUsers>>>[number];
 type InvitationRow = NonNullable<ReturnType<typeof useQuery<typeof api.invitations.listInvitations>>>[number];
 
-export function PlatformAccess({ canReadInvitations }: { canReadInvitations: boolean }) {
+export function PlatformAccess({ canReadUsers, canReadInvitations }: { canReadUsers: boolean; canReadInvitations: boolean }) {
   const roles = useQuery(api.rolesAdmin.listRoles, {});
-  const users = useQuery(api.platformUsers.listUsers, {});
+  const users = useQuery(api.platformUsers.listUsers, canReadUsers ? {} : "skip");
   const invitations = useQuery(api.invitations.listInvitations, canReadInvitations ? {} : "skip");
   const platformUsers = (users ?? []).filter((user) => user.roles.some((role) => role.isPlatform));
 
@@ -20,7 +20,7 @@ export function PlatformAccess({ canReadInvitations }: { canReadInvitations: boo
         <div>
           <p className="eyebrow">Platform control plane</p>
           <h1 className="page-title">Access & roles</h1>
-          <p className="page-subtitle">Read-only summary of platform staff, roles, and pending invitations.</p>
+          <p className="page-subtitle">Read-only view of platform role definitions and any staff details your role can access.</p>
         </div>
       </header>
 
@@ -43,7 +43,7 @@ export function PlatformAccess({ canReadInvitations }: { canReadInvitations: boo
 
       <section className="pf-panel">
         <div className="section-heading"><div><p className="eyebrow">Staff</p><h2>Platform users</h2></div><span className="section-count">{platformUsers.length} users</span></div>
-        {users === undefined ? <p className="pf-muted">Loading users…</p> : platformUsers.length === 0 ? <p className="pf-muted">No platform staff have been provisioned yet.</p> : (
+        {!canReadUsers ? <p className="pf-muted">Staff details are restricted for this role.</p> : users === undefined ? <p className="pf-muted">Loading users…</p> : platformUsers.length === 0 ? <p className="pf-muted">No platform staff have been provisioned yet.</p> : (
           <div className="pf-table-wrap"><table className="pf-table"><thead><tr><th>User</th><th>Email</th><th>Roles</th></tr></thead><tbody>
             {platformUsers.map((platformUser: UserRow) => (
               <tr key={platformUser._id}>

@@ -146,6 +146,7 @@ export default defineSchema({
 
   featureFlags: defineTable({
     key: v.string(),
+    category: v.optional(v.union(v.literal("infrastructure"), v.literal("general"))),
     valueJson: v.string(),
     enabled: v.boolean(),
     description: v.optional(v.string()),
@@ -367,6 +368,81 @@ export default defineSchema({
     .index("by_status_requestedAt", ["status", "requestedAt"])
     .index("by_device_status", ["deviceId", "status"]),
 
+  /** Platform-owned, review-only network policy catalog. It does not provision RADIUS or routers. */
+  platformPolicyTemplates: defineTable({
+    code: v.string(),
+    name: v.string(),
+    description: v.string(),
+    accessType: v.union(v.literal("pppoe"), v.literal("hotspot"), v.literal("both")),
+    currentVersion: v.number(),
+    status: v.union(v.literal("active"), v.literal("archived")),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    updatedBy: v.id("users"),
+    deletedAt: v.optional(v.number()),
+    deletedBy: v.optional(v.id("users")),
+  })
+    .index("by_code", ["code"])
+    .index("by_status_and_updatedAt", ["status", "updatedAt"]),
+
+  /** Immutable snapshots: every edit creates a new version instead of rewriting history. */
+  platformPolicyTemplateVersions: defineTable({
+    templateId: v.id("platformPolicyTemplates"),
+    version: v.number(),
+    downloadMbps: v.number(),
+    uploadMbps: v.number(),
+    burstDownloadMbps: v.optional(v.number()),
+    burstUploadMbps: v.optional(v.number()),
+    burstThresholdPercent: v.optional(v.number()),
+    burstWindowSeconds: v.optional(v.number()),
+    concurrentSessions: v.number(),
+    deviceLimit: v.number(),
+    dataQuotaGb: v.optional(v.number()),
+    timeQuotaHours: v.optional(v.number()),
+    fairUseAfterGb: v.optional(v.number()),
+    fairUseDownloadMbps: v.optional(v.number()),
+    fairUseUploadMbps: v.optional(v.number()),
+    vlanId: v.optional(v.number()),
+    ipPool: v.optional(v.string()),
+    staticIpAllowed: v.boolean(),
+    dnsServers: v.array(v.string()),
+    scheduleStart: v.optional(v.string()),
+    scheduleEnd: v.optional(v.string()),
+    idleTimeoutMinutes: v.optional(v.number()),
+    sessionTimeoutHours: v.optional(v.number()),
+    firewallProfile: v.optional(v.string()),
+    serviceEnabled: v.boolean(),
+    changeNote: v.string(),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+  }).index("by_template_and_version", ["templateId", "version"]),
+
+  /** Global voucher offer templates; they are not voucher stock or issued codes. */
+  platformVoucherPackageTemplates: defineTable({
+    code: v.string(),
+    name: v.string(),
+    description: v.string(),
+    packageType: v.union(v.literal("half_day"), v.literal("day"), v.literal("week"), v.literal("month"), v.literal("specialty")),
+    durationHours: v.number(),
+    currency: v.string(),
+    priceEach: v.number(),
+    dataQuotaMb: v.optional(v.number()),
+    downloadMbps: v.optional(v.number()),
+    uploadMbps: v.optional(v.number()),
+    deviceLimit: v.number(),
+    status: v.union(v.literal("active"), v.literal("archived")),
+    revision: v.number(),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    updatedBy: v.id("users"),
+    deletedAt: v.optional(v.number()),
+    deletedBy: v.optional(v.id("users")),
+  })
+    .index("by_code", ["code"])
+    .index("by_status_and_updatedAt", ["status", "updatedAt"]),
+
   agents: defineTable({
     ...tenantScope,
     name: v.string(),
@@ -535,6 +611,9 @@ export default defineSchema({
     ...tenantScope,
     subject: v.string(),
     description: v.string(),
+    category: v.optional(v.union(v.literal("network"), v.literal("billing"), v.literal("account"))),
+    firstResponseDueAt: v.optional(v.number()),
+    resolutionDueAt: v.optional(v.number()),
     ticketStatus: v.union(
       v.literal("open"),
       v.literal("in_progress"),
@@ -563,6 +642,7 @@ export default defineSchema({
     restoredBy: v.optional(v.id("users")),
   })
     .index("by_status", ["ticketStatus"])
+    .index("by_category", ["category"])
     .index("by_market", ["marketId"])
     .index("by_agent", ["agentId"])
     .index("by_assigned", ["assignedTo"])
@@ -988,12 +1068,18 @@ export default defineSchema({
       v.literal("trial"),
       v.literal("active"),
       v.literal("suspended"),
+      v.literal("pending_deletion"),
       v.literal("cancelled"),
     ),
     // WorkOS per-tenant org id (three-scope model, Phase 2). The server-side
     // tenant resolver derives tenancy from this — never from the client.
     // Preserves the pre-suspension trial/active state for safe restoration.
     statusBeforeSuspension: v.optional(v.union(v.literal("trial"), v.literal("active"))),
+    statusBeforeDeletion: v.optional(v.union(v.literal("trial"), v.literal("active"), v.literal("suspended"))),
+    deletionRequestedAt: v.optional(v.number()),
+    scheduledDeletionAt: v.optional(v.number()),
+    deletionRequestedBy: v.optional(v.id("users")),
+    deletionReason: v.optional(v.string()),
     workosOrganizationId: v.optional(v.string()),
     // Contact phone captured during self-service sign-up (optional, never a
     // verification factor) and the acquisition channel that referred the
@@ -1006,7 +1092,9 @@ export default defineSchema({
     deletedAt: v.optional(v.number()),
   })
     .index("by_slug", ["slug"])
+    .index("by_createdAt", ["createdAt"])
     .index("by_status", ["status"])
+    .index("by_status_and_scheduled_deletion", ["status", "scheduledDeletionAt"])
     .index("by_workosOrganizationId", ["workosOrganizationId"]),
 
   // Warehouse of which workforce user belongs to which tenant (org-scoped).
@@ -1160,6 +1248,51 @@ export default defineSchema({
     initializedBy: v.id("users"),
     initializedAt: v.number(),
   }),
+
+  /** Super-admin defaults inherited by tenant workspaces until overridden. */
+  platformWhiteLabelDefaults: defineTable({
+    key: v.literal("default"),
+    supportEmail: v.string(),
+    supportPhone: v.string(),
+    brandColor: v.string(),
+    updatedBy: v.id("users"),
+    updatedAt: v.number(),
+  }).index("by_key", ["key"]),
+
+  /** Intake and approval record for tenant data export/deletion requests. */
+  platformDataRequests: defineTable({
+    tenantId: v.optional(v.id("tenants")),
+    requestType: v.union(v.literal("export"), v.literal("deletion")),
+    requesterName: v.string(),
+    requesterEmail: v.string(),
+    requestNotes: v.string(),
+    status: v.union(v.literal("received"), v.literal("under_review"), v.literal("completed"), v.literal("rejected")),
+    adminNotes: v.optional(v.string()),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedBy: v.id("users"),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+    deletedBy: v.optional(v.id("users")),
+    deleteReason: v.optional(v.string()),
+    restoredAt: v.optional(v.number()),
+    restoredBy: v.optional(v.id("users")),
+  })
+    .index("by_createdAt", ["createdAt"])
+    .index("by_creator_and_createdAt", ["createdBy", "createdAt"])
+    .index("by_tenant", ["tenantId"])
+    .index("by_status_and_createdAt", ["status", "createdAt"]),
+
+  /** Platform-owned SLA targets by support category. Values are minutes. */
+  platformSlaPolicies: defineTable({
+    category: v.union(v.literal("network"), v.literal("billing"), v.literal("account")),
+    firstResponseMinutes: v.number(),
+    resolutionMinutes: v.number(),
+    updatedBy: v.id("users"),
+    updatedAt: v.number(),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+  }).index("by_category", ["category"]),
 
   // Aggregate-only historical series for C1 platform contracted revenue.
   // Tenant invoices and cash collection are deliberately outside this record.

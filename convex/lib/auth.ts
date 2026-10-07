@@ -10,6 +10,7 @@ import {
 import { assertMfaCompliance as assertMfaCompliancePolicy } from "./mfa";
 import { canTenantOperate } from "./tenantCore";
 import { organizationIdFromWorkosIdentity } from "./workosIdentity";
+import { hasAllowedRole, resolveAllowedRoleSlugs } from "./platformRoleCore";
 
 /**
  * Platform role access is data-driven from the `roles` table via

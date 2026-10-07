@@ -79,6 +79,16 @@ const toolChildren: NavChild[] = [
     description: "Your public address and who it belongs to",
   },
   {
+    href: "/bandwidth-calculator",
+    label: "Bandwidth calculator",
+    description: "Transfer time, capacity and required speed",
+  },
+  {
+    href: "/subnet-calculator",
+    label: "Subnet calculator",
+    description: "IPv4 networks, ranges and host counts",
+  },
+  {
     href: "/demo",
     label: "Live demo",
     description: "A guided tour of the operator console",
@@ -164,6 +174,11 @@ export const companyChildren: NavChild[] = [
     description: "The story, leadership, and values behind MylesNet.",
   },
   {
+    href: "/company/mylescorp",
+    label: "MylesCorp",
+    description: "The parent company and what it builds beyond the platform.",
+  },
+  {
     href: "/customers",
     label: "Customers",
     description: "Where the platform stands today, and how early operators work with us.",
@@ -178,6 +193,31 @@ export const companyChildren: NavChild[] = [
     label: "Contact",
     description: "Sales, product information, and technical support from the team.",
   },
+];
+
+/**
+ * The billing tools an operator is likely comparing us with, surfaced in the
+ * footer sitemap and cross-linked from every /vs page so the comparison
+ * cluster stays discoverable without a header slot.
+ */
+export const comparisonChildren: NavChild[] = [
+  { href: "/vs/freeradius", label: "FreeRADIUS vs MylesNet" },
+  { href: "/vs/daloradius", label: "daloRADIUS vs MylesNet" },
+  { href: "/vs/mikhmon", label: "Mikhmon vs MylesNet" },
+  { href: "/vs/phpnuxbill", label: "PHPNuxBill vs MylesNet" },
+];
+
+/**
+ * The country guides, led by the markets the affiliate programme serves so
+ * the footer list and the programme's market list cannot drift apart.
+ */
+export const countryChildren: NavChild[] = [
+  { href: "/country", label: "All countries" },
+  { href: "/country/kenya", label: "Kenya" },
+  { href: "/country/uganda", label: "Uganda" },
+  { href: "/country/tanzania", label: "Tanzania" },
+  { href: "/country/rwanda", label: "Rwanda" },
+  { href: "/country/ethiopia", label: "Ethiopia" },
 ];
 
 /**
@@ -239,12 +279,31 @@ export const FOOTER_COLUMNS: FooterColumn[] = [
     heading: "Company",
     links: companyChildren,
   },
+  {
+    heading: "Tools",
+    links: [
+      { href: "/speedtest", label: "Speed test" },
+      { href: "/what-is-my-ip", label: "What is my IP" },
+      { href: "/bandwidth-calculator", label: "Bandwidth calculator" },
+      { href: "/subnet-calculator", label: "Subnet calculator" },
+      { href: "/demo", label: "Live demo" },
+    ],
+  },
+  {
+    heading: "Compare",
+    links: comparisonChildren,
+  },
+  {
+    heading: "Countries",
+    links: countryChildren,
+  },
 ];
 
 /** Legal links sit in the footer bottom bar, not in a sitemap column. */
 export const FOOTER_LEGAL_LINKS: NavChild[] = [
   { href: "/legal/privacy", label: "Privacy" },
   { href: "/legal/terms", label: "Terms" },
+  { href: "/legal/affiliate-policy", label: "Affiliate policy" },
 ];
 
 /** Flat list of every internal route linked from the public chrome. */

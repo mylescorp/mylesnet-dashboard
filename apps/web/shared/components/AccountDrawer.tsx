@@ -14,7 +14,6 @@ import {
   ScrollText,
   Settings,
   ShieldCheck,
-  Settings,
   Sun,
   User,
   Users,
@@ -525,4 +524,3 @@ function ThemeSegmented() {
     </div>
   );
 }
-

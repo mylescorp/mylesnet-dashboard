@@ -137,7 +137,9 @@ export default function PricingCalculator() {
 
       <p className="landing-estimate-note">
         An estimate only: the hotspot fee follows the revenue confirmed in a
-        month, and the PPPoE fee counts the subscribers active during it.
+        month, and the PPPoE fee counts the subscribers active during it. A
+        minimum monthly payment of KES 500 (Kenya) or USD 5 (other regions)
+        applies.
       </p>
     </div>
   );

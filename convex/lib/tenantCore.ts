@@ -12,6 +12,7 @@ export type TenantStatus =
   | "trial"
   | "active"
   | "suspended"
+  | "pending_deletion"
   | "cancelled";
 
 /**

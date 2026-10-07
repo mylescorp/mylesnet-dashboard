@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { action, internalMutation, internalQuery, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { getSystemRoleBySlug, PERMISSIONS, SYSTEM_ROLES, workosSlugForRole, ALL_PERMISSION_SLUGS, permissionInCatalog, CUSTOM_ROLE_DEFAULT_RANK } from "./lib/permissions";
-import { requirePermission } from "./lib/auth";
+import { requirePlatformUser } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -145,7 +145,7 @@ export const patchSeededRole = internalMutation({
 export const listRoles = query({
   args: {},
   handler: async (ctx) => {
-    await requirePermission(ctx, "roles:read");
+    await requirePlatformUser(ctx);
     const roles = (await ctx.db.query("roles").collect())
       .filter((role) => role.deletedAt === undefined)
       .sort((left, right) => right.rank - left.rank || left.slug.localeCompare(right.slug));
@@ -171,7 +171,7 @@ export const listRoles = query({
 export const getPermissionsCatalog = query({
   args: {},
   handler: async (ctx) => {
-    await requirePermission(ctx, "roles:read");
+    await requirePlatformUser(ctx);
     return {
       permissions: PERMISSIONS,
       allSlugs: ALL_PERMISSION_SLUGS,
@@ -466,4 +466,3 @@ export const upsertWebhookUser = internalMutation({
     });
   },
 });
-

@@ -2,7 +2,7 @@
 
 import { userFacingMessage } from "@/shared/lib/user-facing-error";
 
-import { useMemo, useState } from "react";
+import { use, useMemo, useState } from "react";
 import { useQuery, useMutation } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
 import { PageHeader, Tabs, TabPanel } from "@mylesnet/ui";
@@ -36,10 +36,11 @@ const statusTone = (status: string) =>
 export default function SubscriberDetailPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  const { id } = use(params);
   const detail = useQuery(subscriberDetail.getDetail, {
-    subscriberId: params.id as Id<"subscribers">,
+    subscriberId: id as Id<"subscribers">,
   });
   const renew = useMutation(api.subscribers.renew);
   const creditAccount = useMutation(api.subscribers.creditAccount);

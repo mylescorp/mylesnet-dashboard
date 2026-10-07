@@ -30,7 +30,7 @@ export default function LandingImagePanel({
       <span className="landing-image-panel-scrim" aria-hidden="true" />
       {label ? (
         <span className="landing-image-panel-brand">
-          <Image src={logo} alt="" width={28} height={28} />
+          <Image src={logo} alt="" width={28} height={19} />
           <span>{label}</span>
         </span>
       ) : null}
