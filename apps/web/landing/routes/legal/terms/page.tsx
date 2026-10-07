@@ -80,31 +80,22 @@ export default function TermsPage() {
               indicates acceptance of the updated terms.
             </p>
 
-            <h2>Trial and renewal</h2>
+            <h2>Access and commercial terms</h2>
             <p>
-              MylesNet offers a 14-day free trial for new operators to explore
-              the platform. To keep enjoying its benefits, you&apos;ll need to
-              renew your access on or before the expiry date. If a renewal slips
-              your mind, no worries&mdash;we&apos;ll send you reminders. However,
-              if the renewal remains outstanding, we&apos;ll have to temporarily
-              disable access to some functionalities&mdash;such as editing data,
-              Winbox, and remote access links&mdash;until your account is current.
-              A one-off system installation fee of $10 applies for initial
-              MikroTik setup; other configurations will be quoted separately.
+              Access periods, renewal, suspension, support, and any trial
+              arrangements will be described in the applicable order or written
+              quote. We will identify any implementation, configuration, or
+              other service charges in writing before that work begins.
             </p>
 
-            <h2>Understanding your bill</h2>
+            <h2>Fees and billing</h2>
             <p>
-              There are a few things to keep in mind regarding your MylesNet
-              usage fees. Kenyan accounts have a minimum monthly payment of KES
-              500, and all other regions have a minimum monthly payment of USD 5,
-              to cover basic functionality. Additionally, for hotspot usage, we
-              charge 3% of the total hotspot revenue collected. For PPPoE
-              (Point-to-Point Protocol over Ethernet) connections, the fee is
-              $0.25 per active subscriber each month. If you ever need technical
-              assistance with router configuration for Hotspot and PPPoE, we&apos;ll
-              be happy to help for free. Other configurations involving devices
-              other than MikroTik will be quoted and charged separately.
+              Fees, calculation basis, invoice timing, payment methods, taxes,
+              and any minimums are those stated in the order or written quote
+              accepted by you. Public pricing examples and currency conversions
+              are estimates and do not replace those agreed commercial terms.
+              Any included implementation or support scope, and any associated
+              fees, will be described in the applicable order or quote.
             </p>
 
             <h2>Support and issue resolution timelines</h2>
