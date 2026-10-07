@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronDown, Menu } from "lucide-react";
-import mark from "../assets/mark.png";
+import logo from "../assets/logo.png";
 import { ThemeToggle } from "@/shared/components/ThemeToggle";
 import { Button } from "@/shared/ui/button";
 import {
@@ -85,8 +85,10 @@ export default function Header() {
     <header className="landing-header">
       <nav className="landing-nav landing-container" aria-label="Main navigation">
         <Link className="landing-brand" href="/" aria-label="MylesNet home">
-          <Image className="landing-logo" src={mark} alt="" width={44} height={44} preload />
-          <span className="landing-brand-name">MylesNet</span>
+          <Image className="landing-logo" src={logo} alt="" width={48} height={32} preload />
+          <span className="landing-brand-name">
+            Myles<span className="landing-brand-accent">Net</span>
+          </span>
         </Link>
 
         <div className="landing-nav-links" ref={navRef}>
@@ -202,7 +204,7 @@ export default function Header() {
             <Link href="/signin">Sign in</Link>
           </Button>
           <Button asChild variant="default" size="sm" className="landing-signup">
-            <Link href="/get-started">Get started</Link>
+            <Link href="/get-started">Talk to our team</Link>
           </Button>
         </div>
 
@@ -229,7 +231,7 @@ export default function Header() {
                 return (
                   <div key={section.href} className="landing-mobile-group">
                     <Link
-                      className="text-lg font-medium hover:text-primary transition-colors"
+                      className="text-lg font-medium transition-colors"
                       href={section.href}
                       data-active={isActive ? "true" : undefined}
                       onClick={() => setMenuOpen(false)}
@@ -261,7 +263,7 @@ export default function Header() {
                   <Link href="/signin">Sign in</Link>
                 </Button>
                 <Button asChild variant="default" className="flex-1" onClick={() => setMenuOpen(false)}>
-                  <Link href="/get-started">Get started</Link>
+                  <Link href="/get-started">Talk to our team</Link>
                 </Button>
               </div>
             </nav>

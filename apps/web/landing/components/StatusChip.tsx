@@ -11,7 +11,7 @@ const STATUS_VARIANT: Record<StatusLabel, "default" | "secondary" | "outline"> =
 
 export default function StatusChip({ status }: { status: StatusLabel }) {
   return (
-    <Badge variant={STATUS_VARIANT[status]} className="font-mono text-xs">
+    <Badge variant={STATUS_VARIANT[status]} className="landing-status-chip font-mono text-xs">
       {status}
     </Badge>
   );
