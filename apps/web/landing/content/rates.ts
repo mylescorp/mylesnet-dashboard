@@ -7,16 +7,17 @@ export const CURRENCIES: { code: CurrencyCode; label: string }[] = [
 ];
 
 /**
- * Cached reference-rate snapshot for public pricing display only.
- * KES is the approved base currency for MylesNet plans. No runtime FX
- * call is made (no new dependency) — update this snapshot through the
- * approved process and re-verify the pricing page before release.
+ * Cached reference-rate snapshot for public pricing estimates only.
+ * KES is the pricing base currency. Values are CBK commercial-bank average
+ * closing rates dated 2026-10-06; they are indicative, not contract rates.
+ * No runtime FX call is made. Update through the approved process and
+ * re-verify the pricing page before release.
  */
 export const FX_SNAPSHOT = {
-  asOf: "2026-09-10",
+  asOf: "2026-10-06",
   base: "KES",
-  /** Units of the target currency per 1 KES (historical cross-rate). */
-  perKES: { KES: 1, UGX: 28, USD: 1 / 130 },
+  /** Units of the target currency per 1 KES (indicative cross-rate). */
+  perKES: { KES: 1, UGX: 31.21, USD: 1 / 129.89 },
 } as const;
 
 export function formatPrice(priceKES: number, currency: CurrencyCode): string {
