@@ -6,6 +6,7 @@ import { logAudit } from "./lib/auditLog";
 import { requirePlatformAdmin, requirePlatformSubRole, requirePlatformUser, resolveRoles, resolveUserByIdentity } from "./lib/auth";
 import { PLATFORM_SUB_ROLE_MAP } from "./lib/permissions";
 import { canTenantOperate, resolveTenantFromAuth } from "./lib/tenant";
+import { decideTenantLifecycleTransition } from "./lib/tenantLifecycleCore";
 import {
   normalizeAutomatedTenantOnboarding,
   normalizeTenantRegistration,
@@ -19,14 +20,6 @@ import {
   getWorkosOrganizationMembership,
 } from "./workos";
 
-const tenantStatus = v.union(
-  v.literal("provisioning"),
-  v.literal("trial"),
-  v.literal("active"),
-  v.literal("suspended"),
-  v.literal("cancelled"),
-);
-
 const entitlementStatus = v.union(
   v.literal("trial"),
   v.literal("active"),
@@ -38,6 +31,7 @@ type WorkspaceSetupReason =
   | "authentication_required"
   | "tenant_unconfigured"
   | "tenant_unavailable"
+  | "tenant_suspended"
   | "account_inactive"
   | "tenant_membership_required";
 
@@ -111,7 +105,13 @@ export const getCurrentWorkspace = query({
     if (!tenantId) return { status: "setup_required", reason: "tenant_unconfigured" };
 
     const tenant = await ctx.db.get(tenantId);
-    if (!tenant || tenant.deletedAt !== undefined || !canTenantOperate(tenant.status)) {
+    if (!tenant || tenant.deletedAt !== undefined) {
+      return { status: "setup_required", reason: "tenant_unavailable" };
+    }
+    if (tenant.status === "suspended") {
+      return { status: "setup_required", reason: "tenant_suspended" };
+    }
+    if (!canTenantOperate(tenant.status)) {
       return { status: "setup_required", reason: "tenant_unavailable" };
     }
 
@@ -155,26 +155,67 @@ export const getCurrentWorkspace = query({
 
 /** Suspend/reactivate without deleting records or severing WorkOS history. */
 export const setStatus = mutation({
-  args: { tenantId: v.id("tenants"), status: tenantStatus },
+  args: { tenantId: v.id("tenants"), status: v.union(v.literal("active"), v.literal("suspended")) },
   handler: async (ctx, args) => {
     const actor = await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_ops"]);
     const tenant = await ctx.db.get(args.tenantId);
     if (!tenant || tenant.deletedAt !== undefined) throw new Error("Tenant not found");
-    if (args.status === "provisioning") throw new Error("Provisioning status is managed by secure onboarding only");
-    if (args.status === "cancelled") {
-      throw new Error("Cancellation requires the retention/offboarding workflow; direct cancellation is disabled");
-    }
-    if (tenant.status === args.status) return { changed: false };
-    await ctx.db.patch(tenant._id, { status: args.status, updatedAt: Date.now() });
+    const transition = decideTenantLifecycleTransition(tenant.status, args.status, tenant.statusBeforeSuspension);
+    if (!transition.changed) return { changed: false, status: tenant.status };
+    await ctx.db.patch(tenant._id, {
+      status: transition.status,
+      statusBeforeSuspension: transition.statusBeforeSuspension,
+      updatedAt: Date.now(),
+    });
     await logAudit(ctx, {
       action: "tenant.statusChanged",
       entityTable: "tenants",
       entityId: tenant._id,
       changedBy: actor._id,
       before: { status: tenant.status },
-      after: { status: args.status },
+      after: { status: transition.status, statusBeforeSuspension: transition.statusBeforeSuspension ?? null },
     });
-    return { changed: true };
+    return { changed: true, status: transition.status };
+  },
+});
+
+/** Update editable tenant profile fields without changing its identity or lifecycle. */
+export const updateTenant = mutation({
+  args: {
+    tenantId: v.id("tenants"),
+    name: v.string(),
+    country: v.string(),
+    timezone: v.string(),
+    currency: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const actor = await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_ops"]);
+    const tenant = await ctx.db.get(args.tenantId);
+    if (!tenant || tenant.deletedAt !== undefined) throw new Error("Tenant not found");
+    const name = args.name.trim();
+    const country = args.country.trim().toUpperCase();
+    const timezone = args.timezone.trim();
+    const currency = args.currency.trim().toUpperCase();
+    if (!name || name.length > 120) throw new Error("Tenant name must be 1–120 characters");
+    if (!/^[A-Z]{2}$/.test(country)) throw new Error("Country must be a two-letter ISO country code");
+    if (!/^[A-Z]{3}$/.test(currency)) throw new Error("Currency must be a three-letter ISO currency code");
+    try {
+      new Intl.DateTimeFormat("en", { timeZone: timezone });
+    } catch {
+      throw new Error("Timezone must be a valid IANA timezone");
+    }
+    const before = { name: tenant.name, country: tenant.country, timezone: tenant.timezone, currency: tenant.currency };
+    const after = { name, country, timezone, currency };
+    await ctx.db.patch(tenant._id, { ...after, updatedAt: Date.now() });
+    await logAudit(ctx, {
+      action: "tenant.profileUpdated",
+      entityTable: "tenants",
+      entityId: tenant._id,
+      changedBy: actor._id,
+      before,
+      after,
+    });
+    return { updated: true };
   },
 });
 
@@ -216,6 +257,7 @@ export const getTenantDetail = query({
       timezone: tenant.timezone,
       currency: tenant.currency,
       status: tenant.status,
+      statusBeforeSuspension: tenant.statusBeforeSuspension ?? null,
       workosOrganizationId: tenant.workosOrganizationId ?? null,
       createdAt: tenant.createdAt,
       updatedAt: tenant.updatedAt,
@@ -248,16 +290,27 @@ export const setEntitlement = mutation({
     const actor = await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_ops"]);
     const tenant = await ctx.db.get(args.tenantId);
     if (!tenant || tenant.deletedAt !== undefined) throw new Error("Tenant not found");
+    const planId = args.planId.trim().toLowerCase();
+    if (!/^[a-z][a-z0-9_-]{1,39}$/.test(planId)) throw new Error("Select a valid subscription plan");
+    for (const [label, value] of [["startsAt", args.startsAt], ["expiresAt", args.expiresAt], ["trialEndsAt", args.trialEndsAt]] as const) {
+      if (value !== undefined && (!Number.isSafeInteger(value) || value < 0)) throw new Error(`${label} must be a valid timestamp`);
+    }
+    if (args.startsAt !== undefined && args.expiresAt !== undefined && args.expiresAt < args.startsAt) throw new Error("Expiry must be after the subscription start");
+    if (args.startsAt !== undefined && args.trialEndsAt !== undefined && args.trialEndsAt < args.startsAt) throw new Error("Trial end must be after the subscription start");
+    const plan = await ctx.db.query("platformPlanCatalog").withIndex("by_code", q => q.eq("code", planId)).first();
+    const existingForTenant = await ctx.db.query("entitlements").withIndex("by_tenant", q => q.eq("tenantId", args.tenantId)).order("desc").first();
+    if (plan?.status === "archived" && existingForTenant?.planId !== planId) throw new Error("Archived plans cannot be assigned to new subscriptions");
+    if (!plan && !["starter", "growth", "pro"].includes(planId)) throw new Error("Choose a plan from the platform plan catalogue");
 
     const auditAfter = {
-      planId: args.planId,
+      planId,
       status: args.status,
       startsAt: args.startsAt ?? null,
       expiresAt: args.expiresAt ?? null,
       trialEndsAt: args.trialEndsAt ?? null,
     };
     const fields = {
-      planId: args.planId,
+      planId,
       status: args.status,
       startsAt: args.startsAt,
       expiresAt: args.expiresAt,
@@ -299,6 +352,30 @@ export const setEntitlement = mutation({
       after: auditAfter,
     });
     return { changed: true };
+  },
+});
+
+/** Remove a tenant's current product entitlement. Invoices and payment data are not affected. */
+export const removeEntitlement = mutation({
+  args: { tenantId: v.id("tenants"), reason: v.string() },
+  handler: async (ctx, args) => {
+    const actor = await requirePlatformSubRole(ctx, ["platform_super_admin"]);
+    const tenant = await ctx.db.get(args.tenantId);
+    if (!tenant || tenant.deletedAt !== undefined) throw new Error("Tenant not found");
+    const reason = args.reason.trim();
+    if (reason.length < 8 || reason.length > 500) throw new Error("Provide a reason between 8 and 500 characters");
+    const records = await ctx.db.query("entitlements").withIndex("by_tenant", q => q.eq("tenantId", args.tenantId)).collect();
+    if (records.length === 0) return { removed: false };
+    for (const record of records) await ctx.db.delete(record._id);
+    await logAudit(ctx, {
+      action: "tenant.entitlementRemoved",
+      entityTable: "tenants",
+      entityId: tenant._id,
+      changedBy: actor._id,
+      before: records.map(({ planId, status, startsAt, expiresAt, trialEndsAt }) => ({ planId, status, startsAt: startsAt ?? null, expiresAt: expiresAt ?? null, trialEndsAt: trialEndsAt ?? null })),
+      after: { entitlementCount: 0, reason },
+    });
+    return { removed: true };
   },
 });
 

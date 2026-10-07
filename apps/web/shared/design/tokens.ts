@@ -29,6 +29,7 @@ export const designToken = {
     accentBg: "var(--accent-bg)",
     success: "var(--success)",
     successBg: "var(--success-bg)",
+    successText: "var(--success-text)",
     warning: "var(--warning)",
     warningBg: "var(--warning-bg)",
     danger: "var(--danger)",

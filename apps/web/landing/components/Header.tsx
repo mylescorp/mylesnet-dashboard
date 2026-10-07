@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu } from "lucide-react";
-import logo from "../assets/logo.png";
+import { ChevronDown, Menu } from "lucide-react";
+import mark from "../assets/mark.png";
 import { ThemeToggle } from "@/shared/components/ThemeToggle";
 import { Button } from "@/shared/ui/button";
 import {
@@ -15,49 +15,194 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/shared/ui/sheet";
+import { NAV_SECTIONS, type NavChild, type NavGroup } from "@/landing/content/navigation";
 
-const NAV_LINKS: { href: string; label: string }[] = [
-  { href: "/product", label: "Product" },
-  { href: "/solutions", label: "Solutions" },
-  { href: "/pricing", label: "Pricing" },
-  { href: "/integrations", label: "Integrations" },
-  { href: "/resources", label: "Resources" },
-  { href: "/contact", label: "Contact" },
-];
+/**
+ * Fallback for sections without authored groups: children flow into
+ * side-by-side columns (up to three), each a vertical stack like Centipid's
+ * 264px mega columns.
+ */
+const chunkColumns = (children: NavChild[]): NavGroup[] => {
+  const columnCount = Math.min(3, Math.max(1, Math.ceil(children.length / 2)));
+  const perColumn = Math.ceil(children.length / columnCount);
+  return Array.from({ length: columnCount }, (_, index) => ({
+    title: "",
+    children: children.slice(index * perColumn, (index + 1) * perColumn),
+  }));
+};
 
 export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
   const pathname = usePathname();
+  const navRef = useRef<HTMLDivElement>(null);
+
+  // Opens a dropdown, clamping the wide Centipid-style panel into the viewport.
+  // The panel is centered on its trigger, so left/right-edge triggers would
+  // otherwise push it off-screen; --dd-shift nudges it back like Centipid's
+  // JS-computed --mega-x offset. Measured while hidden (visibility, not
+  // display, so the panel is laid out), before the open transition starts.
+  const openDropdown = (href: string, itemEl: HTMLElement | null) => {
+    const ddEl = itemEl?.querySelector<HTMLDivElement>(".landing-nav-dropdown");
+    if (itemEl && ddEl) {
+      const viewportWidth = document.documentElement.clientWidth;
+      const itemRect = itemEl.getBoundingClientRect();
+      const width = ddEl.getBoundingClientRect().width;
+      const center = itemRect.left + itemRect.width / 2;
+      const left = center - width / 2;
+      let shift = 0;
+      if (left < 8) shift = 8 - left;
+      else if (left + width > viewportWidth - 8) shift = viewportWidth - 8 - (left + width);
+      ddEl.style.setProperty("--dd-shift", `${Math.round(shift)}px`);
+    }
+    setOpenMenu(href);
+  };
+
+  // Any navigation closes whatever was open.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setOpenMenu((prev) => (prev === null ? null : null));
+  }, [pathname]);
+
+  // Close the open dropdown on outside click or Escape, so it behaves like a menu.
+  useEffect(() => {
+    if (!openMenu) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!navRef.current?.contains(event.target as Node)) setOpenMenu(null);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpenMenu(null);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [openMenu]);
 
   return (
     <header className="landing-header">
       <nav className="landing-nav landing-container" aria-label="Main navigation">
         <Link className="landing-brand" href="/" aria-label="MylesNet home">
-          <Image className="landing-logo" src={logo} alt="" width={48} height={48} priority />
+          <Image className="landing-logo" src={mark} alt="" width={44} height={44} preload />
           <span className="landing-brand-name">MylesNet</span>
         </Link>
 
-        <div className="landing-nav-links">
-          {NAV_LINKS.map((link) => (
-            <Link
-              key={link.href}
-              className="landing-nav-link"
-              href={link.href}
-              data-active={pathname === link.href || pathname.startsWith(`${link.href}/`) ? "true" : undefined}
-              aria-current={pathname === link.href ? "page" : undefined}
-            >
-              {link.label}
-            </Link>
-          ))}
+        <div className="landing-nav-links" ref={navRef}>
+          {NAV_SECTIONS.map((section) => {
+            const isActive =
+              pathname === section.href || pathname.startsWith(`${section.href}/`);
+            const hasChildren = Boolean(section.children?.length);
+
+            if (!hasChildren) {
+              return (
+                <Link
+                  key={section.href}
+                  className="landing-nav-link"
+                  href={section.href}
+                  data-active={isActive ? "true" : undefined}
+                  aria-current={pathname === section.href ? "page" : undefined}
+                >
+                  {section.label}
+                </Link>
+              );
+            }
+
+            const isOpen = openMenu === section.href;
+            // Centipid-style panel: authored groups render as titled columns,
+            // anything else is split evenly across up to three columns.
+            const groups = section.groups?.length
+              ? section.groups
+              : chunkColumns(section.children ?? []);
+            return (
+              <div
+                className="landing-nav-item"
+                data-open={isOpen ? "true" : undefined}
+                key={section.href}
+                onPointerEnter={(event) => openDropdown(section.href, event.currentTarget)}
+                onPointerLeave={() => setOpenMenu(null)}
+                onBlur={(event) => {
+                  const next = event.relatedTarget;
+                  if (!(next instanceof Node) || !event.currentTarget.contains(next)) {
+                    setOpenMenu(null);
+                  }
+                }}
+              >
+                <Link
+                  className="landing-nav-link landing-nav-link-trigger"
+                  href={section.href}
+                  data-active={isActive ? "true" : undefined}
+                  data-expanded={isOpen ? "true" : undefined}
+                  aria-current={pathname === section.href ? "page" : undefined}
+                  aria-haspopup="true"
+                  aria-expanded={isOpen}
+                  onFocus={(event) => openDropdown(section.href, event.currentTarget.closest<HTMLElement>(".landing-nav-item"))}
+                >
+                  {section.label}
+                  <ChevronDown size={14} aria-hidden="true" className="landing-nav-chevron" />
+                </Link>
+                <div className="landing-nav-dropdown">
+                  <p className="landing-nav-dropdown-kicker">{section.label}</p>
+                  <div className="landing-nav-dropdown-list">
+                    {groups.map((group, groupIndex) => (
+                      <div
+                        className="landing-nav-dropdown-column"
+                        key={group.title || groupIndex}
+                      >
+                        {group.title ? (
+                          <p className="landing-nav-dropdown-col-title">{group.title}</p>
+                        ) : null}
+                        <ul className="landing-nav-dropdown-column-list">
+                          {group.children.map((child) => (
+                            <li key={child.href}>
+                              <Link
+                                className="landing-nav-dropdown-link"
+                                href={child.href}
+                                data-active={pathname === child.href ? "true" : undefined}
+                                aria-current={pathname === child.href ? "page" : undefined}
+                              >
+                                {child.label}
+                                {child.description ? (
+                                  <span className="landing-nav-dropdown-desc">
+                                    {child.description}
+                                  </span>
+                                ) : null}
+                              </Link>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                  {section.aside?.length ? (
+                    <div className="landing-nav-dropdown-aside">
+                      {section.aside.map((link) => (
+                        <Link
+                          key={link.href}
+                          className="landing-nav-dropdown-chip"
+                          href={link.href}
+                          data-active={pathname === link.href ? "true" : undefined}
+                          aria-current={pathname === link.href ? "page" : undefined}
+                        >
+                          {link.label}
+                        </Link>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         <div className="landing-nav-cta">
           <ThemeToggle className="landing-theme-toggle" />
-          <Button asChild variant="ghost" size="sm">
+          <Button asChild variant="ghost" size="sm" className="landing-signin">
             <Link href="/signin">Sign in</Link>
           </Button>
-          <Button asChild variant="default" size="sm">
-            <Link href="/signup">Sign up</Link>
+          <Button asChild variant="default" size="sm" className="landing-signup">
+            <Link href="/get-started">Get started</Link>
           </Button>
         </div>
 
@@ -78,25 +223,45 @@ export default function Header() {
               <SheetTitle>Navigation</SheetTitle>
             </SheetHeader>
             <nav className="flex flex-col gap-4 mt-8" aria-label="Mobile navigation">
-              {NAV_LINKS.map((link) => (
-                <Link
-                  key={link.href}
-                  className="text-lg font-medium hover:text-primary transition-colors"
-                  href={link.href}
-                  data-active={pathname === link.href || pathname.startsWith(`${link.href}/`) ? "true" : undefined}
-                  onClick={() => setMenuOpen(false)}
-                  aria-current={pathname === link.href ? "page" : undefined}
-                >
-                  {link.label}
-                </Link>
-              ))}
+              {NAV_SECTIONS.map((section) => {
+                const isActive =
+                  pathname === section.href || pathname.startsWith(`${section.href}/`);
+                return (
+                  <div key={section.href} className="landing-mobile-group">
+                    <Link
+                      className="text-lg font-medium hover:text-primary transition-colors"
+                      href={section.href}
+                      data-active={isActive ? "true" : undefined}
+                      onClick={() => setMenuOpen(false)}
+                      aria-current={pathname === section.href ? "page" : undefined}
+                    >
+                      {section.label}
+                    </Link>
+                    {section.children?.length ? (
+                      <ul className="landing-mobile-subnav">
+                        {section.children.map((child) => (
+                          <li key={child.href}>
+                            <Link
+                              href={child.href}
+                              onClick={() => setMenuOpen(false)}
+                              aria-current={pathname === child.href ? "page" : undefined}
+                            >
+                              {child.label}
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                );
+              })}
               <div className="landing-mobile-theme-row">
                 <ThemeToggle className="landing-theme-toggle" />
                 <Button asChild variant="ghost" className="flex-1" onClick={() => setMenuOpen(false)}>
                   <Link href="/signin">Sign in</Link>
                 </Button>
                 <Button asChild variant="default" className="flex-1" onClick={() => setMenuOpen(false)}>
-                  <Link href="/signup">Sign up</Link>
+                  <Link href="/get-started">Get started</Link>
                 </Button>
               </div>
             </nav>

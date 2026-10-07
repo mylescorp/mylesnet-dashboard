@@ -97,6 +97,15 @@ export const listAuditLog = query({
   },
 });
 
+/** Single append-only audit record for the canonical detail route. */
+export const getAuditLogEntry = query({
+  args: { auditId: v.id("auditLog") },
+  handler: async (ctx, args) => {
+    await requirePlatformUser(ctx);
+    return await ctx.db.get(args.auditId);
+  },
+});
+
 /** Read-only, paginated audit log view for /platform/audit. */
 export const listAuditLogPage = query({
   args: {

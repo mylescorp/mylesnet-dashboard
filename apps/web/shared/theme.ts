@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 
 export type ThemeMode = "light" | "dark" | "system";
 export type ResolvedTheme = "light" | "dark";
+const getServerMode = (): ThemeMode => "system";
 
 const STORAGE_KEY = "mylesnet-dashboard-theme";
 
@@ -27,34 +28,22 @@ function applyMode(mode: ThemeMode) {
 }
 
 export function useTheme() {
-  const [mode, setModeState] = useState<ThemeMode | null>(() => {
-    if (typeof window === "undefined") return null;
-    return getStoredMode();
-  });
-
-  const resolved = mode === null ? "light" : resolveMode(mode);
-
-  useEffect(() => {
-    if (mode !== null) applyMode(mode);
-  }, [mode]);
-
-  useEffect(() => {
-    if (mode !== "system") return;
-
+  const subscribe = useCallback((notify: () => void) => {
+    const onChange = () => notify();
+    window.addEventListener("storage", onChange);
+    window.addEventListener("mylesnet-theme-changed", onChange);
     const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const onChange = () => {
-      if (getStoredMode() === "system") {
-        applyMode("system");
-        setModeState(getStoredMode());
-      }
-    };
-
     media.addEventListener("change", onChange);
-    return () => media.removeEventListener("change", onChange);
-  }, [mode]);
+    return () => {
+      window.removeEventListener("storage", onChange);
+      window.removeEventListener("mylesnet-theme-changed", onChange);
+      media.removeEventListener("change", onChange);
+    };
+  }, []);
+  const mode = useSyncExternalStore(subscribe, getStoredMode, getServerMode);
+  const resolved = mode === "system" && typeof window === "undefined" ? "light" : resolveMode(mode);
 
   const setMode = useCallback((newMode: ThemeMode) => {
-    setModeState(newMode);
     localStorage.setItem(STORAGE_KEY, newMode);
     applyMode(newMode);
     window.dispatchEvent(new CustomEvent("mylesnet-theme-changed", { detail: newMode }));

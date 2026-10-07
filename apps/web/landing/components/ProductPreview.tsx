@@ -10,9 +10,9 @@ const SIDE_ITEMS: { icon: React.ElementType; label: string; active?: boolean }[]
 ];
 
 const KPIS: { label: string; trend: string }[] = [
-  { label: "Revenue today", trend: "posted" },
-  { label: "Customers online", trend: "sessions" },
-  { label: "Expiring soon", trend: "renewals due" },
+  { label: "Revenue today", trend: "Payment activity" },
+  { label: "Customers online", trend: "Active sessions" },
+  { label: "Expiring soon", trend: "Upcoming renewals" },
 ];
 
 const CHART_BAR_COUNT = 12;
@@ -56,7 +56,7 @@ export default function ProductPreview() {
                 <h4>Operations overview</h4>
                 <p>Everything running your network, in one place</p>
               </div>
-              <span className="landing-status-chip">Live</span>
+              <span className="landing-status-chip">Preview</span>
             </div>
             <div className="landing-preview-kpis">
               {KPIS.map((kpi) => (
@@ -66,7 +66,7 @@ export default function ProductPreview() {
                     {kpi.label}
                   </span>
                   <strong>—</strong>
-                  <small>Updated {kpi.trend}</small>
+                  <small>{kpi.trend}</small>
                 </div>
               ))}
             </div>

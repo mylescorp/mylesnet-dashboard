@@ -17,7 +17,11 @@ export type ProvisioningRequest = {
   decidedAt: number | null;
   decisionNote: string | null;
   createdAt: number;
+  marketName: string | null;
+  tenantName: string | null;
 };
+
+export type ProvisioningMarket = { _id: string; name: string; tenantId: string | null; tenantName: string | null };
 
 /**
  * Temporary explicit references while the generated Convex API remains pinned
@@ -54,4 +58,6 @@ export const provisioning = {
     { requestId: string },
     void
   >("provisioning:markProvisioningDeployed"),
+  listMarkets: makeFunctionReference<"query", Record<string, never>, ProvisioningMarket[]>("provisioning:listMarketsForQueue"),
+  deleteRequest: makeFunctionReference<"mutation", { requestId: string }, void>("provisioning:deleteProvisioningRequest"),
 };
