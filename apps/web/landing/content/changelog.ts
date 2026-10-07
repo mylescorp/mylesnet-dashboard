@@ -26,13 +26,11 @@ export const releases: Release[] = [
     date: "2026-10-06",
     status: "Shipped",
     summary:
-      "Hotspot billing is 3% of confirmed hotspot revenue, PPPoE is $0.25 per active subscriber, and enterprise is custom.",
+      "Indicative rates and a fee estimator are published for Hotspot and PPPoE; final billing terms are confirmed by written quote.",
     items: [
       "Hotspot: 3% of the hotspot revenue MylesNet confirms in a month.",
-      "PPPoE: $0.25 per subscriber active during the month — suspended and expired accounts cost nothing.",
-      "Enterprise: custom volume pricing for 10,000+ subscribers and multi-region operations.",
-      "No per-router, per-seat, or per-site charges, and a 14-day trial that needs no card.",
-      "Rates display in KES, UGX or USD from a cached snapshot, so nothing has to look up an exchange rate when the pricing page loads.",
+      "PPPoE estimator: $0.25 per active subscriber, converted for display using an indicative cached reference rate.",
+      "Currency conversions are estimates; confirm the applicable rate, invoice schedule, payment method and other terms in a written quote.",
     ],
   },
   {
