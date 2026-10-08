@@ -28,8 +28,12 @@ separate archive policy.
   READMEs, workflow scripts, and the local vault checkout's branch/working-tree
   status. No secret-bearing environment files were read.
 - **Verification:** `git diff --check` and local Markdown link-target checks
-  passed. Automated tests/build were not run because this task changes
-  documentation only.
+  passed for the documentation changes. After CI surfaced the existing
+  Next.js advisory, `pnpm audit --prod --audit-level=high` passed locally with
+  the 16.3.8 patch. Automated tests/build were not run locally; CI must verify
+  them on the updated PR.
 - **Status:** The documentation set is synchronized into the owner-designated
-  local vault checkout. The GitHub PR and its CI/preview checks remain to be
-  completed.
+  local vault checkout. The initial PR preview passed; CI's production audit
+  found the pre-existing Next.js pin was below the security-patched release.
+  Next.js and `eslint-config-next` are now pinned at 16.3.8 with a regenerated
+  lockfile; CI and preview need to pass on the updated commit before merge.
