@@ -19,7 +19,7 @@
     "test:ui": "pnpm --filter @mylesnet/web run test"
   },
   "dependencies": {
-    "@convex-dev/auth": "^0.0.95",
+    "@convex-dev/auth": "^0.0.96",
     "convex": "~1.44.0",
     "zod": "^4.6.5"
   },
