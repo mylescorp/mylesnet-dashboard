@@ -13,6 +13,7 @@ import {
   Users,
 } from "lucide-react";
 import { Button } from "@/shared/ui/button";
+import { firstUsableAddress } from "@/shared/lib/ipv4-subnet";
 
 /**
  * IPv4 subnet calculator — pure client-side, nothing sent anywhere.
@@ -106,7 +107,7 @@ export default function SubnetCalculatorTool() {
     let usable: number;
     if (prefix >= 31) usable = prefix === 31 ? 2 : 1;
     else usable = total - 2;
-    const first = prefix === 32 ? network : network + 1;
+    const first = firstUsableAddress(network, prefix);
     const last = prefix === 31 ? broadcast : prefix === 32 ? network : broadcast - 1;
     const wildcard = (~mask) >>> 0;
 

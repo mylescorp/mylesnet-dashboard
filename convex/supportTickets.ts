@@ -1,9 +1,10 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireMarketAccess, requirePermission, requirePlatformSubRole, resolveRoles } from "./lib/auth";
+import { enforceTenantOnResource, readScopedTenant } from "./lib/tenant";
 import { logAudit } from "./lib/auditLog";
 
-const platformTicketRoles = ["platform_super_admin", "platform_support", "platform_ops", "platform_finance"];
+const platformTicketRoles = ["platform_super_admin", "platform_owner", "platform_admin", "platform_support", "platform_ops", "platform_finance"];
 const ticketCategory = v.union(v.literal("network"), v.literal("billing"), v.literal("account"));
 
 async function getPlatformTicketActor(ctx: Parameters<typeof requirePlatformSubRole>[0]) {
@@ -12,9 +13,9 @@ async function getPlatformTicketActor(ctx: Parameters<typeof requirePlatformSubR
   const slugs = roles.map(role => role.slug);
   return {
     user,
-    canManageAll: slugs.some(slug => ["platform_owner", "platform_admin", "platform_support"].includes(slug)),
-    canReadNetwork: slugs.includes("ops_manager"),
-    canReadBilling: slugs.includes("finance_manager"),
+    canManageAll: slugs.some(slug => ["platform_super_admin", "platform_owner", "platform_admin", "platform_support"].includes(slug)),
+    canReadNetwork: slugs.some(slug => ["platform_ops", "ops_manager"].includes(slug)),
+    canReadBilling: slugs.some(slug => ["platform_finance", "finance_manager"].includes(slug)),
   };
 }
 
@@ -45,8 +46,11 @@ export const listSupportTickets = query({
   },
   handler: async (ctx, args) => {
     await requirePermission(ctx, "tickets:read");
+    const scope = await readScopedTenant(ctx);
     if (args.marketId) await requireMarketAccess(ctx, args.marketId, "viewer");
-    let tickets = await ctx.db.query("supportTickets").collect();
+    let tickets = scope.enforced
+      ? await ctx.db.query("supportTickets").withIndex("by_tenant_created", (q) => q.eq("tenantId", scope.tenantId!)).order("desc").collect()
+      : await ctx.db.query("supportTickets").collect();
 
     if (args.ticketStatus) {
       tickets = tickets.filter((t) => t.ticketStatus === args.ticketStatus);
@@ -65,7 +69,9 @@ export const getSupportTicket = query({
   args: { ticketId: v.id("supportTickets") },
   handler: async (ctx, args) => {
     await requirePermission(ctx, "tickets:read");
+    const scope = await readScopedTenant(ctx);
     const ticket = await ctx.db.get(args.ticketId);
+    if (scope.enforced && ticket?.tenantId !== scope.tenantId) return null;
     if (ticket?.marketId) await requireMarketAccess(ctx, ticket.marketId, "viewer");
     return ticket;
   },
@@ -87,7 +93,9 @@ export const createSupportTicket = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "tickets:manage");
+    const scope = await readScopedTenant(ctx);
     if (args.marketId) await requireMarketAccess(ctx, args.marketId, "operator");
+    if (args.agentId) await enforceTenantOnResource(ctx, await ctx.db.get(args.agentId), "agent");
     const now = Date.now();
     const category = args.category ?? "account";
     const configuredSla = await ctx.db.query("platformSlaPolicies").withIndex("by_category", q => q.eq("category", category)).first();
@@ -103,6 +111,7 @@ export const createSupportTicket = mutation({
       priority: args.priority,
       marketId: args.marketId,
       agentId: args.agentId,
+      tenantId: scope.enforced ? scope.tenantId ?? undefined : undefined,
       createdBy: user._id,
       createdAt: now,
       updatedAt: now,
@@ -143,9 +152,20 @@ export const updateSupportTicket = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "tickets:manage");
+    const scope = await readScopedTenant(ctx);
     const ticket = await ctx.db.get(args.ticketId);
-    if (!ticket) throw new Error("Ticket not found");
+    if (!ticket || (scope.enforced && ticket.tenantId !== scope.tenantId)) throw new Error("Ticket not found");
     if (ticket.marketId) await requireMarketAccess(ctx, ticket.marketId, "operator");
+    if (args.assignedTo) {
+      const assignedUser = await ctx.db.get(args.assignedTo);
+      if (!assignedUser || assignedUser.isActive === false || assignedUser.deletedAt !== undefined) throw new Error("Assignee not found");
+      if (scope.enforced) {
+        const membership = await ctx.db.query("tenantMemberships")
+          .withIndex("by_user_tenant", (q) => q.eq("userId", args.assignedTo!).eq("tenantId", scope.tenantId!))
+          .first();
+        if (membership?.status !== "active") throw new Error("Assignee not found");
+      }
+    }
 
     const patch: Record<string, unknown> = { updatedAt: Date.now() };
     if (args.ticketStatus !== undefined) {
@@ -176,8 +196,9 @@ export const softDeleteTicket = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "tickets:manage");
+    const scope = await readScopedTenant(ctx);
     const ticket = await ctx.db.get(args.ticketId);
-    if (!ticket) throw new Error("Ticket not found");
+    if (!ticket || (scope.enforced && ticket.tenantId !== scope.tenantId)) throw new Error("Ticket not found");
     if (ticket.marketId) await requireMarketAccess(ctx, ticket.marketId, "operator");
 
     await ctx.db.patch(args.ticketId, {
@@ -199,8 +220,9 @@ export const restoreTicket = mutation({
   args: { ticketId: v.id("supportTickets") },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "tickets:manage");
+    const scope = await readScopedTenant(ctx);
     const ticket = await ctx.db.get(args.ticketId);
-    if (!ticket) throw new Error("Ticket not found");
+    if (!ticket || (scope.enforced && ticket.tenantId !== scope.tenantId)) throw new Error("Ticket not found");
     if (ticket.marketId) await requireMarketAccess(ctx, ticket.marketId, "operator");
 
     await ctx.db.patch(args.ticketId, {
@@ -256,7 +278,7 @@ export const getPlatformTicket = query({
 export const createPlatformTicket = mutation({
   args: { subject: v.string(), description: v.string(), category: ticketCategory, priority: v.union(v.literal("low"), v.literal("medium"), v.literal("high"), v.literal("urgent")), tenantId: v.optional(v.id("tenants")), marketId: v.optional(v.id("markets")) },
   handler: async (ctx, args) => {
-    const actor = await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_support"]);
+    const actor = await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_owner", "platform_admin", "platform_support"]);
     const subject = args.subject.trim(); const description = args.description.trim();
     if (!subject || subject.length > 180) throw new Error("Ticket subject must be 1–180 characters");
     if (!description || description.length > 10_000) throw new Error("Ticket description must be 1–10,000 characters");
@@ -324,7 +346,7 @@ export const updatePlatformTicket = mutation({
 export const deletePlatformTicket = mutation({
   args: { ticketId: v.id("supportTickets"), reason: v.string() },
   handler: async (ctx, args) => {
-    const actor = await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_support"]);
+    const actor = await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_owner", "platform_admin", "platform_support"]);
     const ticket = await ctx.db.get(args.ticketId);
     if (!ticket || ticket.deletedAt !== undefined) throw new Error("Ticket not found");
     const reason = args.reason.trim();
@@ -339,7 +361,7 @@ export const deletePlatformTicket = mutation({
 export const restorePlatformTicket = mutation({
   args: { ticketId: v.id("supportTickets") },
   handler: async (ctx, args) => {
-    const actor = await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_support"]);
+    const actor = await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_owner", "platform_admin", "platform_support"]);
     const ticket = await ctx.db.get(args.ticketId);
     if (!ticket || ticket.deletedAt === undefined) throw new Error("Deleted ticket not found");
     const now = Date.now();

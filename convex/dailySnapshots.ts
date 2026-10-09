@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { internalAction, internalMutation, internalQuery, query } from "./_generated/server";
 import { requirePermission } from "./lib/auth";
 import { dayOf, localToUsd } from "./lib/finance";
+import { enforceTenantOnResource } from "./lib/tenant";
 
 /** Page active markets and enqueue one bounded daily snapshot mutation per market. */
 export const listActiveMarketIdsPage = internalQuery({
@@ -135,6 +136,7 @@ export const getDailySnapshot = query({
   args: { marketId: v.id("markets"), date: v.optional(v.string()) },
   handler: async (ctx, args) => {
     await requirePermission(ctx, "financials:read");
+    if (!(await enforceTenantOnResource(ctx, await ctx.db.get(args.marketId), "market"))) throw new Error("Market not found");
     const row = await ctx.db
       .query("dailySnapshots")
       .withIndex("by_market_date", (q) => q.eq("marketId", args.marketId).eq("date", args.date ?? dayOf(Date.now())))
@@ -147,6 +149,7 @@ export const listDailySnapshots = query({
   args: { marketId: v.id("markets"), days: v.optional(v.number()) },
   handler: async (ctx, args) => {
     await requirePermission(ctx, "financials:read");
+    if (!(await enforceTenantOnResource(ctx, await ctx.db.get(args.marketId), "market"))) throw new Error("Market not found");
     const rows = await ctx.db
       .query("dailySnapshots")
       .withIndex("by_market_date", (q) => q.eq("marketId", args.marketId))

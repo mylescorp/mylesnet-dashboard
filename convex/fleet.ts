@@ -217,6 +217,7 @@ export const registerDevice = mutation({
       marketId: market._id,
       name,
       deviceKind,
+      firmwareVersion: args.firmwareVersion?.trim(),
       macAddress,
       serialOrMac: macAddress,
       lifecycleStatus: "active",
@@ -226,7 +227,7 @@ export const registerDevice = mutation({
       createdAt: now,
       updatedAt: now,
     });
-    await logAudit(ctx, { action: "fleet.device_registered", entityTable: "platformDevices", entityId: deviceId, changedBy: user._id, after: { tenantId: market.tenantId, marketId: market._id, name, deviceKind, macAddress } });
+    await logAudit(ctx, { action: "fleet.device_registered", entityTable: "platformDevices", entityId: deviceId, changedBy: user._id, tenantId: market.tenantId, after: { tenantId: market.tenantId, marketId: market._id, name, deviceKind, firmwareVersion: args.firmwareVersion?.trim(), macAddress } });
     return deviceId;
   },
 });

@@ -31,11 +31,12 @@ export const getDetail = query({
         .collect(),
       ctx.db
         .query("auditLog")
-        .filter((q) =>
-          q.and(
-            q.eq(q.field("entityTable"), "subscribers"),
-            q.eq(q.field("entityId"), args.subscriberId),
-          ),
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("entityTable"), "subscribers"),
+          q.eq(q.field("entityId"), args.subscriberId),
+          q.eq(q.field("tenantId"), tenantId),
+        ),
         )
         .order("desc")
         .take(30),
@@ -49,7 +50,7 @@ export const getDetail = query({
 
     return {
       subscriber,
-      plan: plan
+      plan: plan && plan.tenantId === tenantId
         ? {
             name: plan.name,
             code: plan.code,

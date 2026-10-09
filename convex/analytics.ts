@@ -1,6 +1,8 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
 import { requirePermission } from "./lib/auth";
+import { enforceTenantOnResource, readTenantList } from "./lib/tenant";
+import type { Doc } from "./_generated/dataModel";
 import { dayOf } from "./lib/finance";
 
 /**
@@ -11,9 +13,14 @@ export const getRevenueTrend = query({
   args: { marketId: v.optional(v.id("markets")), days: v.optional(v.number()) },
   handler: async (ctx, args) => {
     await requirePermission(ctx, "analytics:read");
+    if (args.marketId && !(await enforceTenantOnResource(ctx, await ctx.db.get(args.marketId), "market"))) throw new Error("Market not found");
     const days = args.days ?? 30;
     const from = dayOf(Date.now() - days * 24 * 60 * 60 * 1000);
-    const rows = await ctx.db.query("dailySnapshots").withIndex("by_date", (q) => q.gte("date", from)).collect();
+    const rows = await readTenantList<Doc<"dailySnapshots">>(ctx, {
+      all: () => ctx.db.query("dailySnapshots").withIndex("by_date", (q) => q.gte("date", from)).collect(),
+      tenant: (tenantId) => ctx.db.query("dailySnapshots").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect().then((items) => items.filter((row) => row.date >= from)),
+      legacy: () => ctx.db.query("dailySnapshots").withIndex("by_date", (q) => q.gte("date", from)).collect().then((items) => items.filter((row) => row.tenantId === undefined)),
+    });
     const filtered = args.marketId ? rows.filter((r) => r.marketId === args.marketId) : rows;
     const byDate = new Map<string, { revenueLocal: number; revenueUSD: number; netContributionLocal: number; newSubscribers: number; salesCount: number }>();
     for (const row of filtered) {
@@ -50,9 +57,15 @@ export const getSubscriberTrend = query({
   args: { marketId: v.optional(v.id("markets")), days: v.optional(v.number()) },
   handler: async (ctx, args) => {
     await requirePermission(ctx, "subscriber_snapshots:read");
+    if (args.marketId && !(await enforceTenantOnResource(ctx, await ctx.db.get(args.marketId), "market"))) throw new Error("Market not found");
     const days = args.days ?? 30;
     const from = dayOf(Date.now() - days * 24 * 60 * 60 * 1000);
-    const rows = (await ctx.db.query("subscriberSnapshots").collect())
+    const snapshotRows = await readTenantList<Doc<"subscriberSnapshots">>(ctx, {
+      all: () => ctx.db.query("subscriberSnapshots").collect(),
+      tenant: (tenantId) => ctx.db.query("subscriberSnapshots").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
+      legacy: () => ctx.db.query("subscriberSnapshots").withIndex("by_tenant", (q) => q.eq("tenantId", undefined)).collect(),
+    });
+    const rows = snapshotRows
       .filter((s) => s.date >= from && (!args.marketId || s.marketId === args.marketId))
       .sort((a, b) => a.date.localeCompare(b.date));
     const byDate = new Map<string, { activeCount: number; newCount: number }>();
@@ -70,9 +83,14 @@ export const getTopAgents = query({
   args: { days: v.optional(v.number()), marketId: v.optional(v.id("markets")), limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
     await requirePermission(ctx, "agents:read");
+    if (args.marketId && !(await enforceTenantOnResource(ctx, await ctx.db.get(args.marketId), "market"))) throw new Error("Market not found");
     const days = args.days ?? 30;
     const from = Date.now() - days * 24 * 60 * 60 * 1000;
-    const activity = await ctx.db.query("agentActivity").withIndex("by_time", (q) => q.gte("occurredAt", from)).collect();
+    const activity = await readTenantList<Doc<"agentActivity">>(ctx, {
+      all: () => ctx.db.query("agentActivity").withIndex("by_time", (q) => q.gte("occurredAt", from)).collect(),
+      tenant: (tenantId) => ctx.db.query("agentActivity").withIndex("by_tenant_time", (q) => q.eq("tenantId", tenantId)).filter((q) => q.gte(q.field("occurredAt"), from)).collect(),
+      legacy: () => ctx.db.query("agentActivity").withIndex("by_time", (q) => q.gte("occurredAt", from)).collect().then((items) => items.filter((row) => row.tenantId === undefined)),
+    });
     const filtered = args.marketId ? activity.filter((a) => a.marketId === args.marketId) : activity;
     const summary = new Map<string, { count: number; revenueLocal: number; currency: string }>();
     for (const a of filtered) {
@@ -81,7 +99,12 @@ export const getTopAgents = query({
       entry.revenueLocal += a.amountLocal;
       summary.set(a.agentId, entry);
     }
-    const agents = new Map((await ctx.db.query("agents").collect()).map((a) => [a._id, a.name]));
+    const agentRows = await readTenantList<Doc<"agents">>(ctx, {
+      all: () => ctx.db.query("agents").collect(),
+      tenant: (tenantId) => ctx.db.query("agents").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
+      legacy: () => ctx.db.query("agents").withIndex("by_tenant", (q) => q.eq("tenantId", undefined)).collect(),
+    });
+    const agents = new Map(agentRows.map((a) => [a._id, a.name]));
     return Array.from(summary.entries())
       .map(([agentId, s]) => ({ agentId, agentName: agents.get(agentId as never) ?? agentId, ...s }))
       .sort((a, b) => b.revenueLocal - a.revenueLocal)
@@ -93,9 +116,14 @@ export const getSalesMix = query({
   args: { days: v.optional(v.number()), marketId: v.optional(v.id("markets")) },
   handler: async (ctx, args) => {
     await requirePermission(ctx, "business_events:read");
+    if (args.marketId && !(await enforceTenantOnResource(ctx, await ctx.db.get(args.marketId), "market"))) throw new Error("Market not found");
     const days = args.days ?? 30;
     const from = Date.now() - days * 24 * 60 * 60 * 1000;
-    const activity = await ctx.db.query("agentActivity").withIndex("by_time", (q) => q.gte("occurredAt", from)).collect();
+    const activity = await readTenantList<Doc<"agentActivity">>(ctx, {
+      all: () => ctx.db.query("agentActivity").withIndex("by_time", (q) => q.gte("occurredAt", from)).collect(),
+      tenant: (tenantId) => ctx.db.query("agentActivity").withIndex("by_tenant_time", (q) => q.eq("tenantId", tenantId)).filter((q) => q.gte(q.field("occurredAt"), from)).collect(),
+      legacy: () => ctx.db.query("agentActivity").withIndex("by_time", (q) => q.gte("occurredAt", from)).collect().then((items) => items.filter((row) => row.tenantId === undefined)),
+    });
     const filtered = args.marketId ? activity.filter((a) => a.marketId === args.marketId) : activity;
     const mix = new Map<string, { count: number; revenueLocal: number; planId?: string }>();
     for (const a of filtered) {

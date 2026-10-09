@@ -1,5 +1,5 @@
 export type StatementLine = { rowNumber: number; reference: string; amountMinor: number; currency: string; settledAt: number };
-export type PaymentMatchInput = { id: string; tenantId?: string; amount: number; currency: string; status?: string };
+export type PaymentMatchInput = { id: string; tenantId?: string; amount: number; currency: string; status?: "pending" | "completed" | "failed" | "refunded" };
 export type ReconciliationMatchStatus = "matched" | "missing_payment" | "duplicate_statement" | "ambiguous_payment" | "payment_status_mismatch" | "amount_mismatch" | "currency_mismatch";
 
 export function parseMajorAmountToMinor(value: string): number {

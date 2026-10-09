@@ -691,6 +691,7 @@ export default defineSchema({
     restoredAt: v.optional(v.number()),
     restoredBy: v.optional(v.id("users")),
   })
+    .index("by_tenant_created", ["tenantId", "createdAt"])
     .index("by_status", ["ticketStatus"])
     .index("by_category", ["category"])
     .index("by_market", ["marketId"])
@@ -856,6 +857,7 @@ export default defineSchema({
   })
     .index("by_agent", ["agentId"])
     .index("by_agent_market", ["agentId", "marketId"])
+    .index("by_tenant_time", ["tenantId", "occurredAt"])
     .index("by_market_time", ["marketId", "occurredAt"])
     .index("by_time", ["occurredAt"]),
 
@@ -971,6 +973,7 @@ export default defineSchema({
     currency: v.string(),
     createdAt: v.number(),
   })
+    .index("by_tenant", ["tenantId"])
     .index("by_market_date", ["marketId", "date"])
     .index("by_date", ["date"]),
 
@@ -1040,7 +1043,8 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_enabled", ["enabled", "frequency"])
-    .index("by_type", ["reportType"]),
+    .index("by_type", ["reportType"])
+    .index("by_tenant", ["tenantId"]),
 
   // One row per generated report artifact; file bytes live in _storage.
   reportExports: defineTable({
@@ -1058,6 +1062,7 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_requested", ["requestedBy", "createdAt"])
+    .index("by_tenant_created", ["tenantId", "createdAt"])
     .index("by_status", ["status"])
     .index("by_report", ["scheduledReportId"]),
 

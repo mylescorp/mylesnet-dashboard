@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { Doc } from "./_generated/dataModel";
 import { requirePermission, requirePlatformUser } from "./lib/auth";
-import { readTenantList, enforceTenantOnResource } from "./lib/tenant";
+import { readTenantList, enforceTenantOnResource, readScopedTenant } from "./lib/tenant";
 import { logAudit } from "./lib/auditLog";
 
 export const listMarkets = query({
@@ -37,8 +37,10 @@ export const createMarket = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "markets:manage");
+    const scope = await readScopedTenant(ctx);
     const now = Date.now();
     const marketId = await ctx.db.insert("markets", {
+      tenantId: scope.enforced ? scope.tenantId ?? undefined : undefined,
       name: args.name,
       country: args.country,
       currency: args.currency,
@@ -70,7 +72,7 @@ export const updateMarketLifecycleStatus = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "markets:manage");
-    const market = await ctx.db.get(args.marketId);
+    const market = await enforceTenantOnResource(ctx, await ctx.db.get(args.marketId), "market");
     if (!market) throw new Error("Market not found");
 
     await ctx.db.patch(args.marketId, {
@@ -104,7 +106,7 @@ export const softDeleteMarket = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "markets:manage");
-    const market = await ctx.db.get(args.marketId);
+    const market = await enforceTenantOnResource(ctx, await ctx.db.get(args.marketId), "market");
     if (!market) throw new Error("Market not found");
 
     const activeAssignments = await ctx.db
@@ -155,7 +157,7 @@ export const restoreMarket = mutation({
   args: { marketId: v.id("markets") },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "markets:manage");
-    const market = await ctx.db.get(args.marketId);
+    const market = await enforceTenantOnResource(ctx, await ctx.db.get(args.marketId), "market");
     if (!market) throw new Error("Market not found");
 
     // Restoring does NOT auto-reactivate whatever was reassigned away while
@@ -190,6 +192,9 @@ export const reportOperatingCost = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "markets:manage");
+    const market = await enforceTenantOnResource(ctx, await ctx.db.get(args.marketId), "market");
+    if (!market) throw new Error("Market not found");
+    const scope = await readScopedTenant(ctx);
     const existing = await ctx.db
       .query("marketOperatingCosts")
       .withIndex("by_market_month", (q) =>
@@ -198,7 +203,9 @@ export const reportOperatingCost = mutation({
       .first();
 
     if (existing) {
+      await enforceTenantOnResource(ctx, existing, "market operating cost");
       await ctx.db.patch(existing._id, {
+        tenantId: scope.enforced ? scope.tenantId ?? undefined : existing.tenantId,
         airtelDataCost: args.airtelDataCost,
         electricityCost: args.electricityCost,
         currency: args.currency,
@@ -216,6 +223,7 @@ export const reportOperatingCost = mutation({
     }
 
     const costId = await ctx.db.insert("marketOperatingCosts", {
+      tenantId: scope.enforced ? scope.tenantId ?? undefined : undefined,
       marketId: args.marketId,
       yearMonth: args.yearMonth,
       airtelDataCost: args.airtelDataCost,
@@ -240,6 +248,8 @@ export const listOperatingCosts = query({
   args: { marketId: v.id("markets") },
   handler: async (ctx, args) => {
     await requirePermission(ctx, "markets:read");
+    const market = await enforceTenantOnResource(ctx, await ctx.db.get(args.marketId), "market");
+    if (!market) throw new Error("Market not found");
     const rows = await ctx.db
       .query("marketOperatingCosts")
       .withIndex("by_market_month", (q) => q.eq("marketId", args.marketId))
@@ -253,10 +263,11 @@ export const listMarketsMissingCostEntry = query({
   args: { yearMonth: v.string() },
   handler: async (ctx, args) => {
     await requirePermission(ctx, "markets:read");
-    const markets = await ctx.db
-      .query("markets")
-      .filter((q) => q.eq(q.field("lifecycleStatus"), "active"))
-      .collect();
+    const markets = (await readTenantList<Doc<"markets">>(ctx, {
+      all: () => ctx.db.query("markets").collect(),
+      tenant: (tenantId) => ctx.db.query("markets").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
+      legacy: () => ctx.db.query("markets").withIndex("by_tenant", (q) => q.eq("tenantId", undefined)).collect(),
+    })).filter((market) => market.lifecycleStatus === "active");
 
     const missing = [];
     for (const market of markets) {
@@ -277,6 +288,8 @@ export const getMarketStaffingStatus = query({
   args: { marketId: v.id("markets") },
   handler: async (ctx, args) => {
     await requirePermission(ctx, "markets:read");
+    const market = await enforceTenantOnResource(ctx, await ctx.db.get(args.marketId), "market");
+    if (!market) throw new Error("Market not found");
     const assignments = await ctx.db
       .query("agentMarketAssignments")
       .withIndex("by_market", (q) => q.eq("marketId", args.marketId))
