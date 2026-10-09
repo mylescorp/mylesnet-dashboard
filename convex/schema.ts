@@ -201,7 +201,55 @@ export default defineSchema({
     operatorId: v.optional(v.id("users")),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_tenant", ["tenantId"]).index("by_subscriber", ["subscriberId"]).index("by_invoice", ["invoiceId"]).index("by_status", ["status"]).index("by_date", ["paymentDate"]),
+  }).index("by_tenant", ["tenantId"]).index("by_subscriber", ["subscriberId"]).index("by_invoice", ["invoiceId"]).index("by_status", ["status"]).index("by_date", ["paymentDate"]).index("by_gateway_reference", ["gateway", "reference"]),
+
+  /** Platform review trail for derived cross-tenant billing anomaly findings. */
+  platformBillingAnomalyReviews: defineTable({
+    paymentId: v.id("payments"),
+    anomalyType: v.union(v.literal("stale_pending"), v.literal("duplicate_reference"), v.literal("invoice_status_mismatch"), v.literal("negative_amount")),
+    status: v.union(v.literal("open"), v.literal("acknowledged"), v.literal("resolved")),
+    note: v.optional(v.string()),
+    updatedBy: v.id("users"),
+    updatedAt: v.number(),
+  })
+    .index("by_payment_and_type", ["paymentId", "anomalyType"])
+    .index("by_updatedAt", ["updatedAt"]),
+
+  /** Imported external settlement statement, retained as a reviewable run. */
+  platformPaymentReconciliationRuns: defineTable({
+    gateway: v.string(),
+    statementName: v.string(),
+    status: v.union(v.literal("imported"), v.literal("reviewed"), v.literal("closed"), v.literal("void")),
+    voidReason: v.optional(v.string()),
+    rowCount: v.number(),
+    matchedCount: v.number(),
+    exceptionCount: v.number(),
+    importedBy: v.id("users"),
+    importedAt: v.number(),
+    updatedBy: v.id("users"),
+    updatedAt: v.number(),
+  })
+    .index("by_importedAt", ["importedAt"])
+    .index("by_gateway_and_importedAt", ["gateway", "importedAt"]),
+
+  /** Immutable statement rows with the cross-tenant payment match at import time. */
+  platformPaymentReconciliationRows: defineTable({
+    runId: v.id("platformPaymentReconciliationRuns"),
+    rowNumber: v.number(),
+    reference: v.string(),
+    statementAmountMinor: v.number(),
+    statementCurrency: v.string(),
+    settledAt: v.number(),
+    matchStatus: v.union(v.literal("matched"), v.literal("missing_payment"), v.literal("duplicate_statement"), v.literal("ambiguous_payment"), v.literal("payment_status_mismatch"), v.literal("amount_mismatch"), v.literal("currency_mismatch")),
+    paymentId: v.optional(v.id("payments")),
+    tenantId: v.optional(v.id("tenants")),
+    internalAmountMinor: v.optional(v.number()),
+    internalCurrency: v.optional(v.string()),
+    internalPaymentStatus: v.optional(v.union(v.literal("pending"), v.literal("completed"), v.literal("failed"), v.literal("refunded"))),
+  })
+    .index("by_run_and_row", ["runId", "rowNumber"])
+    .index("by_run_and_status", ["runId", "matchStatus"])
+    .index("by_payment", ["paymentId"]),
 
   invoices: defineTable({
     ...tenantScope,
@@ -366,6 +414,7 @@ export default defineSchema({
     .index("by_market_status_requestedAt", ["marketId", "status", "requestedAt"])
     .index("by_status", ["status"])
     .index("by_status_requestedAt", ["status", "requestedAt"])
+    .index("by_requestedAt", ["requestedAt"])
     .index("by_device_status", ["deviceId", "status"]),
 
   /** Platform-owned, review-only network policy catalog. It does not provision RADIUS or routers. */
@@ -509,7 +558,8 @@ export default defineSchema({
   })
     .index("by_tenant", ["tenantId"])
     .index("by_status", ["payoutStatus"])
-    .index("by_agent", ["agentId"]),
+    .index("by_agent", ["agentId"])
+    .index("by_accruedAt", ["accruedAt"]),
 
   vouchers: defineTable({
     ...tenantScope,
@@ -858,6 +908,7 @@ export default defineSchema({
     approvedBy: v.optional(v.id("users")),
     approvedAt: v.optional(v.number()),
     otpHash: v.optional(v.string()),
+    otpCreatedAt: v.optional(v.number()),
     otpVerifiedAt: v.optional(v.number()),
     processedAt: v.optional(v.number()),
     notes: v.optional(v.string()),
@@ -1097,6 +1148,27 @@ export default defineSchema({
     .index("by_status_and_scheduled_deletion", ["status", "scheduledDeletionAt"])
     .index("by_workosOrganizationId", ["workosOrganizationId"]),
 
+  /** Explicit operator-to-agency/reseller tenant scopes (spec §7). */
+  tenantRelationships: defineTable({
+    parentTenantId: v.id("tenants"),
+    childTenantId: v.id("tenants"),
+    type: v.union(v.literal("network"), v.literal("agency"), v.literal("reseller")),
+    status: v.union(v.literal("active"), v.literal("suspended")),
+    statusBeforeSuspension: v.optional(v.literal("active")),
+    suspendedByRelationshipId: v.optional(v.id("tenantRelationships")),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+    deletedBy: v.optional(v.id("users")),
+  })
+    .index("by_parent", ["parentTenantId"])
+    .index("by_child", ["childTenantId"])
+    .index("by_type", ["type"])
+    .index("by_parent_child_type", ["parentTenantId", "childTenantId", "type"])
+    .index("by_suspendedByRelationship", ["suspendedByRelationshipId"])
+    .index("by_createdAt", ["createdAt"]),
+
   // Warehouse of which workforce user belongs to which tenant (org-scoped).
   tenantMemberships: defineTable({
     userId: v.id("users"),
@@ -1249,6 +1321,21 @@ export default defineSchema({
     initializedAt: v.number(),
   }),
 
+  /** Referral commission policy: one global default with agency-specific overrides. */
+  platformCommissionRates: defineTable({
+    scope: v.union(v.literal("global"), v.literal("agency")),
+    relationshipId: v.optional(v.id("tenantRelationships")),
+    rateBasisPoints: v.number(),
+    durationMonths: v.number(),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedBy: v.id("users"),
+    updatedAt: v.number(),
+  })
+    .index("by_scope", ["scope"])
+    .index("by_relationship", ["relationshipId"])
+    .index("by_scope_and_updatedAt", ["scope", "updatedAt"]),
+
   /** Super-admin defaults inherited by tenant workspaces until overridden. */
   platformWhiteLabelDefaults: defineTable({
     key: v.literal("default"),
@@ -1282,6 +1369,48 @@ export default defineSchema({
     .index("by_creator_and_createdAt", ["createdBy", "createdAt"])
     .index("by_tenant", ["tenantId"])
     .index("by_status_and_createdAt", ["status", "createdAt"]),
+
+  /** Platform-issued credentials. Only a digest is stored; raw tokens are returned once. */
+  platformApiKeys: defineTable({
+    name: v.string(),
+    prefix: v.string(),
+    tokenHash: v.string(),
+    scopes: v.array(v.string()),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    expiresAt: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+    revokedBy: v.optional(v.id("users")),
+  })
+    .index("by_createdAt", ["createdAt"])
+    .index("by_tokenHash", ["tokenHash"]),
+
+  /** Shared platform RADIUS nodes; secrets remain in the approved secret store. */
+  platformRadiusServers: defineTable({
+    name: v.string(),
+    hostname: v.string(),
+    region: v.string(),
+    authPort: v.number(),
+    accountingPort: v.number(),
+    transport: v.union(v.literal("udp"), v.literal("tcp"), v.literal("tls")),
+    softwareVersion: v.optional(v.string()),
+    lifecycleStatus: v.union(v.literal("planned"), v.literal("active"), v.literal("degraded"), v.literal("maintenance"), v.literal("retired")),
+    capacitySessions: v.optional(v.number()),
+    // Populated only by the approved trusted telemetry integration; never by CRUD UI.
+    uptimePercent: v.optional(v.number()),
+    latencyMs: v.optional(v.number()),
+    activeSessions: v.optional(v.number()),
+    authSuccessPercent: v.optional(v.number()),
+    authFailurePercent: v.optional(v.number()),
+    metricsObservedAt: v.optional(v.number()),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedBy: v.id("users"),
+    updatedAt: v.number(),
+    archivedAt: v.optional(v.number()),
+    archivedBy: v.optional(v.id("users")),
+    archiveReason: v.optional(v.string()),
+  }).index("by_createdAt", ["createdAt"]).index("by_status_and_createdAt", ["lifecycleStatus", "createdAt"]),
 
   /** Platform-owned SLA targets by support category. Values are minutes. */
   platformSlaPolicies: defineTable({

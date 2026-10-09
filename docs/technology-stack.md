@@ -19,7 +19,7 @@ MylesNet will be a pnpm/Turborepo monorepo: Vercel hosts the web product; Convex
 | Layer | Selected technology |
 |---|---|
 | Monorepo | pnpm, Turborepo, TypeScript |
-| Web | Next.js, React, Tailwind CSS, shadcn/ui, Radix UI, React Hook Form, Zod, TanStack Table, ECharts |
+| Web | Next.js 16.3.8, React 19.2.8, Tailwind CSS, shadcn/ui, Radix UI, React Hook Form, Zod, TanStack Table, ECharts |
 | Product hosting | Vercel |
 | Public edge | Cloudflare DNS, wildcard tenant subdomains, WAF, DDoS protection, rate limits |
 | SaaS backend | Convex queries, mutations, actions, HTTP routes, crons, subscriptions, and database |
@@ -33,7 +33,7 @@ MylesNet will be a pnpm/Turborepo monorepo: Vercel hosts the web product; Convex
 | Cache and ephemeral state | Amazon ElastiCache Redis: OTP state, rate limits, locks, deduplication, and short-lived authorization cache |
 | Durable jobs | Amazon SQS, EventBridge, dead-letter queues, retry policies |
 | File storage | Convex Storage for ordinary attachments; Amazon S3 for backups, exports, KYC archives, router backups, and long-lived invoices |
-| Secrets and encryption | AWS Secrets Manager, KMS, Vercel/Convex/WorkOS secret stores; no secrets in application tables |
+| Secrets and encryption | AWS Secrets Manager, KMS, AWS SDK for JavaScript v3, Vercel OIDC AWS credentials provider, Vercel/Convex/WorkOS secret stores; no secrets in application tables |
 | Payments | Safaricom Daraja adapter first; tenant-owned and MylesCorp-managed collection models; future adapters through the same contract |
 | Communications | Tenant-selected SMS/email providers behind a provider adapter; OTP, payment, expiry, suspension, and reconnection templates |
 | Monitoring | OpenTelemetry, CloudWatch, AWS Managed Prometheus/Grafana, Sentry |
@@ -98,6 +98,8 @@ Working notes that make each layer production-grade. Expand a section (with evid
 - Turborepo for build/task caching; cache keys include env vars, lockfile, and generated package contracts so stale outputs cannot ship.
 - TypeScript strict everywhere; shared schemas live in `packages/schemas`, shared contracts in `packages/api-contracts`, so the API layer cannot silently diverge from the UI.
 - Version discipline: pin runtime dependencies exactly (or by lockfile); upgrade via the change procedure in the Drift Control section below.
+- **2026-10-08 security patch:** Next.js and `eslint-config-next` are pinned to 16.3.8 to remediate the September 2026 Next.js security release. See `docs/decisions.md` for the maintenance record.
+- **2026-10-09 transitive security patches:** workspace overrides pin `source-map-js` to 1.2.2 and `sharp` to 0.35.5, clearing the high findings reported for the admin app without changing the approved runtime technology set. See `docs/decisions.md` for evidence and verification.
 - Do not add a package not on this stack; if a gap is real, record it in this file first (see Drift Control).
 
 ## Web and multi-portal delivery
@@ -186,6 +188,7 @@ Working notes that make each layer production-grade. Expand a section (with evid
 ## Secrets and encryption
 
 - Secrets in AWS Secrets Manager and KMS, plus the Vercel/Convex/WorkOS secret stores; **no secrets in application tables or vault notes**. Vault notes record key *names*, not values.
+- Vercel-hosted runtime writes to Secrets Manager use the AWS SDK for JavaScript v3 and Vercel’s official AWS OIDC credentials provider with an environment-scoped IAM role. Do not add long-lived AWS access keys to the app. Configure a fixed AWS Region, a customer-managed KMS key for tenant payment credentials, and least-privilege access restricted to the MylesNet payment-secret name prefix.
 - KMS envelope encryption for RDS (TDE plus app-layer where required), S3 (SSE-KMS), and Redis (encryption in transit and at rest).
 - Rotation: router/API credentials and DB passwords rotate on schedule; workers refresh credentials from Secrets Manager on rotation without restart where possible.
 - Credential handling in code: retrieve at runtime, never log, mask in telemetry.

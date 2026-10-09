@@ -80,7 +80,7 @@ export function PlatformSubscriptions() {
   );
 }
 
-type EntitlementDates = { startsAt?: number; expiresAt?: number; trialEndsAt?: number };
+type EntitlementDates = { startsAt?: number | null; expiresAt?: number | null; trialEndsAt?: number | null };
 
 function toLocalInput(ms: number): string {
   const d = new Date(ms);
@@ -88,8 +88,10 @@ function toLocalInput(ms: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function parseLocalInput(value: string): number | undefined {
-  return value ? new Date(value).getTime() : undefined;
+function parseLocalInput(value: string): number | null {
+  if (!value) return null;
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
 }
 
 function EntitlementDialog({ tenant, plans, onClose, onSave, working }: { tenant: SubscriptionTenant; plans: PlatformPlan[]; onClose: () => void; onSave: (planId: string, status: EntitlementStatus, dates: EntitlementDates) => Promise<void>; working: boolean }) {

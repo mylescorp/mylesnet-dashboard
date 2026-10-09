@@ -42,6 +42,7 @@ Before merge or release, confirm that:
 
 ## Canonical records
 
-- Vault cross-product policy: `C:\Obsidian\MylesCorp-Brain\No Technology Stack Exposure Standards.md`.
-- Vault product policy: `C:\Obsidian\MylesCorp-Brain\products\mylesnet\no-tech-stack-exposure.md`.
-- Local enforcement: `AGENTS.md` and the Daily Agenda Rule in `docs/technology-stack.md`.
+- Local vault checkout on this workstation: `/home/myles/Projects/mylesnet-dashboard/`.
+- MylesNet policy mirror: `docs/no-technology-stack-exposure.md` in the repository and local vault checkout; keep them synchronized.
+- Local enforcement: `AGENTS.md`, `docs/vault-reference.md`, and the Daily Agenda Rule in `docs/technology-stack.md`.
+- Historical `C:\Obsidian\MylesCorp-Brain` references are not the configured location on this workstation. See `docs/vault-reference.md` for portability and synchronization rules.

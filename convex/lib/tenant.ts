@@ -1,7 +1,7 @@
 import { QueryCtx, MutationCtx } from "../_generated/server";
 import { Id } from "../_generated/dataModel";
 import { isPlatformUser, resolveRoles, resolveUserByIdentity } from "./auth";
-import { assertNoClientOverride, assertTenantMatch, canTenantOperate } from "./tenantCore";
+import { assertNoClientOverride, assertTenantMatch, canTenantOperate, resolveTenantForIdentity } from "./tenantCore";
 import { organizationIdFromWorkosIdentity } from "./workosIdentity";
 
 export {
@@ -116,7 +116,7 @@ export async function resolveTenantFromAuth(
 
   // Never fall back to a bootstrap or arbitrary tenant. An unresolved identity
   // must be denied by the caller rather than silently attached to another ISP.
-  return organizationTenantId;
+  return resolveTenantForIdentity(hasOrganizationClaim, organizationTenantId);
 }
 
 /**
@@ -152,7 +152,27 @@ export async function requireTenantMember(
   if (!membership || membership.status !== "active") {
     throw new Error("Unauthorized: tenant membership required");
   }
+  await assertTenantRelationshipChainOperable(ctx, target);
   return target;
+}
+
+/** A suspended agency/reseller scope revokes access for the complete descendant tenant tree. */
+async function assertTenantRelationshipChainOperable(ctx: QueryCtx | MutationCtx, tenantId: Id<"tenants">) {
+  const pending = [tenantId];
+  const visited = new Set<string>();
+  let reads = 0;
+  while (pending.length) {
+    const childId = pending.shift()!;
+    if (visited.has(childId)) continue;
+    visited.add(childId);
+    if (visited.size > 100 || ++reads > 100) throw new Error("Unauthorized: organization relationship scope exceeds safety limits");
+    const links = await ctx.db.query("tenantRelationships").withIndex("by_child", q => q.eq("childTenantId", childId)).collect();
+    for (const link of links) {
+      if (link.deletedAt !== undefined) continue;
+      if (link.status !== "active") throw new Error("Unauthorized: agency or reseller access is suspended");
+      pending.push(link.parentTenantId);
+    }
+  }
 }
 
 /**
@@ -179,6 +199,7 @@ export async function assertCurrentTenantOperable(
   if (!tenant || !canTenantOperate(tenant.status)) {
     throw new Error("Unauthorized: tenant is suspended or cancelled");
   }
+  await assertTenantRelationshipChainOperable(ctx, tenantId);
 }
 
 /**

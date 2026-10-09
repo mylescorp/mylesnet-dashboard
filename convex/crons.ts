@@ -28,6 +28,14 @@ crons.daily(
   {},
 );
 
+// Per-market revenue and operations snapshots used by analytics and reporting.
+crons.daily(
+  "market analytics snapshots",
+  { hourUTC: 3, minuteUTC: 20 },
+  internal.dailySnapshots.enqueueMarketSnapshotPage,
+  { cursor: null },
+);
+
 // Scheduled report generation (daily digests + weekly/monthly exports).
 crons.daily(
   "scheduled report generation",
@@ -41,14 +49,6 @@ crons.hourly(
   "startup migrations",
   { minuteUTC: 55 },
   internal.osMigrations.runStartupMigrations,
-  {},
-);
-
-// Payout settlement sweep: approved -> processing after the confirmation window.
-crons.hourly(
-  "payout settlement sweep",
-  { minuteUTC: 30 },
-  internal.payouts.autoAdvancePayouts,
   {},
 );
 

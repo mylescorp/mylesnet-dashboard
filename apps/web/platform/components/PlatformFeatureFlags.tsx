@@ -3,6 +3,7 @@
 import { userFacingMessage } from "@/shared/lib/user-facing-error";
 
 import { useState } from "react";
+import { usePaginatedQuery } from "convex/react";
 import { Flag, Plus, Save, Trash2 } from "lucide-react";
 import { useMutation, useQuery } from "@/app/lib/convex";
 import { useUserProfile } from "@/shared/components/UserProfileContext";
@@ -24,7 +25,11 @@ const canDeleteFlag = (roles: { slug: string }[] | undefined) =>
 export function PlatformFeatureFlags() {
   const { user } = useUserProfile();
   const flags = useQuery(featureFlags.list, {});
-  const tenants = useQuery(tenantControl.listPlatformTenantTargets, {});
+  const { results: tenants, status: tenantPageStatus, loadMore: loadMoreTenants } = usePaginatedQuery(
+    tenantControl.listPlatformTenantTargetsPage,
+    {},
+    { initialNumItems: 50 },
+  );
   const setFlag = useMutation(featureFlags.set);
   const removeFlag = useMutation(featureFlags.remove);
   const [creating, setCreating] = useState(false);
@@ -127,7 +132,9 @@ export function PlatformFeatureFlags() {
       {creating || editing ? (
         <FlagEditor
           flag={editing}
-          tenants={tenants ?? []}
+          tenants={tenants}
+          tenantPageStatus={tenantPageStatus}
+          loadMoreTenants={loadMoreTenants}
           canSetCategory={canDelete}
           onClose={() => { setCreating(false); setEditing(null); }}
           onSave={async (input) => {
@@ -159,9 +166,11 @@ function Metric({ label, value, detail }: { label: string; value: string | numbe
 }
 
 function FlagEditor(
-  { flag, tenants, canSetCategory, onClose, onSave }: {
+  { flag, tenants, tenantPageStatus, loadMoreTenants, canSetCategory, onClose, onSave }: {
     flag: FeatureFlag | null;
     tenants: { _id: string; name: string }[];
+    tenantPageStatus: "LoadingFirstPage" | "CanLoadMore" | "LoadingMore" | "Exhausted";
+    loadMoreTenants: (count: number) => void;
     canSetCategory: boolean;
     onClose: () => void;
     onSave: (input: {
@@ -258,6 +267,8 @@ function FlagEditor(
                 }}>
                   {tenants.map((tenant) => <option key={tenant._id} value={tenant._id}>{tenant.name}</option>)}
                 </select>
+                <small className="table-subtext">{tenants.length} tenant options loaded</small>
+                {tenantPageStatus === "CanLoadMore" || tenantPageStatus === "LoadingMore" ? <button type="button" className="secondary-button" disabled={tenantPageStatus === "LoadingMore"} onClick={() => loadMoreTenants(50)}>{tenantPageStatus === "LoadingMore" ? "Loading…" : "Load more tenants"}</button> : null}
               </label>
             ) : null}
           </div>

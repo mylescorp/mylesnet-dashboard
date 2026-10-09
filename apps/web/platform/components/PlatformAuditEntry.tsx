@@ -7,11 +7,11 @@ import { formatDateTime } from "@/shared/components/ui";
 
 function JsonValue({ value }: { value?: string }) {
   if (!value) return <p className="pf-muted">No value recorded.</p>;
+  let formatted = value;
   try {
-    return <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify(JSON.parse(value), null, 2)}</pre>;
-  } catch {
-    return <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{value}</pre>;
-  }
+    formatted = JSON.stringify(JSON.parse(value), null, 2) ?? value;
+  } catch { /* Preserve the original audit value if it is not JSON. */ }
+  return <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{formatted}</pre>;
 }
 
 export function PlatformAuditEntry({ auditId }: { auditId: string }) {

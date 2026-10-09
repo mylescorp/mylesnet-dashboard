@@ -1,5 +1,19 @@
 # Build decisions
 
+## High severity transitive dependency fixes — 2026-10-09
+
+- **Decision:** Pin the vulnerable transitive dependencies `source-map-js` to `1.2.2` and `sharp` to `0.35.5` through workspace overrides, retaining the existing Next.js 16.3.8 framework pin.
+- **Reason:** `pnpm audit --prod --audit-level=high` found `source-map-js@1.2.1` affected by GHSA-68fv-2mgg-jv7q and `sharp@0.35.4` affected by GHSA-wq5f-xc86-pv6w in the admin dependency graph. Both pinned releases are in the advisories' patched ranges and available from the configured registry.
+- **Scope:** Transitive dependency patch versions only; no direct runtime dependency or technology was added.
+- **Verification:** Frozen lockfile refresh passed; `pnpm audit --prod --audit-level=high` reports no known vulnerabilities; all 230 tests pass; root typecheck and lint pass for both apps (one existing warning); token checks pass; web/admin production builds pass at 172/39 routes.
+
+## Next.js security maintenance — 2026-10-08
+
+- **Decision:** Upgrade the web app's exact `next` and `eslint-config-next` pins from 16.3.6/16.3.5 to 16.3.8, and regenerate the pnpm lockfile.
+- **Reason:** CI's production dependency audit identified the installed Next.js version as affected by the September 2026 security release. Next.js identifies 16.3.8 as the patched Active LTS version.
+- **Scope:** Framework and matching lint configuration only; no application API or architecture changes.
+- **Verification:** Lockfile resolution completed. CI must verify the production audit, lint, typecheck, tests, and production build before merge.
+
 ## L2 audit hash chain — close-out decision (2026-09-15)
 
 - **Decision (Option C):** the audit hash chain ships as *new chain from
@@ -535,11 +549,8 @@ counts/data did not.
   (no card on file, month-in-arrears invoicing, grace period), MylesNet-held
   balance settlement, payment methods (M-PESA/PayPal/cards/bank transfer),
   "unlimited routers/staff/vouchers", and the Enterprise SLA/24-7 wording.
-  **Done 2026-10-07 (follow-up):** the home FAQ now states the usage rates, and
-  `/pricing` gained the minimum-monthly-payment footnote (KES 500 Kenya /
-  USD 5 other regions) matching `legal/terms` so both surfaces agree. The
-  one-off $10 MikroTik installation fee from the terms page remains
-  terms-only by design.
+  The home-page FAQ ("What does MylesNet cost?") still says pricing is
+  confirmed with the team and needs a follow-up edit.
 - **Gates:** `tsc --noEmit` 0; eslint 0 on all touched files (pre-existing
   errors remain in unrelated uncommitted work); `tokens:check` green;
   `node --test` 167/167; runtime verification on the dev server (`/pricing`
@@ -548,6 +559,28 @@ counts/data did not.
   the FAQ accordion exercised, FAQPage JSON-LD emitted. `pnpm build` not run
   (dev server holds `.next`); `jest` has one pre-existing unrelated failure
   (`AccountDrawer.test.tsx`).
+
+### 2026-10-07 follow-up — pricing claim cleanup and tenancy endpoint checks
+
+- The comparison table, free-trial/no-card language, included-limit claims,
+  payment-method list, invoice timing/grace-period promises, and Enterprise
+  support/package promises were removed from the public pricing surface because
+  they had no verified commercial approval. Quotes now state the applicable
+  billing and support terms. The usage rates and worked estimate remain
+  published as indicative rates.
+- The home-page pricing FAQ, pricing release note, and public Terms now describe
+  estimates and defer applicable fees, payment schedule, trial arrangements,
+  implementation, and support scope to the accepted written quote/order.
+- Currency display uses the CBK commercial-bank average closing rates dated
+  2026-10-06 (KES/UGX 31.21; USD/KES 129.89) as an indicative cached snapshot;
+  the pricing page links to CBK's rates page and labels conversions as estimates.
+- Added endpoint-level tests for active workspace scope, suspended tenants,
+  revoked membership, cross-tenant subscriber reads, and rejected cross-tenant
+  subscriber updates. Local Jest execution is blocked by the installed Next/Jest
+  setup failing while parsing TypeScript `--showConfig`; see validation notes.
+- Production Convex functions/schema remain undeployed pending the approved
+  production target and deployment credential described in the production
+  deployment runbook.
 
 # Phase 1 tenancy (X-TEN) — build log 2026-09-11
 
@@ -794,3 +827,10 @@ Routes: `/platform/feature-flags` (list + create/edit/delete),
 - The owner-provided platform list A1–O2 is authoritative and tracked in `docs/development/platform-module-register-2026-10-01.md`. It contains 45 IDs, with C2 tenant SaaS invoices explicitly excluded (44 build modules). This supersedes the earlier 36-ID rollup. The supplied historical verification snapshot must be rechecked against current `main` before completion claims.
 - C1 is platform revenue visibility (MRR/ARR); do not implement tenant invoice issuance/payment capture under C2.
 - A2 implementation started at `/platform/organizations/[id]/markets`; it is incomplete pending full CRUD and authorization/isolation evidence.
+
+
+### 2026-10-09 — C4 tenant-owned Daraja credentials and AWS runtime access
+
+- **Decision:** C4 is implemented for tenant-owned Daraja configuration. `platform_super_admin` may create, view, update, archive/restore configuration, and rotate credentials. `platform_finance` may update only non-secret fields and receives no configuration read or credential access. OPS is explicitly denied; the spec-silent SUP and RO cells remain denied. Credentials are write-only through a server route; the browser may submit them over HTTPS, but they must never enter Convex arguments/tables, audit payloads, application logs, or responses. Store consumer key, consumer secret, and the STK passkey only in AWS Secrets Manager. Convex retains non-secret metadata and a version marker only.
+- **Runtime access:** Use the AWS SDK for JavaScript v3 and Vercel’s official AWS OIDC credentials provider with short-lived, environment-scoped IAM credentials. Pin `@aws-sdk/client-secrets-manager` 3.1148.0 and `@vercel/oidc-aws-credentials-provider` 3.3.11. Require an explicit AWS Region, a customer-managed KMS key, and an IAM role restricted to the `mylesnet/payment-gateways/*` secret prefix and the minimum create/describe/version-write permissions. Do not configure long-lived AWS access keys in the web app.
+- **Evidence and limits:** Safaricom’s official Daraja documentation identifies Consumer Key/Consumer Secret for OAuth, a business short code, and a passkey for M-Pesa Express/STK Push. AWS documents `CreateSecret`/`PutSecretValue` idempotency and KMS requirements; Vercel documents environment-scoped AWS OIDC. This decision covers secure credential configuration/rotation, not payment initiation, callbacks, or reconciliation. Production IAM trust, KMS key, region, and Daraja sandbox/live merchant credentials must be provisioned and verified before integration or production use.

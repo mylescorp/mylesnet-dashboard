@@ -113,8 +113,6 @@ export function AccountDrawer({ panel = "dashboard" }: { panel?: ShellPanel }) {
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState<string | null>(null);
-  const persistedAvatarSource = trustedAvatarSource(user?.image, Boolean(user?.avatarStorageId));
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
 
   const titleId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -128,33 +126,6 @@ export function AccountDrawer({ panel = "dashboard" }: { panel?: ShellPanel }) {
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("")
     .slice(0, 2);
-
-  useEffect(() => {
-    setAvatarPreview(null);
-    if (!persistedAvatarSource) return;
-
-    let objectUrl: string | null = null;
-    let cancelled = false;
-    void fetch(persistedAvatarSource, { credentials: "omit" })
-      .then(async (response) => {
-        const contentType = response.headers.get("content-type") ?? "";
-        if (!response.ok || !contentType.startsWith("image/")) return null;
-        return response.blob();
-      })
-      .then((blob) => {
-        if (!blob || cancelled) return;
-        objectUrl = URL.createObjectURL(blob);
-        setAvatarPreview(objectUrl);
-      })
-      .catch(() => {
-        if (!cancelled) setAvatarPreview(null);
-      });
-
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [persistedAvatarSource]);
 
   const toggle = () => {
     if (open) {

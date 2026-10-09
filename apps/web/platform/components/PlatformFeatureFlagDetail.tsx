@@ -5,6 +5,7 @@ import { userFacingMessage } from "@/shared/lib/user-facing-error";
 import Link from "next/link";
 import { ArrowLeft, Save } from "lucide-react";
 import { useState } from "react";
+import { usePaginatedQuery } from "convex/react";
 import { useMutation, useQuery } from "@/app/lib/convex";
 import { useUserProfile } from "@/shared/components/UserProfileContext";
 import { featureFlags } from "@/lib/convex/featureFlags";
@@ -19,7 +20,11 @@ const isOps = (roles: { slug: string }[] | undefined) =>
 export function PlatformFeatureFlagDetail({ flag }: { flag: string }) {
   const { user } = useUserProfile();
   const flagRow = useQuery(featureFlags.get, { key: flag });
-  const tenants = useQuery(tenantControl.listPlatformTenantTargets, {});
+  const { results: tenants, status: tenantPageStatus, loadMore: loadMoreTenants } = usePaginatedQuery(
+    tenantControl.listPlatformTenantTargetsPage,
+    {},
+    { initialNumItems: 50 },
+  );
   const setFlag = useMutation(featureFlags.set);
   const [enabled, setEnabled] = useState<boolean | undefined>(undefined);
   const [description, setDescription] = useState<string | undefined>(undefined);
@@ -105,6 +110,8 @@ export function PlatformFeatureFlagDetail({ flag }: { flag: string }) {
                 </option>
               ))}
             </select>
+            <small className="table-subtext">{tenants.length} tenant options loaded</small>
+            {tenantPageStatus === "CanLoadMore" || tenantPageStatus === "LoadingMore" ? <button type="button" className="secondary-button" disabled={tenantPageStatus === "LoadingMore"} onClick={() => loadMoreTenants(50)}>{tenantPageStatus === "LoadingMore" ? "Loading…" : "Load more tenants"}</button> : null}
           </label>
         ) : null}
       </div>

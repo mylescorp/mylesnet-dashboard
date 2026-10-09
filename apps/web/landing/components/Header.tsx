@@ -34,6 +34,9 @@ const chunkColumns = (children: NavChild[]): NavGroup[] => {
 export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+  // Which dropdown columns have been expanded past their compact cap
+  // (a "View all" reveal in the Resources panel).
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const pathname = usePathname();
   const navRef = useRef<HTMLDivElement>(null);
 
@@ -147,35 +150,57 @@ export default function Header() {
                 <div className="landing-nav-dropdown">
                   <p className="landing-nav-dropdown-kicker">{section.label}</p>
                   <div className="landing-nav-dropdown-list">
-                    {groups.map((group, groupIndex) => (
-                      <div
-                        className="landing-nav-dropdown-column"
-                        key={group.title || groupIndex}
-                      >
-                        {group.title ? (
-                          <p className="landing-nav-dropdown-col-title">{group.title}</p>
-                        ) : null}
-                        <ul className="landing-nav-dropdown-column-list">
-                          {group.children.map((child) => (
-                            <li key={child.href}>
-                              <Link
-                                className="landing-nav-dropdown-link"
-                                href={child.href}
-                                data-active={pathname === child.href ? "true" : undefined}
-                                aria-current={pathname === child.href ? "page" : undefined}
-                              >
-                                {child.label}
-                                {child.description ? (
-                                  <span className="landing-nav-dropdown-desc">
-                                    {child.description}
-                                  </span>
-                                ) : null}
-                              </Link>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ))}
+                    {groups.map((group, groupIndex) => {
+                      const maxVisible = group.maxVisible ?? group.children.length;
+                      const capped = group.maxVisible !== undefined && group.children.length > maxVisible;
+                      const expanded = expandedGroups[group.title ?? ""] === true;
+                      const shown = capped && !expanded ? group.children.slice(0, maxVisible) : group.children;
+                      const hidden = capped ? group.children.length - maxVisible : 0;
+                      return (
+                        <div
+                          className="landing-nav-dropdown-column"
+                          key={group.title || groupIndex}
+                        >
+                          {group.title ? (
+                            <p className="landing-nav-dropdown-col-title">{group.title}</p>
+                          ) : null}
+                          <ul className="landing-nav-dropdown-column-list">
+                            {shown.map((child) => (
+                              <li key={child.href}>
+                                <Link
+                                  className="landing-nav-dropdown-link"
+                                  href={child.href}
+                                  data-active={pathname === child.href ? "true" : undefined}
+                                  aria-current={pathname === child.href ? "page" : undefined}
+                                >
+                                  {child.label}
+                                  {child.description ? (
+                                    <span className="landing-nav-dropdown-desc">
+                                      {child.description}
+                                    </span>
+                                  ) : null}
+                                </Link>
+                              </li>
+                            ))}
+                          </ul>
+                          {capped ? (
+                            <button
+                              type="button"
+                              className="landing-nav-dropdown-more"
+                              aria-expanded={expanded ? "true" : "false"}
+                              onClick={() =>
+                                setExpandedGroups((prev) => ({
+                                  ...prev,
+                                  [group.title ?? ""]: !prev[group.title ?? ""],
+                                }))
+                              }
+                            >
+                              {expanded ? "Show fewer" : `${group.moreLabel ?? "View all"} (+${hidden})`}
+                            </button>
+                          ) : null}
+                        </div>
+                      );
+                    })}
                   </div>
                   {section.aside?.length ? (
                     <div className="landing-nav-dropdown-aside">

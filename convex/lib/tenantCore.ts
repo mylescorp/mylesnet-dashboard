@@ -24,6 +24,15 @@ export function resolvedTenantOrNull<T>(organizationTenant: T | null | undefined
   return organizationTenant ?? null;
 }
 
+/** Resolve only an explicitly mapped organization; never select a fallback tenant. */
+export function resolveTenantForIdentity<T>(
+  hasOrganizationClaim: boolean,
+  organizationTenant: T | null | undefined,
+): T | null {
+  if (!hasOrganizationClaim) return null;
+  return resolvedTenantOrNull(organizationTenant);
+}
+
 /** Translate a WorkOS organization-membership state into local tenant scope. */
 export function tenantMembershipStatusFromWorkos(
   status: "active" | "inactive" | "pending",

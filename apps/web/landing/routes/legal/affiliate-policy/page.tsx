@@ -93,7 +93,7 @@ export default function AffiliatePolicyPage() {
         <div className="landing-section-inner">
           <div className="landing-prose">
             <p>
-              This policy is dated 6 October 2026 and forms part of the site's legal terms.
+              This policy is dated 6 October 2026 and forms part of the site&apos;s legal terms.
               It works alongside the summary on the Become an affiliate page; where they
               differ, the policy governs.
             </p>

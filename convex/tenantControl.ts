@@ -119,16 +119,6 @@ export const listForPlatformPage = query({
   },
 });
 
-/** Small target list for feature-flag pickers; avoids tenant-owned joins. */
-export const listPlatformTenantTargets = query({
-  args: {},
-  handler: async (ctx) => {
-    await requirePlatformUser(ctx);
-    const tenants = await ctx.db.query("tenants").withIndex("by_createdAt").order("desc").collect();
-    return tenants.filter(tenant => tenant.deletedAt === undefined).map(tenant => ({ _id: tenant._id, name: tenant.name }));
-  },
-});
-
 /** Cursor-paged lightweight tenant options for platform intake forms. */
 export const listPlatformTenantTargetsPage = query({
   args: { paginationOpts: paginationOptsValidator },
@@ -511,9 +501,9 @@ export const setEntitlement = mutation({
     tenantId: v.id("tenants"),
     planId: v.string(),
     status: entitlementStatus,
-    startsAt: v.optional(v.number()),
-    expiresAt: v.optional(v.number()),
-    trialEndsAt: v.optional(v.number()),
+    startsAt: v.optional(v.union(v.number(), v.null())),
+    expiresAt: v.optional(v.union(v.number(), v.null())),
+    trialEndsAt: v.optional(v.union(v.number(), v.null())),
   },
   handler: async (ctx, args) => {
     const actor = await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_ops"]);
@@ -522,12 +512,19 @@ export const setEntitlement = mutation({
     const planId = args.planId.trim().toLowerCase();
     if (!/^[a-z][a-z0-9_-]{1,39}$/.test(planId)) throw new Error("Select a valid subscription plan");
     for (const [label, value] of [["startsAt", args.startsAt], ["expiresAt", args.expiresAt], ["trialEndsAt", args.trialEndsAt]] as const) {
-      if (value !== undefined && (!Number.isSafeInteger(value) || value < 0)) throw new Error(`${label} must be a valid timestamp`);
+      if (typeof value === "number" && (!Number.isSafeInteger(value) || value < 0)) throw new Error(`${label} must be a valid timestamp`);
     }
-    if (args.startsAt !== undefined && args.expiresAt !== undefined && args.expiresAt < args.startsAt) throw new Error("Expiry must be after the subscription start");
-    if (args.startsAt !== undefined && args.trialEndsAt !== undefined && args.trialEndsAt < args.startsAt) throw new Error("Trial end must be after the subscription start");
+    const tenantEntitlements = await ctx.db.query("entitlements").withIndex("by_tenant", q => q.eq("tenantId", args.tenantId)).order("desc").take(2);
+    if (tenantEntitlements.length > 1) {
+      throw new Error("This tenant has multiple entitlement records. Reconcile the subscription records before changing its plan.");
+    }
+    const existingForTenant = tenantEntitlements[0];
+    const startsAt = args.startsAt === undefined ? existingForTenant?.startsAt : args.startsAt ?? undefined;
+    const expiresAt = args.expiresAt === undefined ? existingForTenant?.expiresAt : args.expiresAt ?? undefined;
+    const trialEndsAt = args.trialEndsAt === undefined ? existingForTenant?.trialEndsAt : args.trialEndsAt ?? undefined;
+    if (startsAt !== undefined && expiresAt !== undefined && expiresAt < startsAt) throw new Error("Expiry must be after the subscription start");
+    if (startsAt !== undefined && trialEndsAt !== undefined && trialEndsAt < startsAt) throw new Error("Trial end must be after the subscription start");
     const plan = await ctx.db.query("platformPlanCatalog").withIndex("by_code", q => q.eq("code", planId)).first();
-    const existingForTenant = await ctx.db.query("entitlements").withIndex("by_tenant", q => q.eq("tenantId", args.tenantId)).order("desc").first();
     if (plan?.status === "archived" && existingForTenant?.planId !== planId) throw new Error("Archived plans cannot be assigned to new subscriptions");
     // The baked-in plans are a migration fallback only. Once the catalogue has
     // been initialized, an intentionally deleted plan must not remain assignable.
@@ -539,22 +536,11 @@ export const setEntitlement = mutation({
     const auditAfter = {
       planId,
       status: args.status,
-      startsAt: args.startsAt ?? null,
-      expiresAt: args.expiresAt ?? null,
-      trialEndsAt: args.trialEndsAt ?? null,
+      startsAt: startsAt ?? null,
+      expiresAt: expiresAt ?? null,
+      trialEndsAt: trialEndsAt ?? null,
     };
-    const fields = {
-      planId,
-      status: args.status,
-      startsAt: args.startsAt,
-      expiresAt: args.expiresAt,
-      trialEndsAt: args.trialEndsAt,
-    };
-    const existing = await ctx.db
-      .query("entitlements")
-      .withIndex("by_tenant", (q) => q.eq("tenantId", args.tenantId))
-      .order("desc")
-      .first();
+    const existing = existingForTenant;
     const now = Date.now();
 
     if (existing) {
@@ -565,7 +551,11 @@ export const setEntitlement = mutation({
         expiresAt: existing.expiresAt ?? null,
         trialEndsAt: existing.trialEndsAt ?? null,
       };
-      await ctx.db.patch(existing._id, { ...fields, updatedAt: now });
+      const patch: Record<string, unknown> = { planId, status: args.status, updatedAt: now };
+      if (args.startsAt !== undefined) patch.startsAt = startsAt;
+      if (args.expiresAt !== undefined) patch.expiresAt = expiresAt;
+      if (args.trialEndsAt !== undefined) patch.trialEndsAt = trialEndsAt;
+      await ctx.db.patch(existing._id, patch);
       await logAudit(ctx, {
         action: "tenant.entitlementChanged",
         entityTable: "tenants",
@@ -577,7 +567,16 @@ export const setEntitlement = mutation({
       return { changed: true };
     }
 
-    await ctx.db.insert("entitlements", { tenantId: tenant._id, ...fields, createdAt: now, updatedAt: now });
+    await ctx.db.insert("entitlements", {
+      tenantId: tenant._id,
+      planId,
+      status: args.status,
+      ...(startsAt !== undefined ? { startsAt } : {}),
+      ...(expiresAt !== undefined ? { expiresAt } : {}),
+      ...(trialEndsAt !== undefined ? { trialEndsAt } : {}),
+      createdAt: now,
+      updatedAt: now,
+    });
     await logAudit(ctx, {
       action: "tenant.entitlementSet",
       entityTable: "tenants",
@@ -598,15 +597,19 @@ export const removeEntitlement = mutation({
     if (!tenant || tenant.deletedAt !== undefined) throw new Error("Tenant not found");
     const reason = args.reason.trim();
     if (reason.length < 8 || reason.length > 500) throw new Error("Provide a reason between 8 and 500 characters");
-    const records = await ctx.db.query("entitlements").withIndex("by_tenant", q => q.eq("tenantId", args.tenantId)).collect();
+    const records = await ctx.db.query("entitlements").withIndex("by_tenant", q => q.eq("tenantId", args.tenantId)).order("desc").take(2);
+    if (records.length > 1) {
+      throw new Error("This tenant has multiple entitlement records. Reconcile the subscription records before removing an entitlement.");
+    }
     if (records.length === 0) return { removed: false };
-    for (const record of records) await ctx.db.delete(record._id);
+    const [record] = records;
+    await ctx.db.delete(record._id);
     await logAudit(ctx, {
       action: "tenant.entitlementRemoved",
       entityTable: "tenants",
       entityId: tenant._id,
       changedBy: actor._id,
-      before: records.map(({ planId, status, startsAt, expiresAt, trialEndsAt }) => ({ planId, status, startsAt: startsAt ?? null, expiresAt: expiresAt ?? null, trialEndsAt: trialEndsAt ?? null })),
+      before: { planId: record.planId, status: record.status, startsAt: record.startsAt ?? null, expiresAt: record.expiresAt ?? null, trialEndsAt: record.trialEndsAt ?? null },
       after: { entitlementCount: 0, reason },
     });
     return { removed: true };

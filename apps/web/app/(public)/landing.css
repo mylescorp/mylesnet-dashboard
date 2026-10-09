@@ -2257,6 +2257,30 @@ a.landing-card:hover .landing-card-title,
 }
 .landing-nav-dropdown-link:hover, .landing-nav-dropdown-link[data-active="true"] { background: var(--landing-surface-tint); }
 .landing-nav-dropdown-desc { color: var(--muted); font-size: var(--font-size-50); font-weight: var(--font-weight-normal); line-height: var(--leading-snug); }
+/* "View all" reveal button for a compacted dropdown column: keeps the panel
+   short at rest, expands the column in place on demand. Same chip treatment
+   as the aside links so it reads as part of the panel. */
+.landing-nav-dropdown-more {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  margin: var(--space-2) 0 0;
+  padding: 6px var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--primary-text);
+  font-size: var(--font-size-100);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--space-6);
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease-out), background-color var(--duration-fast) var(--ease-out);
+}
+.landing-nav-dropdown-more:hover,
+.landing-nav-dropdown-more:focus-visible {
+  background: var(--landing-surface-tint);
+  color: var(--text-strong);
+}
 /* Centipid's .site-header__panel-aside: hairline-topped chip strip closing the panel. */
 .landing-nav-dropdown-aside { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); margin-top: var(--space-1); padding: var(--space-3) var(--space-2) var(--space-1); border-top: 1px solid var(--line); font-size: var(--font-size-100); }
 .landing-nav-dropdown-chip { padding: 6px var(--space-3); border-radius: var(--radius-sm); color: var(--muted); font-size: var(--font-size-100); text-decoration: none; transition: color var(--duration-fast) var(--ease-out), background-color var(--duration-fast) var(--ease-out); }
@@ -2274,7 +2298,7 @@ a.landing-card:hover .landing-card-title,
 .landing-preview-caption { margin-top: var(--space-4); padding-inline: var(--space-4); }
 .landing-audiences { padding: var(--space-6) var(--space-4); border-block: 1px solid var(--line); background: var(--surface); }
 .landing-audiences-pills { gap: var(--space-2); }
-.landing-audience-pill { padding: var(--space-2) var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-full); background: var(--surface-muted); color: var(--text); }
+.landing-audience-pill { padding: var(--space-2) var(--space-3); border-radius: var(--radius-full); background: var(--surface-muted); color: var(--text); }
 
 .landing-section, .landing-section-alt { padding: var(--landing-section-padding-md) var(--space-4); }
 .landing-section-alt { background: var(--surface-muted); }

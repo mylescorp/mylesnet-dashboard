@@ -110,7 +110,6 @@ export const tenantControl = {
   listForPlatform: makeFunctionReference<"query", Record<string, never>, PlatformTenant[]>("tenantControl:listForPlatform"),
   listForPlatformPage: makeFunctionReference<"query", { paginationOpts: { numItems: number; cursor: string | null } }, PaginationResult<PlatformTenant>>("tenantControl:listForPlatformPage"),
   listSubscriptionsPage: makeFunctionReference<"query", { paginationOpts: { numItems: number; cursor: string | null } }, PaginationResult<SubscriptionTenant>>("tenantControl:listSubscriptionsPage"),
-  listPlatformTenantTargets: makeFunctionReference<"query", Record<string, never>, Array<{ _id: string; name: string }>>("tenantControl:listPlatformTenantTargets"),
   listPlatformTenantTargetsPage: makeFunctionReference<"query", { paginationOpts: { numItems: number; cursor: string | null } }, PaginationResult<{ _id: string; name: string }>>("tenantControl:listPlatformTenantTargetsPage"),
   getPlatformOverview: makeFunctionReference<"query", Record<string, never>, PlatformOverview>("tenantControl:getPlatformOverview"),
   getCurrentWorkspace: makeFunctionReference<"query", Record<string, never>, TenantWorkspaceResult>("tenantControl:getCurrentWorkspace"),
@@ -123,9 +122,9 @@ export const tenantControl = {
     tenantId: string;
     planId: string;
     status: EntitlementStatus;
-    startsAt?: number;
-    expiresAt?: number;
-    trialEndsAt?: number;
+    startsAt?: number | null;
+    expiresAt?: number | null;
+    trialEndsAt?: number | null;
   }, { changed: boolean }>("tenantControl:setEntitlement"),
   removeEntitlement: makeFunctionReference<"mutation", { tenantId: string; reason: string }, { removed: boolean }>("tenantControl:removeEntitlement"),
   provisionTenant: makeFunctionReference<"action", {
