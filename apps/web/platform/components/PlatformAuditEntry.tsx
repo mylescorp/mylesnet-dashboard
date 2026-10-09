@@ -5,15 +5,6 @@ import { useQuery } from "@/app/lib/convex";
 import { platformPanel } from "@/lib/convex/platformPanel";
 import { formatDateTime } from "@/shared/components/ui";
 
-function JsonValue({ value }: { value?: string }) {
-  if (!value) return <p className="pf-muted">No value recorded.</p>;
-  let formatted = value;
-  try {
-    formatted = JSON.stringify(JSON.parse(value), null, 2) ?? value;
-  } catch { /* Preserve the original audit value if it is not JSON. */ }
-  return <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{formatted}</pre>;
-}
-
 export function PlatformAuditEntry({ auditId }: { auditId: string }) {
   const entry = useQuery(platformPanel.getAuditLogEntry, { auditId });
 
@@ -35,24 +26,11 @@ export function PlatformAuditEntry({ auditId }: { auditId: string }) {
             <div className="section-heading"><div><p className="eyebrow">Event</p><h2><code>{entry.action}</code></h2></div></div>
             <dl className="pf-detail-grid">
               <div><dt>Timestamp</dt><dd>{formatDateTime(entry.timestamp)}</dd></div>
-              <div><dt>Entity</dt><dd>{entry.entityTable} · {entry.entityId}</dd></div>
-              <div><dt>Changed by</dt><dd>{entry.changedBy}</dd></div>
-              <div><dt>Source IP</dt><dd>{entry.ip ?? "Not recorded"}</dd></div>
-              <div><dt>Audit record ID</dt><dd><code>{entry._id}</code></dd></div>
-              <div><dt>Hash-chain sequence</dt><dd>{entry.chainSequence ?? "Legacy, unsealed"}</dd></div>
-              {entry.chainSequence !== undefined ? <>
-                <div><dt>Previous hash</dt><dd><code>{entry.prevHash ?? "Missing"}</code></dd></div>
-                <div><dt>Entry hash</dt><dd><code>{entry.hash ?? "Missing"}</code></dd></div>
-              </> : null}
+              <div><dt>Entity type</dt><dd>{entry.entityTable.replace(/([A-Z])/g, " $1")}</dd></div>
+              <div><dt>Actor</dt><dd>Platform user</dd></div>
             </dl>
           </section>
-          <section className="pf-panel">
-            <div className="section-heading"><div><p className="eyebrow">Change</p><h2>Before and after</h2></div></div>
-            <div className="pf-detail-grid">
-              <div><h3>Before</h3><JsonValue value={entry.beforeJson} /></div>
-              <div><h3>After</h3><JsonValue value={entry.afterJson} /></div>
-            </div>
-          </section>
+          <section className="pf-panel"><p className="pf-muted">Detailed record values are restricted to authorized audit exports.</p></section>
         </>
       )}
     </div>

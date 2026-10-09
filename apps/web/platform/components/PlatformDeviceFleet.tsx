@@ -164,7 +164,7 @@ export function PlatformDeviceFleet() {
                   </td>
                   {editable ? (
                     <td className="pf-action-col">
-                      {row.deletedAt ? <button type="button" className="secondary-button" onClick={() => void restoreFleet({ deviceId: row._id }).then(() => setNotice("Device restored."), caught => setError(caught instanceof Error ? caught.message : "Device could not be restored."))}>Restore</button> : <><button type="button" className="secondary-button" onClick={() => setEditRow(row)}>Edit</button><button type="button" className="secondary-button danger" onClick={() => void archiveDevice(row)}>Archive</button></>}
+                      {row.deletedAt ? <button type="button" className="secondary-button" onClick={() => void restoreFleet({ deviceId: row._id }).then(() => setNotice("Device restored."), caught => setError(userFacingMessage(caught, "Device could not be restored.")))}>Restore</button> : <><button type="button" className="secondary-button" onClick={() => setEditRow(row)}>Edit</button><button type="button" className="secondary-button danger" onClick={() => void archiveDevice(row)}>Archive</button></>}
                     </td>
                   ) : null}
                 </tr>
@@ -213,7 +213,7 @@ function DeviceEditor(
       deviceId: string;
       name: string;
       deviceKind: string;
-      firmwareVersion?: string;
+      firmwareVersion?: string | null;
       provisioningStatus?: "unprovisioned" | "pending" | "provisioned" | "failed";
     }) => Promise<void>;
   },
@@ -233,7 +233,7 @@ function DeviceEditor(
           deviceId: row._id,
           name: name.trim(),
           deviceKind: deviceKind.trim(),
-          firmwareVersion: firmwareVersion.trim() || undefined,
+          firmwareVersion: firmwareVersion.trim() || null,
           provisioningStatus,
         });
         setWorking(false);

@@ -43,7 +43,9 @@ export default function PricingCalculator() {
   const perKES = FX_SNAPSHOT.perKES[currency];
   const hotspotFeeKES = (HOTSPOT_RATE * revenueAmount) / perKES;
   const pppoeFeeKES = (subscriberCount * PPPOE_FEE_USD) / FX_SNAPSHOT.perKES.USD;
-  const totalKES = hotspotFeeKES + pppoeFeeKES;
+  const subtotalKES = hotspotFeeKES + pppoeFeeKES;
+  const minimumKES = currency === "KES" ? 500 : 5 / FX_SNAPSHOT.perKES.USD;
+  const totalKES = Math.max(subtotalKES, minimumKES);
 
   return (
     <div className="landing-estimate">
@@ -125,7 +127,7 @@ export default function PricingCalculator() {
           <dd>{formatPrice(pppoeFeeKES, currency)}</dd>
         </div>
         <div className="landing-estimate-row landing-estimate-total">
-          <dt>Estimated total</dt>
+          <dt>Estimated monthly payment</dt>
           <dd>
             <span className="landing-estimate-total-value">
               {formatPrice(totalKES, currency)}
@@ -139,7 +141,8 @@ export default function PricingCalculator() {
         An estimate only: the hotspot fee follows the revenue confirmed in a
         month, and the PPPoE fee counts the subscribers active during it. A
         minimum monthly payment of KES 500 (Kenya) or USD 5 (other regions)
-        applies.
+        applies. The estimate includes that minimum when the calculated fees
+        are lower.
       </p>
     </div>
   );

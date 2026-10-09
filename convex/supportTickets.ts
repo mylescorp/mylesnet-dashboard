@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
 import { mutation, query } from "./_generated/server";
 import { requireMarketAccess, requirePermission, requirePlatformSubRole, resolveRoles } from "./lib/auth";
 import { enforceTenantOnResource, readScopedTenant } from "./lib/tenant";
@@ -243,25 +244,22 @@ export const restoreTicket = mutation({
 
 /** Cross-tenant platform queue with sub-role-scoped billing/network reads. */
 export const listPlatformTickets = query({
-  args: { category: v.optional(ticketCategory), ticketStatus: v.optional(v.union(v.literal("open"), v.literal("in_progress"), v.literal("waiting_on_customer"), v.literal("resolved"), v.literal("closed"))), includeDeleted: v.optional(v.boolean()) },
+  args: { paginationOpts: paginationOptsValidator, category: v.optional(ticketCategory), ticketStatus: v.optional(v.union(v.literal("open"), v.literal("in_progress"), v.literal("waiting_on_customer"), v.literal("resolved"), v.literal("closed"))), includeDeleted: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
     const actor = await getPlatformTicketActor(ctx);
     let categoriesToRead: ("network" | "billing" | "account")[];
     if (args.category) categoriesToRead = mayReadTicketCategory(actor, args.category) ? [args.category] : [];
     else if (actor.canManageAll) categoriesToRead = ["network", "billing", "account"];
     else categoriesToRead = [actor.canReadNetwork ? "network" : null, actor.canReadBilling ? "billing" : null].filter((value): value is "network" | "billing" => value !== null);
-    const perCategory = await Promise.all(categoriesToRead.map(category => ctx.db.query("supportTickets").withIndex("by_category", q => q.eq("category", category)).order("desc").take(200)));
-    let rows = perCategory.flat().sort((a, b) => b.createdAt - a.createdAt).slice(0, 200);
-    if (categoriesToRead.includes("account") && actor.canManageAll) {
-      const legacyRows = await ctx.db.query("supportTickets").withIndex("by_category", q => q.eq("category", undefined)).order("desc").take(200);
-      rows = [...rows, ...legacyRows].sort((a, b) => b.createdAt - a.createdAt).slice(0, 200);
-    }
+    const page = await ctx.db.query("supportTickets").withIndex("by_createdAt").order("desc").paginate({ ...args.paginationOpts, numItems: Math.max(1, Math.min(args.paginationOpts.numItems, 100)) });
+    let rows = page.page.filter(ticket => categoriesToRead.includes(ticket.category ?? "account"));
     rows = rows.filter(ticket => args.includeDeleted ? ticket.deletedAt !== undefined : ticket.deletedAt === undefined);
     if (args.ticketStatus) rows = rows.filter(ticket => ticket.ticketStatus === args.ticketStatus);
-    return Promise.all(rows.map(async ticket => ({
+    const items = await Promise.all(rows.map(async ticket => ({
       ...ticket,
       tenantName: ticket.tenantId ? (await ctx.db.get(ticket.tenantId))?.name ?? null : null,
     })));
+    return { ...page, page: items };
   },
 });
 
@@ -330,6 +328,7 @@ export const updatePlatformTicket = mutation({
     if (args.subject !== undefined) patch.subject = args.subject.trim();
     if (args.description !== undefined) patch.description = args.description.trim();
     if (args.category !== undefined) patch.category = args.category;
+    if (args.category !== undefined && args.category !== category) Object.assign(patch, await slaDeadlines(ctx, args.category, ticket.createdAt));
     if (args.priority !== undefined) patch.priority = args.priority;
     if (args.ticketStatus !== undefined) {
       patch.ticketStatus = args.ticketStatus;

@@ -4,7 +4,7 @@ export type PlatformVoucherPackageType = "half_day" | "day" | "week" | "month" |
 export type PlatformVoucherPackageStatus = "active" | "archived";
 export type PlatformVoucherPackage = {
   _id: string; _creationTime: number; code: string; name: string; description: string; packageType: PlatformVoucherPackageType;
-  durationHours: number; currency: string; priceEach: number; dataQuotaMb?: number; downloadMbps?: number; uploadMbps?: number;
+  durationHours: number; currency: string; priceEach: number; dataQuotaMb?: number | null; downloadMbps?: number | null; uploadMbps?: number | null;
   deviceLimit: number; status: PlatformVoucherPackageStatus; revision: number; createdBy: string; createdAt: number; updatedAt: number; updatedBy: string; deletedAt?: number; deletedBy?: string;
 };
 export type PlatformVoucherPackageFields = Omit<PlatformVoucherPackage, "_id" | "_creationTime" | "status" | "revision" | "createdBy" | "createdAt" | "updatedAt" | "updatedBy" | "deletedAt" | "deletedBy">;

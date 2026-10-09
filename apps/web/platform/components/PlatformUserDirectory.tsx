@@ -11,7 +11,7 @@ import { userFacingMessage } from "@/shared/lib/user-facing-error";
 export function PlatformUserDirectory() {
   const { user } = useUserProfile();
   const roleSlugs = user?.roles.map((role) => role.slug) ?? [];
-  const isSuperAdmin = roleSlugs.includes("platform_super_admin") || roleSlugs.includes("platform_owner");
+  const isSuperAdmin = roleSlugs.includes("platform_super_admin") || roleSlugs.includes("platform_owner") || roleSlugs.includes("platform_admin");
   const isSupport = roleSlugs.includes("platform_support");
   const [searchInput, setSearchInput] = useState("");
   const [searchEmail, setSearchEmail] = useState("");

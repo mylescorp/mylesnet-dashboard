@@ -66,14 +66,13 @@ export function PlatformAuditLog() {
         <div className="section-heading"><div><p className="eyebrow">Entries</p><h2>Change history</h2></div><span className="section-count">{audit?.items.length ?? 0} in this page</span></div>
         {audit === undefined ? <p className="pf-muted">Loading audit log…</p> : audit.items.length === 0 ? <p className="pf-muted">No audit entries match the current filter.</p> : (
           <>
-            <div className="pf-table-wrap"><table className="pf-table"><thead><tr><th>Timestamp</th><th>Action</th><th>Entity</th><th>Changed by</th><th>IP</th></tr></thead><tbody>
+            <div className="pf-table-wrap"><table className="pf-table"><thead><tr><th>Timestamp</th><th>Action</th><th>Entity type</th><th>Actor</th></tr></thead><tbody>
               {audit.items.map((entry: AuditLogEntry) => (
                 <tr key={entry._id}>
                   <td>{formatDateTime(entry.timestamp)}</td>
                   <td><Link href={`/platform/audit-log/${entry._id}`}><code>{entry.action}</code></Link></td>
-                  <td><span className="table-subtext">{entry.entityTable}</span>{entry.entityId}</td>
-                  <td><span className="table-subtext">{entry.changedBy}</span></td>
-                  <td><span className="table-subtext">{entry.ip ?? "—"}</span></td>
+                  <td>{entry.entityTable.replace(/([A-Z])/g, " $1")}</td>
+                  <td>Platform user</td>
                 </tr>
               ))}
             </tbody></table></div>
