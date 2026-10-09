@@ -9,7 +9,7 @@ const PAYOUT_ROLES = [
   "platform_super_admin", "platform_finance", "platform_owner", "platform_admin", "finance_manager",
 ];
 
-export default async function PlatformPayoutDetailPage({ params }: PageProps<"/platform/commissions/payouts/[id]">) {
+export default async function PlatformPayoutDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await requirePanelAccess("platform");
   const session = await requireUser();
   if (!hasAnyRole(session.roleSlugs, PAYOUT_ROLES)) redirect("/no-access");

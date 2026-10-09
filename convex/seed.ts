@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { Id } from "./_generated/dataModel";
-import { mutation } from "./_generated/server";
+import { internalMutation } from "./_generated/server";
 import { logAudit } from "./lib/auditLog";
 
 /**
@@ -38,11 +38,14 @@ function voucherCode(): string {
   return code;
 }
 
-export const seedDemoData = mutation({
+export const seedDemoData = internalMutation({
   args: {
     operatorUserId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
+    if (process.env.MYLESNET_DEMO_SEED_ENABLED !== "true") {
+      throw new Error("Demo data seeding is disabled for this deployment");
+    }
     const nowMs = Date.now();
 
     const owner =

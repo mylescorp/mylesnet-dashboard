@@ -11,6 +11,7 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useUserProfile } from "@/shared/components/UserProfileContext";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
+import { toEditedExpiryTimestamp } from "@/shared/lib/subscriber-expiry";
 
 const STATUS_OPTIONS = [
   "active",
@@ -58,15 +59,15 @@ function SubscriberEditForm({
         id: subscriber._id,
         name: formData.name,
         phone: formData.phone,
-        email: formData.email || undefined,
-        username: formData.username || undefined,
-        planId: formData.planId ? (formData.planId as Id<"plans">) : undefined,
+        email: formData.email || null,
+        username: formData.username || null,
+        planId: formData.planId ? (formData.planId as Id<"plans">) : null,
         connectionType: formData.connectionType,
-        macAddress: formData.macAddress || undefined,
+        macAddress: formData.macAddress || null,
         status: formData.status,
-        expiryDate: formData.expiryDate
-          ? new Date(formData.expiryDate).getTime()
-          : undefined,
+        expiryDate: formData.expiryDate === toDateInput(subscriber.expiryDate)
+          ? undefined
+          : toEditedExpiryTimestamp(formData.expiryDate, subscriber.expiryDate),
       });
       router.push(`/subscribers/${subscriber._id}`);
     } catch (err: unknown) {

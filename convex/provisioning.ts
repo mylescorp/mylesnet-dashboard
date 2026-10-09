@@ -107,8 +107,11 @@ export const requestDeviceProvisioning = mutation({
       if (device.tenantId && market.tenantId && device.tenantId !== market.tenantId) {
         throw new Error("Device and market belong to different tenants");
       }
-      const existing = await ctx.db.query("provisioningRequests").withIndex("by_device_status", q => q.eq("deviceId", args.deviceId!).eq("status", "pending")).first();
-      if (existing) throw new Error("This device already has a pending provisioning request");
+      const [pending, approved] = await Promise.all([
+        ctx.db.query("provisioningRequests").withIndex("by_device_status", q => q.eq("deviceId", args.deviceId!).eq("status", "pending")).first(),
+        ctx.db.query("provisioningRequests").withIndex("by_device_status", q => q.eq("deviceId", args.deviceId!).eq("status", "approved")).first(),
+      ]);
+      if (pending || approved) throw new Error("This device already has an open provisioning request");
     }
 
     const now = Date.now();

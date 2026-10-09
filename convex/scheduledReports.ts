@@ -1,7 +1,8 @@
 import { v } from "convex/values";
 import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { requirePermission, requirePlatformUser } from "./lib/auth";
+import { requirePermission } from "./lib/auth";
+import { enforceTenantOnResource, readScopedTenant, readTenantList } from "./lib/tenant";
 import { logAudit } from "./lib/auditLog";
 import { dayOf, monthOf } from "./lib/finance";
 import type { Id } from "./_generated/dataModel";
@@ -18,8 +19,13 @@ export type ReportDataset = "revenue" | "subscribers" | "financials";
 export const listScheduledReports = query({
   args: {},
   handler: async (ctx) => {
-    await requirePermission(ctx, "reports:generate");
-    return (await ctx.db.query("scheduledReports").collect()).sort((a, b) => a.name.localeCompare(b.name));
+    await requirePermission(ctx, "reports:read");
+    const rows = await readTenantList(ctx, {
+      all: () => ctx.db.query("scheduledReports").collect(),
+      tenant: (tenantId) => ctx.db.query("scheduledReports").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
+      legacy: () => ctx.db.query("scheduledReports").withIndex("by_tenant", (q) => q.eq("tenantId", undefined)).collect(),
+    });
+    return rows.sort((a, b) => a.name.localeCompare(b.name));
   },
 });
 
@@ -27,7 +33,12 @@ export const listReportExports = query({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
     await requirePermission(ctx, "reports:read");
-    const rows = await ctx.db.query("reportExports").order("desc").take(args.limit ?? 50);
+    const limit = Math.max(1, Math.min(100, Math.floor(args.limit ?? 50)));
+    const rows = await readTenantList(ctx, {
+      all: () => ctx.db.query("reportExports").order("desc").take(limit),
+      tenant: (tenantId) => ctx.db.query("reportExports").withIndex("by_tenant_created", (q) => q.eq("tenantId", tenantId)).order("desc").take(limit),
+      legacy: () => ctx.db.query("reportExports").withIndex("by_tenant_created", (q) => q.eq("tenantId", undefined)).order("desc").take(limit),
+    });
     return rows;
   },
 });
@@ -43,7 +54,9 @@ export const createScheduledReport = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "reports:generate");
+    const scope = await readScopedTenant(ctx);
     const id = await ctx.db.insert("scheduledReports", {
+      tenantId: scope.enforced ? scope.tenantId ?? undefined : undefined,
       name: args.name,
       reportType: args.reportType,
       recipients: args.recipients,
@@ -71,6 +84,8 @@ export const updateScheduledReport = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "reports:generate");
+    const report = await enforceTenantOnResource(ctx, await ctx.db.get(args.reportId), "scheduled report");
+    if (!report) throw new Error("Scheduled report not found");
     const patch = { name: args.name, recipients: args.recipients, frequency: args.frequency, scopeFilter: args.scopeFilter, format: args.format, enabled: args.enabled };
     const cleaned = Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined));
     await ctx.db.patch(args.reportId, cleaned);
@@ -82,6 +97,8 @@ export const deleteScheduledReport = mutation({
   args: { reportId: v.id("scheduledReports") },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "reports:generate");
+    const report = await enforceTenantOnResource(ctx, await ctx.db.get(args.reportId), "scheduled report");
+    if (!report) throw new Error("Scheduled report not found");
     await ctx.db.delete(args.reportId);
     await logAudit(ctx, { action: "report.delete", entityTable: "scheduledReports", entityId: args.reportId, changedBy: user._id });
   },
@@ -98,12 +115,14 @@ function toCsv(header: string[], rows: (string | number | undefined)[][]): strin
 
 /** Build rows for a dataset. Runs inside actions via runQuery. */
 export const collectReportRows = internalQuery({
-  args: { dataset: v.string(), month: v.optional(v.string()) },
+  args: { dataset: v.string(), month: v.optional(v.string()), tenantId: v.optional(v.id("tenants")) },
   handler: async (ctx, args) => {
     const month = args.month ?? monthOf(Date.now() - 30 * 24 * 60 * 60 * 1000);
     switch (args.dataset) {
       case "revenue": {
-        const snapshots = await ctx.db.query("dailySnapshots").withIndex("by_date", (q) => q.lte("date", dayOf(Date.now()))).collect();
+        const snapshots = args.tenantId
+          ? await ctx.db.query("dailySnapshots").withIndex("by_tenant", (q) => q.eq("tenantId", args.tenantId!)).collect()
+          : await ctx.db.query("dailySnapshots").withIndex("by_date", (q) => q.lte("date", dayOf(Date.now()))).collect();
         return {
           header: ["date", "marketId", "revenueLocal", "revenueUSD", "salesCount", "newSubscribers", "netContributionLocal", "currency"],
           rows: snapshots
@@ -113,7 +132,9 @@ export const collectReportRows = internalQuery({
         };
       }
       case "subscribers": {
-        const subs = await ctx.db.query("subscriberSnapshots").collect();
+        const subs = args.tenantId
+          ? await ctx.db.query("subscriberSnapshots").withIndex("by_tenant", (q) => q.eq("tenantId", args.tenantId!)).collect()
+          : await ctx.db.query("subscriberSnapshots").collect();
         return {
           header: ["date", "marketId", "activeCount", "newCount", "renewalCount", "renewalRate", "avgPlanPriceLocal", "currency"],
           rows: subs
@@ -123,8 +144,16 @@ export const collectReportRows = internalQuery({
         };
       }
       case "financials": {
-        const fin = await ctx.db.query("marketFinancials").withIndex("by_month", (q) => q.eq("month", month)).collect();
-        const exp = await ctx.db.query("expenses").withIndex("by_month", (q) => q.eq("month", month)).collect();
+        const [financialRows, expenseRows] = await Promise.all([
+          args.tenantId
+            ? ctx.db.query("marketFinancials").withIndex("by_tenant", (q) => q.eq("tenantId", args.tenantId!)).collect()
+            : ctx.db.query("marketFinancials").withIndex("by_month", (q) => q.eq("month", month)).collect(),
+          args.tenantId
+            ? ctx.db.query("expenses").withIndex("by_tenant", (q) => q.eq("tenantId", args.tenantId!)).collect()
+            : ctx.db.query("expenses").withIndex("by_month", (q) => q.eq("month", month)).collect(),
+        ]);
+        const fin = financialRows.filter((row) => row.month === month);
+        const exp = expenseRows.filter((row) => row.month === month);
         return {
           header: ["marketId", "revenueLocal", "revenueUSD", "variableCostLocal", "netContributionLocal", "breakEvenStatus", "expenseCount"],
           rows: fin.map((f) => [
@@ -144,25 +173,36 @@ export const collectReportRows = internalQuery({
   },
 });
 
+/** Authenticate manual report generation before the public action reads data. */
+export const authorizeReportGeneration = internalQuery({
+  args: { scheduledReportId: v.optional(v.id("scheduledReports")) },
+  handler: async (ctx, args) => {
+    const user = await requirePermission(ctx, "reports:generate");
+    const scope = await readScopedTenant(ctx);
+    if (args.scheduledReportId) {
+      const report = await ctx.db.get(args.scheduledReportId);
+      const ownedReport = await enforceTenantOnResource(ctx, report, "scheduled report");
+      if (!ownedReport) throw new Error("Scheduled report not found");
+    }
+    return { userId: user._id, tenantId: scope.enforced ? scope.tenantId : null };
+  },
+});
+
 /** Generate one report artifact now (manual or scheduled). */
 export const generateReport = action({
   args: {
     scheduledReportId: v.optional(v.id("scheduledReports")),
-    dataset: v.string(),
+    dataset: v.union(v.literal("revenue"), v.literal("subscribers"), v.literal("financials")),
     format: v.union(v.literal("pdf"), v.literal("csv")),
     scopeFilter: v.optional(v.any()),
   },
   handler: async (ctx, args): Promise<{ exportId: string }> => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
-    const reporter = (await ctx.runQuery(internal.platformUsers.getUserByEmail, {
-      email: identity.email ?? "",
-    })) as { _id: Id<"users"> } | null;
-    if (!reporter) throw new Error("Unauthorized");
+    const actor = await ctx.runQuery(internal.scheduledReports.authorizeReportGeneration, { scheduledReportId: args.scheduledReportId });
 
     const data = await ctx.runQuery(internal.scheduledReports.collectReportRows, {
       dataset: args.dataset,
       month: args.scopeFilter?.month,
+      tenantId: actor.tenantId ?? undefined,
     });
 
     let fileId: string | undefined;
@@ -179,7 +219,8 @@ export const generateReport = action({
 
     const exportId: string = await ctx.runMutation(internal.scheduledReports.recordExport, {
       scheduledReportId: args.scheduledReportId,
-      requestedBy: reporter._id,
+      requestedBy: actor.userId,
+      tenantId: actor.tenantId ?? undefined,
       format: args.format,
       scopeFilter: args.scopeFilter,
       dataset: args.dataset,
@@ -193,6 +234,7 @@ export const recordExport = internalMutation({
   args: {
     scheduledReportId: v.optional(v.id("scheduledReports")),
     requestedBy: v.id("users"),
+    tenantId: v.optional(v.id("tenants")),
     format: v.union(v.literal("pdf"), v.literal("csv")),
     scopeFilter: v.optional(v.any()),
     dataset: v.optional(v.string()),
@@ -200,6 +242,7 @@ export const recordExport = internalMutation({
   },
   handler: async (ctx, args) => {
     return await ctx.db.insert("reportExports", {
+      tenantId: args.tenantId,
       scheduledReportId: args.scheduledReportId,
       requestedBy: args.requestedBy,
       format: args.format,
@@ -216,7 +259,9 @@ export const recordExport = internalMutation({
 export const markReportExportViewed = mutation({
   args: { exportId: v.id("reportExports") },
   handler: async (ctx, args) => {
-    await requirePlatformUser(ctx);
+    await requirePermission(ctx, "reports:read");
+    const report = await enforceTenantOnResource(ctx, await ctx.db.get(args.exportId), "report export");
+    if (!report) throw new Error("Report export not found");
     await ctx.db.patch(args.exportId, { viewedAt: Date.now() });
   },
 });
@@ -244,12 +289,14 @@ export const triggerDueReports = internalAction({
         const data = await ctx.runQuery(internal.scheduledReports.collectReportRows, {
           dataset,
           month: now.toISOString().slice(0, 7),
+          tenantId: report.tenantId,
         });
         const blob = new Blob([toCsv(data.header, data.rows)], { type: "text/csv" });
         const fileId = (await ctx.storage.store(blob)) as string;
         await ctx.runMutation(internal.scheduledReports.recordExport, {
           scheduledReportId: report._id,
           requestedBy: report.createdBy,
+          tenantId: report.tenantId,
           format: "csv",
           scopeFilter: report.scopeFilter,
           dataset,

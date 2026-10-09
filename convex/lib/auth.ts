@@ -116,7 +116,29 @@ async function getActiveTenantMembership(ctx: QueryCtx | MutationCtx, user: Doc<
     .query("tenantMemberships")
     .withIndex("by_user_tenant", (q) => q.eq("userId", user._id).eq("tenantId", tenant._id))
     .first();
-  return membership?.status === "active" ? membership : null;
+  if (membership?.status !== "active") return null;
+
+  // Agency/reseller suspension is relationship-scoped and does not change
+  // the child tenant's own lifecycle status. Walk each ancestor relationship
+  // before granting permissions, with a bounded fail-closed traversal.
+  const pending = [tenant._id];
+  const visited = new Set<string>();
+  while (pending.length > 0) {
+    const childTenantId = pending.shift()!;
+    if (visited.has(childTenantId)) continue;
+    visited.add(childTenantId);
+    if (visited.size > 100) return null;
+    const relationships = await ctx.db
+      .query("tenantRelationships")
+      .withIndex("by_child", (q) => q.eq("childTenantId", childTenantId))
+      .collect();
+    for (const relationship of relationships) {
+      if (relationship.deletedAt !== undefined) continue;
+      if (relationship.status !== "active") return null;
+      pending.push(relationship.parentTenantId);
+    }
+  }
+  return membership;
 }
 
 export async function resolveTenantAccess(ctx: QueryCtx | MutationCtx, user: Doc<"users">) {

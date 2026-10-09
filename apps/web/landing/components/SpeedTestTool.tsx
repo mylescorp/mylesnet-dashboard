@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Activity, Timer, RefreshCw, X } from "lucide-react";
 import { Button } from "@/shared/ui/button";
+import { userFacingMessage } from "@/shared/lib/user-facing-error";
 
 /**
  * Production-grade speed test component measuring against this site's endpoint.
@@ -185,7 +186,7 @@ export default function SpeedTestTool() {
       setPhase("done");
     } catch (err) {
       if (signal.aborted) return;
-      setErrorMessage(err instanceof Error ? err.message : "Unknown error");
+      setErrorMessage(userFacingMessage(err, "The speed test could not finish. Please try again."));
       setPhase("error");
     } finally {
       if (!signal.aborted) {

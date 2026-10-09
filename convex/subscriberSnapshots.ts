@@ -1,7 +1,8 @@
 import { v } from "convex/values";
 import { internalMutation, query } from "./_generated/server";
-import { requirePermission, requirePlatformUser } from "./lib/auth";
+import { requirePermission } from "./lib/auth";
 import { dayOf } from "./lib/finance";
+import { enforceTenantOnResource } from "./lib/tenant";
 
 /**
  * Subscriber snapshot projections (spec §24 population model). Without live
@@ -87,7 +88,8 @@ export const computeSubscriberSnapshot = internalMutation({
 export const getSubscriberSnapshot = query({
   args: { marketId: v.id("markets"), date: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    await requirePlatformUser(ctx);
+    await requirePermission(ctx, "subscriber_snapshots:read");
+    if (!(await enforceTenantOnResource(ctx, await ctx.db.get(args.marketId), "market"))) throw new Error("Market not found");
     const date = args.date ?? dayOf(Date.now());
     const row = await ctx.db
       .query("subscriberSnapshots")
@@ -101,6 +103,7 @@ export const listSubscriberTrend = query({
   args: { marketId: v.id("markets"), days: v.optional(v.number()) },
   handler: async (ctx, args) => {
     await requirePermission(ctx, "subscriber_snapshots:read");
+    if (!(await enforceTenantOnResource(ctx, await ctx.db.get(args.marketId), "market"))) throw new Error("Market not found");
     const rows = await ctx.db
       .query("subscriberSnapshots")
       .withIndex("by_market_date", (q) => q.eq("marketId", args.marketId))

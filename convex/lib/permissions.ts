@@ -95,7 +95,6 @@ const TENANT_ADMIN_EXCLUDED_PERMISSIONS = new Set<string>([
   "roles:manage",
   "users:manage",
   "organizations:read",
-  "audit_log:read",
   "investors:read",
   "investors:manage",
 ]);
@@ -109,7 +108,7 @@ export const TENANT_ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     "tickets:read", "tickets:manage", "markets:read", "markets:manage", "plans:read",
     "plans:manage", "vouchers:read", "vouchers:manage", "agents:read", "agents:manage",
     "teams:read", "teams:manage", "payments:read", "invoices:read", "expenses:read",
-    "analytics:read", "reports:read",
+    "analytics:read", "reports:read", "audit_log:read",
   ],
   tenant_operator: [
     "dashboard:access", "subscribers:read", "subscribers:create", "subscribers:update",
@@ -444,4 +443,3 @@ export const PLATFORM_SUB_ROLE_MAP: Record<string, string[]> = {
   platform_support: ["platform_support"],
   platform_readonly: ["platform_readonly"],
 };
-

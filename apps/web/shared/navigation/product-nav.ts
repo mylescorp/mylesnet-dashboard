@@ -1,4 +1,4 @@
-import { Activity, Building2, ChartColumn, CreditCard, Database, Flag, HandCoins, LayoutDashboard, KeyRound, Map, Package, Radio, Router, ScrollText, Settings, ShieldCheck, Ticket, TicketCheck, Trophy, UserCog, UserSearch, Users, UsersRound } from "lucide-react";
+import { Activity, Building2, ChartColumn, CreditCard, Database, Flag, HandCoins, LayoutDashboard, KeyRound, Map, Package, Radio, Receipt, Router, ScrollText, Settings, ShieldCheck, Ticket, TicketCheck, Trophy, UserCog, UserSearch, Users, UsersRound } from "lucide-react";
 import type { NavGroup, NavItem, RouteIndexItem } from "@mylesnet/ui";
 import { findActiveNavItem } from "@mylesnet/ui";
 import { hasPanelAccess, type ProtectedPanel } from "@/shared/auth/panelAccess";

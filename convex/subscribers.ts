@@ -1,6 +1,15 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { requireTenantPermission } from "./lib/auth";
+import { logAudit } from "./lib/auditLog";
+
+async function assertPlanOwnedByTenant(ctx: MutationCtx, planId: Id<"plans"> | null | undefined, tenantId: Id<"tenants">) {
+  if (planId === undefined || planId === null) return;
+  const plan = await ctx.db.get(planId);
+  if (!plan || plan.tenantId !== tenantId) throw new Error("Plan not found in this workspace");
+}
 
 // ==========================================================================
 // QUERIES
@@ -135,6 +144,7 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const { user, tenantId } = await requireTenantPermission(ctx, "subscribers:create");
+    await assertPlanOwnedByTenant(ctx, args.planId, tenantId);
 
     // Check if account number already exists
     const existing = await ctx.db
@@ -158,6 +168,15 @@ export const create = mutation({
       updatedAt: Date.now(),
     });
 
+    await logAudit(ctx, {
+      action: "subscriber.create",
+      entityTable: "subscribers",
+      entityId: id,
+      changedBy: user._id,
+      tenantId,
+      after: { accountNumber: args.accountNumber, planId: args.planId ?? null, status: "active" },
+    });
+
     return id;
   },
 });
@@ -167,13 +186,13 @@ export const update = mutation({
     id: v.id("subscribers"),
     name: v.optional(v.string()),
     phone: v.optional(v.string()),
-    email: v.optional(v.string()),
-    username: v.optional(v.string()),
-    planId: v.optional(v.id("plans")),
+    email: v.optional(v.union(v.string(), v.null())),
+    username: v.optional(v.union(v.string(), v.null())),
+    planId: v.optional(v.union(v.id("plans"), v.null())),
     connectionType: v.optional(
       v.union(v.literal("pppoe"), v.literal("hotspot")),
     ),
-    macAddress: v.optional(v.string()),
+    macAddress: v.optional(v.union(v.string(), v.null())),
     status: v.optional(
       v.union(
         v.literal("active"),
@@ -184,11 +203,10 @@ export const update = mutation({
         v.literal("churned"),
       ),
     ),
-    expiryDate: v.optional(v.number()),
-    walletBalance: v.optional(v.number()),
+    expiryDate: v.optional(v.union(v.number(), v.null())),
   },
   handler: async (ctx, args) => {
-    const { tenantId } = await requireTenantPermission(ctx, "subscribers:update");
+    const { user, tenantId } = await requireTenantPermission(ctx, "subscribers:update");
 
     const { id, ...updates } = args;
     const subscriber = await ctx.db.get(id);
@@ -197,9 +215,34 @@ export const update = mutation({
       throw new Error("Subscriber not found");
     }
 
+    await assertPlanOwnedByTenant(ctx, updates.planId, tenantId);
+
+    const patch = Object.fromEntries(Object.entries(updates).map(([key, value]) => [key, value === null ? undefined : value]));
+    const auditAfter = Object.fromEntries(Object.entries(updates));
+
     await ctx.db.patch(id, {
-      ...updates,
+      ...patch,
       updatedAt: Date.now(),
+    });
+
+    await logAudit(ctx, {
+      action: "subscriber.update",
+      entityTable: "subscribers",
+      entityId: id,
+      changedBy: user._id,
+      tenantId,
+      before: {
+        name: subscriber.name,
+        phone: subscriber.phone,
+        email: subscriber.email ?? null,
+        username: subscriber.username ?? null,
+        planId: subscriber.planId ?? null,
+        connectionType: subscriber.connectionType,
+        macAddress: subscriber.macAddress ?? null,
+        status: subscriber.status,
+        expiryDate: subscriber.expiryDate ?? null,
+      },
+      after: auditAfter,
     });
 
     return id;
@@ -221,6 +264,8 @@ export const softDelete = mutation({
       deletedBy: user._id,
     });
 
+    await logAudit(ctx, { action: "subscriber.archived", entityTable: "subscribers", entityId: args.id, changedBy: user._id, tenantId, after: { archived: true } });
+
     return args.id;
   },
 });
@@ -228,7 +273,7 @@ export const softDelete = mutation({
 export const restore = mutation({
   args: { id: v.id("subscribers") },
   handler: async (ctx, args) => {
-    const { tenantId } = await requireTenantPermission(ctx, "subscribers:delete");
+    const { user, tenantId } = await requireTenantPermission(ctx, "subscribers:delete");
 
     const subscriber = await ctx.db.get(args.id);
     if (!subscriber || subscriber.tenantId !== tenantId || subscriber.deletedAt === undefined) {
@@ -240,6 +285,8 @@ export const restore = mutation({
       deletedBy: undefined,
       updatedAt: Date.now(),
     });
+
+    await logAudit(ctx, { action: "subscriber.restored", entityTable: "subscribers", entityId: args.id, changedBy: user._id, tenantId, after: { archived: false } });
 
     return args.id;
   },
@@ -255,7 +302,7 @@ export const renew = mutation({
     days: v.number(),
   },
   handler: async (ctx, args) => {
-    const { tenantId } = await requireTenantPermission(ctx, "subscribers:update");
+    const { user, tenantId } = await requireTenantPermission(ctx, "subscribers:update");
 
     const subscriber = await ctx.db.get(args.id);
     if (!subscriber || subscriber.tenantId !== tenantId || subscriber.deletedAt !== undefined) {
@@ -272,6 +319,8 @@ export const renew = mutation({
       updatedAt: Date.now(),
     });
 
+    await logAudit(ctx, { action: "subscriber.renewed", entityTable: "subscribers", entityId: args.id, changedBy: user._id, tenantId, before: { expiryDate: subscriber.expiryDate ?? null }, after: { expiryDate: extendedExpiry } });
+
     return extendedExpiry;
   },
 });
@@ -283,7 +332,7 @@ export const creditAccount = mutation({
     reason: v.string(),
   },
   handler: async (ctx, args) => {
-    const { tenantId } = await requireTenantPermission(ctx, "subscribers:financial");
+    const { user, tenantId } = await requireTenantPermission(ctx, "subscribers:financial");
 
     const subscriber = await ctx.db.get(args.id);
     if (!subscriber || subscriber.tenantId !== tenantId || subscriber.deletedAt !== undefined) {
@@ -298,6 +347,8 @@ export const creditAccount = mutation({
       walletBalance: subscriber.walletBalance + args.amount,
       updatedAt: Date.now(),
     });
+
+    await logAudit(ctx, { action: "subscriber.balanceCredited", entityTable: "subscribers", entityId: args.id, changedBy: user._id, tenantId, before: { walletBalance: subscriber.walletBalance }, after: { walletBalance: subscriber.walletBalance + args.amount, reason: args.reason } });
 
     return subscriber.walletBalance + args.amount;
   },

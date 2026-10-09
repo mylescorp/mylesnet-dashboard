@@ -1,6 +1,7 @@
 import { MutationCtx, QueryCtx } from "../_generated/server";
 import { Id } from "../_generated/dataModel";
 import { AUDIT_CHAIN_GENESIS, hashAuditChainPayload } from "./auditChainCore";
+import { organizationIdFromWorkosIdentity } from "./workosIdentity";
 
 /**
  * Unified audit log writer. Call this from every mutation that changes
@@ -15,11 +16,28 @@ export async function logAudit(
     entityTable: string;
     entityId: string;
     changedBy: Id<"users">;
+    tenantId?: Id<"tenants">;
     before?: unknown;
     after?: unknown;
     ip?: string;
   }
 ) {
+  let tenantId = params.tenantId;
+  if (tenantId === undefined) {
+    const identity = await ctx.auth.getUserIdentity();
+    const organizationId = identity ? organizationIdFromWorkosIdentity(identity) : undefined;
+    if (organizationId) {
+      const tenant = await ctx.db.query("tenants")
+        .withIndex("by_workosOrganizationId", (q) => q.eq("workosOrganizationId", organizationId))
+        .first();
+      if (tenant) {
+        const membership = await ctx.db.query("tenantMemberships")
+          .withIndex("by_user_tenant", (q) => q.eq("userId", params.changedBy).eq("tenantId", tenant._id))
+          .first();
+        if (membership?.status === "active") tenantId = tenant._id;
+      }
+    }
+  }
   const beforeJson = params.before !== undefined ? JSON.stringify(params.before) : undefined;
   const afterJson = params.after !== undefined ? JSON.stringify(params.after) : undefined;
   // Convex mutations are serializable. Reading the current tail means a
@@ -44,6 +62,7 @@ export async function logAudit(
   });
 
   await ctx.db.insert("auditLog", {
+    tenantId,
     action: params.action,
     entityTable: params.entityTable,
     entityId: params.entityId,

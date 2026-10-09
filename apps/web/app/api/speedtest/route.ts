@@ -14,6 +14,7 @@ const CHUNK_BYTES = 1 << 20; // 1 MiB per stream step
 const MIN_BYTES = 64 * 1024;
 const MAX_BYTES = 64 * (1 << 20);
 const DEFAULT_BYTES = 10 * (1 << 20);
+const MAX_UPLOAD_BYTES = 8 * (1 << 20);
 
 const NO_STORE = {
   "Cache-Control": "no-store, no-cache, must-revalidate",
@@ -65,9 +66,26 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const body = await request.arrayBuffer();
+  const declaredLength = Number(request.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_UPLOAD_BYTES) {
+    return Response.json({ success: false, message: "Upload exceeds the allowed size." }, { status: 413, headers: { "Cache-Control": "no-store" } });
+  }
+  if (!request.body) {
+    return Response.json({ received: 0 }, { headers: { "Cache-Control": "no-store" } });
+  }
+  const reader = request.body.getReader();
+  let received = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    received += value.byteLength;
+    if (received > MAX_UPLOAD_BYTES) {
+      await reader.cancel();
+      return Response.json({ success: false, message: "Upload exceeds the allowed size." }, { status: 413, headers: { "Cache-Control": "no-store" } });
+    }
+  }
   return Response.json(
-    { received: body.byteLength },
+    { received },
     { headers: { "Cache-Control": "no-store" } }
   );
 }
