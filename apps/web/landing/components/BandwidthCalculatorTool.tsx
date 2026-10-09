@@ -108,7 +108,8 @@ export default function BandwidthCalculatorTool() {
   const timeValid = numberValid(timeValue);
 
   const derived = useMemo(() => {
-    if (!sizeValid || !speedValid || !timeValid) return null;
+    const inputsValid = mode === "time" ? sizeValid && speedValid : mode === "capacity" ? speedValid && timeValid : sizeValid && timeValid;
+    if (!inputsValid) return null;
     const sizeBits = Number(sizeValue) * sizeFactor(sizeUnit);
     const speedBps = Number(speedValue) * speedFactor(speedUnit);
     const windowSeconds = Number(timeValue) * timeFactor(timeUnit);
@@ -119,9 +120,6 @@ export default function BandwidthCalculatorTool() {
   }, [mode, sizeValue, sizeUnit, speedValue, speedUnit, timeValue, timeUnit, sizeValid, speedValid, timeValid]);
 
   const status = useMemo(() => {
-    if (!sizeValid || !speedValid || !timeValid) {
-      return "Enter a number greater than zero for every field.";
-    }
     if (!derived) return "Enter a number greater than zero for every field.";
     if (derived.mode === "time") {
       return `≈ ${formatDuration(derived.seconds)} to move ${formatBits(Number(sizeValue) * sizeFactor(sizeUnit))} at ${formatSpeed(Number(speedValue) * speedFactor(speedUnit))}.`;

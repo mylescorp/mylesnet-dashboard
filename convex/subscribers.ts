@@ -152,9 +152,10 @@ export const create = mutation({
       .withIndex("by_account_number", (q) =>
         q.eq("accountNumber", args.accountNumber),
       )
+      .filter((q) => q.eq(q.field("tenantId"), tenantId))
       .first();
 
-    if (existing && existing.tenantId === tenantId) {
+    if (existing) {
       throw new Error("Account number already exists");
     }
 

@@ -697,7 +697,8 @@ export default defineSchema({
     .index("by_market", ["marketId"])
     .index("by_agent", ["agentId"])
     .index("by_assigned", ["assignedTo"])
-    .index("by_created", ["createdBy"]),
+    .index("by_created", ["createdBy"])
+    .index("by_createdAt", ["createdAt"]),
 
   // ==========================================================================
   // RENEWAL ATTRIBUTION (4.7 — conditional on provider CSV verification)

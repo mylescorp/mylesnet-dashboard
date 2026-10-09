@@ -48,7 +48,7 @@ type MembershipActionArgs = { userId: Id<"users">; tenantId: Id<"tenants">; stat
 async function authorizeDirectoryActor(ctx: Parameters<typeof requirePlatformUser>[0]) {
   const actor = await requirePlatformUser(ctx);
   const roles = await resolveRoles(ctx, actor);
-  const isSuperAdmin = roles.some((role) => role.slug === "platform_super_admin" || role.slug === "platform_owner");
+  const isSuperAdmin = roles.some((role) => role.slug === "platform_super_admin" || role.slug === "platform_owner" || role.slug === "platform_admin");
   const isSupport = roles.some((role) => role.slug === "platform_support");
   if (!isSuperAdmin && !isSupport) throw new Error("Unauthorized: directory access is restricted");
   return { actor, isSuperAdmin, isSupport };

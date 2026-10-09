@@ -124,7 +124,7 @@ export const updateDeviceFleetRow = mutation({
     deviceId: v.id("platformDevices"),
     name: v.optional(v.string()),
     deviceKind: v.optional(v.string()),
-    firmwareVersion: v.optional(v.string()),
+    firmwareVersion: v.optional(v.union(v.string(), v.null())),
     provisioningStatus: v.optional(
       v.union(
         v.literal("unprovisioned"),
@@ -146,7 +146,7 @@ export const updateDeviceFleetRow = mutation({
     if (name !== undefined && (name.length < 2 || name.length > 120)) throw new Error("Device name must be 2–120 characters");
     if (deviceKind !== undefined && (deviceKind.length < 2 || deviceKind.length > 80)) throw new Error("Device model must be 2–80 characters");
 
-    if (args.firmwareVersion !== undefined && !isValidFirmwareLabel(args.firmwareVersion)) {
+    if (args.firmwareVersion !== undefined && args.firmwareVersion !== null && !isValidFirmwareLabel(args.firmwareVersion)) {
       throw new Error("firmwareVersion must be 3-80 characters");
     }
     if (
@@ -159,7 +159,7 @@ export const updateDeviceFleetRow = mutation({
     await ctx.db.patch(args.deviceId, {
       ...(name !== undefined ? { name } : {}),
       ...(deviceKind !== undefined ? { deviceKind } : {}),
-      ...(args.firmwareVersion !== undefined ? { firmwareVersion: args.firmwareVersion } : {}),
+      ...(args.firmwareVersion !== undefined ? { firmwareVersion: args.firmwareVersion ?? undefined } : {}),
       ...(args.provisioningStatus !== undefined
         ? { provisioningStatus: args.provisioningStatus as DeviceProvisioningStatus }
         : {}),
@@ -172,7 +172,7 @@ export const updateDeviceFleetRow = mutation({
       entityId: args.deviceId,
       changedBy: user._id,
       before: { name: device.name, deviceKind: device.deviceKind, firmwareVersion: device.firmwareVersion, provisioningStatus: device.provisioningStatus },
-      after: { name: name ?? device.name, deviceKind: deviceKind ?? device.deviceKind, firmwareVersion: args.firmwareVersion ?? device.firmwareVersion, provisioningStatus: args.provisioningStatus ?? device.provisioningStatus },
+      after: { name: name ?? device.name, deviceKind: deviceKind ?? device.deviceKind, firmwareVersion: args.firmwareVersion === null ? null : args.firmwareVersion ?? device.firmwareVersion, provisioningStatus: args.provisioningStatus ?? device.provisioningStatus },
     });
   },
 });

@@ -102,6 +102,7 @@ export const update = mutation({
     const actor = await requirePlatformSubRole(ctx, ["platform_super_admin"]);
     const row = await ctx.db.get(args.id);
     if (!row || row.deletedAt !== undefined) throw new Error("Active partner relationship not found");
+    if (row.status === "suspended" && (args.parentTenantId !== undefined || args.childTenantId !== undefined)) throw new Error("Restore the relationship before changing its endpoints");
     const parentTenantId = args.parentTenantId ?? row.parentTenantId;
     const childTenantId = args.childTenantId ?? row.childTenantId;
     await validatePair(ctx, parentTenantId, childTenantId);

@@ -84,21 +84,23 @@ const measureDownload = async (
   signal: AbortSignal
 ): Promise<number> => {
   const started = performance.now();
+  const timeoutController = new AbortController();
+  const timeout = setTimeout(() => timeoutController.abort(), MAX_DOWNLOAD_DURATION);
+  const linkedSignal = AbortSignal.any([signal, timeoutController.signal]);
+  let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+  try {
   const response = await fetch(
     `/api/speedtest?op=download&bytes=${DOWNLOAD_BYTES}`,
-    { cache: "no-store", signal }
+    { cache: "no-store", signal: linkedSignal }
   );
   if (!response.ok) throw new Error(`download failed: ${response.status}`);
   if (!response.body) throw new Error("streaming unavailable");
 
-  const reader = response.body.getReader();
+  reader = response.body.getReader();
   let received = 0;
   let lastProgressUpdate = 0;
 
   for (;;) {
-    if (performance.now() - started > MAX_DOWNLOAD_DURATION) {
-      throw new Error("download timeout");
-    }
     const { done, value } = await reader.read();
     if (done) break;
     received += value?.byteLength ?? 0;
@@ -111,6 +113,13 @@ const measureDownload = async (
 
   const seconds = (performance.now() - started) / 1000;
   return seconds > 0 ? (received * 8) / seconds / 1e6 : 0;
+  } catch (err) {
+    if (timeoutController.signal.aborted) throw new Error("download timeout");
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+    if (reader) await reader.cancel().catch(() => undefined);
+  }
 };
 
 const measureUpload = async (signal: AbortSignal): Promise<number> => {

@@ -54,8 +54,8 @@ export const createPlan = mutation({
       const market = await ctx.db.get(args.marketId);
       if (!market || market.tenantId !== tenantId) throw new Error("Market not found");
     }
-    const existing = await ctx.db.query("plans").withIndex("by_code", (q) => q.eq("code", args.code)).first();
-    if (existing && existing.tenantId === tenantId && existing.status === "active") throw new Error("A plan with this code already exists");
+    const existing = await ctx.db.query("plans").withIndex("by_code", (q) => q.eq("code", args.code)).filter((q) => q.eq(q.field("tenantId"), tenantId)).first();
+    if (existing && existing.status === "active") throw new Error("A plan with this code already exists");
 
     const id = await ctx.db.insert("plans", {
       tenantId,

@@ -47,7 +47,7 @@ export const fleet = {
       deviceId: string;
       name?: string;
       deviceKind?: string;
-      firmwareVersion?: string;
+      firmwareVersion?: string | null;
       provisioningStatus?: DeviceProvisioningStatus;
     },
     void
