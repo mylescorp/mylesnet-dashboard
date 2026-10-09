@@ -1,7 +1,7 @@
 import { QueryCtx, MutationCtx } from "../_generated/server";
 import { Id } from "../_generated/dataModel";
 import { isPlatformUser, resolveRoles, resolveUserByIdentity } from "./auth";
-import { assertNoClientOverride, assertTenantMatch, canTenantOperate } from "./tenantCore";
+import { assertNoClientOverride, assertTenantMatch, canTenantOperate, resolveTenantForIdentity } from "./tenantCore";
 import { organizationIdFromWorkosIdentity } from "./workosIdentity";
 
 export {
@@ -46,6 +46,11 @@ export async function readScopedTenant(ctx: QueryCtx | MutationCtx): Promise<Rea
   return { tenantId, enforced: true };
 }
 
+/** Derive the tenant for a new tenant-owned record from the active identity. */
+export async function tenantIdForWrite(ctx: MutationCtx): Promise<Id<"tenants">> {
+  return requireTenantMember(ctx);
+}
+
 /**
  * Collect tenant-owned rows through the active membership scope. Rows without
  * a tenantId are legacy data and are never exposed to tenant users.
@@ -68,7 +73,7 @@ export async function readTenantList<T>(
  * tenant; legacy unscoped resources are not tenant-readable.
  */
 export async function enforceTenantOnResource<T extends { tenantId?: Id<"tenants"> | null }>(
-  ctx: QueryCtx,
+  ctx: QueryCtx | MutationCtx,
   resource: T | null,
   label: string,
 ): Promise<T | null> {
@@ -93,8 +98,12 @@ export async function resolveTenantFromAuth(
   if (!identity) return null;
 
   // Primary path: WorkOS per-tenant org claim (Phase 2 wiring, additive today).
+  const hasOrganizationClaim = Object.prototype.hasOwnProperty.call(identity, "org_id");
   const orgId = organizationIdFromWorkosIdentity(identity);
   let organizationTenantId: Id<"tenants"> | null = null;
+  // A malformed or unmapped org claim is an explicit unresolved scope. Do not
+  // attach that identity to the legacy bootstrap tenant.
+  if (hasOrganizationClaim && !orgId) return null;
   if (typeof orgId === "string" && orgId.length > 0) {
     const byOrg = await ctx.db
       .query("tenants")
@@ -107,7 +116,7 @@ export async function resolveTenantFromAuth(
 
   // Never fall back to a bootstrap or arbitrary tenant. An unresolved identity
   // must be denied by the caller rather than silently attached to another ISP.
-  return organizationTenantId;
+  return resolveTenantForIdentity(hasOrganizationClaim, organizationTenantId);
 }
 
 /**
@@ -143,7 +152,54 @@ export async function requireTenantMember(
   if (!membership || membership.status !== "active") {
     throw new Error("Unauthorized: tenant membership required");
   }
+  await assertTenantRelationshipChainOperable(ctx, target);
   return target;
+}
+
+/** A suspended agency/reseller scope revokes access for the complete descendant tenant tree. */
+async function assertTenantRelationshipChainOperable(ctx: QueryCtx | MutationCtx, tenantId: Id<"tenants">) {
+  const pending = [tenantId];
+  const visited = new Set<string>();
+  let reads = 0;
+  while (pending.length) {
+    const childId = pending.shift()!;
+    if (visited.has(childId)) continue;
+    visited.add(childId);
+    if (visited.size > 100 || ++reads > 100) throw new Error("Unauthorized: organization relationship scope exceeds safety limits");
+    const links = await ctx.db.query("tenantRelationships").withIndex("by_child", q => q.eq("childTenantId", childId)).collect();
+    for (const link of links) {
+      if (link.deletedAt !== undefined) continue;
+      if (link.status !== "active") throw new Error("Unauthorized: agency or reseller access is suspended");
+      pending.push(link.parentTenantId);
+    }
+  }
+}
+
+/**
+ * Lifecycle guard for permission-protected tenant endpoints. This deliberately
+ * checks lifecycle without requiring a tenant membership, preserving the
+ * additive migration's current membership rollout while ensuring a suspended
+ * tenant cannot keep using APIs through a direct Convex call.
+ */
+export async function assertCurrentTenantOperable(
+  ctx: QueryCtx | MutationCtx,
+): Promise<void> {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) throw new Error("Unauthenticated");
+  const tenantId = await resolveTenantFromAuth(ctx);
+  // Preserve legacy identities without an org claim before bootstrap exists,
+  // but never let an explicit, unresolved organization bypass lifecycle gates.
+  if (!tenantId) {
+    if (Object.prototype.hasOwnProperty.call(identity, "org_id")) {
+      throw new Error("Unauthorized: tenancy not configured for this identity");
+    }
+    return;
+  }
+  const tenant = await ctx.db.get(tenantId);
+  if (!tenant || !canTenantOperate(tenant.status)) {
+    throw new Error("Unauthorized: tenant is suspended or cancelled");
+  }
+  await assertTenantRelationshipChainOperable(ctx, tenantId);
 }
 
 /**

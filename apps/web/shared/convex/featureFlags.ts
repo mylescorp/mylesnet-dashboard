@@ -3,6 +3,7 @@ import { makeFunctionReference } from "convex/server";
 export type FeatureFlag = {
   _id: string;
   key: string;
+  category?: "infrastructure" | "general" | null;
   valueJson: string;
   enabled: boolean;
   description?: string | null;
@@ -41,6 +42,7 @@ export const featureFlags = {
       enabled: boolean;
       description?: string;
       tenantIds?: string[];
+      category?: "infrastructure" | "general";
     },
     string
   >("featureFlags:setFeatureFlag"),

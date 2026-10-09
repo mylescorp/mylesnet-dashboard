@@ -16,7 +16,7 @@ const SIGNAL_LABEL: Record<string, string> = {
 
 const canManage = (roles: { slug: string }[] | undefined) =>
   roles?.some((role) =>
-    ["platform_owner", "platform_admin", "ops_manager"].includes(role.slug),
+    ["platform_super_admin", "platform_ops", "platform_owner", "platform_admin", "ops_manager"].includes(role.slug),
   );
 
 export function PlatformVoucherMonitor() {

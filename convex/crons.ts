@@ -52,6 +52,14 @@ crons.hourly(
   {},
 );
 
+// Finalize expired tenant deletion grace periods while preserving records for retention work.
+crons.hourly(
+  "tenant deletion grace period sweep",
+  { minuteUTC: 40 },
+  internal.tenantControl.finalizeExpiredDeletions,
+  {},
+);
+
 // Audit-chain integrity — advances a running verification sweep, or starts a
 // fresh full sweep once the previous one finished, so every sealed audit row
 // from genesis is re-verified on a rolling basis (see auditChainVerify.ts).

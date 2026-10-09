@@ -37,3 +37,7 @@ separate archive policy.
   found the pre-existing Next.js pin was below the security-patched release.
   Next.js and `eslint-config-next` are now pinned at 16.3.8 with a regenerated
   lockfile; CI and preview need to pass on the updated commit before merge.
+
+## 2026-10-10: restore newer platform features
+
+Prepared the reviewed platform feature bundle on `feat/restore-platform-features`, preserving the existing dirty production worktree. Restored platform analytics and leaderboard, API key management, payment reconciliation and anomaly review, commissions and payouts, agency/reseller lifecycle, RADIUS fleet, and the platform organization API. Reconciled schemas with current-main security and tenant lifecycle fields and corrected C5 reconciliation type errors. Web typecheck, backend typecheck excluding tests, 37 repository tests, and focused frontend lint passed. Build remains blocked by dependencies linked from outside this isolated clone. GitHub authentication is invalid, so no PR has been pushed or opened. The PR note will be linked after the PR is opened.

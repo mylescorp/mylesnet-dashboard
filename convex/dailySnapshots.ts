@@ -1,7 +1,45 @@
+import { anyApi, paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
-import { internalMutation, query } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery, query } from "./_generated/server";
 import { requirePermission } from "./lib/auth";
 import { dayOf, localToUsd } from "./lib/finance";
+
+/** Page active markets and enqueue one bounded daily snapshot mutation per market. */
+export const listActiveMarketIdsPage = internalQuery({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    const page = await ctx.db.query("markets").withIndex("by_tenant").order("desc").paginate({
+      ...args.paginationOpts,
+      numItems: Math.max(1, Math.min(50, Math.floor(args.paginationOpts.numItems))),
+    });
+    return {
+      ...page,
+      page: page.page.filter(market => market.deletedAt === undefined && market.lifecycleStatus === "active").map(market => market._id),
+    };
+  },
+});
+
+/** Cursor-driven scheduler keeps nightly snapshot generation bounded by market page. */
+export const enqueueMarketSnapshotPage = internalAction({
+  args: { cursor: v.union(v.string(), v.null()), date: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const date = args.date ?? dayOf(Date.now() - 24 * 60 * 60 * 1000);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("Snapshot date must use YYYY-MM-DD");
+    const page = await ctx.runQuery(anyApi.dailySnapshots.listActiveMarketIdsPage, {
+      paginationOpts: { numItems: 50, cursor: args.cursor },
+    });
+    for (const marketId of page.page) {
+      await ctx.scheduler.runAfter(0, anyApi.dailySnapshots.buildDailySnapshot, { marketId, date });
+    }
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(0, anyApi.dailySnapshots.enqueueMarketSnapshotPage, {
+        cursor: page.continueCursor,
+        date,
+      });
+    }
+    return { scheduled: page.page.length, complete: page.isDone, date };
+  },
+});
 
 /**
  * Daily revenue & contribution snapshot (spec §25). Derived purely from the
@@ -66,6 +104,7 @@ export const buildDailySnapshot = internalMutation({
     const revenueUSD = await localToUsd(ctx, revenueLocal, market.currency, date);
 
     const row = {
+      tenantId: market.tenantId,
       marketId: args.marketId,
       date,
       revenueLocal,

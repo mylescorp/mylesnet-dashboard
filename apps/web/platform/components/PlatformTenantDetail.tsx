@@ -32,6 +32,7 @@ const statusTone: Record<TenantStatus, "success" | "warning" | "danger" | "neutr
   active: "success",
   trial: "warning",
   suspended: "danger",
+  pending_deletion: "warning",
   cancelled: "neutral",
 };
 
