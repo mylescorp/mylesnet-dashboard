@@ -179,6 +179,7 @@ export default defineSchema({
     deletedBy: v.optional(v.id("users")),
   })
     .index("by_tenant", ["tenantId"])
+    .index("by_tenant_account_number", ["tenantId", "accountNumber"])
     .index("by_account_number", ["accountNumber"])
     .index("by_username", ["username"])
     .index("by_phone", ["phone"])
@@ -999,6 +1000,7 @@ export default defineSchema({
   })
     .index("by_market", ["marketId"])
     .index("by_tenant", ["tenantId"])
+    .index("by_tenant_code", ["tenantId", "code"])
     .index("by_code", ["code"])
     .index("by_status", ["status"]),
 
@@ -1147,6 +1149,7 @@ export default defineSchema({
     // populated by the internal, paginated backfill before this is treated as
     // an authoritative count.
     subscriberCount: v.optional(v.number()),
+    subscriberCountBackfillRunning: v.optional(v.boolean()),
     settings: v.optional(v.any()),
     createdAt: v.number(),
     updatedAt: v.number(),

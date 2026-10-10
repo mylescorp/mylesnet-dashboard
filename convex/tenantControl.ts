@@ -95,8 +95,9 @@ async function toPlatformTenant(ctx: QueryCtx, tenant: Doc<"tenants">) {
 /**
  * Populate a legacy tenant's denormalized subscriber total in bounded pages.
  * Start once per existing tenant with an internal invocation after deployment.
- * Avoid running it during a bulk subscriber import; steady-state writes update
- * the total transactionally once the backfill commits.
+ * Subscriber create/archive/restore writes are paused for this tenant while
+ * the paginated scan runs. That gives every page one stable data set and
+ * prevents a stale final total from overwriting concurrent changes.
  */
 export const backfillTenantSubscriberCount = internalMutation({
   args: {
@@ -107,13 +108,16 @@ export const backfillTenantSubscriberCount = internalMutation({
   handler: async (ctx, args) => {
     const tenant = await ctx.db.get(args.tenantId);
     if (!tenant) throw new Error("Tenant not found");
+    if (!args.cursor) {
+      await ctx.db.patch(args.tenantId, { subscriberCountBackfillRunning: true });
+    }
     const page = await ctx.db
       .query("subscribers")
       .withIndex("by_tenant", (q) => q.eq("tenantId", args.tenantId))
       .paginate({ numItems: 500, cursor: args.cursor ?? null });
     const accumulatedCount = (args.accumulatedCount ?? 0) + page.page.filter((row) => row.deletedAt === undefined).length;
     if (page.isDone) {
-      await ctx.db.patch(args.tenantId, { subscriberCount: accumulatedCount });
+      await ctx.db.patch(args.tenantId, { subscriberCount: accumulatedCount, subscriberCountBackfillRunning: false });
       return { complete: true, subscriberCount: accumulatedCount };
     }
     await ctx.scheduler.runAfter(0, internal.tenantControl.backfillTenantSubscriberCount, {

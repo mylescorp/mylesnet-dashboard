@@ -27,7 +27,7 @@ export type FleetRow = {
   uptimePercent: number | null;
   provisioningStatus: DeviceProvisioningStatus | null;
   lifecycleStatus: string;
-  registeredBy: string | null;
+  registeredByName: string | null;
   registeredAt: number | null;
   deletedAt: number | null;
 };
@@ -75,7 +75,7 @@ export function buildFleetRow(
     uptimePercent: device.uptimePercent ?? null,
     provisioningStatus: device.provisioningStatus ?? null,
     lifecycleStatus: device.lifecycleStatus,
-    registeredBy: device.registeredBy ?? null,
+    registeredByName: null,
     registeredAt: device.createdAt ?? null,
     deletedAt: device.deletedAt ?? null,
   };

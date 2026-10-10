@@ -40,7 +40,7 @@ export function PlatformDeviceDetail({ deviceId }: { deviceId: string }) {
         <div className="pf-field"><span className="pf-label">Tenant</span><p className="pf-static">{row.tenantName ?? "Unassigned"}</p></div>
         <div className="pf-field"><span className="pf-label">Market</span><p className="pf-static">{row.marketName ?? "Unknown market"}</p></div>
         <div className="pf-field"><span className="pf-label">Model / kind</span><p className="pf-static">{row.deviceKind}</p></div>
-        <div className="pf-field"><span className="pf-label">Registered by</span><p className="pf-static">{row.registeredBy ?? "—"}</p></div>
+        <div className="pf-field"><span className="pf-label">Registered by</span><p className="pf-static">{row.registeredByName ?? "—"}</p></div>
         <div className="pf-field"><span className="pf-label">Registered</span><p className="pf-static">{row.registeredAt ? new Date(row.registeredAt).toLocaleString() : "—"}</p></div>
       </div>
     </div>

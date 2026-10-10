@@ -5,6 +5,13 @@ import type { Id } from "./_generated/dataModel";
 import { requireTenantPermission } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 
+async function assertSubscriberCountReady(ctx: MutationCtx, tenantId: Id<"tenants">) {
+  const tenant = await ctx.db.get(tenantId);
+  if (tenant?.subscriberCountBackfillRunning) {
+    throw new Error("Subscriber totals are being refreshed. Try again shortly.");
+  }
+}
+
 async function assertPlanOwnedByTenant(ctx: MutationCtx, planId: Id<"plans"> | null | undefined, tenantId: Id<"tenants">) {
   if (planId === undefined || planId === null) return;
   const plan = await ctx.db.get(planId);
@@ -144,15 +151,17 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const { user, tenantId } = await requireTenantPermission(ctx, "subscribers:create");
+    await assertSubscriberCountReady(ctx, tenantId);
     await assertPlanOwnedByTenant(ctx, args.planId, tenantId);
+    const accountNumber = args.accountNumber.trim();
+    if (!accountNumber || accountNumber.length > 80) throw new Error("Account number must be 1–80 characters");
 
     // Check if account number already exists
     const existing = await ctx.db
       .query("subscribers")
-      .withIndex("by_account_number", (q) =>
-        q.eq("accountNumber", args.accountNumber),
+      .withIndex("by_tenant_account_number", (q) =>
+        q.eq("tenantId", tenantId).eq("accountNumber", accountNumber),
       )
-      .filter((q) => q.eq(q.field("tenantId"), tenantId))
       .first();
 
     if (existing) {
@@ -161,6 +170,7 @@ export const create = mutation({
 
     const id = await ctx.db.insert("subscribers", {
       ...args,
+      accountNumber,
       tenantId,
       status: "active",
       walletBalance: 0,
@@ -259,6 +269,7 @@ export const softDelete = mutation({
   args: { id: v.id("subscribers") },
   handler: async (ctx, args) => {
     const { user, tenantId } = await requireTenantPermission(ctx, "subscribers:delete");
+    await assertSubscriberCountReady(ctx, tenantId);
 
     const subscriber = await ctx.db.get(args.id);
     if (!subscriber || subscriber.tenantId !== tenantId || subscriber.deletedAt !== undefined) {
@@ -284,6 +295,7 @@ export const restore = mutation({
   args: { id: v.id("subscribers") },
   handler: async (ctx, args) => {
     const { user, tenantId } = await requireTenantPermission(ctx, "subscribers:delete");
+    await assertSubscriberCountReady(ctx, tenantId);
 
     const subscriber = await ctx.db.get(args.id);
     if (!subscriber || subscriber.tenantId !== tenantId || subscriber.deletedAt === undefined) {

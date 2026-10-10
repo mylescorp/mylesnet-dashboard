@@ -1,9 +1,27 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
+import type { QueryCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { requirePermission } from "./lib/auth";
 import { enforceTenantOnResource, readScopedTenant, readTenantList } from "./lib/tenant";
 import type { Doc } from "./_generated/dataModel";
 import { dayOf } from "./lib/finance";
+
+async function tenantActivityRows(ctx: QueryCtx, tenantId: Id<"tenants">, from: number) {
+  const [tagged, markets] = await Promise.all([
+    ctx.db.query("agentActivity").withIndex("by_tenant_time", (q) => q.eq("tenantId", tenantId).gte("occurredAt", from)).collect(),
+    ctx.db.query("markets").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
+  ]);
+  const marketRows = await Promise.all(markets.map((market) =>
+    ctx.db.query("agentActivity").withIndex("by_market_time", (q) => q.eq("marketId", market._id).gte("occurredAt", from)).collect()
+  ));
+  const rows = new Map(tagged.map((row) => [row._id, row]));
+  for (const row of marketRows.flat()) {
+    // Market ownership is authoritative for legacy rows that predate tenantId.
+    if (row.tenantId === undefined || row.tenantId === tenantId) rows.set(row._id, row);
+  }
+  return [...rows.values()];
+}
 
 /**
  * Performance analytics (spec "Performance Reporting"). Pure aggregations over
@@ -95,7 +113,7 @@ export const getTopAgents = query({
     const from = Date.now() - days * 24 * 60 * 60 * 1000;
     const activity = await readTenantList<Doc<"agentActivity">>(ctx, {
       all: () => ctx.db.query("agentActivity").withIndex("by_time", (q) => q.gte("occurredAt", from)).collect(),
-      tenant: (tenantId) => ctx.db.query("agentActivity").withIndex("by_tenant_time", (q) => q.eq("tenantId", tenantId)).filter((q) => q.gte(q.field("occurredAt"), from)).collect(),
+      tenant: (tenantId) => tenantActivityRows(ctx, tenantId, from),
       legacy: () => ctx.db.query("agentActivity").withIndex("by_time", (q) => q.gte("occurredAt", from)).collect().then((items) => items.filter((row) => row.tenantId === undefined)),
     });
     const filtered = args.marketId ? activity.filter((a) => a.marketId === args.marketId) : activity;
@@ -128,7 +146,7 @@ export const getSalesMix = query({
     const from = Date.now() - days * 24 * 60 * 60 * 1000;
     const activity = await readTenantList<Doc<"agentActivity">>(ctx, {
       all: () => ctx.db.query("agentActivity").withIndex("by_time", (q) => q.gte("occurredAt", from)).collect(),
-      tenant: (tenantId) => ctx.db.query("agentActivity").withIndex("by_tenant_time", (q) => q.eq("tenantId", tenantId)).filter((q) => q.gte(q.field("occurredAt"), from)).collect(),
+      tenant: (tenantId) => tenantActivityRows(ctx, tenantId, from),
       legacy: () => ctx.db.query("agentActivity").withIndex("by_time", (q) => q.gte("occurredAt", from)).collect().then((items) => items.filter((row) => row.tenantId === undefined)),
     });
     const filtered = args.marketId ? activity.filter((a) => a.marketId === args.marketId) : activity;

@@ -127,6 +127,20 @@ export const listAuditLogPage = query({
 
 async function presentAuditEntry(ctx: import("./_generated/server").QueryCtx, entry: Doc<"auditLog">) {
   const actor = await ctx.db.get(entry.changedBy);
+  const entityTypeLabels: Record<string, string> = {
+    tenants: "Workspace",
+    organizations: "Workspace",
+    markets: "Market",
+    subscribers: "Subscriber",
+    payments: "Payment",
+    invoices: "Invoice",
+    plans: "Plan",
+    supportTickets: "Support ticket",
+    platformDevices: "Network device",
+    users: "Team member",
+    roles: "Role",
+    vouchers: "Voucher",
+  };
   const labelFields = ["name", "title", "subject", "tenantName", "marketName", "planName", "serverName", "deviceName", "code", "accountNumber"];
   const labelFrom = (json: string | undefined): string | null => {
     if (!json) return null;
@@ -141,8 +155,8 @@ async function presentAuditEntry(ctx: import("./_generated/server").QueryCtx, en
   };
   return {
     _id: entry._id,
-    action: entry.action,
-    entityTable: entry.entityTable,
+    action: entry.action.replace(/[._]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()),
+    entityTable: entityTypeLabels[entry.entityTable] ?? "Business record",
     entityLabel: labelFrom(entry.afterJson) ?? labelFrom(entry.beforeJson) ?? "Record",
     actorName: actor?.name ?? actor?.email ?? "Former platform user",
     timestamp: entry.timestamp,

@@ -30,6 +30,7 @@ test("buildFleetRow maps the raw device into a flat, serializable row", () => {
       uptimePercent: 99.7,
       provisioningStatus: "provisioned",
       lifecycleStatus: "active",
+      registeredBy: "user-secret-id",
     }),
     "tenantA",
     "Acme ISP",
@@ -43,6 +44,8 @@ test("buildFleetRow maps the raw device into a flat, serializable row", () => {
   assert.equal(row.lastSeenAt, 1700000000000);
   assert.equal(row.uptimePercent, 99.7);
   assert.equal(row.provisioningStatus, "provisioned");
+  assert.equal(row.registeredByName, null);
+  assert.equal("registeredBy" in row, false);
 });
 
 test("absent optional fields resolve to null, not undefined", () => {

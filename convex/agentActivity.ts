@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { requirePlatformUser } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 
@@ -28,7 +29,15 @@ export async function insertActivityLedger(
     platformFeeLocal?: number;
   },
 ) {
+  const [agent, market] = await Promise.all([
+    ctx.db.get(entry.agentId as Id<"agents">),
+    ctx.db.get(entry.marketId as Id<"markets">),
+  ]);
+  if (!agent || !market || !market.tenantId || agent.tenantId !== market.tenantId) {
+    throw new Error("Agent activity must belong to the selected workspace and market");
+  }
   await ctx.db.insert("agentActivity", {
+    tenantId: market.tenantId,
     agentId: entry.agentId as never,
     marketId: entry.marketId as never,
     action: entry.action,

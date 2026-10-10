@@ -20,7 +20,7 @@ export type FleetRow = {
   uptimePercent: number | null;
   provisioningStatus: DeviceProvisioningStatus | null;
   lifecycleStatus: string;
-  registeredBy: string | null;
+  registeredByName: string | null;
   registeredAt: number | null;
   deletedAt: number | null;
 };

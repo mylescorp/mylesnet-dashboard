@@ -251,10 +251,17 @@ export const listPlatformTickets = query({
     if (args.category) categoriesToRead = mayReadTicketCategory(actor, args.category) ? [args.category] : [];
     else if (actor.canManageAll) categoriesToRead = ["network", "billing", "account"];
     else categoriesToRead = [actor.canReadNetwork ? "network" : null, actor.canReadBilling ? "billing" : null].filter((value): value is "network" | "billing" => value !== null);
-    const page = await ctx.db.query("supportTickets").withIndex("by_createdAt").order("desc").paginate({ ...args.paginationOpts, numItems: Math.max(1, Math.min(args.paginationOpts.numItems, 100)) });
-    let rows = page.page.filter(ticket => categoriesToRead.includes(ticket.category ?? "account"));
-    rows = rows.filter(ticket => args.includeDeleted ? ticket.deletedAt !== undefined : ticket.deletedAt === undefined);
-    if (args.ticketStatus) rows = rows.filter(ticket => ticket.ticketStatus === args.ticketStatus);
+    const base = ctx.db.query("supportTickets").withIndex("by_createdAt").order("desc");
+    const page = categoriesToRead.length === 0
+      ? await base.paginate({ ...args.paginationOpts, numItems: Math.max(1, Math.min(args.paginationOpts.numItems, 100)) })
+      : await base.filter((q) => q.and(
+        q.or(...categoriesToRead.map((category) => category === "account"
+          ? q.or(q.eq(q.field("category"), "account"), q.eq(q.field("category"), undefined))
+          : q.eq(q.field("category"), category))),
+        args.includeDeleted ? q.neq(q.field("deletedAt"), undefined) : q.eq(q.field("deletedAt"), undefined),
+        ...(args.ticketStatus ? [q.eq(q.field("ticketStatus"), args.ticketStatus)] : []),
+      )).paginate({ ...args.paginationOpts, numItems: Math.max(1, Math.min(args.paginationOpts.numItems, 100)) });
+    const rows = categoriesToRead.length === 0 ? [] : page.page;
     const items = await Promise.all(rows.map(async ticket => ({
       ...ticket,
       tenantName: ticket.tenantId ? (await ctx.db.get(ticket.tenantId))?.name ?? null : null,

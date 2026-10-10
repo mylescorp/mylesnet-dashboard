@@ -57,7 +57,7 @@ export const listDeviceFleet = query({
         const market = await ctx.db.get(device.marketId);
         const resolvedTenantId = device.tenantId ?? market?.tenantId ?? null;
         const tenant = resolvedTenantId ? await ctx.db.get(resolvedTenantId) : null;
-        return buildFleetRow(
+        const row = buildFleetRow(
           {
             _id: device._id,
             tenantId: resolvedTenantId ?? undefined,
@@ -77,6 +77,8 @@ export const listDeviceFleet = query({
           resolvedTenantId,
           tenant?.name ?? null,
         );
+        const registrant = device.registeredBy && device.registeredBy !== "self" ? await ctx.db.get(device.registeredBy) : null;
+        return { ...row, registeredByName: registrant?.name ?? (device.registeredBy ? "Team member" : null) };
       })),
     };
   },
@@ -91,7 +93,7 @@ export const getDeviceFleetRow = query({
     const market = await ctx.db.get(device.marketId);
     const resolvedTenantId = device.tenantId ?? market?.tenantId ?? null;
     const tenant = resolvedTenantId ? await ctx.db.get(resolvedTenantId) : null;
-    return buildFleetRow(
+    const row = buildFleetRow(
       {
         _id: device._id,
         tenantId: resolvedTenantId ?? undefined,
@@ -111,6 +113,8 @@ export const getDeviceFleetRow = query({
       resolvedTenantId,
       tenant?.name ?? null,
     );
+    const registrant = device.registeredBy && device.registeredBy !== "self" ? await ctx.db.get(device.registeredBy) : null;
+    return { ...row, registeredByName: registrant?.name ?? (device.registeredBy ? "Team member" : null) };
   },
 });
 

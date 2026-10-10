@@ -179,3 +179,10 @@ separate archive policy.
 - **Changes:** Added a server-side 12-hour absolute lifetime and a Convex-backed 30-minute inactivity window for platform sessions, with a 25-minute warning and client activity heartbeat. Session rows bind the authenticated user and current platform-role fingerprint; role changes fail closed for the prior session. Added pure boundary tests for session lifetime, inactivity, and derived identity/role keys.
 - **Verification:** `pnpm typecheck` passed; `pnpm test` passed 36 test files; `pnpm tokens:check` passed; `pnpm lint` has zero errors and one existing warning in `BandwidthCalculatorTool.tsx`. A production webpack build passed compilation/typecheck and prerendered 167 pages using non-secret `NEXT_PUBLIC_CONVEX_URL=https://example.convex.cloud`; final status is pending.
 - **Status:** Work continues on `codex/platform-production` in the isolated worktree. The app split, remaining modules/integrations, UI Jest, audit/security gates, production target verification, deploy, and release sign-off remain open.
+
+### 2026-10-10 — PR #72 Greptile review remediation
+
+- **Scope:** Address the six findings in Greptile's 3/5 review of PR #72 at `bce737c`.
+- **Changes:** Attribute new activity rows to the validated market tenant and retain safe market-scoped reads for legacy rows; use tenant/value indexes for subscriber account numbers and plan codes; pause count-changing subscriber writes during the paginated count backfill; apply ticket category/status/deletion filters before pagination; replace implementation-facing API-key copy; return registrant names instead of staff IDs and business-facing audit labels.
+- **Verification:** `pnpm typecheck`, `pnpm lint`, `pnpm tokens:check`, and `pnpm test` (43 tests) pass after the final changes; `git diff --check` passes. The vault checkout was not edited because this isolated PR worktree is the authorized writable location and the owner checkout must remain untouched.
+- **Status:** Fixes are ready to push from `codex/pr72-fixes`. New Greptile review is required; PR #72 was also previously reported to have conflicts with `main`.

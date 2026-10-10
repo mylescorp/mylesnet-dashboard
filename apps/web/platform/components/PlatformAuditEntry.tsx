@@ -23,7 +23,7 @@ export function PlatformAuditEntry({ auditId }: { auditId: string }) {
       ) : (
         <>
           <section className="pf-panel">
-            <div className="section-heading"><div><p className="eyebrow">Event</p><h2><code>{entry.action}</code></h2></div></div>
+            <div className="section-heading"><div><p className="eyebrow">Event</p><h2>{entry.action.replace(/[._]+/g, " ").replace(/\b\w/g, letter => letter.toUpperCase())}</h2></div></div>
             <dl className="pf-detail-grid">
               <div><dt>Timestamp</dt><dd>{formatDateTime(entry.timestamp)}</dd></div>
               <div><dt>Entity type</dt><dd>{entry.entityTable.replace(/([A-Z])/g, " $1")}</dd></div>

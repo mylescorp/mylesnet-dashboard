@@ -50,17 +50,21 @@ export const createPlan = mutation({
   },
   handler: async (ctx, args) => {
     const { user, tenantId } = await requireTenantPermission(ctx, "plans:manage");
+    const code = args.code.trim().toLowerCase();
+    if (!code || code.length > 80) throw new Error("Plan code must be 1–80 characters");
     if (args.marketId) {
       const market = await ctx.db.get(args.marketId);
       if (!market || market.tenantId !== tenantId) throw new Error("Market not found");
     }
-    const existing = await ctx.db.query("plans").withIndex("by_code", (q) => q.eq("code", args.code)).filter((q) => q.eq(q.field("tenantId"), tenantId)).first();
-    if (existing && existing.status === "active") throw new Error("A plan with this code already exists");
+    const existing = await ctx.db.query("plans").withIndex("by_tenant_code", (q) => q.eq("tenantId", tenantId).eq("code", code)).first();
+    const legacyCaseMatch = existing ? null : (await ctx.db.query("plans").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect())
+      .find((plan) => plan.code.trim().toLowerCase() === code);
+    if (existing || legacyCaseMatch) throw new Error("A plan with this code already exists");
 
     const id = await ctx.db.insert("plans", {
       tenantId,
       marketId: args.marketId,
-      code: args.code,
+      code,
       name: args.name,
       category: args.category,
       priceLocal: args.priceLocal,
