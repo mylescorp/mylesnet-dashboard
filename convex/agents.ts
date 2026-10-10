@@ -1,9 +1,15 @@
 import { v } from "convex/values";
 import { mutation, query, internalQuery } from "./_generated/server";
-import { Doc } from "./_generated/dataModel";
-import { requirePermission } from "./lib/auth";
-import { readTenantList, enforceTenantOnResource } from "./lib/tenant";
+import type { QueryCtx, MutationCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { requireTenantPermission } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
+
+async function getTenantAgent(ctx: QueryCtx | MutationCtx, agentId: Id<"agents">, tenantId: Id<"tenants">, includeDeleted = false) {
+  const agent = await ctx.db.get(agentId);
+  if (!agent || agent.tenantId !== tenantId || (!includeDeleted && agent.deletedAt !== undefined)) throw new Error("Agent not found");
+  return agent;
+}
 
 export const getAgentInternal = internalQuery({
   args: { agentId: v.id("agents") },
@@ -15,14 +21,8 @@ export const getAgentInternal = internalQuery({
 export const listAgents = query({
   args: {},
   handler: async (ctx) => {
-    await requirePermission(ctx, "agents:read");
-    const rows = await readTenantList<Doc<"agents">>(ctx, {
-      all: () => ctx.db.query("agents").collect(),
-      tenant: (tenantId) =>
-        ctx.db.query("agents").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
-      legacy: () =>
-        ctx.db.query("agents").withIndex("by_tenant", (q) => q.eq("tenantId", undefined)).collect(),
-    });
+    const { tenantId } = await requireTenantPermission(ctx, "agents:read");
+    const rows = await ctx.db.query("agents").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect();
     return rows.filter((a) => a.status !== "deleted");
   },
 });
@@ -30,9 +30,8 @@ export const listAgents = query({
 export const getAgent = query({
   args: { agentId: v.id("agents") },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "agents:read");
-    const agent = await ctx.db.get(args.agentId);
-    return await enforceTenantOnResource(ctx, agent, "agent");
+    const { tenantId } = await requireTenantPermission(ctx, "agents:read");
+    return await getTenantAgent(ctx, args.agentId, tenantId);
   },
 });
 
@@ -40,21 +39,29 @@ export const getAgent = query({
 export const getAgentAssignmentHistory = query({
   args: { agentId: v.id("agents") },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "agents:read");
+    const { tenantId } = await requireTenantPermission(ctx, "agents:read");
+    await getTenantAgent(ctx, args.agentId, tenantId);
     const rows = await ctx.db
       .query("agentMarketAssignments")
       .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
       .collect();
-    return rows.sort((a, b) => b.startedAt - a.startedAt);
+    const visible = await Promise.all(rows.map(async (assignment) => {
+      if (assignment.tenantId === tenantId) return assignment;
+      if (assignment.tenantId !== undefined) return null;
+      const market = await ctx.db.get(assignment.marketId);
+      return market?.tenantId === tenantId ? assignment : null;
+    }));
+    return visible.filter((row): row is NonNullable<typeof row> => row !== null).sort((a, b) => b.startedAt - a.startedAt);
   },
 });
 
 export const createAgent = mutation({
   args: { name: v.string(), phone: v.string(), email: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    const user = await requirePermission(ctx, "agents:manage");
+    const { user, tenantId } = await requireTenantPermission(ctx, "agents:manage");
     const now = Date.now();
     const agentId = await ctx.db.insert("agents", {
+      tenantId,
       name: args.name,
       phone: args.phone,
       email: args.email,
@@ -100,12 +107,18 @@ export const assignAgentToMarket = mutation({
     ),
   },
   handler: async (ctx, args) => {
-    const user = await requirePermission(ctx, "agents:manage");
+    const { user, tenantId } = await requireTenantPermission(ctx, "agents:manage");
     const now = Date.now();
+
+    const agent = await getTenantAgent(ctx, args.agentId, tenantId);
+    const market = await ctx.db.get(args.marketId);
+    if (!market || market.tenantId !== tenantId || market.deletedAt !== undefined) throw new Error("Market not found");
 
     if (args.endPreviousAssignmentId) {
       const prev = await ctx.db.get(args.endPreviousAssignmentId);
-      if (!prev) throw new Error("Previous assignment not found");
+      if (!prev || prev.agentId !== agent._id || (prev.tenantId !== undefined && prev.tenantId !== tenantId)) throw new Error("Previous assignment not found");
+      const previousMarket = await ctx.db.get(prev.marketId);
+      if (!previousMarket || previousMarket.tenantId !== tenantId) throw new Error("Previous assignment not found");
       await ctx.db.patch(args.endPreviousAssignmentId, {
         assignmentStatus: "ended",
         endedAt: now,
@@ -114,6 +127,7 @@ export const assignAgentToMarket = mutation({
     }
 
     const assignmentId = await ctx.db.insert("agentMarketAssignments", {
+      tenantId,
       agentId: args.agentId,
       marketId: args.marketId,
       assignmentStatus: "active",
@@ -138,9 +152,8 @@ export const assignAgentToMarket = mutation({
 export const suspendAgent = mutation({
   args: { agentId: v.id("agents"), reason: v.string() },
   handler: async (ctx, args) => {
-    const user = await requirePermission(ctx, "agents:manage");
-    const agent = await ctx.db.get(args.agentId);
-    if (!agent) throw new Error("Agent not found");
+    const { user, tenantId } = await requireTenantPermission(ctx, "agents:manage");
+    const agent = await getTenantAgent(ctx, args.agentId, tenantId);
 
     await ctx.db.patch(args.agentId, {
       lifecycleStatus: "suspended",
@@ -161,9 +174,8 @@ export const suspendAgent = mutation({
 export const reactivateAgent = mutation({
   args: { agentId: v.id("agents") },
   handler: async (ctx, args) => {
-    const user = await requirePermission(ctx, "agents:manage");
-    const agent = await ctx.db.get(args.agentId);
-    if (!agent) throw new Error("Agent not found");
+    const { user, tenantId } = await requireTenantPermission(ctx, "agents:manage");
+    const agent = await getTenantAgent(ctx, args.agentId, tenantId);
 
     await ctx.db.patch(args.agentId, {
       lifecycleStatus: "active",
@@ -191,7 +203,8 @@ export const reactivateAgent = mutation({
 export const offboardAgentStep1CloseAssignments = mutation({
   args: { agentId: v.id("agents") },
   handler: async (ctx, args) => {
-    const user = await requirePermission(ctx, "agents:manage");
+    const { user, tenantId } = await requireTenantPermission(ctx, "agents:manage");
+    await getTenantAgent(ctx, args.agentId, tenantId);
     const now = Date.now();
 
     const activeAssignments = await ctx.db
@@ -199,6 +212,7 @@ export const offboardAgentStep1CloseAssignments = mutation({
       .withIndex("by_agent_status", (q) =>
         q.eq("agentId", args.agentId).eq("assignmentStatus", "active")
       )
+      .filter((q) => q.eq(q.field("tenantId"), tenantId))
       .collect();
 
     for (const assignment of activeAssignments) {
@@ -225,14 +239,15 @@ export const offboardAgentStep1CloseAssignments = mutation({
 export const getAgentUnsoldVouchersForOffboarding = query({
   args: { agentId: v.id("agents") },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "agents:manage");
+    const { tenantId } = await requireTenantPermission(ctx, "agents:manage");
+    await getTenantAgent(ctx, args.agentId, tenantId);
     return await ctx.db
       .query("vouchers")
       .withIndex("by_owner", (q) => q.eq("ownerAgentId", args.agentId))
       .filter((q) =>
-        q.or(
-          q.eq(q.field("voucherStatus"), "owned"),
-          q.eq(q.field("voucherStatus"), "unallocated")
+        q.and(
+          q.eq(q.field("tenantId"), tenantId),
+          q.or(q.eq(q.field("voucherStatus"), "owned"), q.eq(q.field("voucherStatus"), "unallocated"))
         )
       )
       .collect();
@@ -247,11 +262,14 @@ export const disposeOffboardingVoucher = mutation({
     newOwnerAgentId: v.optional(v.id("agents")),
   },
   handler: async (ctx, args) => {
-    const user = await requirePermission(ctx, "agents:manage");
+    const { user, tenantId } = await requireTenantPermission(ctx, "agents:manage");
     if (args.disposition === "reassign" && !args.newOwnerAgentId) {
       throw new Error("newOwnerAgentId is required when reassigning");
     }
 
+    const voucher = await ctx.db.get(args.voucherId);
+    if (!voucher || voucher.tenantId !== tenantId) throw new Error("Voucher not found");
+    if (args.newOwnerAgentId) await getTenantAgent(ctx, args.newOwnerAgentId, tenantId);
     await ctx.db.patch(args.voucherId, {
       ownerAgentId: args.disposition === "reassign" ? args.newOwnerAgentId : undefined,
       voucherStatus: "unallocated",
@@ -280,15 +298,17 @@ export const offboardAgentFinalize = mutation({
     marketId: v.id("markets"),
   },
   handler: async (ctx, args) => {
-    const user = await requirePermission(ctx, "agents:manage");
-    const agent = await ctx.db.get(args.agentId);
-    if (!agent) throw new Error("Agent not found");
+    const { user, tenantId } = await requireTenantPermission(ctx, "agents:manage");
+    const agent = await getTenantAgent(ctx, args.agentId, tenantId);
+    const market = await ctx.db.get(args.marketId);
+    if (!market || market.tenantId !== tenantId) throw new Error("Market not found");
 
     const now = Date.now();
 
     // Final settlement enters the same accrue -> hold -> approve -> paid
     // pipeline as a normal commission, per Section 4.4 step 3.
     await ctx.db.insert("commissions", {
+      tenantId,
       agentId: args.agentId,
       marketId: args.marketId,
       amount: args.finalSettlementAmount,
@@ -326,9 +346,8 @@ export const offboardAgentFinalize = mutation({
 export const restoreAgent = mutation({
   args: { agentId: v.id("agents") },
   handler: async (ctx, args) => {
-    const user = await requirePermission(ctx, "agents:manage");
-    const agent = await ctx.db.get(args.agentId);
-    if (!agent) throw new Error("Agent not found");
+    const { user, tenantId } = await requireTenantPermission(ctx, "agents:manage");
+    await getTenantAgent(ctx, args.agentId, tenantId, true);
 
     // Restoring an agent restores full history including unpaid commission
     // balance exactly as it was — delete/restore never touches financial state.

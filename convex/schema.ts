@@ -515,6 +515,7 @@ export default defineSchema({
     badges: v.optional(v.array(v.string())),
   })
     .index("by_tenant", ["tenantId"])
+    .index("by_createdAt", ["createdAt"])
     .index("by_lifecycleStatus", ["lifecycleStatus"])
     .index("by_status", ["status"]),
 

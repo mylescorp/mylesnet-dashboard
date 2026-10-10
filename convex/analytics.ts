@@ -13,7 +13,9 @@ async function tenantActivityRows(ctx: QueryCtx, tenantId: Id<"tenants">, from: 
     ctx.db.query("markets").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
   ]);
   const marketRows = await Promise.all(markets.map((market) =>
-    ctx.db.query("agentActivity").withIndex("by_market_time", (q) => q.eq("marketId", market._id).gte("occurredAt", from)).collect()
+    ctx.db.query("agentActivity").withIndex("by_market_time", (q) => q.eq("marketId", market._id).gte("occurredAt", from))
+      .filter((q) => q.eq(q.field("tenantId"), undefined))
+      .collect()
   ));
   const rows = new Map(tagged.map((row) => [row._id, row]));
   for (const row of marketRows.flat()) {

@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { BOOTSTRAP_TENANT_SLUG } from "./lib/tenant.ts";
 import { selectBootstrapOwner } from "./lib/tenantCore.ts";
 import {
@@ -33,6 +34,69 @@ export const runTenantIdBackfill = internalMutation({
       steps: plan.map((s) => `${s.stage}:${s.table}`),
       executedRows: 0,
     };
+  },
+});
+
+/**
+ * Safely infer legacy agent ownership from all of that agent's market
+ * assignments. Ambiguous and unassigned agents are left untouched and counted
+ * for manual review. The by_createdAt cursor remains stable while tenantId is
+ * patched, unlike paginating the by_tenant index being modified.
+ */
+export const backfillAgentTenantOwnership = internalMutation({
+  args: {
+    cursor: v.optional(v.union(v.string(), v.null())),
+    migratedCount: v.optional(v.number()),
+    unresolvedCount: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const page = await ctx.db.query("agents").withIndex("by_createdAt").order("asc").paginate({
+      numItems: 100,
+      cursor: args.cursor ?? null,
+    });
+    let migratedCount = args.migratedCount ?? 0;
+    let unresolvedCount = args.unresolvedCount ?? 0;
+
+    for (const agent of page.page) {
+      const assignments = await ctx.db.query("agentMarketAssignments")
+        .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
+        .collect();
+      if (assignments.length === 0) {
+        if (agent.tenantId === undefined) unresolvedCount += 1;
+        continue;
+      }
+      const markets = await Promise.all(assignments.map((assignment) => ctx.db.get(assignment.marketId)));
+      const tenantIds = new Set(markets.flatMap((market) => market?.tenantId ? [market.tenantId] : []));
+      const tenantId = agent.tenantId ?? (tenantIds.size === 1 ? [...tenantIds][0] : undefined);
+      const ownershipIsConsistent = tenantId !== undefined && markets.every((market) => market?.tenantId === tenantId) &&
+        assignments.every((assignment) => assignment.tenantId === undefined || assignment.tenantId === tenantId);
+      if (!ownershipIsConsistent || !tenantId) {
+        unresolvedCount += 1;
+        continue;
+      }
+      let changed = false;
+      if (agent.tenantId === undefined) {
+        await ctx.db.patch(agent._id, { tenantId });
+        changed = true;
+      }
+      for (const assignment of assignments) {
+        if (assignment.tenantId === undefined) {
+          await ctx.db.patch(assignment._id, { tenantId });
+          changed = true;
+        }
+      }
+      if (changed) migratedCount += 1;
+    }
+
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(0, internal.tenantMigrations.backfillAgentTenantOwnership, {
+        cursor: page.continueCursor,
+        migratedCount,
+        unresolvedCount,
+      });
+      return { complete: false, migratedCount, unresolvedCount };
+    }
+    return { complete: true, migratedCount, unresolvedCount };
   },
 });
 

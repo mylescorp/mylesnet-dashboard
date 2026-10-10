@@ -33,8 +33,28 @@ export async function insertActivityLedger(
     ctx.db.get(entry.agentId as Id<"agents">),
     ctx.db.get(entry.marketId as Id<"markets">),
   ]);
-  if (!agent || !market || !market.tenantId || agent.tenantId !== market.tenantId) {
+  if (!agent || !market || !market.tenantId || (agent.tenantId !== undefined && agent.tenantId !== market.tenantId)) {
     throw new Error("Agent activity must belong to the selected workspace and market");
+  }
+  const assignments = await ctx.db.query("agentMarketAssignments")
+    .withIndex("by_agent", (q) => q.eq("agentId", entry.agentId as Id<"agents">))
+    .collect();
+  const activeAssignments = assignments.filter((assignment) => assignment.assignmentStatus === "active");
+  if (!activeAssignments.some((assignment) => assignment.marketId === market._id)) {
+    throw new Error("Agent must be assigned to the selected market before recording activity");
+  }
+  const assignmentMarkets = await Promise.all(assignments.map((assignment) => ctx.db.get(assignment.marketId)));
+  if (assignmentMarkets.some((assignedMarket, index) =>
+    !assignedMarket || assignedMarket.tenantId !== market.tenantId ||
+    (assignments[index].tenantId !== undefined && assignments[index].tenantId !== market.tenantId)
+  )) {
+    throw new Error("Agent assignments must belong to one workspace");
+  }
+  if (agent.tenantId === undefined) {
+    await ctx.db.patch(agent._id, { tenantId: market.tenantId });
+    for (const assignment of assignments) {
+      if (assignment.tenantId === undefined) await ctx.db.patch(assignment._id, { tenantId: market.tenantId });
+    }
   }
   await ctx.db.insert("agentActivity", {
     tenantId: market.tenantId,

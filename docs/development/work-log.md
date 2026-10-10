@@ -186,3 +186,10 @@ separate archive policy.
 - **Changes:** Attribute new activity rows to the validated market tenant and retain safe market-scoped reads for legacy rows; use tenant/value indexes for subscriber account numbers and plan codes; pause count-changing subscriber writes during the paginated count backfill; apply ticket category/status/deletion filters before pagination; replace implementation-facing API-key copy; return registrant names instead of staff IDs and business-facing audit labels.
 - **Verification:** `pnpm typecheck`, `pnpm lint`, `pnpm tokens:check`, and `pnpm test` (43 tests) pass after the final changes; `git diff --check` passes. The vault checkout was not edited because this isolated PR worktree is the authorized writable location and the owner checkout must remain untouched.
 - **Status:** Fixes are ready to push from `codex/pr72-fixes`. New Greptile review is required; PR #72 was also previously reported to have conflicts with `main`.
+
+### 2026-10-10 — PR #72 Greptile follow-up
+
+- **Scope:** Address Greptile's two follow-up findings after the score increased to 4/5 on `30a761c`.
+- **Changes:** New agent records now take tenant ownership from the authenticated workspace; agent operations and market assignments are tenant-scoped; a bounded internal migration infers legacy agent ownership only when every assignment resolves to one tenant and reports ambiguous rows; activity writes safely backfill a legacy agent only after validating its active market assignments. Tenant analytics now reads only untagged legacy activity through market indexes, avoiding a second read of migrated activity.
+- **Verification:** `pnpm typecheck`, `pnpm lint`, `pnpm tokens:check`, and all 43 tests pass; remote CI and Greptile review are pending.
+- **Status:** Follow-up fixes are ready for review in `codex/pr72-fixes`. The owner checkout remains untouched; its local vault mirror is not synchronized from this worktree.
