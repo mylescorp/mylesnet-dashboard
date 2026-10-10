@@ -85,3 +85,9 @@ Prepared the reviewed platform feature bundle on `feat/restore-platform-features
 - **Changes:** Removed the Ops read overgrant from global commission rate, override, and agency-option queries. The backend now uses the same super-admin/finance role tuple as the page and sidebar. Added a regression test proving spec-silent Ops, support, and readonly roles are excluded.
 - **Verification:** Focused commission policy test passed; web and direct Convex typechecks passed; `git diff --check` passed.
 - **Status:** E3 configuration CRUD exists but accrual/payout integration and authenticated live-role verification remain open. Changes are committed on the isolated RBAC branch for review; no push or deployment was performed. Owner checkout and port 3000 were untouched.
+
+### 2026-10-10 — B3 RADIUS fleet status re-audit
+
+- **Changes:** Reclassified B3 from absent to partial based on the checked-out platform route, CRUD backend, audit writes, role gates, and read-only UI. The register and production plan now identify telemetry ingestion as the remaining blocker.
+- **Verification:** File-grounded route/backend/UI review and `git diff --check` passed. No telemetry integration or authenticated role test was performed.
+- **Status:** Awaiting an approved trusted telemetry source; no sample metrics were introduced.

@@ -28,7 +28,7 @@ The status column records the supplied audit snapshot. Revalidate route, backend
 | A3 | Suspension/restoration `/platform/organizations/[id]/suspend`, `/restore` | SA CRUD; OPS CRU; FIN/SUP/RO R | Partial; canonical confirmation routes, audited lifecycle transitions, prior-state restoration; org-claim tenant resolution now denies unmapped/malformed scopes, and a server-side dashboard gate now calls the authenticated workspace query and invokes Next `forbidden()` for suspended tenants; authenticated HTTP 403 behavior, full API coverage, and RADIUS/billing/device cascade are not yet proven |
 | B1 | Device fleet `/platform/infrastructure/devices`, `/[id]` | SA/OPS CRUD; SUP/RO R; FIN — | Partial; route, registry, UI, exact role gates and cursor pagination added; telemetry ingestion is absent |
 | B2 | Provisioning `/platform/infrastructure/provisioning-queue` | SA CRUD; OPS CRU; others R | Partial; canonical route and review UI added, latest 200 rows only; no device-side provisioning integration |
-| B3 | RADIUS fleet `/platform/infrastructure/radius` | SA/OPS CRUD; others R | Not present |
+| B3 | RADIUS fleet `/platform/infrastructure/radius` | SA/OPS CRUD; others R | Partial; paginated registry, audited create/update/archive/restore, and role-gated metrics display exist; metrics ingestion and authenticated role coverage remain absent |
 | B4 | Policy templates `/platform/infrastructure/policy-templates` | SA/OPS CRUD; others R | Not present |
 | B5 | Health rollup `/platform/infrastructure/health` | SA/OPS RU; SUP/RO R; FIN — | Not present |
 | B6 | Firmware/config `/platform/infrastructure/firmware` | SA CRUD; OPS CRU; others R | Not present |
@@ -142,3 +142,8 @@ Moved CSV parsing into the tested reconciliation core. Imports now enforce a 1 M
 ## 2026-10-10 E3 commission-rate RBAC correction
 
 The page and sidebar already limited `/platform/commissions/rates` to super-admin and finance, but three Convex read queries also admitted `platform_ops`. Centralized the allowed role tuple and use it for all reads and writes, so direct calls now match the canonical matrix and fail closed for ops, support, and readonly. Added a regression test against the role tuple used by the Convex module. Targeted test, web typecheck, direct Convex typecheck, and `git diff --check` pass. E3 remains partial because accrual and payout integration is not implemented, and authenticated live-role verification is still outstanding.
+
+
+## 2026-10-10 B3 RADIUS fleet re-audit
+
+The checked-out branch contains `/platform/infrastructure/radius`, a paginated platform fleet registry with SA/OPS create, update, archive, and restore actions, audit records, and read-only views for finance/support/readonly roles. The screen explicitly marks uptime, latency, sessions, and authentication rates as unreported until trusted telemetry is integrated. B3 is therefore Partial, not absent or confirmed. This repository has no verified RADIUS telemetry source; do not populate these metrics with samples.

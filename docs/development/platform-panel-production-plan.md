@@ -161,3 +161,8 @@ Changed the SLA read model to show all three effective category targets, includi
 ## 2026-10-10 continuation — C5 reconciliation import validation
 
 Moved CSV parsing into a tested shared core and added pre-mutation validation for byte size, row count, BOMs, quoted fields, malformed quoting, required columns/values, and overflow fields. Removed fabricated row data from placeholders. The workflow remains manual statement matching, without gateway access or money movement. Tests/typechecks/lint/diff checks pass; authenticated role/runtime and production data validation remain open.
+
+
+## 2026-10-10 B3 RADIUS fleet re-audit
+
+The isolated branch includes a RADIUS server registry at `/platform/infrastructure/radius`, with SA/OPS audited management and read-only fleet metrics for other canonical roles. Metrics are rendered as unreported because the repo does not contain an established trusted RADIUS telemetry source. Keep B3 partial until a provider/agent contract is approved, metrics ingestion is implemented, and all-role access is exercised against a deployed backend.
