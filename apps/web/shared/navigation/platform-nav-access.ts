@@ -12,6 +12,7 @@ const platformRoles = {
 const PLATFORM_NAV_ROLE_SCOPES: Record<string, string[]> = {
   "/platform": [...platformRoles.superAdmin, ...platformRoles.ops, ...platformRoles.finance, ...platformRoles.support, ...platformRoles.readonly],
   "/platform/organizations": [...platformRoles.superAdmin, ...platformRoles.ops, ...platformRoles.finance, ...platformRoles.support, ...platformRoles.readonly],
+  "/platform/organizations/new": [...platformRoles.superAdmin, ...platformRoles.ops],
   "/platform/subscriptions": [...platformRoles.superAdmin, ...platformRoles.ops, ...platformRoles.finance, ...platformRoles.support, ...platformRoles.readonly],
   "/platform/billing": [...platformRoles.superAdmin, ...platformRoles.finance, ...platformRoles.readonly],
   "/platform/billing/plans": [...platformRoles.superAdmin, ...platformRoles.finance, ...platformRoles.ops, ...platformRoles.support, ...platformRoles.readonly],

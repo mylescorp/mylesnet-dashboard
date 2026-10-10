@@ -72,6 +72,7 @@ test("sidebar visibility matches representative canonical grants for all five su
         "/platform/security/data-requests": true,
         "/platform/agencies": true,
         "/platform/settings": true,
+        "/platform/organizations/new": true,
       },
     },
     {
@@ -85,6 +86,7 @@ test("sidebar visibility matches representative canonical grants for all five su
         "/platform/security/data-requests": false,
         "/platform/agencies": true,
         "/platform/settings": true,
+        "/platform/organizations/new": true,
       },
     },
     {
@@ -98,6 +100,7 @@ test("sidebar visibility matches representative canonical grants for all five su
         "/platform/security/data-requests": false,
         "/platform/agencies": true,
         "/platform/settings": false,
+        "/platform/organizations/new": false,
       },
     },
     {
@@ -111,6 +114,7 @@ test("sidebar visibility matches representative canonical grants for all five su
         "/platform/security/data-requests": true,
         "/platform/agencies": true,
         "/platform/settings": false,
+        "/platform/organizations/new": false,
       },
     },
     {
@@ -124,6 +128,7 @@ test("sidebar visibility matches representative canonical grants for all five su
         "/platform/security/data-requests": false,
         "/platform/agencies": false,
         "/platform/settings": false,
+        "/platform/organizations/new": false,
       },
     },
   ];

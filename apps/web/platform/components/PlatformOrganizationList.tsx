@@ -4,6 +4,8 @@ import Link from "next/link";
 import { Building2, Plus, Search, Users, Calendar, ExternalLink, ArrowRight } from "lucide-react";
 import { useQuery } from "@/app/lib/convex";
 import { tenantControl, type PlatformTenant } from "@/lib/convex/tenantControl";
+import { canManagePlatformTenants } from "@/platform/permissions";
+import { useUserProfile } from "@/shared/components/UserProfileContext";
 
 const statusConfig = {
   active: { label: "Active", color: "bg-muted text-foreground border-border" },
@@ -15,6 +17,8 @@ const statusConfig = {
 
 export function PlatformOrganizationList() {
   const tenants = useQuery(tenantControl.listForPlatform, {});
+  const { user } = useUserProfile();
+  const canCreate = canManagePlatformTenants(user?.roles.map((role) => role.slug));
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "var(--canvas)" }}>
@@ -35,7 +39,7 @@ export function PlatformOrganizationList() {
                 Manage all tenant organizations across the platform. Monitor status, membership, and access organization settings.
               </p>
             </div>
-            <Link 
+            {canCreate ? <Link
               href="/platform/organizations/new"
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium transition-all duration-200 shadow-lg hover:-translate-y-0.5"
               style={{
@@ -47,7 +51,7 @@ export function PlatformOrganizationList() {
             >
               <Plus size={18} aria-hidden="true" />
               New Organization
-            </Link>
+            </Link> : null}
           </div>
         </div>
 
@@ -234,7 +238,7 @@ export function PlatformOrganizationList() {
               <p className="text-center max-w-sm mb-6" style={{ color: "var(--text)" }}>
                 Get started by creating your first organization to begin managing tenants across the platform.
               </p>
-              <Link 
+              {canCreate ? <Link
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium transition-all duration-200 shadow-lg"
                 href="/platform/organizations/new"
                 style={{
@@ -246,7 +250,7 @@ export function PlatformOrganizationList() {
               >
                 <Plus size={18} aria-hidden="true" />
                 Create Organization
-              </Link>
+              </Link> : null}
             </div>
           )}
         </div>
