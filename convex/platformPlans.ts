@@ -32,6 +32,7 @@ async function ensureDefaultPlans(ctx: MutationCtx, userId: Id<"users">) {
       entityTable: "platformPlanCatalog",
       entityId: id,
       changedBy: userId,
+      tenantId: null,
       after: { code: plan.code, monthlyPriceMinor: plan.monthlyPriceMinor, currency: "KES" },
     });
   }
@@ -82,7 +83,7 @@ export const create = mutation({
     }
     const now = Date.now();
     const id = await ctx.db.insert("platformPlanCatalog", { ...plan, currency: "KES", status: "active", createdBy: actor._id, createdAt: now, updatedBy: actor._id, updatedAt: now });
-    await logAudit(ctx, { action: "platform.plan.created", entityTable: "platformPlanCatalog", entityId: id, changedBy: actor._id, after: { ...plan, currency: "KES" } });
+    await logAudit(ctx, { action: "platform.plan.created", entityTable: "platformPlanCatalog", entityId: id, changedBy: actor._id, tenantId: null, after: { ...plan, currency: "KES" } });
     return id;
   },
 });
@@ -96,7 +97,7 @@ export const update = mutation({
     if (!existing) throw new Error("Plan not found");
     const plan = validatePlan(existing.code, args.name, args.monthlyPriceMinor);
     await ctx.db.patch(existing._id, { name: plan.name, monthlyPriceMinor: plan.monthlyPriceMinor, updatedBy: actor._id, updatedAt: Date.now() });
-    await logAudit(ctx, { action: "platform.plan.updated", entityTable: "platformPlanCatalog", entityId: existing._id, changedBy: actor._id, before: { name: existing.name, monthlyPriceMinor: existing.monthlyPriceMinor }, after: { name: plan.name, monthlyPriceMinor: plan.monthlyPriceMinor, currency: "KES" } });
+    await logAudit(ctx, { action: "platform.plan.updated", entityTable: "platformPlanCatalog", entityId: existing._id, changedBy: actor._id, tenantId: null, before: { name: existing.name, monthlyPriceMinor: existing.monthlyPriceMinor }, after: { name: plan.name, monthlyPriceMinor: plan.monthlyPriceMinor, currency: "KES" } });
     return existing._id;
   },
 });
@@ -110,7 +111,7 @@ export const setStatus = mutation({
     if (!existing) throw new Error("Plan not found");
     if (existing.status === args.status) return { changed: false, status: existing.status };
     await ctx.db.patch(existing._id, { status: args.status, updatedBy: actor._id, updatedAt: Date.now() });
-    await logAudit(ctx, { action: "platform.plan.statusChanged", entityTable: "platformPlanCatalog", entityId: existing._id, changedBy: actor._id, before: { status: existing.status }, after: { status: args.status } });
+    await logAudit(ctx, { action: "platform.plan.statusChanged", entityTable: "platformPlanCatalog", entityId: existing._id, changedBy: actor._id, tenantId: null, before: { status: existing.status }, after: { status: args.status } });
     return { changed: true, status: args.status };
   },
 });
@@ -125,7 +126,7 @@ export const remove = mutation({
     const entitlements = await ctx.db.query("entitlements").withIndex("by_planId", q => q.eq("planId", existing.code)).collect();
     if (entitlements.length > 0) throw new Error("This plan is referenced by tenant subscription records. Archive it to preserve the subscription and audit history.");
     await ctx.db.delete(existing._id);
-    await logAudit(ctx, { action: "platform.plan.deleted", entityTable: "platformPlanCatalog", entityId: existing._id, changedBy: actor._id, before: { code: existing.code, name: existing.name, monthlyPriceMinor: existing.monthlyPriceMinor, status: existing.status } });
+    await logAudit(ctx, { action: "platform.plan.deleted", entityTable: "platformPlanCatalog", entityId: existing._id, changedBy: actor._id, tenantId: null, before: { code: existing.code, name: existing.name, monthlyPriceMinor: existing.monthlyPriceMinor, status: existing.status } });
     return { deleted: true, code: existing.code };
   },
 });

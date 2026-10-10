@@ -1,12 +1,29 @@
 import { MutationCtx, QueryCtx } from "../_generated/server";
 import { Id } from "../_generated/dataModel";
 import { AUDIT_CHAIN_GENESIS, hashAuditChainPayload } from "./auditChainCore";
+import { resolveAuditTenantId } from "./auditTenantCore";
+import { resolveTenantFromAuth } from "./tenant";
 
 /**
  * Unified audit log writer. Call this from every mutation that changes
  * state — not just deletions (soft-delete fields cover that separately).
  * Covers commission edits, market status changes, device swaps, assignment
  * changes, approval actions, everything.
+ *
+ * Tenant attribution: pass `tenantId` with the tenant the change actually
+ * affects. For a platform operator acting on another tenant's record, that is
+ * the affected record's tenant (the record itself, or its owning market), not
+ * the operator's own claim -- otherwise the tenant's audit trail never sees the
+ * change. Pass an explicit `null` only for genuinely global/platform rows
+ * (users, roles, feature flags, the platform plan catalog). When it is omitted,
+ * the row inherits the caller's resolved tenant from their WorkOS organization
+ * claim so the tenant-scoped audit query can see it. An unmapped claim yields
+ * no tenant scope; it never guesses a bootstrap tenant.
+ *
+ * `tenantId` is intentionally NOT part of the sealed chain hash: the chain
+ * signs the immutable audit facts (action, entity, actor, state diff, time, ip)
+ * and changing the canonical payload would invalidate every existing sealed
+ * row. The tenant id is a routing attribute written by this single writer.
  */
 export async function logAudit(
   ctx: MutationCtx,
@@ -18,10 +35,17 @@ export async function logAudit(
     before?: unknown;
     after?: unknown;
     ip?: string;
+    tenantId?: Id<"tenants"> | null;
   }
 ) {
   const beforeJson = params.before !== undefined ? JSON.stringify(params.before) : undefined;
   const afterJson = params.after !== undefined ? JSON.stringify(params.after) : undefined;
+  const authenticatedTenantId =
+    params.tenantId === undefined ? await resolveTenantFromAuth(ctx) : null;
+  const tenantId = resolveAuditTenantId({
+    explicitTenantId: params.tenantId,
+    authenticatedTenantId,
+  }) as Id<"tenants"> | null;
   // Convex mutations are serializable. Reading the current tail means a
   // concurrent writer is retried before it can append a competing chain link.
   const previous = await ctx.db.query("auditLog").withIndex("by_timestamp").order("desc").first();
@@ -55,6 +79,7 @@ export async function logAudit(
     chainSequence,
     prevHash,
     hash,
+    tenantId: tenantId ?? undefined,
   });
 }
 

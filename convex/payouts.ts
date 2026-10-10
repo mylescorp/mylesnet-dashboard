@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
 import { Doc } from "./_generated/dataModel";
 import { requirePermission, requirePlatformOwner, requirePlatformUser } from "./lib/auth";
-import { readTenantList, enforceTenantOnResource } from "./lib/tenant";
+import { readTenantList, readScopedTenant, enforceTenantOnResource } from "./lib/tenant";
 import { localToUsd } from "./lib/finance";
 import { logAudit } from "./lib/auditLog";
 
@@ -43,8 +43,11 @@ export const createPayoutRequest = mutation({
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "payouts:manage");
     if (args.amountLocal <= 0) throw new Error("Amount must be positive");
+    const scope = await readScopedTenant(ctx);
+    const market = args.marketId ? await enforceTenantOnResource(ctx, await ctx.db.get(args.marketId), "market") : null;
     const amountUSD = await localToUsd(ctx, args.amountLocal, args.currency);
     const id = await ctx.db.insert("payouts", {
+      tenantId: market?.tenantId ?? scope.tenantId ?? undefined,
       type: args.type,
       payeeType: args.payeeType,
       payeeId: args.payeeId,
@@ -64,6 +67,7 @@ export const createPayoutRequest = mutation({
       entityTable: "payouts",
       entityId: id,
       changedBy: user._id,
+      tenantId: market?.tenantId ?? scope.tenantId,
       after: { amountUSD, tier: tierForAmountUsd(amountUSD) },
     });
     return id;
@@ -74,13 +78,15 @@ export const createPayoutRequest = mutation({
 export const requestPayoutOtp = mutation({
   args: { payoutId: v.id("payouts") },
   handler: async (ctx, args) => {
-    // Any finance-role user may generate for tier_1/2; tier_3 owners only.
-    const payout = await ctx.db.get(args.payoutId);
+    // Authorize before any read: the baseline finance permission first, then a
+    // stricter owner check once the payout's tier is known.
+    const user = await requirePermission(ctx, "payouts:manage");
+    const payout = await enforceTenantOnResource(ctx, await ctx.db.get(args.payoutId), "payout");
     if (!payout) throw new Error("Payout not found");
-    const user =
-      payout.approvalTier === "tier_3"
-        ? await requirePlatformOwner(ctx)
-        : await requirePermission(ctx, "payouts:manage");
+    if (payout.approvalTier === "tier_3") {
+      await requirePlatformOwner(ctx);
+    }
+    const market = payout.marketId ? await ctx.db.get(payout.marketId) : null;
 
     const code = String(Math.floor(100000 + Math.random() * 900000));
     await ctx.db.patch(args.payoutId, {
@@ -92,6 +98,7 @@ export const requestPayoutOtp = mutation({
       entityTable: "payouts",
       entityId: args.payoutId,
       changedBy: user._id,
+      tenantId: payout.tenantId ?? market?.tenantId,
     });
     // Returned once. In production this is delivered via SMS/email (lib/notify)
     // instead of surfaced in the UI.
@@ -103,8 +110,9 @@ export const approvePayout = mutation({
   args: { payoutId: v.id("payouts"), otp: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "payouts:manage");
-    const payout = await ctx.db.get(args.payoutId);
+    const payout = await enforceTenantOnResource(ctx, await ctx.db.get(args.payoutId), "payout");
     if (!payout) throw new Error("Payout not found");
+    const market = payout.marketId ? await ctx.db.get(payout.marketId) : null;
     if (payout.status !== "pending_approval") throw new Error("Payout is not pending approval");
 
     // Self-approval guard (finance rules): a user cannot approve their own payout.
@@ -137,6 +145,7 @@ export const approvePayout = mutation({
       entityTable: "payouts",
       entityId: args.payoutId,
       changedBy: user._id,
+      tenantId: payout.tenantId ?? market?.tenantId,
     });
   },
 });
@@ -145,8 +154,11 @@ export const markPayoutProcessing = mutation({
   args: { payoutId: v.id("payouts") },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "payouts:manage");
+    const payout = await enforceTenantOnResource(ctx, await ctx.db.get(args.payoutId), "payout");
+    if (!payout) throw new Error("Payout not found");
+    const market = payout.marketId ? await ctx.db.get(payout.marketId) : null;
     await ctx.db.patch(args.payoutId, { status: "processing" });
-    await logAudit(ctx, { action: "payout.processing", entityTable: "payouts", entityId: args.payoutId, changedBy: user._id });
+    await logAudit(ctx, { action: "payout.processing", entityTable: "payouts", entityId: args.payoutId, changedBy: user._id, tenantId: payout.tenantId ?? market?.tenantId });
   },
 });
 
@@ -154,8 +166,11 @@ export const markPayoutPaid = mutation({
   args: { payoutId: v.id("payouts") },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "payouts:manage");
+    const payout = await enforceTenantOnResource(ctx, await ctx.db.get(args.payoutId), "payout");
+    if (!payout) throw new Error("Payout not found");
+    const market = payout.marketId ? await ctx.db.get(payout.marketId) : null;
     await ctx.db.patch(args.payoutId, { status: "paid", processedAt: Date.now() });
-    await logAudit(ctx, { action: "payout.paid", entityTable: "payouts", entityId: args.payoutId, changedBy: user._id });
+    await logAudit(ctx, { action: "payout.paid", entityTable: "payouts", entityId: args.payoutId, changedBy: user._id, tenantId: payout.tenantId ?? market?.tenantId });
   },
 });
 
@@ -163,8 +178,11 @@ export const rejectPayout = mutation({
   args: { payoutId: v.id("payouts"), notes: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "payouts:manage");
+    const payout = await enforceTenantOnResource(ctx, await ctx.db.get(args.payoutId), "payout");
+    if (!payout) throw new Error("Payout not found");
+    const market = payout.marketId ? await ctx.db.get(payout.marketId) : null;
     await ctx.db.patch(args.payoutId, { status: "rejected", notes: args.notes });
-    await logAudit(ctx, { action: "payout.reject", entityTable: "payouts", entityId: args.payoutId, changedBy: user._id });
+    await logAudit(ctx, { action: "payout.reject", entityTable: "payouts", entityId: args.payoutId, changedBy: user._id, tenantId: payout.tenantId ?? market?.tenantId });
   },
 });
 

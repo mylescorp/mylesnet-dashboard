@@ -51,6 +51,7 @@ export const createInvestor = mutation({
       entityTable: "investors",
       entityId: id,
       changedBy: user._id,
+      tenantId: null,
       after: { name: args.name, amountUSD: args.investmentAmountUSD },
     });
     return id;
@@ -79,6 +80,7 @@ export const updateInvestor = mutation({
       entityTable: "investors",
       entityId: args.investorId,
       changedBy: user._id,
+      tenantId: null,
       after: cleaned,
     });
   },
@@ -136,7 +138,7 @@ export const markInvestorReportViewed = mutation({
   handler: async (ctx, args) => {
     const user = await requirePlatformUser(ctx);
     await ctx.db.patch(args.reportId, { viewedAt: Date.now() });
-    await logAudit(ctx, { action: "investorReport.viewed", entityTable: "investorReports", entityId: args.reportId, changedBy: user._id });
+    await logAudit(ctx, { action: "investorReport.viewed", entityTable: "investorReports", entityId: args.reportId, changedBy: user._id, tenantId: null });
   },
 });
 
