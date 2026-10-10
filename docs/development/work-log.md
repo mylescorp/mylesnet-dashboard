@@ -186,7 +186,7 @@ separate archive policy.
 - **Scope:** Install Greptile repository review rules and correct the configured local vault references.
 - **Changes:** Added the mandatory PR gate, Greptile configuration, review template, and a dated tooling-only decision. Corrected repo instructions to point at `/home/myles/Projects/mylescorp-brain/`. Vault-wide rollout was added for all ten product folders.
 - **Verification:** Greptile file names and schema checked against its official file reference. Mirror pairs were compared before edits; divergent pairs were left unchanged. No runtime dependency was added.
-- **Status:** PR review, required CI checks, and branch protection remain to be verified. No vault `work-log.md` counterpart exists, so the repo work-log append is not synchronized.
+- **Status:** PR review, required CI checks, and branch protection remain to be verified. The vault work-log copy was added at `products/mylesnet/work-log.md` with required frontmatter.
 
 ### 2026-10-10 - Greptile gate baseline verification
 
@@ -195,3 +195,10 @@ separate archive policy.
 - Gate build: before rebasing, production compilation succeeded and typecheck stopped on the five C5 errors from stale local main. No process was stopped; the owner's dev server was not touched.
 - Changes: amended steps 3 and 8 in repo/vault gate, added the PR template baseline section, recorded the vault work-log path, and prepared a mirror-divergence report.
 - Status: local-main C5 failures do not exist on current origin/main and are not current PR baseline failures. Rebased the gate onto `origin/main` so the PR contains one commit and no unrelated history. The rebased branch passed `pnpm typecheck`, `pnpm test` (171/171), `pnpm lint` (zero errors, 15 warnings), and `pnpm build` (131 generated pages). GitHub CI security fails its production dependency audit on unchanged baseline `next` below patched 16.3.8 (GHSA-cjq9-62q9-8jv4); secret scanning passed. Do not change runtime dependencies in this gate PR. Greptile review remains pending.
+
+
+### 2026-10-10 - Greptile review round 1
+
+- Review: Greptile returned 4/5 with two P2 findings about post-review record commits and the mapped work-log path. Both findings were valid.
+- Changes: Final review record updates are now committed before the final review; the final Greptile summary on the final commit is canonical score evidence, with no record-only commit after 5/5. Vault reference step 3 now names `products/mylesnet/work-log.md`. Repo and vault gate wording match.
+- Status: Fix commit pushed to PR #73. Waiting for re-review; no branch protection changes applied.

@@ -32,8 +32,9 @@ configured vault on this workstation is `/home/myles/Projects/mylescorp-brain/`.
 3. For each meaningful implementation, audit, decision, release, or docs task,
    update the relevant vault record before closing the task. Record the date,
    scope, changed files or areas, verification performed, current status, and
-   open work. Append a short entry to `docs/development/work-log.md` in both
-   checkouts. For a product decision, update the decision log. For implementation
+   open work. Append a short entry to the repository's
+   `docs/development/work-log.md` and the vault's `products/mylesnet/work-log.md`.
+   For a product decision, update the decision log. For implementation
    status, update the relevant module/task register. For a notable agent session,
    update the transcript archive.
 4. Keep documents declared as byte-identical mirrors byte-identical. The repo
