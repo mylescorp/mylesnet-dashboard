@@ -39,7 +39,7 @@ function wholeNumber(value: unknown, fallback: number, min: number, max: number)
   return typeof value === "number" && Number.isInteger(value) && value >= min && value <= max ? value : fallback;
 }
 
-function normalize(settings: unknown, tenantName?: string) {
+function normalize(settings: unknown, tenantName?: string, inheritedBranding?: { supportEmail: string; supportPhone: string; brandColor: string }) {
   const source = settings && typeof settings === "object" ? settings as Record<string, unknown> : {};
   const branding = source.branding && typeof source.branding === "object" ? source.branding as Record<string, unknown> : {};
   const operations = source.operations && typeof source.operations === "object" ? source.operations as Record<string, unknown> : {};
@@ -49,9 +49,11 @@ function normalize(settings: unknown, tenantName?: string) {
   return {
     branding: {
       networkName: text(branding.networkName, 120, tenantName ?? defaultSettings.branding.networkName),
-      supportEmail: text(branding.supportEmail, 160),
-      supportPhone: text(branding.supportPhone, 20),
-      brandColor: /^#[0-9A-F]{6}$/.test(color) ? color : defaultSettings.branding.brandColor,
+      supportEmail: text(branding.supportEmail, 160) || inheritedBranding?.supportEmail || "",
+      supportPhone: text(branding.supportPhone, 20) || inheritedBranding?.supportPhone || "",
+      brandColor: /^#[0-9A-F]{6}$/.test(color) && color !== defaultSettings.branding.brandColor
+        ? color
+        : inheritedBranding?.brandColor ?? defaultSettings.branding.brandColor,
       termsAccepted: branding.termsAccepted === true,
     },
     operations: {
@@ -86,9 +88,10 @@ export const get = query({
     const { tenantId } = access;
     const tenant = await ctx.db.get(tenantId);
     if (!tenant) return { workspace: null, settings: normalize(undefined), canManage: false };
+    const inheritedBranding = await ctx.db.query("platformWhiteLabelDefaults").withIndex("by_key", q => q.eq("key", "default")).first();
     return {
       workspace: { name: tenant.name, country: tenant.country, timezone: tenant.timezone, currency: tenant.currency },
-      settings: normalize(tenant.settings, tenant.name),
+      settings: normalize(tenant.settings, tenant.name, inheritedBranding ?? undefined),
       canManage: tenantRoleHasPermission(access.role, "settings:manage"),
     };
   },

@@ -31,11 +31,14 @@ const directoryPageValidator = v.object({
   isDone: v.boolean(),
 });
 const authMembershipResultValidator = v.object({
+  requestId: v.string(),
   actorUserId: v.id("users"),
   targetUserId: v.id("users"),
   workosUserId: v.string(),
   organizationId: v.string(),
   expectedStatus: v.union(v.literal("active"), v.literal("pending"), v.literal("revoked")),
+  alreadyApplied: v.boolean(),
+  alreadyEffective: v.boolean(),
 });
 const resetAuthorizationValidator = v.object({
   actorUserId: v.id("users"),
@@ -43,7 +46,7 @@ const resetAuthorizationValidator = v.object({
   email: v.string(),
 });
 
-type MembershipActionArgs = { userId: Id<"users">; tenantId: Id<"tenants">; status: "active" | "revoked" };
+type MembershipActionArgs = { userId: Id<"users">; tenantId: Id<"tenants">; status: "active" | "revoked"; requestId: string };
 
 async function authorizeDirectoryActor(ctx: Parameters<typeof requirePlatformUser>[0]) {
   const actor = await requirePlatformUser(ctx);
@@ -56,6 +59,18 @@ async function authorizeDirectoryActor(ctx: Parameters<typeof requirePlatformUse
 
 async function authorizeMembershipAction(ctx: Parameters<typeof requirePlatformUser>[0], args: MembershipActionArgs) {
   const { actor, isSuperAdmin, isSupport } = await authorizeDirectoryActor(ctx);
+  if (!/^[0-9a-f-]{36}$/i.test(args.requestId)) throw new Error("Access change request is invalid");
+  const completed = await ctx.db.query("platformUserAccessRequests").withIndex("by_requestId", q => q.eq("requestId", args.requestId)).first();
+  if (completed) {
+    if (completed.actorUserId !== actor._id || completed.targetUserId !== args.userId || completed.tenantId !== args.tenantId || completed.status !== args.status) {
+      throw new Error("Access change request identifier has already been used");
+    }
+    return {
+      requestId: args.requestId, actorUserId: actor._id, targetUserId: args.userId,
+      workosUserId: completed.workosUserId, organizationId: completed.organizationId,
+      expectedStatus: args.status, alreadyApplied: true, alreadyEffective: true,
+    };
+  }
   if (args.status === "active" && !isSuperAdmin) throw new Error("Unauthorized: only a platform super-admin can restore access");
   const target = await ctx.db.get(args.userId);
   if (!target || target.deletedAt !== undefined || !target.workosUserId) throw new Error("User account not found");
@@ -71,16 +86,19 @@ async function authorizeMembershipAction(ctx: Parameters<typeof requirePlatformU
     .withIndex("by_user_tenant", (q) => q.eq("userId", target._id).eq("tenantId", args.tenantId))
     .first();
   const expectedStatus = args.status === "revoked" ? "active" : "revoked";
-  if (!membership || membership.status !== expectedStatus) throw new Error("Workspace membership has changed; refresh and review it");
+  if (!membership || (membership.status !== expectedStatus && membership.status !== args.status)) throw new Error("Workspace membership has changed; refresh and review it");
   const tenant = await ctx.db.get(args.tenantId);
   if (!tenant?.workosOrganizationId) throw new Error("Workspace access is not connected");
   if (args.status === "active" && !canTenantOperate(tenant.status)) throw new Error("This workspace is not active");
   return {
     actorUserId: actor._id,
+    requestId: args.requestId,
     targetUserId: target._id,
     workosUserId: target.workosUserId,
     organizationId: tenant.workosOrganizationId,
     expectedStatus: membership.status,
+    alreadyApplied: false,
+    alreadyEffective: membership.status === args.status,
   };
 }
 
@@ -157,20 +175,23 @@ export const list = query({
 });
 
 export const authorizeMembershipChange = internalQuery({
-  args: { userId: v.id("users"), tenantId: v.id("tenants"), status: membershipStatusValidator },
+  args: { userId: v.id("users"), tenantId: v.id("tenants"), status: membershipStatusValidator, requestId: v.string() },
   returns: authMembershipResultValidator,
   handler: (ctx, args) => authorizeMembershipAction(ctx, args),
 });
 
 export const updateMembership = action({
-  args: { userId: v.id("users"), tenantId: v.id("tenants"), status: membershipStatusValidator },
+  args: { userId: v.id("users"), tenantId: v.id("tenants"), status: membershipStatusValidator, requestId: v.string() },
   returns: v.object({ updated: v.boolean() }),
   handler: async (ctx, args) => {
     const authorized = await ctx.runQuery(internal.platformUserDirectory.authorizeMembershipChange, args);
-    if (args.status === "revoked") {
-      await deactivateOrganizationMembership(authorized.organizationId, authorized.workosUserId);
-    } else {
-      await reactivateOrganizationMembership(authorized.organizationId, authorized.workosUserId);
+    if (authorized.alreadyApplied) return { updated: true };
+    if (!authorized.alreadyEffective) {
+      if (args.status === "revoked") {
+        await deactivateOrganizationMembership(authorized.organizationId, authorized.workosUserId);
+      } else {
+        await reactivateOrganizationMembership(authorized.organizationId, authorized.workosUserId);
+      }
     }
     await ctx.runMutation(internal.platformUserDirectory.applyMembershipStatus, {
       userId: args.userId,
@@ -178,6 +199,7 @@ export const updateMembership = action({
       status: args.status,
       expectedStatus: authorized.expectedStatus,
       actorUserId: authorized.actorUserId,
+      requestId: authorized.requestId,
     });
     return { updated: true };
   },
@@ -185,7 +207,7 @@ export const updateMembership = action({
 
 export const applyMembershipStatus = internalMutation({
   args: {
-    userId: v.id("users"), tenantId: v.id("tenants"), status: membershipStatusValidator,
+    userId: v.id("users"), tenantId: v.id("tenants"), status: membershipStatusValidator, requestId: v.string(),
     expectedStatus: v.union(v.literal("active"), v.literal("pending"), v.literal("revoked")),
     actorUserId: v.id("users"),
   },
@@ -200,25 +222,36 @@ export const applyMembershipStatus = internalMutation({
     const targetRoles = await resolveRoles(ctx, target);
     if (targetRoles.some((role) => role.slug === "platform_owner" || role.slug === "platform_super_admin")) throw new Error("The platform owner account is protected");
     if (isSupport && targetRoles.some((role) => role.isPlatform)) throw new Error("Support can only manage end-tenant user access");
+    const completed = await ctx.db.query("platformUserAccessRequests").withIndex("by_requestId", q => q.eq("requestId", args.requestId)).first();
+    if (completed) {
+      if (completed.actorUserId !== args.actorUserId || completed.targetUserId !== args.userId || completed.tenantId !== args.tenantId || completed.status !== args.status) throw new Error("Access change request identifier has already been used");
+      return { updated: true };
+    }
     const tenant = await ctx.db.get(args.tenantId);
     if (!tenant?.workosOrganizationId || (args.status === "active" && !canTenantOperate(tenant.status))) throw new Error("Workspace access is not available");
     const membership = await ctx.db.query("tenantMemberships")
       .withIndex("by_user_tenant", (q) => q.eq("userId", args.userId).eq("tenantId", args.tenantId))
       .first();
     if (!membership) throw new Error("Workspace membership not found");
-    if (membership.status === args.status) return { updated: true };
-    if (membership.status !== args.expectedStatus) throw new Error("Workspace membership has changed; refresh and review it");
-    await ctx.db.patch(membership._id, {
-      status: args.status,
-      revokedAt: args.status === "revoked" ? Date.now() : undefined,
-    });
+    if (membership.status !== args.status) {
+      if (membership.status !== args.expectedStatus) throw new Error("Workspace membership has changed; refresh and review it");
+      await ctx.db.patch(membership._id, {
+        status: args.status,
+        revokedAt: args.status === "revoked" ? Date.now() : undefined,
+      });
+    }
     await logAudit(ctx, {
       action: args.status === "revoked" ? "global_user.tenant_access_disabled" : "global_user.tenant_access_restored",
       entityTable: "users",
       entityId: args.userId,
       changedBy: args.actorUserId,
       before: { tenantId: args.tenantId, status: args.expectedStatus },
-      after: { tenantId: args.tenantId, status: args.status },
+      after: { tenantId: args.tenantId, status: args.status, requestId: args.requestId, alreadyEffective: membership.status === args.status },
+    });
+    await ctx.db.insert("platformUserAccessRequests", {
+      requestId: args.requestId, actorUserId: args.actorUserId, targetUserId: args.userId,
+      tenantId: args.tenantId, status: args.status, organizationId: tenant.workosOrganizationId,
+      workosUserId: target.workosUserId, createdAt: Date.now(),
     });
     return { updated: true };
   },

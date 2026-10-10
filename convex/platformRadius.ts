@@ -2,7 +2,7 @@ import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
-import { requirePlatformSubRole } from "./lib/auth";
+import { requirePlatformSubRole, resolveRoles } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 import { validatePlatformRadiusInput, type PlatformRadiusInput } from "./lib/platformRadiusCore";
 
@@ -11,11 +11,12 @@ const transport = v.union(v.literal("udp"), v.literal("tcp"), v.literal("tls"));
 const writeRoles = ["platform_super_admin", "platform_ops"];
 const readRoles = [...writeRoles, "platform_finance", "platform_support", "platform_readonly"];
 
-function toRow(server: Doc<"platformRadiusServers">) {
+function toRow(server: Doc<"platformRadiusServers">, includeConnectionDetails: boolean) {
   return {
-    _id: server._id, name: server.name, hostname: server.hostname, region: server.region,
-    authPort: server.authPort, accountingPort: server.accountingPort, transport: server.transport,
-    softwareVersion: server.softwareVersion ?? null, lifecycleStatus: server.lifecycleStatus,
+    _id: server._id, name: server.name, hostname: includeConnectionDetails ? server.hostname : null, region: server.region,
+    authPort: includeConnectionDetails ? server.authPort : null, accountingPort: includeConnectionDetails ? server.accountingPort : null,
+    transport: includeConnectionDetails ? server.transport : null,
+    softwareVersion: includeConnectionDetails ? server.softwareVersion ?? null : null, lifecycleStatus: server.lifecycleStatus,
     capacitySessions: server.capacitySessions ?? null, uptimePercent: server.uptimePercent ?? null,
     latencyMs: server.latencyMs ?? null, activeSessions: server.activeSessions ?? null,
     authSuccessPercent: server.authSuccessPercent ?? null, authFailurePercent: server.authFailurePercent ?? null,
@@ -27,20 +28,24 @@ function toRow(server: Doc<"platformRadiusServers">) {
 export const list = query({
   args: { paginationOpts: paginationOptsValidator, includeArchived: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
-    await requirePlatformSubRole(ctx, readRoles);
+    const user = await requirePlatformSubRole(ctx, readRoles);
+    const roles = await resolveRoles(ctx, user);
+    const includeConnectionDetails = roles.some(role => ["platform_owner", "platform_admin", "ops_manager"].includes(role.slug));
     const page = await ctx.db.query("platformRadiusServers").withIndex("by_createdAt").order("desc").paginate({
       ...args.paginationOpts, numItems: Math.min(50, Math.max(1, Math.floor(args.paginationOpts.numItems))),
     });
-    return { ...page, page: page.page.filter(row => args.includeArchived || row.archivedAt === undefined).map(toRow) };
+    return { ...page, page: page.page.filter(row => args.includeArchived || row.archivedAt === undefined).map(row => toRow(row, includeConnectionDetails)) };
   },
 });
 
 export const get = query({
   args: { serverId: v.id("platformRadiusServers") },
   handler: async (ctx, args) => {
-    await requirePlatformSubRole(ctx, readRoles);
+    const user = await requirePlatformSubRole(ctx, readRoles);
+    const roles = await resolveRoles(ctx, user);
+    const includeConnectionDetails = roles.some(role => ["platform_owner", "platform_admin", "ops_manager"].includes(role.slug));
     const server = await ctx.db.get(args.serverId);
-    return server ? toRow(server) : null;
+    return server ? toRow(server, includeConnectionDetails) : null;
   },
 });
 

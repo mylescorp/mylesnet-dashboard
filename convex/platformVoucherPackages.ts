@@ -1,7 +1,7 @@
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { requirePlatformSubRole, requirePlatformUser } from "./lib/auth";
+import { requirePlatformSubRole } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 
 const packageTypeValidator = v.union(v.literal("half_day"), v.literal("day"), v.literal("week"), v.literal("month"), v.literal("specialty"));
@@ -36,7 +36,7 @@ export const list = query({
   args: { paginationOpts: paginationOptsValidator, includeArchived: v.optional(v.boolean()), includeDeleted: v.optional(v.boolean()) },
   returns: pageValidator,
   handler: async (ctx, args) => {
-    await requirePlatformUser(ctx);
+    await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_ops"]);
     const query = args.includeArchived
       ? ctx.db.query("platformVoucherPackageTemplates")
       : ctx.db.query("platformVoucherPackageTemplates").withIndex("by_status_and_updatedAt", (q) => q.eq("status", "active"));

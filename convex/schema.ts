@@ -1437,6 +1437,18 @@ export default defineSchema({
     createdAt: v.number(),
   }).index("by_category", ["category"]),
 
+  /** Idempotency records for global user-access actions delegated to the identity provider. */
+  platformUserAccessRequests: defineTable({
+    requestId: v.string(),
+    actorUserId: v.id("users"),
+    targetUserId: v.id("users"),
+    tenantId: v.id("tenants"),
+    status: v.union(v.literal("active"), v.literal("revoked")),
+    organizationId: v.string(),
+    workosUserId: v.string(),
+    createdAt: v.number(),
+  }).index("by_requestId", ["requestId"]),
+
   // Aggregate-only historical series for C1 platform contracted revenue.
   // Tenant invoices and cash collection are deliberately outside this record.
   platformRevenueSnapshots: defineTable({

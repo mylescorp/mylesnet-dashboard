@@ -50,7 +50,7 @@ export function PlatformUserDirectory() {
     setError("");
     setMessage("");
     try {
-      await updateMembership({ userId: target._id, tenantId, status: next });
+      await updateMembership({ userId: target._id, tenantId, status: next, requestId: crypto.randomUUID() });
       setMessage(next === "revoked" ? "Access to " + tenantName + " was disabled." : "Access to " + tenantName + " was restored.");
     } catch (cause) {
       setError(userFacingMessage(cause, "Workspace access could not be changed."));

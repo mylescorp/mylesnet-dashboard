@@ -3,14 +3,11 @@ import { mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import { requirePlatformSubRole } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
+import { PLATFORM_SLA_FALLBACK } from "./lib/platformSlaCore";
 
 const categories = ["network", "billing", "account"] as const;
 const readers = ["platform_super_admin", "platform_support"];
-const fallbackTargets = {
-  network: { firstResponseMinutes: 15, resolutionMinutes: 240 },
-  billing: { firstResponseMinutes: 60, resolutionMinutes: 2880 },
-  account: { firstResponseMinutes: 120, resolutionMinutes: 4320 },
-} as const;
+const fallbackTargets = PLATFORM_SLA_FALLBACK;
 
 function validateTargets(firstResponseMinutes: number, resolutionMinutes: number) {
   for (const [label, value] of [["First response", firstResponseMinutes], ["Resolution", resolutionMinutes]] as const) {

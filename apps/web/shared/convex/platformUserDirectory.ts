@@ -25,7 +25,7 @@ export const platformUserDirectory = {
   >("platformUserDirectory:list"),
   updateMembership: makeFunctionReference<
     "action",
-    { userId: string; tenantId: string; status: "active" | "revoked" },
+    { userId: string; tenantId: string; status: "active" | "revoked"; requestId: string },
     { updated: boolean }
   >("platformUserDirectory:updateMembership"),
   sendPasswordReset: makeFunctionReference<

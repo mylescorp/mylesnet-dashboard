@@ -28,7 +28,7 @@ async function project(ctx: { db: { get(id: Id<"tenants">): Promise<Doc<"tenants
 export const list = query({
   args: { type: partnerType, paginationOpts: paginationOptsValidator, includeArchived: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
-    await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_ops", "platform_finance", "platform_support", "platform_readonly"]);
+    await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_ops", "platform_finance", "platform_support"]);
     const page = await ctx.db.query("tenantRelationships").withIndex("by_type", q => q.eq("type", args.type)).order("desc").paginate({ ...args.paginationOpts, numItems: pageSize(args.paginationOpts.numItems) });
     const rows = page.page.filter(row => args.includeArchived || row.deletedAt === undefined);
     return { ...page, page: await Promise.all(rows.map(row => project(ctx, row))) };
@@ -38,7 +38,7 @@ export const list = query({
 export const get = query({
   args: { id: v.id("tenantRelationships") },
   handler: async (ctx, args) => {
-    await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_ops", "platform_finance", "platform_support", "platform_readonly"]);
+    await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_ops", "platform_finance", "platform_support"]);
     const row = await ctx.db.get(args.id);
     if (!row || row.deletedAt !== undefined || row.type === "network") return null;
     return project(ctx, row);

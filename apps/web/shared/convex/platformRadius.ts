@@ -2,8 +2,8 @@ import { makeFunctionReference } from "convex/server";
 import type { PaginationResult } from "convex/server";
 
 export type PlatformRadiusRow = {
-  _id: string; name: string; hostname: string; region: string; authPort: number; accountingPort: number;
-  transport: "udp" | "tcp" | "tls"; softwareVersion: string | null;
+  _id: string; name: string; hostname: string | null; region: string; authPort: number | null; accountingPort: number | null;
+  transport: "udp" | "tcp" | "tls" | null; softwareVersion: string | null;
   lifecycleStatus: "planned" | "active" | "degraded" | "maintenance" | "retired";
   capacitySessions: number | null; uptimePercent: number | null; latencyMs: number | null; activeSessions: number | null;
   authSuccessPercent: number | null; authFailurePercent: number | null; metricsObservedAt: number | null;
