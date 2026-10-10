@@ -10,11 +10,15 @@ import { resolveTenantFromAuth } from "./tenant";
  * Covers commission edits, market status changes, device swaps, assignment
  * changes, approval actions, everything.
  *
- * Tenant attribution: pass `tenantId` when the mutation already knows the
- * affected tenant (and pass an explicit `null` for a deliberate platform row).
- * When it is omitted, the row inherits the caller's resolved tenant from their
- * WorkOS organization claim so the tenant-scoped audit query can see it. An
- * unmapped claim yields no tenant scope; it never guesses a bootstrap tenant.
+ * Tenant attribution: pass `tenantId` with the tenant the change actually
+ * affects. For a platform operator acting on another tenant's record, that is
+ * the affected record's tenant (the record itself, or its owning market), not
+ * the operator's own claim -- otherwise the tenant's audit trail never sees the
+ * change. Pass an explicit `null` only for genuinely global/platform rows
+ * (users, roles, feature flags, the platform plan catalog). When it is omitted,
+ * the row inherits the caller's resolved tenant from their WorkOS organization
+ * claim so the tenant-scoped audit query can see it. An unmapped claim yields
+ * no tenant scope; it never guesses a bootstrap tenant.
  *
  * `tenantId` is intentionally NOT part of the sealed chain hash: the chain
  * signs the immutable audit facts (action, entity, actor, state diff, time, ip)

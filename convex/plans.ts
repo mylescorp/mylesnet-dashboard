@@ -75,6 +75,7 @@ export const createPlan = mutation({
       entityTable: "plans",
       entityId: id,
       changedBy: user._id,
+      tenantId,
       after: args,
     });
     return id;
@@ -102,6 +103,7 @@ export const updatePlan = mutation({
       entityTable: "plans",
       entityId: args.planId,
       changedBy: user._id,
+      tenantId,
       after: cleaned,
     });
   },
@@ -120,6 +122,7 @@ export const linkBatchToPlan = mutation({
       entityTable: "voucherBatches",
       entityId: args.batchId,
       changedBy: user._id,
+      tenantId,
       after: { planId: args.planId },
     });
   },

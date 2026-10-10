@@ -172,6 +172,7 @@ export const setStatus = mutation({
       entityTable: "tenants",
       entityId: tenant._id,
       changedBy: actor._id,
+      tenantId: tenant._id,
       before: { status: tenant.status },
       after: { status: transition.status, statusBeforeSuspension: transition.statusBeforeSuspension ?? null },
     });
@@ -212,6 +213,7 @@ export const updateTenant = mutation({
       entityTable: "tenants",
       entityId: tenant._id,
       changedBy: actor._id,
+      tenantId: tenant._id,
       before,
       after,
     });
@@ -337,6 +339,7 @@ export const setEntitlement = mutation({
         entityTable: "tenants",
         entityId: tenant._id,
         changedBy: actor._id,
+        tenantId: tenant._id,
         before,
         after: auditAfter,
       });
@@ -349,6 +352,7 @@ export const setEntitlement = mutation({
       entityTable: "tenants",
       entityId: tenant._id,
       changedBy: actor._id,
+      tenantId: tenant._id,
       after: auditAfter,
     });
     return { changed: true };
@@ -372,6 +376,7 @@ export const removeEntitlement = mutation({
       entityTable: "tenants",
       entityId: tenant._id,
       changedBy: actor._id,
+      tenantId: tenant._id,
       before: records.map(({ planId, status, startsAt, expiresAt, trialEndsAt }) => ({ planId, status, startsAt: startsAt ?? null, expiresAt: expiresAt ?? null, trialEndsAt: trialEndsAt ?? null })),
       after: { entitlementCount: 0, reason },
     });
@@ -570,6 +575,7 @@ export const finalizeAutomatedTenantOnboarding = internalMutation({
       entityTable: "tenants",
       entityId: tenantId,
       changedBy: run.createdBy,
+      tenantId,
       after: { status: "trial", ownerEmail: run.ownerEmail, ownerReady: true },
     });
     return { tenantId };
@@ -611,6 +617,7 @@ export const activateProvisionedTenant = internalMutation({
       entityTable: "tenants",
       entityId: tenant._id,
       changedBy: owner._id,
+      tenantId: tenant._id,
       before: { status: "provisioning" },
       after: { status: "trial" },
     });
@@ -745,6 +752,7 @@ export const registerVerifiedTenant = internalMutation({
       entityTable: "tenants",
       entityId: tenantId,
       changedBy: actor._id,
+      tenantId,
       after: { workosOrganizationId: args.workosOrganizationId, ownerWorkosUserId: args.ownerWorkosUserId, status: "trial" },
     });
     return { tenantId };

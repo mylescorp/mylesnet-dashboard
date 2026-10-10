@@ -104,6 +104,7 @@ export const create = mutation({
       entityTable: "expenses",
       entityId: id,
       changedBy: user._id,
+      tenantId,
       after: args,
     });
     
@@ -150,6 +151,7 @@ export const update = mutation({
       entityTable: "expenses",
       entityId: id,
       changedBy: user._id,
+      tenantId,
       before: expense,
       after: updates,
     });
@@ -188,6 +190,7 @@ export const remove = mutation({
       entityTable: "expenses",
       entityId: args.id,
       changedBy: user._id,
+      tenantId,
       before: expense,
     });
 

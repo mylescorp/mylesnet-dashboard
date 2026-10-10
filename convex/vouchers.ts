@@ -77,6 +77,7 @@ export const generateVoucherBatch = mutation({
     const user = await requirePermission(ctx, "vouchers:manage");
     await requireMarketAccess(ctx, args.marketId, "operator");
     const now = Date.now();
+    const market = await ctx.db.get(args.marketId);
 
     const batchId = await ctx.db.insert("voucherBatches", {
       marketId: args.marketId,
@@ -107,6 +108,7 @@ export const generateVoucherBatch = mutation({
       entityTable: "voucherBatches",
       entityId: batchId,
       changedBy: user._id,
+      tenantId: market?.tenantId,
       after: { quantity: args.quantity, planType: args.planType },
     });
 
@@ -138,6 +140,7 @@ export const allocateVoucherToAgent = mutation({
     const voucher = await ctx.db.get(args.voucherId);
     if (!voucher) throw new Error("Voucher not found");
     await requireMarketAccess(ctx, voucher.marketId, "operator");
+    const market = await ctx.db.get(voucher.marketId);
     await ctx.db.patch(args.voucherId, {
       ownerAgentId: args.agentId,
       voucherStatus: "owned",
@@ -147,6 +150,7 @@ export const allocateVoucherToAgent = mutation({
       entityTable: "vouchers",
       entityId: args.voucherId,
       changedBy: user._id,
+      tenantId: market?.tenantId,
       after: { agentId: args.agentId },
     });
   },
@@ -163,6 +167,7 @@ export const markVoucherSold = mutation({
     await requireMarketAccess(ctx, voucher.marketId, "operator");
 
     const now = Date.now();
+    const market = await ctx.db.get(voucher.marketId);
     await ctx.db.patch(args.voucherId, {
       voucherStatus: "sold",
       soldAt: now,
@@ -218,6 +223,7 @@ export const markVoucherSold = mutation({
       entityTable: "vouchers",
       entityId: args.voucherId,
       changedBy: user._id,
+      tenantId: market?.tenantId,
     });
   },
 });
@@ -240,6 +246,7 @@ export const redeemVoucher = mutation({
     const voucher = await ctx.db.get(args.voucherId);
     if (!voucher) throw new Error("Voucher not found");
     await requireMarketAccess(ctx, voucher.marketId, "operator");
+    const market = await ctx.db.get(voucher.marketId);
     if (voucher.voucherStatus === "redeemed") {
       throw new Error("Voucher already redeemed");
     }
@@ -284,6 +291,7 @@ export const redeemVoucher = mutation({
       entityTable: "vouchers",
       entityId: args.voucherId,
       changedBy: user._id,
+      tenantId: market?.tenantId,
       after: { hasCustomerPhone: args.customerPhoneAtRedemption !== undefined },
     });
   },

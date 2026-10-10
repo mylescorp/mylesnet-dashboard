@@ -99,6 +99,7 @@ export const computeLeaderboard = mutation({
       entityTable: "leaderboardSnapshots",
       entityId: args.snapshotDate,
       changedBy: user._id,
+      tenantId: null,
       after: { agentCount: rankings.length, snapshotDate: args.snapshotDate },
     });
 

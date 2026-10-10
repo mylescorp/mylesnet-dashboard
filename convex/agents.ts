@@ -122,11 +122,13 @@ export const assignAgentToMarket = mutation({
       startedAt: now,
     });
 
+    const agent = await ctx.db.get(args.agentId);
     await logAudit(ctx, {
       action: "agent.assignToMarket",
       entityTable: "agentMarketAssignments",
       entityId: assignmentId,
       changedBy: user._id,
+      tenantId: agent?.tenantId,
       after: { agentId: args.agentId, marketId: args.marketId },
     });
 
@@ -152,6 +154,7 @@ export const suspendAgent = mutation({
       entityTable: "agents",
       entityId: args.agentId,
       changedBy: user._id,
+      tenantId: agent.tenantId,
       before: { lifecycleStatus: agent.lifecycleStatus },
       after: { lifecycleStatus: "suspended", reason: args.reason },
     });
@@ -174,6 +177,7 @@ export const reactivateAgent = mutation({
       entityTable: "agents",
       entityId: args.agentId,
       changedBy: user._id,
+      tenantId: agent.tenantId,
       before: { lifecycleStatus: agent.lifecycleStatus },
       after: { lifecycleStatus: "active" },
     });
@@ -193,6 +197,7 @@ export const offboardAgentStep1CloseAssignments = mutation({
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "agents:manage");
     const now = Date.now();
+    const agent = await ctx.db.get(args.agentId);
 
     const activeAssignments = await ctx.db
       .query("agentMarketAssignments")
@@ -214,6 +219,7 @@ export const offboardAgentStep1CloseAssignments = mutation({
       entityTable: "agents",
       entityId: args.agentId,
       changedBy: user._id,
+      tenantId: agent?.tenantId,
       after: { closedCount: activeAssignments.length },
     });
 
@@ -251,6 +257,7 @@ export const disposeOffboardingVoucher = mutation({
     if (args.disposition === "reassign" && !args.newOwnerAgentId) {
       throw new Error("newOwnerAgentId is required when reassigning");
     }
+    const voucher = await ctx.db.get(args.voucherId);
 
     await ctx.db.patch(args.voucherId, {
       ownerAgentId: args.disposition === "reassign" ? args.newOwnerAgentId : undefined,
@@ -262,6 +269,7 @@ export const disposeOffboardingVoucher = mutation({
       entityTable: "vouchers",
       entityId: args.voucherId,
       changedBy: user._id,
+      tenantId: voucher?.tenantId,
       after: { disposition: args.disposition, newOwnerAgentId: args.newOwnerAgentId },
     });
   },
@@ -314,6 +322,7 @@ export const offboardAgentFinalize = mutation({
       entityTable: "agents",
       entityId: args.agentId,
       changedBy: user._id,
+      tenantId: agent.tenantId,
       after: { finalSettlementAmount: args.finalSettlementAmount },
     });
 
@@ -344,6 +353,7 @@ export const restoreAgent = mutation({
       entityTable: "agents",
       entityId: args.agentId,
       changedBy: user._id,
+      tenantId: agent.tenantId,
     });
   },
 });

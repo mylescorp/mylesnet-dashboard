@@ -71,10 +71,11 @@ export const updateScheduledReport = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "reports:generate");
+    const existing = await ctx.db.get(args.reportId);
     const patch = { name: args.name, recipients: args.recipients, frequency: args.frequency, scopeFilter: args.scopeFilter, format: args.format, enabled: args.enabled };
     const cleaned = Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined));
     await ctx.db.patch(args.reportId, cleaned);
-    await logAudit(ctx, { action: "report.update", entityTable: "scheduledReports", entityId: args.reportId, changedBy: user._id, after: cleaned });
+    await logAudit(ctx, { action: "report.update", entityTable: "scheduledReports", entityId: args.reportId, changedBy: user._id, tenantId: existing?.tenantId, after: cleaned });
   },
 });
 
@@ -82,8 +83,9 @@ export const deleteScheduledReport = mutation({
   args: { reportId: v.id("scheduledReports") },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "reports:generate");
+    const report = await ctx.db.get(args.reportId);
     await ctx.db.delete(args.reportId);
-    await logAudit(ctx, { action: "report.delete", entityTable: "scheduledReports", entityId: args.reportId, changedBy: user._id });
+    await logAudit(ctx, { action: "report.delete", entityTable: "scheduledReports", entityId: args.reportId, changedBy: user._id, tenantId: report?.tenantId });
   },
 });
 

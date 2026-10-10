@@ -87,10 +87,11 @@ export const updateTeam = mutation({
   args: { teamId: v.id("teams"), name: v.optional(v.string()), leaderAgentId: v.optional(v.id("agents")) },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "teams:manage");
+    const team = await ctx.db.get(args.teamId);
     const patch = { name: args.name, leaderAgentId: args.leaderAgentId };
     const cleaned = Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined));
     await ctx.db.patch(args.teamId, cleaned);
-    await logAudit(ctx, { action: "team.update", entityTable: "teams", entityId: args.teamId, changedBy: user._id, after: cleaned });
+    await logAudit(ctx, { action: "team.update", entityTable: "teams", entityId: args.teamId, changedBy: user._id, tenantId: team?.tenantId, after: cleaned });
   },
 });
 
@@ -98,8 +99,9 @@ export const removeTeam = mutation({
   args: { teamId: v.id("teams") },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "teams:manage");
+    const team = await ctx.db.get(args.teamId);
     await ctx.db.patch(args.teamId, { status: "removed", removedAt: Date.now(), removedBy: user._id });
-    await logAudit(ctx, { action: "team.remove", entityTable: "teams", entityId: args.teamId, changedBy: user._id });
+    await logAudit(ctx, { action: "team.remove", entityTable: "teams", entityId: args.teamId, changedBy: user._id, tenantId: team?.tenantId });
   },
 });
 
@@ -122,7 +124,7 @@ export const addTeamMember = mutation({
       agentId: args.agentId,
       joinedAt: Date.now(),
     });
-    await logAudit(ctx, { action: "team.addMember", entityTable: "teamMembers", entityId: id, changedBy: user._id });
+    await logAudit(ctx, { action: "team.addMember", entityTable: "teamMembers", entityId: id, changedBy: user._id, tenantId: team.tenantId });
     return id;
   },
 });
@@ -131,6 +133,7 @@ export const removeTeamMember = mutation({
   args: { teamId: v.id("teams"), agentId: v.id("agents") },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "teams:manage");
+    const team = await ctx.db.get(args.teamId);
     const member = await ctx.db
       .query("teamMembers")
       .withIndex("by_team_member", (q) => q.eq("teamId", args.teamId).eq("agentId", args.agentId))
@@ -138,6 +141,6 @@ export const removeTeamMember = mutation({
       .first();
     if (!member) throw new Error("Agent is not on this team");
     await ctx.db.patch(member._id, { leftAt: Date.now() });
-    await logAudit(ctx, { action: "team.removeMember", entityTable: "teamMembers", entityId: member._id, changedBy: user._id });
+    await logAudit(ctx, { action: "team.removeMember", entityTable: "teamMembers", entityId: member._id, changedBy: user._id, tenantId: team?.tenantId });
   },
 });

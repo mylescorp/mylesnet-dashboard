@@ -83,6 +83,7 @@ export const updateMarketLifecycleStatus = mutation({
       entityTable: "markets",
       entityId: args.marketId,
       changedBy: user._id,
+      tenantId: market.tenantId,
       before: { lifecycleStatus: market.lifecycleStatus },
       after: { lifecycleStatus: args.lifecycleStatus },
     });
@@ -145,6 +146,7 @@ export const softDeleteMarket = mutation({
       entityTable: "markets",
       entityId: args.marketId,
       changedBy: user._id,
+      tenantId: market.tenantId,
       before: { status: market.status },
       after: { status: "deleted", cascaded: !!args.forceCascade },
     });
@@ -172,6 +174,7 @@ export const restoreMarket = mutation({
       entityTable: "markets",
       entityId: args.marketId,
       changedBy: user._id,
+      tenantId: market.tenantId,
     });
   },
 });
@@ -190,6 +193,7 @@ export const reportOperatingCost = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "markets:manage");
+    const market = await ctx.db.get(args.marketId);
     const existing = await ctx.db
       .query("marketOperatingCosts")
       .withIndex("by_market_month", (q) =>
@@ -210,6 +214,7 @@ export const reportOperatingCost = mutation({
         entityTable: "marketOperatingCosts",
         entityId: existing._id,
         changedBy: user._id,
+        tenantId: market?.tenantId,
         after: { yearMonth: args.yearMonth },
       });
       return existing._id;
@@ -229,6 +234,7 @@ export const reportOperatingCost = mutation({
       entityTable: "marketOperatingCosts",
       entityId: costId,
       changedBy: user._id,
+      tenantId: market?.tenantId,
       after: { yearMonth: args.yearMonth },
     });
     return costId;
@@ -391,6 +397,7 @@ export const platformCreateMarket = mutation({
       entityTable: "markets",
       entityId: marketId,
       changedBy: user._id,
+      tenantId: args.tenantId,
       after: { 
         tenantId: args.tenantId,
         name: args.name, 
@@ -445,6 +452,7 @@ export const platformUpdateMarket = mutation({
       entityTable: "markets",
       entityId: args.marketId,
       changedBy: user._id,
+      tenantId: market.tenantId ?? null,
       before,
       after: args.updates,
     });
@@ -509,6 +517,7 @@ export const platformSoftDeleteMarket = mutation({
       entityTable: "markets",
       entityId: args.marketId,
       changedBy: user._id,
+      tenantId: market.tenantId ?? null,
       before: { status: market.status },
       after: { status: "deleted", cascaded: !!args.forceCascade },
     });
@@ -541,6 +550,7 @@ export const platformRestoreMarket = mutation({
       entityTable: "markets",
       entityId: args.marketId,
       changedBy: user._id,
+      tenantId: market.tenantId ?? null,
     });
   },
 });

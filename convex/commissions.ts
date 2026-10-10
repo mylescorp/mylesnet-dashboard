@@ -24,6 +24,7 @@ export const accrueCommission = mutation({
     const user = await requirePermission(ctx, "commissions:manage");
     const now = Date.now();
 
+    const market = await ctx.db.get(args.marketId);
     const commissionId = await ctx.db.insert("commissions", {
       agentId: args.agentId,
       marketId: args.marketId,
@@ -41,6 +42,7 @@ export const accrueCommission = mutation({
       entityTable: "commissions",
       entityId: commissionId,
       changedBy: user._id,
+      tenantId: market?.tenantId,
       after: { amount: args.amount, agentId: args.agentId },
     });
 
@@ -58,6 +60,7 @@ export const requestCommissionPayout = mutation({
     const user = await requirePlatformUser(ctx);
     const commission = await ctx.db.get(args.commissionId);
     if (!commission) throw new Error("Commission not found");
+    const market = await ctx.db.get(commission.marketId);
 
     if (commission.payoutStatus !== "held") {
       throw new Error(`Cannot request payout from status "${commission.payoutStatus}"`);
@@ -77,6 +80,7 @@ export const requestCommissionPayout = mutation({
       entityTable: "commissions",
       entityId: args.commissionId,
       changedBy: user._id,
+      tenantId: commission.tenantId ?? market?.tenantId,
       after: { payoutMethod: args.payoutMethod },
     });
   },
@@ -93,6 +97,7 @@ export const approveCommissionPayout = mutation({
     const user = await requirePermission(ctx, "commissions:manage");
     const commission = await ctx.db.get(args.commissionId);
     if (!commission) throw new Error("Commission not found");
+    const market = await ctx.db.get(commission.marketId);
     if (commission.payoutStatus !== "requested") {
       throw new Error(`Cannot approve payout from status "${commission.payoutStatus}"`);
     }
@@ -110,6 +115,7 @@ export const approveCommissionPayout = mutation({
       entityTable: "commissions",
       entityId: args.commissionId,
       changedBy: user._id,
+      tenantId: commission.tenantId ?? market?.tenantId,
     });
   },
 });
@@ -121,6 +127,7 @@ export const markCommissionProcessing = mutation({
     const user = await requirePermission(ctx, "commissions:manage");
     const commission = await ctx.db.get(args.commissionId);
     if (!commission) throw new Error("Commission not found");
+    const market = await ctx.db.get(commission.marketId);
     if (commission.payoutStatus !== "approved") {
       throw new Error(`Cannot process payout from status "${commission.payoutStatus}"`);
     }
@@ -132,6 +139,7 @@ export const markCommissionProcessing = mutation({
       entityTable: "commissions",
       entityId: args.commissionId,
       changedBy: user._id,
+      tenantId: commission.tenantId ?? market?.tenantId,
     });
   },
 });
@@ -142,6 +150,7 @@ export const markCommissionPaid = mutation({
     const user = await requirePermission(ctx, "commissions:manage");
     const commission = await ctx.db.get(args.commissionId);
     if (!commission) throw new Error("Commission not found");
+    const market = await ctx.db.get(commission.marketId);
     if (commission.payoutStatus !== "processing") {
       throw new Error(`Cannot mark paid from status "${commission.payoutStatus}"`);
     }
@@ -156,6 +165,7 @@ export const markCommissionPaid = mutation({
       entityTable: "commissions",
       entityId: args.commissionId,
       changedBy: user._id,
+      tenantId: commission.tenantId ?? market?.tenantId,
     });
   },
 });
@@ -165,12 +175,16 @@ export const disputeCommission = mutation({
   args: { commissionId: v.id("commissions"), reason: v.string() },
   handler: async (ctx, args) => {
     const user = await requirePlatformOwner(ctx);
+    const commission = await ctx.db.get(args.commissionId);
+    if (!commission) throw new Error("Commission not found");
+    const market = await ctx.db.get(commission.marketId);
     await ctx.db.patch(args.commissionId, { payoutStatus: "disputed" });
     await logAudit(ctx, {
       action: "commission.dispute",
       entityTable: "commissions",
       entityId: args.commissionId,
       changedBy: user._id,
+      tenantId: commission.tenantId ?? market?.tenantId,
       after: { reason: args.reason },
     });
   },
