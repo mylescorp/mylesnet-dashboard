@@ -12,6 +12,13 @@ separate archive policy.
 
 ## Entries
 
+### 2026-10-10 — PR #71 Greptile and CI findings
+
+- **Scope:** Continue the user's request to close PR #71 findings and wait for a fresh Greptile 5/5 review.
+- **Changes:** Pushed commits through `e8f638b` on isolated branch `codex/pr71-fixes`: fixed report ownership reads for legacy snapshots; restored safe actor names and record labels in the audit UI; restricted RADIUS endpoint reads to write-role edit flows; removed raw device IDs from visible forms/fallbacks; and returned a named, ID-free support ticket detail projection. Corrected package overrides to preserve `brace-expansion` major compatibility and recorded the two currently unfixable `braces` CVEs narrowly in the workspace audit config. Kept Next.js at the repository contract's 16.3.8 pin.
+- **Verification:** `pnpm audit --audit-level=high` passed with one high and one moderate CVE explicitly ignored as unfixable in the development-only lint tree; typecheck and lint passed; token check passed; test suite passed 218/218; `git diff --check` passed. Local `pnpm build` is unverified because Turbopack could not bind its CSS worker port (`Operation not permitted`), including on an escalated attempt. GitHub reports CI quality and CI security successful for `e8f638b`; Vercel deployment is in progress.
+- **Status/next:** Greptile's review for `e8f638b` is still running; prior score is 4/5. PR remains blocked by 25 merge-conflicted paths against `main`. The owner-designated checkout was inspected read-only and is clean on `full-audit`; this worktree cannot write the local vault records under current filesystem permissions, so vault synchronization remains outstanding. No merge or production release occurred.
+
 ### 2026-10-09 — Runtime error triage during platform implementation
 
 - **Scope:** Check the reported `Receipt is not defined`, inline theme script warning, and negative `TenantDashboardLayout` performance timestamp against the production worktree before proceeding.
