@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { canTransitionRunStatus, matchStatementLine, parseMajorAmountToMinor, parseStatementTimestamp } from "./platformReconciliationCore.ts";
+import { canTransitionRunStatus, matchStatementLine, parseMajorAmountToMinor, parseStatementCsv, parseStatementTimestamp } from "./platformReconciliationCore.ts";
 
 const line = { rowNumber: 2, reference: "gw-1", amountMinor: 1250, currency: "KES", settledAt: 1_800_000_000_000 };
 test("statement parser accepts exact minor-unit amounts and rejects ambiguous precision", () => {
@@ -34,4 +34,22 @@ test("reconciliation runs progress imported to reviewed to closed and can be voi
   assert.equal(canTransitionRunStatus("closed", "reviewed"), false);
   assert.equal(canTransitionRunStatus("closed", "void"), true);
   assert.equal(canTransitionRunStatus("void", "reviewed"), false);
+});
+
+test("statement CSV parses quoted fields, escaped quotes, CRLF, and a UTF-8 BOM", () => {
+  assert.deepEqual(parseStatementCsv('\uFEFFreference,amount,currency,settled_at\r\n"Ref, 1",10.25,KES,2026-10-07T10:00:00Z\r\n'), [
+    { rowNumber: 2, reference: "Ref, 1", amount: "10.25", currency: "KES", settledAt: "2026-10-07T10:00:00Z" },
+  ]);
+  assert.equal(parseStatementCsv('reference,amount,currency,settled_at\n"Ref ""A""",1.00,KES,2026-10-07T10:00:00Z')[0]?.reference, 'Ref "A"');
+});
+
+test("statement CSV rejects missing headers or values, unmatched quotes, oversize files, and more than 500 rows", () => {
+  assert.throws(() => parseStatementCsv("reference,amount,currency\nA,1,KES"));
+  assert.throws(() => parseStatementCsv("reference,amount,currency,settled_at\nA,,KES,2026-10-07T10:00:00Z"));
+  assert.throws(() => parseStatementCsv('reference,amount,currency,settled_at\n"A,1,KES,2026-10-07T10:00:00Z'));
+  assert.throws(() => parseStatementCsv('reference,amount,currency,settled_at\n"A"x,1,KES,2026-10-07T10:00:00Z'));
+  assert.throws(() => parseStatementCsv("x".repeat(1_000_001)));
+  assert.throws(() => parseStatementCsv("é".repeat(600_000)));
+  const lines = ["reference,amount,currency,settled_at", ...Array.from({ length: 501 }, (_, i) => `R${i},1,KES,2026-10-07T10:00:00Z`)];
+  assert.throws(() => parseStatementCsv(lines.join("\n")));
 });

@@ -157,3 +157,7 @@ Added `/platform/health` and its all-role read gate. The page refreshes periodic
 ## 2026-10-10 continuation — I2 effective support SLAs
 
 Changed the SLA read model to show all three effective category targets, including built-in defaults and override source. Support remains read-only; super-admin can add, edit, or remove overrides. Removing an override returns the category to the existing fallback; network remains the fastest category under pure tested rules. Web/backend typechecks, 42/42 root tests, focused ESLint and diff check pass; full lint has no errors and 11 existing warnings. Authenticated role behavior and production Convex deployment remain unverified.
+
+## 2026-10-10 continuation — C5 reconciliation import validation
+
+Moved CSV parsing into a tested shared core and added pre-mutation validation for byte size, row count, BOMs, quoted fields, malformed quoting, required columns/values, and overflow fields. Removed fabricated row data from placeholders. The workflow remains manual statement matching, without gateway access or money movement. Tests/typechecks/lint/diff checks pass; authenticated role/runtime and production data validation remain open.

@@ -36,3 +36,52 @@ export function canTransitionRunStatus(from: ReconciliationRunStatus, to: Reconc
   if (to === "void") return true;
   return (from === "imported" && to === "reviewed") || (from === "reviewed" && to === "closed");
 }
+
+export type StatementImportRow = { rowNumber: number; reference: string; amount: string; currency: string; settledAt: string };
+export const MAX_STATEMENT_CSV_BYTES = 1_000_000;
+
+export function parseStatementCsv(source: string): StatementImportRow[] {
+  if (new TextEncoder().encode(source).byteLength > MAX_STATEMENT_CSV_BYTES) throw new Error("Statement data must be no larger than 1 MB");
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let quoted = false;
+  let quoteClosed = false;
+  for (let index = 0; index < source.length; index++) {
+    const character = source[index]!;
+    if (quoted) {
+      if (character === '"' && source[index + 1] === '"') { field += '"'; index++; }
+      else if (character === '"') { quoted = false; quoteClosed = true; }
+      else field += character;
+    } else if (quoteClosed && character !== "," && character !== "\n" && character !== "\r") {
+      throw new Error("CSV contains characters after a quoted field");
+    } else if (character === '"' && field.length === 0) quoted = true;
+    else if (character === '"') throw new Error("CSV contains an invalid quote in an unquoted field");
+    else if (character === ",") { row.push(field.trim()); field = ""; quoteClosed = false; }
+    else if (character === "\n" || character === "\r") {
+      if (character === "\r" && source[index + 1] === "\n") index++;
+      row.push(field.trim()); field = "";
+      if (row.some((value) => value !== "")) rows.push(row);
+      row = []; quoteClosed = false;
+      if (rows.length > 501) throw new Error("Import is limited to 500 statement rows");
+    } else field += character;
+  }
+  if (quoted) throw new Error("CSV contains an unclosed quoted field");
+  row.push(field.trim());
+  if (row.some((value) => value !== "")) rows.push(row);
+  if (rows.length < 2) throw new Error("Add a header row and at least one statement row");
+  if (rows.length > 501) throw new Error("Import is limited to 500 statement rows");
+
+  const headers = rows[0]!.map((value, index) => (index === 0 ? value.replace(/^\uFEFF/, "") : value).toLowerCase());
+  const required = ["reference", "amount", "currency", "settled_at"];
+  const indexes = required.map((name) => headers.indexOf(name));
+  if (indexes.some((index) => index < 0) || new Set(indexes).size !== required.length) {
+    throw new Error("CSV headers must include reference, amount, currency, settled_at exactly once");
+  }
+  return rows.slice(1).map((values, index) => {
+    const fields = indexes.map((fieldIndex) => values[fieldIndex] ?? "");
+    if (fields.some((value) => value === "")) throw new Error(`Statement row ${index + 2} is missing a required value`);
+    if (values.slice(headers.length).some((value) => value !== "")) throw new Error(`Statement row ${index + 2} has more values than the header`);
+    return { rowNumber: index + 2, reference: fields[0]!, amount: fields[1]!, currency: fields[2]!, settledAt: fields[3]! };
+  });
+}

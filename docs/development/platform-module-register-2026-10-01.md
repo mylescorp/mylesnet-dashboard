@@ -133,3 +133,7 @@ Added `/platform/health` with an explicit read-only role scope for all five plat
 ## 2026-10-10 I2 effective SLA coverage
 
 The SLA query now returns effective Network, Billing, and Account targets, distinguishing built-in fallback values from configured overrides. The support role can inspect all three effective targets; only super-admin can add/update/delete overrides. The UI can configure from a fallback row and restore a category to its fallback. Validation and network-priority rules are now tested pure functions. Web and direct Convex typechecks passed, root suite passed 42/42, focused ESLint passed, full lint completed with 0 errors and 11 existing warnings, and diff checks passed. I2 remains partial until authenticated role behavior and deployed Convex persistence are verified.
+
+## 2026-10-10 C5 import input hardening
+
+Moved CSV parsing into the tested reconciliation core. Imports now enforce a 1 MB byte limit and 500-row limit, handle CRLF, quoted commas, escaped quotes, and UTF-8 BOMs, and reject malformed quotes, duplicate/missing headers, missing required values, and extra non-empty fields before mutation. Removed the fabricated payment-row placeholder from the UI. This is still manual evidence import and does not call payment providers or move funds. Parser tests, web and Convex typechecks, focused ESLint, root suite 42/42, full lint (0 errors, 11 existing warnings), and `git diff --check` pass. C5 remains partial pending authenticated role integration and deployed-data validation.

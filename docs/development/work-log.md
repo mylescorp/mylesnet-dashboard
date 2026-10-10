@@ -72,3 +72,9 @@ Prepared the reviewed platform feature bundle on `feat/restore-platform-features
 - **Changes:** SLA read now returns effective targets for all three ticket categories with explicit fallback/override source. Super-admin can configure fallback rows, update overrides, and restore built-in fallback. Support sees targets read-only. Extracted target validation and network-priority rules for tests.
 - **Verification:** Web and direct Convex typechecks passed; root Node suite passed 42/42; focused ESLint passed; full lint had 0 errors and 11 warnings; `git diff --check` passed.
 - **Status:** I2 remains partial pending authenticated role/runtime and production database verification.
+
+### 2026-10-10 — C5 CSV import hardening
+
+- **Changes:** Reconciliation CSV parsing now has a 1 MB byte cap and 500-row cap, supports BOM/CRLF/quoted values, and rejects malformed quotes, bad headers, missing values, and extra fields before backend mutation. Removed sample payment data from the UI placeholder.
+- **Verification:** Parser tests passed; web and Convex TypeScript passed; root suite 42/42; focused ESLint passed; full lint had 0 errors and 11 existing warnings; `git diff --check` passed.
+- **Status:** C5 remains partial until authenticated roles and deployed-data behavior are verified.

@@ -5,35 +5,14 @@ import { usePaginatedQuery } from "convex/react";
 import { useMutation } from "@/app/lib/convex";
 import { useUserProfile } from "@/shared/components/UserProfileContext";
 import { StatusPill } from "@/shared/components/ui";
-import { platformReconciliation, type ReconciliationRun, type ReconciliationRow, type StatementImportRow } from "@/shared/convex/platformReconciliation";
+import { platformReconciliation, type ReconciliationRun, type ReconciliationRow } from "@/shared/convex/platformReconciliation";
 import { userFacingMessage } from "@/shared/lib/user-facing-error";
 import { hasAnyRole } from "@/shared/auth/rbac";
+import { MAX_STATEMENT_CSV_BYTES, parseStatementCsv } from "@/convex/lib/platformReconciliationCore";
 
 const ADMIN = ["platform_super_admin", "platform_owner", "platform_admin"];
 const FINANCE = ["platform_finance", "finance_manager"];
 const money = (minor?: number, currency = "") => minor === undefined ? "—" : `${currency} ${(minor / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-function parseCsv(source: string): string[][] {
-  const rows: string[][] = []; let row: string[] = []; let field = ""; let quoted = false;
-  for (let i = 0; i < source.length; i++) {
-    const ch = source[i]!;
-    if (quoted) {
-      if (ch === '"' && source[i + 1] === '"') { field += '"'; i++; }
-      else if (ch === '"') quoted = false;
-      else field += ch;
-    } else if (ch === '"' && field.length === 0) quoted = true;
-    else if (ch === ",") { row.push(field.trim()); field = ""; }
-    else if (ch === "\n" || ch === "\r") {
-      if (ch === "\r" && source[i + 1] === "\n") i++;
-      row.push(field.trim()); field = "";
-      if (row.some(value => value !== "")) rows.push(row);
-      row = [];
-    } else field += ch;
-  }
-  if (quoted) throw new Error("CSV contains an unclosed quoted field.");
-  row.push(field.trim()); if (row.some(value => value !== "")) rows.push(row);
-  return rows;
-}
 
 function RunStatusPill({ status }: { status: ReconciliationRun["status"] }) {
   const tone = status === "closed" ? "success" : status === "void" ? "danger" : status === "reviewed" ? "warning" : "neutral";
@@ -43,16 +22,6 @@ function RunStatusPill({ status }: { status: ReconciliationRun["status"] }) {
 function MatchStatusPill({ status }: { status: ReconciliationRun["status"] | ReconciliationRow["matchStatus"] }) {
   const tone = status === "matched" || status === "closed" ? "success" : status === "void" || status === "missing_payment" || status === "duplicate_statement" || status === "ambiguous_payment" ? "danger" : status === "imported" ? "neutral" : "warning";
   return <StatusPill tone={tone}>{status}</StatusPill>;
-}
-
-function toImportRows(source: string): StatementImportRow[] {
-  const matrix = parseCsv(source);
-  if (matrix.length < 2) throw new Error("Add a header row and at least one statement row.");
-  const headers = matrix[0]!.map(value => value.toLowerCase().trim());
-  const indexes = ["reference", "amount", "currency", "settled_at"].map(name => headers.indexOf(name));
-  if (indexes.some(index => index < 0)) throw new Error("CSV headers must include reference, amount, currency, settled_at.");
-  if (matrix.length > 501) throw new Error("Import is limited to 500 statement rows.");
-  return matrix.slice(1).map((values, index) => ({ rowNumber: index + 2, reference: values[indexes[0]!] ?? "", amount: values[indexes[1]!] ?? "", currency: values[indexes[2]!] ?? "", settledAt: values[indexes[3]!] ?? "" }));
 }
 
 export function PlatformPaymentReconciliation() {
@@ -68,7 +37,7 @@ export function PlatformPaymentReconciliation() {
   const submitImport = async (event: React.FormEvent) => {
     event.preventDefault(); setBusy(true); setError(""); setNotice("");
     try {
-      const result = await importStatement({ gateway, statementName, rows: toImportRows(csv) });
+      const result = await importStatement({ gateway, statementName, rows: parseStatementCsv(csv) });
       setNotice(`Imported ${result.rowCount} rows: ${result.matchedCount} matched, ${result.exceptionCount} need review.`); setStatementName(""); setCsv("");
     } catch (cause) { setError(userFacingMessage(cause, "Statement import failed.")); }
     finally { setBusy(false); }
@@ -88,9 +57,9 @@ export function PlatformPaymentReconciliation() {
     {error && <p className="platform-claim-message" role="alert">{error}</p>}{notice && <p className="platform-notice" role="status">{notice}</p>}
     {canImport && <form className="pf-panel" onSubmit={submitImport}>
       <h2>Import settlement CSV</h2><p className="pf-hint">Required columns: <code>reference,amount,currency,settled_at</code>. Up to 500 rows per import. Amounts use major currency units.</p>
-      <div className="pf-form-grid"><label className="pf-field"><span className="pf-label">Gateway</span><input className="pf-input" required maxLength={80} value={gateway} onChange={e => setGateway(e.target.value)} placeholder="e.g. M-Pesa" /></label><label className="pf-field"><span className="pf-label">Statement name</span><input className="pf-input" required maxLength={160} value={statementName} onChange={e => setStatementName(e.target.value)} placeholder="Settlement report date or reference" /></label></div>
-      <label className="pf-field"><span className="pf-label">CSV file</span><input className="pf-input" type="file" accept=".csv,text/csv" onChange={async e => { const file = e.target.files?.[0]; if (file) setCsv(await file.text()); }} /></label>
-      <label className="pf-field"><span className="pf-label">Statement data</span><textarea className="pf-input" rows={7} required value={csv} onChange={e => setCsv(e.target.value)} placeholder={'reference,amount,currency,settled_at\nABC123,100.00,KES,2026-10-07T10:00:00Z'} /></label>
+      <div className="pf-form-grid"><label className="pf-field"><span className="pf-label">Gateway</span><input className="pf-input" required maxLength={80} value={gateway} onChange={e => setGateway(e.target.value)} /></label><label className="pf-field"><span className="pf-label">Statement name</span><input className="pf-input" required maxLength={160} value={statementName} onChange={e => setStatementName(e.target.value)} /></label></div>
+      <label className="pf-field"><span className="pf-label">CSV file (maximum 1 MB)</span><input className="pf-input" type="file" accept=".csv,text/csv" onChange={async e => { const file = e.target.files?.[0]; if (!file) return; if (file.size > MAX_STATEMENT_CSV_BYTES) { setCsv(""); setError("Statement data must be no larger than 1 MB."); return; } setError(""); setCsv(await file.text()); }} /></label>
+      <label className="pf-field"><span className="pf-label">Statement data</span><textarea className="pf-input" rows={7} maxLength={MAX_STATEMENT_CSV_BYTES} required value={csv} onChange={e => { setCsv(e.target.value); setError(""); }} /></label>
       <button className="primary-button" disabled={busy || !csv.trim()}>{busy ? "Importing…" : "Import and reconcile"}</button>
     </form>}
     <section className="section-heading"><div><p className="eyebrow">Settlement records</p><h2>Statement imports</h2></div><span className="section-count">{runs?.length ?? 0} loaded</span></section>
