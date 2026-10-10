@@ -1,4 +1,5 @@
-import { randomFillSync } from "node:crypto";
+import { createHash, randomFillSync } from "node:crypto";
+import { allowSpeedTestUpload } from "../../../shared/lib/speedtest-upload-rate-limit.ts";
 
 /**
  * Speed-test payload endpoint.
@@ -69,6 +70,14 @@ export async function POST(request: Request) {
   const declaredLength = Number(request.headers.get("content-length"));
   if (Number.isFinite(declaredLength) && declaredLength > MAX_UPLOAD_BYTES) {
     return Response.json({ success: false, message: "Upload exceeds the allowed size." }, { status: 413, headers: { "Cache-Control": "no-store" } });
+  }
+  const clientAddress = request.headers.get("x-real-ip") ?? request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown-client";
+  const clientKey = createHash("sha256").update(clientAddress).digest("hex");
+  if (!allowSpeedTestUpload(clientKey)) {
+    return Response.json(
+      { success: false, message: "Please wait before running another upload test." },
+      { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": "60" } },
+    );
   }
   if (!request.body) {
     return Response.json({ received: 0 }, { headers: { "Cache-Control": "no-store" } });

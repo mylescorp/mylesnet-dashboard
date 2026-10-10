@@ -93,7 +93,12 @@ export const ALL_PERMISSION_SLUGS: string[] = PERMISSIONS.map((permission) => pe
  */
 const TENANT_ADMIN_EXCLUDED_PERMISSIONS = new Set<string>([
   "roles:manage",
+  // These readers target the platform-wide workforce directory and platform
+  // invitation table. Tenant workspace users have separate team membership
+  // and invitation workflows and must never reach these global readers.
+  "users:read",
   "users:manage",
+  "invitations:manage",
   "organizations:read",
   "investors:read",
   "investors:manage",

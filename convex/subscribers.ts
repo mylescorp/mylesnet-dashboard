@@ -169,6 +169,11 @@ export const create = mutation({
       updatedAt: Date.now(),
     });
 
+    const tenant = await ctx.db.get(tenantId);
+    if (tenant?.subscriberCount !== undefined) {
+      await ctx.db.patch(tenantId, { subscriberCount: tenant.subscriberCount + 1 });
+    }
+
     await logAudit(ctx, {
       action: "subscriber.create",
       entityTable: "subscribers",
@@ -264,6 +269,10 @@ export const softDelete = mutation({
       deletedAt: Date.now(),
       deletedBy: user._id,
     });
+    const tenant = await ctx.db.get(tenantId);
+    if (tenant?.subscriberCount !== undefined) {
+      await ctx.db.patch(tenantId, { subscriberCount: Math.max(0, tenant.subscriberCount - 1) });
+    }
 
     await logAudit(ctx, { action: "subscriber.archived", entityTable: "subscribers", entityId: args.id, changedBy: user._id, tenantId, after: { archived: true } });
 
@@ -286,6 +295,10 @@ export const restore = mutation({
       deletedBy: undefined,
       updatedAt: Date.now(),
     });
+    const tenant = await ctx.db.get(tenantId);
+    if (tenant?.subscriberCount !== undefined) {
+      await ctx.db.patch(tenantId, { subscriberCount: tenant.subscriberCount + 1 });
+    }
 
     await logAudit(ctx, { action: "subscriber.restored", entityTable: "subscribers", entityId: args.id, changedBy: user._id, tenantId, after: { archived: false } });
 

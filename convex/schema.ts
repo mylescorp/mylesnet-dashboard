@@ -1143,6 +1143,10 @@ export default defineSchema({
     // operator, if any. Both are seeded by the signup wizard.
     phone: v.optional(v.string()),
     acquisitionSource: v.optional(v.string()),
+    // Maintained on subscriber create/archive/restore. Existing tenants are
+    // populated by the internal, paginated backfill before this is treated as
+    // an authoritative count.
+    subscriberCount: v.optional(v.number()),
     settings: v.optional(v.any()),
     createdAt: v.number(),
     updatedAt: v.number(),

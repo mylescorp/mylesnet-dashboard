@@ -49,7 +49,7 @@ export function useTheme() {
 
   useEffect(() => {
     applyMode(mode);
-  }, [mode]);
+  }, [mode, resolved]);
 
   const setMode = useCallback((newMode: ThemeMode) => {
     localStorage.setItem(STORAGE_KEY, newMode);

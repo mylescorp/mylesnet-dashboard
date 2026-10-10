@@ -796,6 +796,7 @@ export const commitTenantInternal = internalMutation({
         timezone: args.timezone,
         currency: args.currency,
         status: "trial",
+        subscriberCount: 0,
         workosOrganizationId: args.workosOrganizationId,
         phone: args.phone || undefined,
         acquisitionSource: args.acquisitionSource || undefined,

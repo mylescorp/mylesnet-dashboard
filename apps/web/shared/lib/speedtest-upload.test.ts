@@ -10,7 +10,7 @@ test("speed-test upload counts streamed bytes without buffering the full request
       controller.close();
     },
   });
-  const response = await POST(new Request("https://example.test/api/speedtest?op=upload", { method: "POST", body, duplex: "half" } as RequestInit & { duplex: "half" }));
+  const response = await POST(new Request("https://example.test/api/speedtest?op=upload", { method: "POST", headers: { "x-real-ip": "192.0.2.10" }, body, duplex: "half" } as RequestInit & { duplex: "half" }));
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { received: 3072 });
 });
@@ -18,7 +18,7 @@ test("speed-test upload counts streamed bytes without buffering the full request
 test("speed-test upload rejects an oversized declared body", async () => {
   const response = await POST(new Request("https://example.test/api/speedtest?op=upload", {
     method: "POST",
-    headers: { "content-length": String(9 * 1024 * 1024) },
+    headers: { "content-length": String(9 * 1024 * 1024), "x-real-ip": "192.0.2.11" },
   }));
   assert.equal(response.status, 413);
 });
@@ -30,6 +30,6 @@ test("speed-test upload rejects an oversized streamed body", async () => {
       controller.enqueue(new Uint8Array(3 * 1024 * 1024));
     },
   });
-  const response = await POST(new Request("https://example.test/api/speedtest?op=upload", { method: "POST", body, duplex: "half" } as RequestInit & { duplex: "half" }));
+  const response = await POST(new Request("https://example.test/api/speedtest?op=upload", { method: "POST", headers: { "x-real-ip": "192.0.2.12" }, body, duplex: "half" } as RequestInit & { duplex: "half" }));
   assert.equal(response.status, 413);
 });

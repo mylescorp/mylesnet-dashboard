@@ -1,7 +1,7 @@
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { logAudit } from "./lib/auditLog";
@@ -60,11 +60,10 @@ type TenantWorkspaceResult =
   | { status: "setup_required"; reason: WorkspaceSetupReason };
 
 async function toPlatformTenant(ctx: QueryCtx, tenant: Doc<"tenants">) {
-  const [memberships, entitlement, markets, subscribers] = await Promise.all([
+  const [memberships, entitlement, markets] = await Promise.all([
     ctx.db.query("tenantMemberships").withIndex("by_tenant", q => q.eq("tenantId", tenant._id)).collect(),
     ctx.db.query("entitlements").withIndex("by_tenant", q => q.eq("tenantId", tenant._id)).order("desc").first(),
     ctx.db.query("markets").withIndex("by_tenant", q => q.eq("tenantId", tenant._id)).collect(),
-    ctx.db.query("subscribers").withIndex("by_tenant", q => q.eq("tenantId", tenant._id)).collect(),
   ]);
   const ownerMembership = memberships.find(membership => membership.status === "active" && membership.role === "tenant_admin");
   const owner = ownerMembership ? await ctx.db.get(ownerMembership.userId) : null;
@@ -81,7 +80,7 @@ async function toPlatformTenant(ctx: QueryCtx, tenant: Doc<"tenants">) {
     membershipCount: memberships.filter(membership => membership.status === "active").length,
     accountOwner: owner && owner.deletedAt === undefined && owner.isActive !== false ? { name: owner.name ?? null, email: owner.email ?? null } : null,
     marketCount: markets.filter(market => market.status !== "deleted").length,
-    subscriberCount: subscribers.filter(subscriber => subscriber.deletedAt === undefined).length,
+    subscriberCount: tenant.subscriberCount ?? null,
     entitlement: entitlement ? {
       planId: entitlement.planId,
       status: entitlement.status,
@@ -92,6 +91,39 @@ async function toPlatformTenant(ctx: QueryCtx, tenant: Doc<"tenants">) {
     createdAt: tenant.createdAt,
   };
 }
+
+/**
+ * Populate a legacy tenant's denormalized subscriber total in bounded pages.
+ * Start once per existing tenant with an internal invocation after deployment.
+ * Avoid running it during a bulk subscriber import; steady-state writes update
+ * the total transactionally once the backfill commits.
+ */
+export const backfillTenantSubscriberCount = internalMutation({
+  args: {
+    tenantId: v.id("tenants"),
+    cursor: v.optional(v.union(v.string(), v.null())),
+    accumulatedCount: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const tenant = await ctx.db.get(args.tenantId);
+    if (!tenant) throw new Error("Tenant not found");
+    const page = await ctx.db
+      .query("subscribers")
+      .withIndex("by_tenant", (q) => q.eq("tenantId", args.tenantId))
+      .paginate({ numItems: 500, cursor: args.cursor ?? null });
+    const accumulatedCount = (args.accumulatedCount ?? 0) + page.page.filter((row) => row.deletedAt === undefined).length;
+    if (page.isDone) {
+      await ctx.db.patch(args.tenantId, { subscriberCount: accumulatedCount });
+      return { complete: true, subscriberCount: accumulatedCount };
+    }
+    await ctx.scheduler.runAfter(0, internal.tenantControl.backfillTenantSubscriberCount, {
+      tenantId: args.tenantId,
+      cursor: page.continueCursor,
+      accumulatedCount,
+    });
+    return { complete: false, subscriberCount: null };
+  },
+});
 
 /** Platform-only tenant estate inventory. It intentionally includes no tenant-owned records. */
 export const listForPlatform = query({
@@ -439,7 +471,7 @@ export const getTenantDetail = query({
     await requirePlatformUser(ctx);
     const tenant = await ctx.db.get(args.tenantId);
     if (!tenant || tenant.deletedAt !== undefined) return null;
-    const [memberships, entitlement, markets, subscribers] = await Promise.all([
+    const [memberships, entitlement, markets] = await Promise.all([
       ctx.db
         .query("tenantMemberships")
         .withIndex("by_tenant", (q) => q.eq("tenantId", args.tenantId))
@@ -450,7 +482,6 @@ export const getTenantDetail = query({
         .order("desc")
         .first(),
       ctx.db.query("markets").withIndex("by_tenant", (q) => q.eq("tenantId", args.tenantId)).collect(),
-      ctx.db.query("subscribers").withIndex("by_tenant", (q) => q.eq("tenantId", args.tenantId)).collect(),
     ]);
     const members = await Promise.all(memberships.filter((membership) => membership.status !== "revoked").map(async (membership) => {
       const user = await ctx.db.get(membership.userId);
@@ -489,7 +520,7 @@ export const getTenantDetail = query({
         : null,
       activeMemberCount: memberships.filter((membership) => membership.status === "active").length,
       marketCount: markets.filter((market) => market.status !== "deleted").length,
-      subscriberCount: subscribers.filter((subscriber) => subscriber.deletedAt === undefined).length,
+      subscriberCount: tenant.subscriberCount ?? null,
       members,
     };
   },
@@ -789,6 +820,7 @@ export const finalizeAutomatedTenantOnboarding = internalMutation({
       timezone: run.timezone,
       currency: run.currency,
       status: "trial",
+      subscriberCount: 0,
       workosOrganizationId: run.workosOrganizationId,
       createdAt: now,
       updatedAt: now,
@@ -958,6 +990,7 @@ export const registerVerifiedTenant = internalMutation({
       timezone: args.timezone,
       currency: args.currency,
       status: "trial",
+      subscriberCount: 0,
       workosOrganizationId: args.workosOrganizationId,
       createdAt: now,
       updatedAt: now,

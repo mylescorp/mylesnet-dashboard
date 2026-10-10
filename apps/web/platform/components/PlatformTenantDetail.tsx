@@ -157,7 +157,7 @@ export function PlatformTenantDetail({ tenantId }: { tenantId: string }) {
           <dt>Timezone</dt><dd>{tenant.timezone}</dd>
           <dt>Currency</dt><dd>{tenant.currency}</dd>
           <dt>Markets</dt><dd>{tenant.marketCount}</dd>
-          <dt>Subscribers</dt><dd>{tenant.subscriberCount.toLocaleString("en")}</dd>
+          <dt>Subscribers</dt><dd>{tenant.subscriberCount?.toLocaleString("en") ?? "Pending count setup"}</dd>
           <dt>Created</dt><dd>{formatTs(tenant.createdAt)}</dd>
           <dt>Last updated</dt><dd>{formatTs(tenant.updatedAt)}</dd>
         </dl>

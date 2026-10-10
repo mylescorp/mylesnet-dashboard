@@ -3,7 +3,10 @@ import { fetchQuery } from "convex/nextjs";
 import { api } from "@/convex/_generated/api";
 
 const noStore = { "Cache-Control": "no-store", "Content-Type": "application/json" };
-const unauthorized = () => Response.json({ error: "unauthorized" }, { status: 401, headers: { ...noStore, "WWW-Authenticate": "Bearer" } });
+const unauthorized = () => Response.json(
+  { success: false, message: "Authentication is required." },
+  { status: 401, headers: { ...noStore, "WWW-Authenticate": "Bearer" } },
+);
 
 export async function GET(request: Request) {
   const authorization = request.headers.get("authorization");
@@ -20,6 +23,9 @@ export async function GET(request: Request) {
     const { page, continueCursor, isDone } = result;
     return Response.json({ data: page, pagination: { nextCursor: isDone ? null : continueCursor, isDone } }, { headers: noStore });
   } catch {
-    return Response.json({ error: "service_unavailable" }, { status: 503, headers: noStore });
+    return Response.json(
+      { success: false, message: "The service is temporarily unavailable." },
+      { status: 503, headers: noStore },
+    );
   }
 }

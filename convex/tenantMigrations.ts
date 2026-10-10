@@ -77,6 +77,7 @@ export const bootstrapTenant = internalMutation({
         timezone: "Africa/Nairobi",
         currency: "KES",
         status: "active",
+        subscriberCount: 0,
         createdAt: now,
         updatedAt: now,
       }));

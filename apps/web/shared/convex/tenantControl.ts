@@ -20,7 +20,7 @@ export type PlatformTenant = {
   membershipCount: number;
   accountOwner: { name: string | null; email: string | null } | null;
   marketCount: number;
-  subscriberCount: number;
+  subscriberCount: number | null;
   entitlement: EntitlementSummary;
   createdAt: number;
 };
@@ -97,7 +97,7 @@ export type TenantDetail = {
   } | null;
   activeMemberCount: number;
   marketCount: number;
-  subscriberCount: number;
+  subscriberCount: number | null;
   members: TenantDetailMember[];
 };
 
