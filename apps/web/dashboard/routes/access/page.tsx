@@ -153,7 +153,7 @@ export default function AccessManagementPage() {
     return <PlatformAccess canReadInvitations={currentUser.permissions.includes("invitations:manage")} />;
   }
 
-  const canManageRoles = canManagePlatformAccess;
+  const canManageRoles = currentUser.permissions.includes("roles:manage");
   const tabs: { key: TabKey; label: string; icon: React.ReactNode; available: boolean }[] = [
     { key: "users", label: "Users", icon: <UsersRound size={16} />, available: true },
     { key: "roles", label: "Roles", icon: <ShieldCheck size={16} />, available: canManageRoles },
