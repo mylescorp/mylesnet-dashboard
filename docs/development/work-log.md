@@ -207,3 +207,10 @@ separate archive policy.
 - **Changes:** Tenant audit results now resolve a safe record label from descriptive audit fields and actor names from user records. The dashboard renders product labels and “You” instead of IDs. The query uses the authenticated tenant permission helper.
 - **Verification:** Typecheck, lint, 43 tests, and `git diff --check` pass. The isolated worktree is `codex/pr72-fixes`; the owner checkout remains untouched. Push, remote CI, and a fresh Greptile score are pending.
 - **Status:** PR #72 remains open and is not being merged. The owner checkout has pre-existing uncommitted changes; no vault docs were written.
+
+### 2026-10-10 — PR #72 audit action wording follow-up
+
+- **Scope:** Address Greptile's 5/5 review note that unsupported tenant audit action suffixes fell back to “updated.”
+- **Changes:** Added explicit labels for create/update/archive/restore/refund variants written by tenant handlers, and changed unknown actions to neutral “activity recorded.”
+- **Verification:** Typecheck, lint, token check, all 43 tests, and `git diff --check` pass (or are being rerun for this follow-up before push). The owner checkout was not modified.
+- **Status:** Pushing a follow-up to PR #72, then awaiting a fresh review.

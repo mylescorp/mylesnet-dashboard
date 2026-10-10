@@ -18,10 +18,15 @@ const ENTITY_LABELS: Record<string, string> = {
 
 const ACTION_LABELS: Record<string, string> = {
   create: "created",
+  created: "created",
   update: "updated",
+  updated: "updated",
   delete: "archived",
   archive: "archived",
+  softDelete: "archived",
+  archived: "archived",
   restore: "restored",
+  restored: "restored",
   suspend: "suspended",
   reactivate: "reactivated",
   approve: "approved",
@@ -34,12 +39,15 @@ const ACTION_LABELS: Record<string, string> = {
   redeem: "redeemed",
   allocate: "allocated",
   generate: "created",
+  refund: "refunded",
 };
 
 function presentTenantAuditEntry(entry: Doc<"auditLog">) {
   const entityType = ENTITY_LABELS[entry.entityTable] ?? "Workspace activity";
   const actionSuffix = entry.action.split(".").at(-1) ?? "update";
-  const action = `${entityType} ${ACTION_LABELS[actionSuffix] ?? "updated"}`;
+  const action = ACTION_LABELS[actionSuffix]
+    ? `${entityType} ${ACTION_LABELS[actionSuffix]}`
+    : `${entityType} activity recorded`;
   const labelFields = ["name", "title", "subject", "planName", "marketName", "tenantName", "deviceName", "serverName"];
   const labelFrom = (json: string | undefined): string | null => {
     if (!json) return null;
