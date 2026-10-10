@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { canSeePlatformNavRoute } from "./platform-nav-access.ts";
+import { canSeePlatformNavRoute, PLATFORM_NAV_ROLE_SCOPES } from "./platform-nav-access.ts";
+
+test("every route registered in the platform access matrix is visible to the owner", () => {
+  for (const route of Object.keys(PLATFORM_NAV_ROLE_SCOPES)) {
+    assert.equal(canSeePlatformNavRoute(route, ["platform_owner"]), true, `${route} should be visible to platform_owner`);
+    assert.equal(canSeePlatformNavRoute(route, ["platform_super_admin"]), true, `${route} should be visible to platform_super_admin`);
+  }
+});
 
 test("platform owner has sidebar access to every owner-authorized module route", () => {
   const routes = [

@@ -1,3 +1,4 @@
+import { requirePlatformRouteAccess } from "@/shared/auth/platform-route-access";
 import type { Metadata } from "next";
 import { requirePanelAccess } from "@/lib/auth/panels";
 import { QueryErrorBoundary } from "@/platform/components/QueryErrorBoundary";
@@ -10,6 +11,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 export default async function OrganizationDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await requirePanelAccess("platform");
+  await requirePlatformRouteAccess("/platform/organizations");
   const { id } = await params;
   return <QueryErrorBoundary><PlatformTenantDetail tenantId={id} /></QueryErrorBoundary>;
 }

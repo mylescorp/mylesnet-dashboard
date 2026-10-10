@@ -1,3 +1,4 @@
+import { requirePlatformRouteAccess } from "@/shared/auth/platform-route-access";
 import { requirePanelAccess } from "@/lib/auth/panels";
 import { QueryErrorBoundary } from "@/platform/components/QueryErrorBoundary";
 import { PlatformMarkets } from "@/platform/components/PlatformMarkets";
@@ -9,6 +10,7 @@ export default async function PlatformOrganizationMarketsPage({
   params: Promise<{ id: string }>;
 }) {
   await requirePanelAccess("platform");
+  await requirePlatformRouteAccess("/platform/organizations");
   const { id } = await params;
   return (
     <QueryErrorBoundary>

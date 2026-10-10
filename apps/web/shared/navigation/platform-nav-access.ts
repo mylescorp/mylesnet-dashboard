@@ -9,10 +9,12 @@ const platformRoles = {
 };
 
 /** Explicit routes whose canonical matrix denies at least one platform sub-role. */
-const PLATFORM_NAV_ROLE_SCOPES: Record<string, string[]> = {
+export const PLATFORM_NAV_ROLE_SCOPES: Readonly<Record<string, readonly string[]>> = {
   "/platform": [...platformRoles.superAdmin, ...platformRoles.ops, ...platformRoles.finance, ...platformRoles.support, ...platformRoles.readonly],
   "/platform/organizations": [...platformRoles.superAdmin, ...platformRoles.ops, ...platformRoles.finance, ...platformRoles.support, ...platformRoles.readonly],
   "/platform/organizations/new": [...platformRoles.superAdmin, ...platformRoles.ops],
+  "/platform/organizations/[id]/suspend": [...platformRoles.superAdmin, ...platformRoles.ops],
+  "/platform/organizations/[id]/restore": [...platformRoles.superAdmin, ...platformRoles.ops],
   "/platform/subscriptions": [...platformRoles.superAdmin, ...platformRoles.ops, ...platformRoles.finance, ...platformRoles.support, ...platformRoles.readonly],
   "/platform/billing": [...platformRoles.superAdmin, ...platformRoles.finance, ...platformRoles.readonly],
   "/platform/billing/plans": [...platformRoles.superAdmin, ...platformRoles.finance, ...platformRoles.ops, ...platformRoles.support, ...platformRoles.readonly],
@@ -39,6 +41,7 @@ const PLATFORM_NAV_ROLE_SCOPES: Record<string, string[]> = {
   "/platform/access": [...platformRoles.superAdmin, ...platformRoles.ops, ...platformRoles.finance, ...platformRoles.support, ...platformRoles.readonly],
   "/platform/users/directory": [...platformRoles.superAdmin, ...platformRoles.ops, ...platformRoles.finance, ...platformRoles.support, ...platformRoles.readonly],
   "/platform/audit": [...platformRoles.superAdmin, ...platformRoles.ops, ...platformRoles.finance, ...platformRoles.support, ...platformRoles.readonly],
+  "/platform/audit-log": [...platformRoles.superAdmin, ...platformRoles.ops, ...platformRoles.finance, ...platformRoles.support, ...platformRoles.readonly],
   "/platform/security": [...platformRoles.superAdmin, ...platformRoles.ops, ...platformRoles.finance, ...platformRoles.support, ...platformRoles.readonly],
   "/platform/api-keys": [...platformRoles.superAdmin, ...platformRoles.ops],
   "/platform/security/data-requests": [...platformRoles.superAdmin, ...platformRoles.support],
@@ -51,5 +54,5 @@ export function canSeePlatformNavRoute(href: string, roleSlugs: string[], fallba
   const requiredRoles = PLATFORM_NAV_ROLE_SCOPES[href] ?? fallbackRoles;
   // A new platform route must opt into an explicit role scope before it can
   // appear in navigation. This keeps spec-silent role cells denied by default.
-  return requiredRoles !== undefined && hasAnyRole(roleSlugs, requiredRoles);
+  return requiredRoles !== undefined && hasAnyRole(roleSlugs, [...requiredRoles]);
 }

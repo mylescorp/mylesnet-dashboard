@@ -54,3 +54,9 @@ Prepared the reviewed platform feature bundle on `feat/restore-platform-features
 - **Changes:** Removed invented initial network-policy values from the policy-template form, required an explicit access type, omitted empty optional fields from Convex payloads, and extracted validation into a tested pure module. Added UI role-helper coverage for tenant, plans, infrastructure, delete, and white-label operations, including owner aliases.
 - **Verification:** Web and direct Convex TypeScript checks passed; full lint completed with 0 errors and 11 warnings; `pnpm test` passed 42/42; `git diff --check` passed. No browser-authenticated role test or deployment was performed.
 - **Status:** The B4 work is local on `fix/platform-owner-access-rbac`. Earlier sidebar/RBAC commits are already committed on the branch but remain unpushed. GitHub auth/network still block Greptile review. The owner checkout and port 3000 were left untouched.
+
+### 2026-10-10 — Server-side platform route RBAC
+
+- **Changes:** Added a shared server route gate driven by the same explicit role matrix as sidebar visibility. Applied it to platform routes that previously relied only on broad platform membership. Added route matrix entries for tenant suspend/restore and the audit-log alias. Added a test that every registered route remains visible to both platform owner slugs.
+- **Verification:** Web typecheck passed; root Node tests passed 42/42; full lint had 0 errors and 11 warnings; focused ESLint passed with an ignored test-file warning; `git diff --check` passed. The app-local Jest script cannot parse Next's TypeScript `--showConfig`; the repo root Node test script is the working suite.
+- **Status:** Changes are isolated on `fix/platform-owner-access-rbac`; no authenticated session/browser test, deploy, push, or Greptile review has occurred. Port 3000 and the owner checkout were untouched.
