@@ -23,9 +23,9 @@ This is the canonical design-token governance record for the multi-tenant ISP an
 ## Source of truth and precedence
 
 1. This file governs intent, accessibility, tenant-branding boundaries, and token changes.
-2. `C:\Users\Admin\Projects\mylesnet-dashboard\app\globals.css` provides runtime CSS variables for the active dashboard.
-3. `C:\Users\Admin\Projects\mylesnet-dashboard\app\design\tokens.ts` provides typed CSS-variable references for React consumers.
-4. `C:\Users\Admin\Projects\mylesnet-dashboard\docs\design\tokens.md` is the repository handoff.
+2. `apps/web/app/globals.css` provides runtime CSS variables for the active application.
+3. `apps/web/shared/design/tokens.ts` provides typed CSS-variable references for React consumers.
+4. `docs/design/tokens.md` is the repository handoff.
 
 Code must consume semantic or component tokens. Primitive `--mn-*` values are private to the token layer and are not a feature-component API.
 
@@ -163,6 +163,30 @@ The public marketing surface uses **Bricolage Grotesque** for display typography
 | `--sidebar-active` / `-end` | `var(--primary-action)` / `var(--primary-action-hover)` | Active nav fill; dark `#FF9D3D` / `#FA8200` |
 | `--surface-inverse` | `var(--ink)` | Overlay/ink surfaces (dark zeroes as `--surface-strong`) |
 
+## Shared layout and card tokens
+
+The public landing pages, operator workspace, and Platform, Admin, Reseller, and
+Partner panels share the same page gutter and card contract. Responsive content
+may change its grid and density, while its base card radius, border, padding,
+gap, and elevation continue to resolve through these shared tokens.
+
+| Token | Default mapping | Use |
+| --- | --- | --- |
+| `--page-gutter` | `clamp(16px, 3vw, 40px)` | Shared page inset, reduced on tablet and mobile |
+| `--page-padding-block` | `32px` | Workspace page top rhythm |
+| `--card-radius` | `var(--radius-lg)` | Default card shape across public and authenticated surfaces |
+| `--card-border` | `var(--line)` | Card edge in both themes |
+| `--card-padding` | `clamp(16px, 2.2vw, 24px)` | Default card inset |
+| `--card-padding-compact` | `var(--space-4)` | Dense metric and utility cards |
+| `--card-gap` | `var(--space-3)` | Card content rhythm |
+| `--card-shadow` / `--card-shadow-hover` | `--shadow-sm` / `--shadow-md` | Default and interactive card elevation |
+
+The landing surface keeps its display typography, section rhythm, and decorative
+glass effects, but does not redefine the shared container, card shape, or card
+spacing. Its maximum content width follows `--landing-container` (1140px) and
+its cards use the shared card tokens. `color-scheme` follows the resolved theme
+so native form controls use matching light and dark rendering.
+
 ## Shared component specifications
 
 | Component | Variants and states | Required tokens | Accessibility |
@@ -170,7 +194,7 @@ The public marketing surface uses **Bricolage Grotesque** for display typography
 | Button | primary, secondary, danger, ghost; default, hover, disabled, loading | primary, surface, line, danger, focus ring | Native button, visible label, keyboard activation |
 | Input, select, textarea | default, focused, disabled, invalid, read-only | surface, text, line, danger, focus ring | Label, description, validation message, error association |
 | Status pill | success, warning, danger, info, neutral | state foreground and background | Text always present, never colour-only |
-| Card | standard, selectable, metric, critical | surface, line, shadow | Heading hierarchy, selected state announced where interactive |
+| Card | standard, selectable, metric, critical | card radius, border, padding, gap, and elevation tokens | Heading hierarchy, selected state announced where interactive |
 | Table | standard, dense, sortable, loading, empty | surface, line, muted, text | Semantic table markup and sortable button labels |
 | Dialog | modal, confirmation, full-screen workbench | surface, shadow-lg, focus ring | Focus trap, title, Escape close unless safety requires otherwise |
 | Navigation | default, hover, active, planned, collapsed | sidebar component tokens | Current route conveyed with `aria-current` |
@@ -215,6 +239,17 @@ Token changes are product changes. A change must include intended semantic effec
 - **Typed contract**: `app/design/tokens.ts` extended (`brand`, `status`, `neutral`, `auth`, `layout`, `motion`, `focus`, `font`); existing `chart` and `rank` keys preserved. `scripts/check-design-tokens.mjs` `externalVars` updated.
 - `npm run tokens:check`, `pnpm typecheck`, `pnpm lint`, and `pnpm build` all pass.
 - This system is a design and implementation contract. It does not claim the full multi-tenant product is production-ready.
+
+### Shared landing and panel consistency pass, 2026-10-10
+
+- The landing surface and workspace panels now consume shared card shape,
+  padding, border, gap, and elevation tokens; responsive workspace page insets
+  use the common spacing scale.
+- The landing stylesheet no longer redefines the global content width or
+  palette-derived glass/ink values. Marketing typography, section rhythm, and
+  decorative effects remain purpose-specific.
+- Both themes set native `color-scheme` to the resolved light or dark mode.
+- The shared semantic palette and tenant-branding boundary remain unchanged.
 
 ### Alias integrity correction — 2026-09-13
 

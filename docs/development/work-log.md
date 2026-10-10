@@ -200,3 +200,10 @@ separate archive policy.
 ### 2026-10-10 - Greptile review
 
 - Review record: see PR #73.
+
+### 2026-10-10 — Shared landing and panel design tokens
+
+- **Scope:** Align the public landing page and shared workspace, Platform, Admin, Reseller, and Partner panels on one light/dark semantic and component-token system.
+- **Changes:** Added shared page gutter and card shape, border, padding, gap, and elevation tokens; made workspace and landing cards consume them; moved landing fonts back to the existing shared font tokens; aligned landing content width to the documented 1140px token; made native controls follow the resolved light/dark scheme; extended typed token references and token-check guards; corrected source paths and updated repository and canonical vault token documentation.
+- **Verification:** Design-token check, full web TypeScript check, and `git diff --check` passed. ESLint completed with zero errors and 15 existing warnings. Production build was blocked by the isolated worktree's dependency symlinks: Turbopack rejects links outside the worktree and the webpack fallback could not parse TypeScript's config output. Browser visual review could not run because the sandbox denied binding the local dev server port.
+- **Status:** Changes are in isolated branch `feat/unified-design-system` at `/home/myles/Work/mylesnet-design-system`. The source checkout's existing uncommitted changes remain untouched. The vault work-log entry is synchronized.

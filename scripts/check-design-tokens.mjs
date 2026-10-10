@@ -54,6 +54,22 @@ for (const root of applicationRoots) for (const file of await sourceFiles(root))
 // ---- 2. globals.css: hex colours only inside the token-definition region ----
 const css = await readFile(globalsCssPath, "utf8");
 
+for (const token of [
+  "--page-gutter",
+  "--page-padding-block",
+  "--card-radius",
+  "--card-border",
+  "--card-padding",
+  "--card-padding-compact",
+  "--card-gap",
+  "--card-shadow",
+  "--card-shadow-hover",
+]) {
+  if (!new RegExp(`${token}\\s*:`).test(css)) report(`globals.css is missing shared layout token ${token}`);
+}
+if (!/:root\s*\{[^}]*color-scheme:\s*light/s.test(css)) report("globals.css must set the light native color scheme");
+if (!/:root\[data-theme="dark"\]\s*\{[^}]*color-scheme:\s*dark/s.test(css)) report("globals.css must set the dark native color scheme");
+
 const themeOpen = css.indexOf("@theme inline");
 if (themeOpen === -1) throw new Error("globals.css lost its `@theme inline` block; token definition region cannot be located.");
 const themeCloseBrace = css.indexOf("}", themeOpen);
@@ -136,6 +152,12 @@ const landingCssRoot = join(process.cwd(), "app", "(public)");
 for (const file of await cssFiles(landingCssRoot)) {
   const relativePath = relative(process.cwd(), file).replaceAll("\\", "/");
   const landingCss = await readFile(file, "utf8");
+  if (relativePath.endsWith("landing.css")) {
+    const landingRoot = rootTokenBlocks(landingCss).map(([start, end]) => landingCss.slice(start, end)).join("\n");
+    for (const token of ["--landing-container", "--landing-radius", "--landing-radius-lg", "--landing-glass", "--landing-glass-border", "--landing-ink-start", "--landing-ink-end"]) {
+      if (new RegExp(`${token}\\s*:`).test(landingRoot)) report(`${relativePath} must inherit shared token ${token} from globals.css`);
+    }
+  }
   for (const match of colorOutsideTokenBlock(landingCss)) {
     const line = landingCss.slice(0, match.index).split("\n").length;
     report(`${relativePath}:${line} uses ${match[0]} outside a :root token block`);

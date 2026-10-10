@@ -6,24 +6,10 @@
    ============================================================ */
 
 :root {
-  /* Component-scope tokens derived from the shared contract */
-  --landing-container: 1440px;
-  --landing-radius: 20px;
-  --landing-radius-lg: 26px;
-  --landing-glass: color-mix(in srgb, var(--surface) 78%, transparent);
-  --landing-glass-border: color-mix(in srgb, var(--line) 65%, transparent);
-  --landing-primary-glow: color-mix(in srgb, var(--primary) 32%, transparent);
-  --landing-accent-glow: color-mix(in srgb, var(--accent) 40%, transparent);
-  --landing-ink-start: var(--surface-inverse);
-  --landing-ink-end: color-mix(in srgb, var(--surface-inverse) 70%, var(--surface));
-  --landing-ink-text: var(--text-on-inverse);
-  --landing-ink-muted: var(--text-on-inverse-muted);
-  --landing-surface-tint: color-mix(in srgb, var(--primary) 6%, var(--surface));
-
-  /* Typography — Inter UI/body, Bricolage Grotesque display, JetBrains Mono accents.
-     --landing-font-display is defined in globals.css as the single source of truth. */
-  --landing-font-sans: var(--font-inter), Arial, Helvetica, sans-serif;
-  --landing-font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* Public pages inherit palette, shape, container, and ink from the shared
+     theme. Only landing typography and effects remain scoped here. */
+  --landing-font-sans: var(--font-ui);
+  --landing-font-mono: var(--font-mono-ui);
 }
 
 .landing-main {
@@ -35,7 +21,7 @@
 .landing-container {
   width: min(var(--landing-container), 100%);
   margin: 0 auto;
-  padding-inline: clamp(20px, 3vw, 40px);
+  padding-inline: var(--page-gutter);
 }
 
 /* ============================================================
@@ -62,7 +48,7 @@
 .landing-brand {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
   color: var(--text-strong);
   text-decoration: none;
 }
@@ -737,13 +723,13 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--card-gap);
   overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg, var(--landing-radius));
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
   background: var(--surface);
-  padding: clamp(22px, 2.8vw, 28px);
-  box-shadow: var(--shadow-sm);
+  padding: var(--card-padding);
+  box-shadow: var(--card-shadow);
   text-decoration: none;
   color: inherit;
   transition:
@@ -766,8 +752,8 @@ a.landing-card:hover {
 }
 
 .landing-card-compact {
-  gap: 10px;
-  padding: 18px 20px;
+  gap: var(--space-2);
+  padding: var(--card-padding-compact);
 }
 
 .landing-card-step {
