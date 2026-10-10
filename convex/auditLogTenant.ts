@@ -1,7 +1,66 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
-import { requirePermission } from "./lib/auth";
-import { resolveTenantFromAuth } from "./lib/tenant";
+import type { Doc } from "./_generated/dataModel";
+import { requireTenantPermission } from "./lib/auth";
+
+const ENTITY_LABELS: Record<string, string> = {
+  subscribers: "Subscriber",
+  markets: "Market",
+  agents: "Agent",
+  vouchers: "Voucher",
+  commissions: "Commission",
+  invoices: "Invoice",
+  payments: "Payment",
+  plans: "Plan",
+  expenses: "Expense",
+  teams: "Team",
+};
+
+const ACTION_LABELS: Record<string, string> = {
+  create: "created",
+  update: "updated",
+  delete: "archived",
+  archive: "archived",
+  restore: "restored",
+  suspend: "suspended",
+  reactivate: "reactivated",
+  approve: "approved",
+  reject: "declined",
+  record: "recorded",
+  assignToMarket: "assignment changed",
+  statusChange: "status changed",
+  offboard: "offboarding updated",
+  finalize: "offboarding completed",
+  redeem: "redeemed",
+  allocate: "allocated",
+  generate: "created",
+};
+
+function presentTenantAuditEntry(entry: Doc<"auditLog">) {
+  const entityType = ENTITY_LABELS[entry.entityTable] ?? "Workspace activity";
+  const actionSuffix = entry.action.split(".").at(-1) ?? "update";
+  const action = `${entityType} ${ACTION_LABELS[actionSuffix] ?? "updated"}`;
+  const labelFields = ["name", "title", "subject", "planName", "marketName", "tenantName", "deviceName", "serverName"];
+  const labelFrom = (json: string | undefined): string | null => {
+    if (!json) return null;
+    try {
+      const values = JSON.parse(json) as Record<string, unknown>;
+      for (const field of labelFields) {
+        const value = values[field];
+        if (typeof value === "string" && value.trim()) return value.trim().slice(0, 120);
+      }
+    } catch { /* Older malformed audit data has no display label. */ }
+    return null;
+  };
+  return {
+    _id: entry._id,
+    action,
+    entityType,
+    entityLabel: labelFrom(entry.afterJson) ?? labelFrom(entry.beforeJson) ?? entityType,
+    changedBy: entry.changedBy,
+    timestamp: entry.timestamp,
+  };
+}
 
 /**
  * Tenant-scoped audit trail. The platform audit log (`platform.listAuditLog`)
@@ -16,9 +75,7 @@ export const listForTenant = query({
     cursor: v.optional(v.nullable(v.string())),
   },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "audit_log:read");
-    const tenantId = await resolveTenantFromAuth(ctx);
-    if (!tenantId) return { entries: [], isDone: true, continueCursor: null };
+    const { user, tenantId } = await requireTenantPermission(ctx, "audit_log:read");
     const limit = Math.min(100, args.limit ?? 50);
     const base = args.entityTable
       ? ctx.db
@@ -34,6 +91,15 @@ export const listForTenant = query({
       numItems: limit,
       cursor: args.cursor ?? null,
     });
-    return { entries: page, isDone, continueCursor };
+    const actors = await Promise.all(page.map((entry) => ctx.db.get(entry.changedBy)));
+    return {
+      entries: page.map((entry, index) => ({
+        ...presentTenantAuditEntry(entry),
+        changedByName: actors[index]?.name ?? "Workspace member",
+        isCurrentUser: entry.changedBy === user._id,
+      })),
+      isDone,
+      continueCursor,
+    };
   },
 });

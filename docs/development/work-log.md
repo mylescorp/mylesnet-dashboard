@@ -200,3 +200,10 @@ separate archive policy.
 - **Changes:** Redemption ledger entries now accept verified historical market assignments, while voucher sales still require an active assignment. Voucher generation writes market-derived tenant ownership; allocation checks tenant and agent ownership. Offboarding resolves legacy voucher ownership from the market, stamps ownership when disposing, and refuses to finalize while unsold vouchers remain.
 - **Verification:** `pnpm typecheck`, `pnpm lint`, `pnpm tokens:check`, and all 43 tests pass; `git diff --check` remains to be run before commit. Remote checks and Greptile review are pending.
 - **Status:** Changes are being prepared on `codex/pr72-fixes`; PR #72 remains open and is not being merged.
+
+### 2026-10-10 — PR #72 tenant audit display follow-up
+
+- **Scope:** Fix Greptile's remaining 4/5 finding that tenant audit rows exposed raw entity and actor identifiers.
+- **Changes:** Tenant audit results now resolve a safe record label from descriptive audit fields and actor names from user records. The dashboard renders product labels and “You” instead of IDs. The query uses the authenticated tenant permission helper.
+- **Verification:** Typecheck, lint, 43 tests, and `git diff --check` pass. The isolated worktree is `codex/pr72-fixes`; the owner checkout remains untouched. Push, remote CI, and a fresh Greptile score are pending.
+- **Status:** PR #72 remains open and is not being merged. The owner checkout has pre-existing uncommitted changes; no vault docs were written.

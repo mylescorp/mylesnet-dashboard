@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
 import { Field, Select, Loading, EmptyState, formatDateTime } from "@/shared/components/ui";
-import type { Id } from "@/convex/_generated/dataModel";
 
 const CONFIG = {
   subscriber: { table: "subscribers", label: "Subscribers" },
@@ -22,9 +21,10 @@ const CONFIG = {
 type Entry = {
   _id: string;
   action: string;
-  entityTable: string;
-  entityId: string;
-  changedBy: Id<"users">;
+  entityType: string;
+  entityLabel: string;
+  changedByName: string;
+  isCurrentUser: boolean;
   timestamp: number;
 };
 
@@ -41,7 +41,6 @@ export default function AuditLogPage() {
       ? { entityTable, limit, cursor }
       : { limit, cursor },
   );
-  const currentUser = useQuery(api.platform.getCurrentPlatformUser, {});
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
@@ -53,11 +52,9 @@ export default function AuditLogPage() {
   }, [page, cursor]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  if (page === undefined || currentUser === undefined) {
+  if (page === undefined) {
     return <Loading />;
   }
-
-  const currentUserId = currentUser && currentUser._id;
 
   const reset = () => {
     setCursor(null);
@@ -111,7 +108,7 @@ export default function AuditLogPage() {
                     <th>When</th>
                     <th>Action</th>
                     <th>Entity</th>
-                    <th className="pf-hide-sm">Entity id</th>
+                    <th className="pf-hide-sm">Record</th>
                     <th>Actor</th>
                   </tr>
                 </thead>
@@ -120,9 +117,9 @@ export default function AuditLogPage() {
                     <tr key={e._id}>
                       <td>{formatDateTime(e.timestamp)}</td>
                       <td><strong>{e.action}</strong></td>
-                      <td>{e.entityTable}</td>
-                      <td className="pf-hide-sm">{e.entityId}</td>
-                      <td>{e.changedBy === currentUserId ? "You" : `#${String(e.changedBy).slice(-6)}`}</td>
+                      <td>{e.entityType}</td>
+                      <td className="pf-hide-sm">{e.entityLabel}</td>
+                      <td>{e.isCurrentUser ? "You" : e.changedByName}</td>
                     </tr>
                   ))}
                 </tbody>
