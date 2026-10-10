@@ -37,15 +37,18 @@ The tenant panel today is a real but narrow billing and operations workspace.
 The overwhelming majority of the feature list is Partial or Missing. Very few
 features meet the section 11 definition of done.
 
+Counts are the totals of the per-ID rows in section 5 and section 6 below, and
+sum to the 331 features in the catalogue.
+
 | Area | Done | Partial | Broken | Missing |
 |---|---|---|---|---|
-| Cross-cutting XC (22) | 2 | 12 | 0 | 8 |
+| Cross-cutting XC (22) | 2 | 15 | 0 | 5 |
 | ONB (11) | 2 | 4 | 0 | 5 |
-| DSH (8) | 1 | 3 | 0 | 4 |
-| SUB (19) | 0 | 8 | 0 | 11 |
+| DSH (8) | 1 | 2 | 0 | 5 |
+| SUB (19) | 0 | 7 | 0 | 12 |
 | PAU (10) | 0 | 0 | 0 | 10 |
 | PKG (13) | 0 | 3 | 0 | 10 |
-| BIL (13) | 0 | 7 | 0 | 6 |
+| BIL (13) | 0 | 6 | 0 | 7 |
 | PAY (17) | 0 | 5 | 0 | 12 |
 | CMP (9) | 0 | 0 | 0 | 9 |
 | ACC (9) | 0 | 3 | 0 | 6 |
@@ -57,11 +60,11 @@ features meet the section 11 definition of done.
 | MAP (5) | 0 | 1 | 0 | 4 |
 | WRK (9) | 0 | 0 | 0 | 9 |
 | AST (6) | 0 | 0 | 0 | 6 |
-| VCH (9) | 0 | 5 | 0 | 4 |
-| AGT (11) | 1 | 4 | 0 | 6 |
+| VCH (9) | 0 | 6 | 0 | 3 |
+| AGT (11) | 0 | 5 | 0 | 6 |
 | LED (6) | 0 | 0 | 0 | 6 |
 | SUP (9) | 0 | 2 | 0 | 7 |
-| COM (9) | 0 | 3 | 0 | 6 |
+| COM (9) | 0 | 2 | 0 | 7 |
 | AUT (5) | 0 | 0 | 0 | 5 |
 | SVY (4) | 0 | 0 | 0 | 4 |
 | LOY (5) | 0 | 1 | 0 | 4 |
@@ -71,13 +74,15 @@ features meet the section 11 definition of done.
 | CRS (7) | 0 | 0 | 0 | 7 |
 | HRM (5) | 0 | 1 | 0 | 4 |
 | RPT (6) | 0 | 3 | 0 | 3 |
-| CPL (5) | 0 | 0 | 0 | 5 |
+| CPL (6) | 0 | 0 | 0 | 6 |
 | ADD (4) | 0 | 0 | 0 | 4 |
 | AIX (4) | 0 | 0 | 0 | 4 |
 | IMP (4) | 0 | 0 | 0 | 4 |
 | API (4) | 0 | 0 | 0 | 4 |
+| SET (15) | 0 | 8 | 0 | 7 |
 | NTF (2) | 0 | 0 | 0 | 2 |
 | AUD (2) | 0 | 1 | 1 | 0 |
+| **Total (331)** | **5** | **79** | **1** | **246** |
 
 Highest-priority foundation gaps (build order step 1): tenant isolation holes
 in `analytics.ts`, `scheduledReports.ts`, `notifications.ts`; the tenant audit
@@ -320,7 +325,7 @@ All AST-01 to AST-06 are **Missing**.
 | VCH-03 | Missing | No scratch card/QR/PDF | |
 | VCH-04 | Partial | `markVoucherSold` + commission | No float deduction |
 | VCH-05 | Partial | staff `redeemVoucher` | Captive portal/subscriber panel absent |
-| VCH-06 | Done | `voucherFraud.ts` + `/platform/vouchers/monitor`; core test | Platform-only |
+| VCH-06 | Partial | `voucherFraud.ts` + `/platform/vouchers/monitor`; core test | Platform-only fraud monitor; no tenant voucher fraud surface, so the tenant feature is still owed |
 | VCH-07 | Partial | `/sales` + analytics | No voucher report |
 | VCH-08 | Missing | | |
 | VCH-09 | Missing | | |
@@ -333,7 +338,7 @@ All AST-01 to AST-06 are **Missing**.
 | AGT-02 | Missing | No float | |
 | AGT-03 | Missing | No cash-up | |
 | AGT-04 | Partial | `commissions.ts` | No per-package/renewal/tier rules/statements |
-| AGT-05 | Done | `commissions.ts` + `payouts.ts` + UI | Tiered approval |
+| AGT-05 | Partial | `commissions.ts` + `payouts.ts` + tiered approval UI | No mobile-money or bank-transfer payout |
 | AGT-06 | Partial | `/sales`, leaderboard | No targets |
 | AGT-07 | Partial | `allocateVoucherToAgent` | No subscriber→agent |
 | AGT-08 | Missing | | |
@@ -430,7 +435,8 @@ All CRS-01 to CRS-07 are **Missing**.
 
 ## 6.32 CPL Compliance
 
-All CPL-01 to CPL-05 are **Missing**.
+All CPL-01 to CPL-06 are **Missing**. CPL-06 (country adapters for additional
+markets) has no implementation.
 
 ## 6.33 ADD Add-ons
 
