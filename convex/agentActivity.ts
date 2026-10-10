@@ -40,8 +40,9 @@ export async function insertActivityLedger(
     .withIndex("by_agent", (q) => q.eq("agentId", entry.agentId as Id<"agents">))
     .collect();
   const activeAssignments = assignments.filter((assignment) => assignment.assignmentStatus === "active");
-  if (!activeAssignments.some((assignment) => assignment.marketId === market._id)) {
-    throw new Error("Agent must be assigned to the selected market before recording activity");
+  if (!assignments.some((assignment) => assignment.marketId === market._id &&
+    (entry.action !== "voucher_sale" || assignment.assignmentStatus === "active"))) {
+    throw new Error("Agent must have a verified assignment to the selected market before recording activity");
   }
   const assignmentMarkets = await Promise.all(assignments.map((assignment) => ctx.db.get(assignment.marketId)));
   if (assignmentMarkets.some((assignedMarket, index) =>

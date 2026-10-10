@@ -193,3 +193,10 @@ separate archive policy.
 - **Changes:** New agent records now take tenant ownership from the authenticated workspace; agent operations and market assignments are tenant-scoped; a bounded internal migration infers legacy agent ownership only when every assignment resolves to one tenant and reports ambiguous rows; activity writes safely backfill a legacy agent only after validating its active market assignments. Tenant analytics now reads only untagged legacy activity through market indexes, avoiding a second read of migrated activity.
 - **Verification:** `pnpm typecheck`, `pnpm lint`, `pnpm tokens:check`, and all 43 tests pass; remote CI and Greptile review are pending.
 - **Status:** Follow-up fixes are ready for review in `codex/pr72-fixes`. The owner checkout remains untouched; its local vault mirror is not synchronized from this worktree.
+
+### 2026-10-10 — PR #72 voucher workflow follow-up
+
+- **Scope:** Address Greptile's two voucher regressions in its 3/5 review of `c7bd818`.
+- **Changes:** Redemption ledger entries now accept verified historical market assignments, while voucher sales still require an active assignment. Voucher generation writes market-derived tenant ownership; allocation checks tenant and agent ownership. Offboarding resolves legacy voucher ownership from the market, stamps ownership when disposing, and refuses to finalize while unsold vouchers remain.
+- **Verification:** `pnpm typecheck`, `pnpm lint`, `pnpm tokens:check`, and all 43 tests pass; `git diff --check` remains to be run before commit. Remote checks and Greptile review are pending.
+- **Status:** Changes are being prepared on `codex/pr72-fixes`; PR #72 remains open and is not being merged.

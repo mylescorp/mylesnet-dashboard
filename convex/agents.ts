@@ -11,6 +11,18 @@ async function getTenantAgent(ctx: QueryCtx | MutationCtx, agentId: Id<"agents">
   return agent;
 }
 
+async function listUnsettledAgentVouchers(ctx: QueryCtx | MutationCtx, agentId: Id<"agents">, tenantId: Id<"tenants">) {
+  const rows = await ctx.db.query("vouchers").withIndex("by_owner", (q) => q.eq("ownerAgentId", agentId)).collect();
+  const unsettled = rows.filter((voucher) => voucher.voucherStatus === "owned" || voucher.voucherStatus === "unallocated");
+  const visible = await Promise.all(unsettled.map(async (voucher) => {
+    if (voucher.tenantId === tenantId) return voucher;
+    if (voucher.tenantId !== undefined) return null;
+    const market = await ctx.db.get(voucher.marketId);
+    return market?.tenantId === tenantId ? voucher : null;
+  }));
+  return visible.filter((voucher): voucher is NonNullable<typeof voucher> => voucher !== null);
+}
+
 export const getAgentInternal = internalQuery({
   args: { agentId: v.id("agents") },
   handler: async (ctx, args) => {
@@ -241,16 +253,7 @@ export const getAgentUnsoldVouchersForOffboarding = query({
   handler: async (ctx, args) => {
     const { tenantId } = await requireTenantPermission(ctx, "agents:manage");
     await getTenantAgent(ctx, args.agentId, tenantId);
-    return await ctx.db
-      .query("vouchers")
-      .withIndex("by_owner", (q) => q.eq("ownerAgentId", args.agentId))
-      .filter((q) =>
-        q.and(
-          q.eq(q.field("tenantId"), tenantId),
-          q.or(q.eq(q.field("voucherStatus"), "owned"), q.eq(q.field("voucherStatus"), "unallocated"))
-        )
-      )
-      .collect();
+    return await listUnsettledAgentVouchers(ctx, args.agentId, tenantId);
   },
 });
 
@@ -268,9 +271,13 @@ export const disposeOffboardingVoucher = mutation({
     }
 
     const voucher = await ctx.db.get(args.voucherId);
-    if (!voucher || voucher.tenantId !== tenantId) throw new Error("Voucher not found");
+    const market = voucher ? await ctx.db.get(voucher.marketId) : null;
+    if (!voucher || (voucher.tenantId !== tenantId && (voucher.tenantId !== undefined || market?.tenantId !== tenantId))) {
+      throw new Error("Voucher not found");
+    }
     if (args.newOwnerAgentId) await getTenantAgent(ctx, args.newOwnerAgentId, tenantId);
     await ctx.db.patch(args.voucherId, {
+      tenantId,
       ownerAgentId: args.disposition === "reassign" ? args.newOwnerAgentId : undefined,
       voucherStatus: "unallocated",
     });
@@ -302,6 +309,8 @@ export const offboardAgentFinalize = mutation({
     const agent = await getTenantAgent(ctx, args.agentId, tenantId);
     const market = await ctx.db.get(args.marketId);
     if (!market || market.tenantId !== tenantId) throw new Error("Market not found");
+    const unsettledVouchers = await listUnsettledAgentVouchers(ctx, args.agentId, tenantId);
+    if (unsettledVouchers.length > 0) throw new Error("Resolve all of this agent’s unsold vouchers before finalizing offboarding");
 
     const now = Date.now();
 

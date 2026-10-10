@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
-import { requireMarketAccess, requirePermission } from "./lib/auth";
+import { requireMarketAccess, requirePermission, requireTenantPermission } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 import { insertActivityLedger } from "./agentActivity";
 
@@ -74,11 +74,14 @@ export const generateVoucherBatch = mutation({
     priceEach: v.number(),
   },
   handler: async (ctx, args) => {
-    const user = await requirePermission(ctx, "vouchers:manage");
+    const { user, tenantId } = await requireTenantPermission(ctx, "vouchers:manage");
     await requireMarketAccess(ctx, args.marketId, "operator");
+    const market = await ctx.db.get(args.marketId);
+    if (!market || market.tenantId !== tenantId || market.deletedAt !== undefined) throw new Error("Market not found");
     const now = Date.now();
 
     const batchId = await ctx.db.insert("voucherBatches", {
+      tenantId,
       marketId: args.marketId,
       planType: args.planType,
       quantity: args.quantity,
@@ -93,6 +96,7 @@ export const generateVoucherBatch = mutation({
     for (let i = 0; i < args.quantity; i++) {
       const code = generateVoucherCode();
       await ctx.db.insert("vouchers", {
+        tenantId,
         batchId,
         marketId: args.marketId,
         code,
@@ -134,11 +138,17 @@ export const validateVoucherCode = internalQuery({
 export const allocateVoucherToAgent = mutation({
   args: { voucherId: v.id("vouchers"), agentId: v.id("agents") },
   handler: async (ctx, args) => {
-    const user = await requirePermission(ctx, "vouchers:manage");
+    const { user, tenantId } = await requireTenantPermission(ctx, "vouchers:manage");
     const voucher = await ctx.db.get(args.voucherId);
     if (!voucher) throw new Error("Voucher not found");
     await requireMarketAccess(ctx, voucher.marketId, "operator");
+    const market = await ctx.db.get(voucher.marketId);
+    const agent = await ctx.db.get(args.agentId);
+    if (!market || market.tenantId !== tenantId || !agent || agent.tenantId !== tenantId || agent.deletedAt !== undefined) {
+      throw new Error("Voucher or agent not found in this workspace");
+    }
     await ctx.db.patch(args.voucherId, {
+      tenantId,
       ownerAgentId: args.agentId,
       voucherStatus: "owned",
     });
