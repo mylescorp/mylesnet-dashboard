@@ -78,3 +78,10 @@ Prepared the reviewed platform feature bundle on `feat/restore-platform-features
 - **Changes:** Reconciliation CSV parsing now has a 1 MB byte cap and 500-row cap, supports BOM/CRLF/quoted values, and rejects malformed quotes, bad headers, missing values, and extra fields before backend mutation. Removed sample payment data from the UI placeholder.
 - **Verification:** Parser tests passed; web and Convex TypeScript passed; root suite 42/42; focused ESLint passed; full lint had 0 errors and 11 existing warnings; `git diff --check` passed.
 - **Status:** C5 remains partial until authenticated roles and deployed-data behavior are verified.
+
+
+### 2026-10-10 — E3 commission-rate RBAC correction
+
+- **Changes:** Removed the Ops read overgrant from global commission rate, override, and agency-option queries. The backend now uses the same super-admin/finance role tuple as the page and sidebar. Added a regression test proving spec-silent Ops, support, and readonly roles are excluded.
+- **Verification:** Focused commission policy test passed; web and direct Convex typechecks passed; `git diff --check` passed.
+- **Status:** E3 configuration CRUD exists but accrual/payout integration and authenticated live-role verification remain open. Changes are committed on the isolated RBAC branch for review; no push or deployment was performed. Owner checkout and port 3000 were untouched.

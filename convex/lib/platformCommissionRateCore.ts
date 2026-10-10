@@ -1,5 +1,6 @@
 export const BUILT_IN_REFERRAL_RATE_BASIS_POINTS = 2000;
 export const BUILT_IN_REFERRAL_DURATION_MONTHS = 12;
+export const PLATFORM_COMMISSION_RATE_ROLES = ["platform_super_admin", "platform_finance"] as const;
 
 export type CommissionRatePolicy = { rateBasisPoints: number; durationMonths: number };
 

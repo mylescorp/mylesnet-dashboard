@@ -1,6 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { BUILT_IN_REFERRAL_DURATION_MONTHS, BUILT_IN_REFERRAL_RATE_BASIS_POINTS, resolveCommissionRatePolicy, validateCommissionRatePolicy } from "./platformCommissionRateCore.ts";
+import { BUILT_IN_REFERRAL_DURATION_MONTHS, BUILT_IN_REFERRAL_RATE_BASIS_POINTS, PLATFORM_COMMISSION_RATE_ROLES, resolveCommissionRatePolicy, validateCommissionRatePolicy } from "./platformCommissionRateCore.ts";
+
+test("commission rates are limited to finance and super-admin roles", () => {
+  assert.deepEqual(PLATFORM_COMMISSION_RATE_ROLES, ["platform_super_admin", "platform_finance"]);
+  assert.equal(PLATFORM_COMMISSION_RATE_ROLES.includes("platform_ops" as never), false);
+  assert.equal(PLATFORM_COMMISSION_RATE_ROLES.includes("platform_support" as never), false);
+  assert.equal(PLATFORM_COMMISSION_RATE_ROLES.includes("platform_readonly" as never), false);
+});
 
 test("commission policy defaults to the approved public referral contract", () => {
   assert.deepEqual(resolveCommissionRatePolicy(undefined, undefined), { rateBasisPoints: 2000, durationMonths: 12 });

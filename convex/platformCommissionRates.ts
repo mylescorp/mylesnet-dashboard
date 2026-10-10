@@ -4,10 +4,10 @@ import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requirePlatformSubRole } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
-import { BUILT_IN_REFERRAL_DURATION_MONTHS, BUILT_IN_REFERRAL_RATE_BASIS_POINTS, validateCommissionRatePolicy } from "./lib/platformCommissionRateCore";
+import { BUILT_IN_REFERRAL_DURATION_MONTHS, BUILT_IN_REFERRAL_RATE_BASIS_POINTS, PLATFORM_COMMISSION_RATE_ROLES, validateCommissionRatePolicy } from "./lib/platformCommissionRateCore";
 
-const managers = ["platform_super_admin", "platform_finance"];
-const readers = [...managers, "platform_ops"];
+const managers = [...PLATFORM_COMMISSION_RATE_ROLES];
+const readers = [...PLATFORM_COMMISSION_RATE_ROLES];
 export const getGlobal = query({
   args: {},
   handler: async (ctx) => {

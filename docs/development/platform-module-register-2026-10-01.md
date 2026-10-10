@@ -43,7 +43,7 @@ The status column records the supplied audit snapshot. Revalidate route, backend
 | D3 | Provisioning approvals `/platform/onboarding/approvals` | SA CRU; SUP R | Partial |
 | E1 | Commission ledger `/platform/commissions` | SA/FIN CRUD; OPS R | Partial |
 | E2 | Payouts `/platform/commissions/payouts`, `/[id]` | SA/FIN CRUD; OPS — | Partial |
-| E3 | Commission rates `/platform/commissions/rates` | SA/FIN CRUD | Not present |
+| E3 | Commission rates `/platform/commissions/rates` | SA/FIN CRUD | Partial; configuration CRUD and route/sidebar gates exist, and direct Convex reads now deny ops/support/readonly; referral accrual and payout integration remain absent |
 | F1 | Voucher monitor `/platform/vouchers/monitor` | SA/OPS RU; FIN R | Confirmed in snapshot |
 | F2 | Voucher packages `/platform/vouchers/packages` | SA/OPS CRUD | Partial |
 | G1 | Platform users and roles `/platform/access` | SA CRUD; others R, no self-elevation | Partial; full management and read-only summary unified on `/platform/access`; `/access` redirects there |
@@ -137,3 +137,8 @@ The SLA query now returns effective Network, Billing, and Account targets, disti
 ## 2026-10-10 C5 import input hardening
 
 Moved CSV parsing into the tested reconciliation core. Imports now enforce a 1 MB byte limit and 500-row limit, handle CRLF, quoted commas, escaped quotes, and UTF-8 BOMs, and reject malformed quotes, duplicate/missing headers, missing required values, and extra non-empty fields before mutation. Removed the fabricated payment-row placeholder from the UI. This is still manual evidence import and does not call payment providers or move funds. Parser tests, web and Convex typechecks, focused ESLint, root suite 42/42, full lint (0 errors, 11 existing warnings), and `git diff --check` pass. C5 remains partial pending authenticated role integration and deployed-data validation.
+
+
+## 2026-10-10 E3 commission-rate RBAC correction
+
+The page and sidebar already limited `/platform/commissions/rates` to super-admin and finance, but three Convex read queries also admitted `platform_ops`. Centralized the allowed role tuple and use it for all reads and writes, so direct calls now match the canonical matrix and fail closed for ops, support, and readonly. Added a regression test against the role tuple used by the Convex module. Targeted test, web typecheck, direct Convex typecheck, and `git diff --check` pass. E3 remains partial because accrual and payout integration is not implemented, and authenticated live-role verification is still outstanding.
