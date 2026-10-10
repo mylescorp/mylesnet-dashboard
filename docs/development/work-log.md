@@ -212,5 +212,5 @@ separate archive policy.
 
 - **Scope:** Address Greptile's 5/5 review note that unsupported tenant audit action suffixes fell back to “updated.”
 - **Changes:** Added explicit labels for create/update/archive/restore/refund variants written by tenant handlers, and changed unknown actions to neutral “activity recorded.”
-- **Verification:** Typecheck, lint, token check, all 43 tests, and `git diff --check` pass (or are being rerun for this follow-up before push). The owner checkout was not modified.
-- **Status:** Pushing a follow-up to PR #72, then awaiting a fresh review.
+- **Verification:** Typecheck, lint, token check, all 43 tests, and `git diff --check` pass. Remote quality, security, Vercel preview, and Greptile checks pass; Greptile reports 5/5 on `78d55a1` and all inspected Greptile review threads are resolved.
+- **Status:** Greptile findings are addressed on PR #72 branch `full-audit`; PR remains open and unmerged. The owner checkout was not modified and its documentation mirror was not synchronized.
