@@ -29,4 +29,6 @@ test("sidebar route scopes follow the platform sub-role grants", () => {
   assert.equal(canSeePlatformNavRoute("/platform/infrastructure/devices", ["finance_manager"]), false);
   assert.equal(canSeePlatformNavRoute("/platform/security/data-requests", ["platform_support"]), true);
   assert.equal(canSeePlatformNavRoute("/platform/security/data-requests", ["platform_readonly"]), false);
+  assert.equal(canSeePlatformNavRoute("/platform/access", ["platform_support"]), true);
+  assert.equal(canSeePlatformNavRoute("/platform/audit", ["platform_support"]), true);
 });

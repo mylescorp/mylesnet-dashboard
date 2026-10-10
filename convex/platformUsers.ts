@@ -1,9 +1,10 @@
 import { v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
 import { z } from "zod";
 import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
-import { requirePermission, resolveRoles, resolveUserByIdentity } from "./lib/auth";
+import { requirePermission, requirePlatformSubRole, resolveRoles, resolveUserByIdentity } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 import { PLATFORM_SUB_ROLE_MAP, workosSlugForRole } from "./lib/permissions";
 import { tenantMembershipStatusFromWorkos } from "./lib/tenantCore";
@@ -27,6 +28,28 @@ const profileSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
   phone: z.string().trim().regex(/^\+[1-9]\d{7,14}$/).optional(),
   jobTitle: z.string().trim().max(100).optional(),
+});
+
+/** Read-only platform staff directory, deliberately excluding tenant users. */
+export const listPlatformStaffPage = query({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_ops", "platform_finance", "platform_support", "platform_readonly"]);
+    const page = await ctx.db.query("users").order("desc").paginate(args.paginationOpts);
+    const rows = [];
+    for (const user of page.page) {
+      const roles = (await resolveRoles(ctx, user)).filter((role) => role.isPlatform);
+      if (roles.length === 0) continue;
+      rows.push({
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        active: user.isActive !== false && user.deactivatedAt === undefined && user.deletedAt === undefined,
+        roles: roles.map((role) => ({ slug: role.slug, name: role.name })),
+      });
+    }
+    return { ...page, page: rows };
+  },
 });
 
 /**
