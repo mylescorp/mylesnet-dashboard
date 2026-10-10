@@ -2,13 +2,16 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   DEFAULT_BACKFILL_BATCH_SIZE,
+  MARKET_DERIVED_BACKFILL_TABLES,
   MARKET_SITE_RESCOPING,
   PLATFORM_OWNED_TABLES,
   TENANT_BACKFILL_RUN_ID,
+  TENANT_BACKFILL_TABLE_ORDER,
   TENANT_FEATURE_FLAGS,
   TENANT_OWNED_TABLES,
   isInventoryConsistent,
   isMarketScopedTable,
+  singleTenantFromMarketTenants,
   stageRequiresFlag,
   tenantMigrationPlan,
 } from "./tenantMigration.ts";
@@ -101,4 +104,31 @@ test("isMarketScopedTable classifies the site-seam tables", () => {
   assert.equal(isMarketScopedTable("agentMarketAssignments"), true);
   assert.equal(isMarketScopedTable("markets"), false, "markets key the seam, not carry marketId");
   assert.equal(isMarketScopedTable("users"), false);
+});
+
+test("singleTenantFromMarketTenants assigns only a deterministically known owner", () => {
+  assert.equal(singleTenantFromMarketTenants(["ten_a"]), "ten_a");
+  assert.equal(singleTenantFromMarketTenants(["ten_a", "ten_a"]), "ten_a");
+  assert.equal(singleTenantFromMarketTenants(["ten_a", null, undefined]), "ten_a");
+  assert.equal(singleTenantFromMarketTenants([]), undefined, "unknown owner stays unassigned");
+  assert.equal(
+    singleTenantFromMarketTenants(["ten_a", "ten_b"]),
+    undefined,
+    "ambiguous owner spans multiple tenants and stays unassigned",
+  );
+  assert.equal(singleTenantFromMarketTenants([null, undefined]), undefined);
+});
+
+test("backfill walks market-derived tables before agents and only tenant-owned tables", () => {
+  for (const table of TENANT_BACKFILL_TABLE_ORDER) {
+    assert.ok(TENANT_OWNED_TABLES.includes(table), `${table} must be tenant-owned`);
+  }
+  for (const table of MARKET_DERIVED_BACKFILL_TABLES) {
+    assert.ok(TENANT_BACKFILL_TABLE_ORDER.includes(table), `${table} must be in the backfill order`);
+  }
+  assert.equal(
+    TENANT_BACKFILL_TABLE_ORDER[TENANT_BACKFILL_TABLE_ORDER.length - 1],
+    "agents",
+    "agents is derived last, after its assignments and activity are assigned",
+  );
 });

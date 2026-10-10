@@ -5,9 +5,10 @@
  * `migrationRunCore.ts` primitives (bounded batches, assertions, manifest,
  * rollback checkpoints, feature-flag gating).
  *
- * The plan is DESIGN, not execution: the gated backfill (`convex/tenantMigrations.ts`)
- * stays a no-op stub until the 8-item review queue is resolved and the
- * production deploy from `apps/web` is confirmed.
+ * The plan is DESIGN: the gated backfill runner (`convex/tenantMigrations.ts`)
+ * is implemented but stays inert until the 8-item review queue is resolved, the
+ * `tenant.backfill` flag is enabled, and the production deploy from `apps/web`
+ * is confirmed.
  */
 
 /** Immutable id of the Phase 1 backfill run (retries reuse it → idempotent). */
@@ -15,6 +16,56 @@ export const TENANT_BACKFILL_RUN_ID = "tenantid-backfill-001";
 
 /** Bounded batch size for the tenantId backfill. */
 export const DEFAULT_BACKFILL_BATCH_SIZE = 100;
+
+/**
+ * Tables whose legacy (`tenantId: undefined`) rows carry a `marketId` and so
+ * can be assigned to a tenant deterministically from `markets.tenantId`.
+ */
+export const MARKET_DERIVED_BACKFILL_TABLES = [
+  "agentMarketAssignments",
+  "agentActivity",
+  "subscriberSnapshots",
+  "dailySnapshots",
+] as const;
+
+/**
+ * Tables whose legacy rows belong to the single pre-migration operator and are
+ * therefore assigned to the bootstrap tenant (slug `mylesnet`), per the Phase 1
+ * market/site re-scoping design ("bootstrap tenant for all current records").
+ * Assigned first so the market-derived tables can resolve their market's tenant.
+ */
+export const BOOTSTRAP_ASSIGNED_BACKFILL_TABLES = ["markets"] as const;
+
+/**
+ * Order the bounded backfill walks tables in. Markets first (they key the
+ * tenant seam), then the market-derived tables, then `agents` last because its
+ * ownership is derived from its assignments (then its activity).
+ */
+export const TENANT_BACKFILL_TABLE_ORDER = [
+  ...BOOTSTRAP_ASSIGNED_BACKFILL_TABLES,
+  ...MARKET_DERIVED_BACKFILL_TABLES,
+  "agents",
+] as const;
+
+export type TenantBackfillTable = (typeof TENANT_BACKFILL_TABLE_ORDER)[number];
+
+/**
+ * Resolve the single owning tenant implied by a set of market tenants.
+ *
+ * Returns the tenant id only when exactly one distinct tenant is present. An
+ * empty set (owner unknown) or a set spanning more than one tenant (ambiguous)
+ * resolves to `undefined` and stays unassigned, per Master §B2: "No record is
+ * silently assigned when its owner cannot be determined."
+ */
+export function singleTenantFromMarketTenants(
+  marketTenants: ReadonlyArray<string | null | undefined>,
+): string | undefined {
+  const distinct = new Set<string>();
+  for (const tenantId of marketTenants) {
+    if (typeof tenantId === "string" && tenantId.length > 0) distinct.add(tenantId);
+  }
+  return distinct.size === 1 ? [...distinct][0] : undefined;
+}
 
 /** Feature flags that gate each reversible stage (system_settings keys). */
 export const TENANT_FEATURE_FLAGS = {

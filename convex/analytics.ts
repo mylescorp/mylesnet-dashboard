@@ -144,7 +144,7 @@ export const getTopAgents = query({
       : await ctx.db.query("agents").collect();
     const agents = new Map(agentRows.map((a) => [a._id, a.name]));
     return Array.from(summary.entries())
-      .map(([agentId, s]) => ({ agentId, agentName: agents.get(agentId as never) ?? agentId, ...s }))
+      .map(([agentId, s]) => ({ agentId, agentName: agents.get(agentId as never) ?? "Unavailable", ...s }))
       .sort((a, b) => b.revenueLocal - a.revenueLocal)
       .slice(0, args.limit ?? 10);
   },
