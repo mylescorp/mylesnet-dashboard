@@ -8,21 +8,17 @@ required synchronization practice for current and future agents.
 The owner-designated MylesNet project/vault checkout is:
 
 ```text
-/home/myles/Projects/mylesnet-dashboard/
+/home/myles/Projects/mylescorp-brain/
 ```
 
-This is a local Git checkout containing the MylesNet source tree and its
-vault-style project records. The repo-side documentation mirrors are in that
-checkout's `docs/` directory. This location is specific to this workstation;
+This is the configured local vault containing MylesCorp Brain records. The
+MylesNet source repository is a separate checkout at
+`/home/myles/Projects/mylesnet-dashboard/`. This location is specific to this workstation;
 it is not guaranteed to exist in another developer's machine, CI, or a hosted
 agent environment.
 
-Some historical repository notes refer to the Windows path
-`C:\Obsidian\MylesCorp-Brain`. That path is not the configured local location
-for this workstation. Use the owner-designated path above and the tracked docs
-in this repo. If the owner later identifies a separate mounted Obsidian vault,
-update this file and `AGENTS.md` with that confirmed location before treating
-it as canonical.
+Older notes that refer to `C:\Obsidian\MylesCorp-Brain` are historical. The
+configured vault on this workstation is `/home/myles/Projects/mylescorp-brain/`.
 
 ## Required workflow
 
@@ -36,8 +32,9 @@ it as canonical.
 3. For each meaningful implementation, audit, decision, release, or docs task,
    update the relevant vault record before closing the task. Record the date,
    scope, changed files or areas, verification performed, current status, and
-   open work. Append a short entry to `docs/development/work-log.md` in both
-   checkouts. For a product decision, update the decision log. For implementation
+   open work. Append a short entry to the repository's
+   `docs/development/work-log.md` and the vault's `products/mylesnet/work-log.md`.
+   For a product decision, update the decision log. For implementation
    status, update the relevant module/task register. For a notable agent session,
    update the transcript archive.
 4. Keep documents declared as byte-identical mirrors byte-identical. The repo
@@ -61,7 +58,7 @@ it as canonical.
 | No-stack-exposure policy | `docs/no-technology-stack-exposure.md` | Corresponding MylesNet policy record |
 | Captive portal requirements | `docs/captive-portal/` | Corresponding approved product specification and flow records |
 | Platform module progress | `docs/development/platform-module-register-2026-10-01.md` | Current MylesNet module/task record |
-| Meaningful agent work | `docs/development/work-log.md` | Matching work-log file in the local vault checkout |
+| Meaningful agent work | `docs/development/work-log.md` | `/home/myles/Projects/mylescorp-brain/products/mylesnet/work-log.md` |
 | Agent sessions | `docs/agent-threads/` | Matching project agent-thread record when a separate mirror exists |
 
 The exact vault folder names can evolve. Search the checkout's `docs/` and
