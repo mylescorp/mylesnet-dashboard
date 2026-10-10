@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Building2, Plus, Search, Users, Calendar, ExternalLink, ArrowRight } from "lucide-react";
 import { useQuery } from "@/app/lib/convex";
-import { tenantControl, type PlatformTenant } from "@/lib/convex/tenantControl";
+import { tenantControl } from "@/lib/convex/tenantControl";
 import { canManagePlatformTenants } from "@/platform/permissions";
 import { useUserProfile } from "@/shared/components/UserProfileContext";
 

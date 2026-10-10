@@ -2,14 +2,19 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Building2, Globe, Calendar, DollarSign, Users, Check, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, Building2, Globe, Calendar, DollarSign, Users, X } from "lucide-react";
 import { useAction } from "convex/react";
 import { tenantControl } from "@/lib/convex/tenantControl";
+import { userFacingMessage } from "@/shared/lib/user-facing-error";
 
 export function NewOrganizationForm() {
+  const router = useRouter();
   const [formData, setFormData] = useState({
     name: "",
     slug: "",
+    ownerEmail: "",
+    ownerName: "",
     country: "",
     timezone: "",
     currency: "",
@@ -68,6 +73,10 @@ export function NewOrganizationForm() {
     } else if (!/^[a-z0-9-]+$/.test(formData.slug)) {
       newErrors.slug = "Slug must contain only lowercase letters, numbers, and hyphens";
     }
+
+    if (!formData.ownerEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.ownerEmail.trim())) {
+      newErrors.ownerEmail = "Enter a valid administrator email";
+    }
     
     if (!formData.country) {
       newErrors.country = "Country is required";
@@ -91,24 +100,27 @@ export function NewOrganizationForm() {
     if (!validateForm()) return;
     
     setIsSubmitting(true);
+    setErrors({});
     
     try {
-      // This would call the actual tenant provisioning mutation
-      console.log("Creating organization:", formData);
-      // await createTenant({
-      //   name: formData.name,
-      //   slug: formData.slug,
-      //   country: formData.country,
-      //   timezone: formData.timezone,
-      //   currency: formData.currency,
-      //   ownerEmail: "", // Would be collected in a real form
-      // });
-      
-      // For now, just redirect back to organizations list
-      window.location.href = "/platform/organizations";
+      const result = await createTenant({
+        name: formData.name.trim(),
+        slug: formData.slug.trim(),
+        ownerEmail: formData.ownerEmail.trim(),
+        ...(formData.ownerName.trim() ? { ownerName: formData.ownerName.trim() } : {}),
+        country: formData.country,
+        timezone: formData.timezone,
+        currency: formData.currency,
+      });
+      if (result.status !== "ready") {
+        setErrors({ submit: result.status === "authentication_required"
+          ? "Your session expired. Sign in again before provisioning the organization."
+          : "The organization could not be provisioned. Try again or contact your administrator." });
+        return;
+      }
+      router.push(`/platform/organizations/${result.tenantId}`);
     } catch (error) {
-      console.error("Failed to create organization:", error);
-      setErrors({ submit: "Failed to create organization. Please try again." });
+      setErrors({ submit: userFacingMessage(error, "The organization could not be provisioned. Try again or contact your administrator.") });
     } finally {
       setIsSubmitting(false);
     }
@@ -191,8 +203,39 @@ export function NewOrganizationForm() {
                   </p>
                 )}
                 <p className="mt-1.5 text-sm text-muted-foreground">
-                  This will be used in URLs: {formData.slug || "organization-slug"}.mylesnetisp.mylescorptech.com
+                  This address will identify the organization&apos;s workspace.
                 </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-muted-foreground mb-2" htmlFor="organization-owner-email">
+                  Administrator email <span className="text-foreground">*</span>
+                </label>
+                <input
+                  id="organization-owner-email"
+                  type="email"
+                  required
+                  maxLength={254}
+                  autoComplete="email"
+                  value={formData.ownerEmail}
+                  onChange={(e) => setFormData(prev => ({ ...prev, ownerEmail: e.target.value }))}
+                  className={`w-full px-4 py-3 bg-background border rounded-lg text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200 ${errors.ownerEmail ? "border-destructive" : "border-border"}`}
+                />
+                {errors.ownerEmail ? <p className="mt-1.5 text-sm text-foreground">{errors.ownerEmail}</p> : null}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-muted-foreground mb-2" htmlFor="organization-owner-name">
+                  Administrator name <span className="text-muted-foreground">(optional)</span>
+                </label>
+                <input
+                  id="organization-owner-name"
+                  type="text"
+                  maxLength={120}
+                  autoComplete="name"
+                  value={formData.ownerName}
+                  onChange={(e) => setFormData(prev => ({ ...prev, ownerName: e.target.value }))}
+                  className="w-full px-4 py-3 bg-background border border-border rounded-lg text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200"
+                />
               </div>
 
               {/* Country */}
@@ -320,7 +363,7 @@ export function NewOrganizationForm() {
             <div>
               <h3 className="text-sm font-medium text-foreground mb-1">Next Steps</h3>
               <p className="text-sm text-foreground">
-                After creating the organization, you&apos;ll need to invite the first owner and configure the WorkOS organization mapping. The organization will be in &quot;provisioning&quot; status until these steps are complete.
+                The administrator will receive secure access instructions. You can review the organization&apos;s provisioning status from its detail page.
               </p>
             </div>
           </div>
