@@ -1,6 +1,24 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { requireTenantPermission } from "./lib/auth";
+import { canWriteSubscriberCount, subscriberCountAfterChange } from "./lib/tenantSubscriberCountCore";
+
+async function assertSubscriberCountWritable(ctx: MutationCtx, tenantId: Id<"tenants">) {
+  const tenant = await ctx.db.get(tenantId);
+  if (!tenant) throw new Error("Tenant not found");
+  if (!canWriteSubscriberCount(tenant.subscriberCountBackfillRunning)) {
+    throw new Error("Subscriber records are temporarily paused while the organization total is recalculated");
+  }
+  return tenant;
+}
+
+async function adjustSubscriberCount(ctx: MutationCtx, tenantId: Id<"tenants">, delta: -1 | 1) {
+  const tenant = await assertSubscriberCountWritable(ctx, tenantId);
+  const subscriberCount = subscriberCountAfterChange(tenant.subscriberCount, delta);
+  if (subscriberCount !== undefined) await ctx.db.patch(tenant._id, { subscriberCount });
+}
 
 // ==========================================================================
 // QUERIES
@@ -135,6 +153,7 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const { user, tenantId } = await requireTenantPermission(ctx, "subscribers:create");
+    await assertSubscriberCountWritable(ctx, tenantId);
 
     // Check if account number already exists
     const existing = await ctx.db
@@ -157,6 +176,7 @@ export const create = mutation({
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });
+    await adjustSubscriberCount(ctx, tenantId, 1);
 
     return id;
   },
@@ -215,11 +235,13 @@ export const softDelete = mutation({
     if (!subscriber || subscriber.tenantId !== tenantId || subscriber.deletedAt !== undefined) {
       throw new Error("Subscriber not found");
     }
+    await assertSubscriberCountWritable(ctx, tenantId);
 
     await ctx.db.patch(args.id, {
       deletedAt: Date.now(),
       deletedBy: user._id,
     });
+    await adjustSubscriberCount(ctx, tenantId, -1);
 
     return args.id;
   },
@@ -234,12 +256,14 @@ export const restore = mutation({
     if (!subscriber || subscriber.tenantId !== tenantId || subscriber.deletedAt === undefined) {
       throw new Error("Subscriber not found or not deleted");
     }
+    await assertSubscriberCountWritable(ctx, tenantId);
 
     await ctx.db.patch(args.id, {
       deletedAt: undefined,
       deletedBy: undefined,
       updatedAt: Date.now(),
     });
+    await adjustSubscriberCount(ctx, tenantId, 1);
 
     return args.id;
   },

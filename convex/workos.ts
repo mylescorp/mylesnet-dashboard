@@ -125,6 +125,46 @@ export async function reactivateWorkosMembership(workosUserId: string): Promise<
   );
 }
 
+/** Deactivate one tenant organization's membership without changing other workspaces. */
+export async function deactivateOrganizationMembership(
+  organizationId: string,
+  workosUserId: string,
+): Promise<void> {
+  const membership = await getWorkosOrganizationMembership(organizationId, workosUserId);
+  if (!membership) throw new Error("The user is not a member of this workspace");
+  if (membership.status !== "active") {
+    if (membership.status === "inactive") return;
+    throw new Error("Only active workspace access can be disabled");
+  }
+  await workosFetch(
+    `/user_management/organization_memberships/${encodeURIComponent(membership.id)}/deactivate`,
+    { method: "PUT" },
+  );
+}
+
+/** Reactivate one tenant organization's membership without changing other workspaces. */
+export async function reactivateOrganizationMembership(
+  organizationId: string,
+  workosUserId: string,
+): Promise<void> {
+  const membership = await getWorkosOrganizationMembership(organizationId, workosUserId);
+  if (!membership) throw new Error("The user is not a member of this workspace");
+  if (membership.status === "active") return;
+  if (membership.status !== "inactive") throw new Error("Pending workspace invitations cannot be restored here");
+  await workosFetch(
+    `/user_management/organization_memberships/${encodeURIComponent(membership.id)}/reactivate`,
+    { method: "PUT" },
+  );
+}
+
+/** Ask WorkOS to deliver a password reset email; never return or store its token. */
+export async function sendWorkosPasswordReset(email: string): Promise<void> {
+  await workosFetch("/user_management/password_reset", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
 export interface WorkosEnvironmentRole {
   id: string;
   slug: string;

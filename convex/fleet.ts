@@ -178,12 +178,20 @@ export const updateDeviceFleetRow = mutation({
 });
 
 export const listMarketsForFleetManagement = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
     await requirePlatformSubRole(ctx, managers);
-    const [markets, tenants] = await Promise.all([ctx.db.query("markets").collect(), ctx.db.query("tenants").collect()]);
-    const tenantStatus = new Map(tenants.map(tenant => [tenant._id, tenant.status]));
-    return markets.filter(market => market.deletedAt === undefined && market.status !== "deleted" && (!market.tenantId || canTenantOperate(tenantStatus.get(market.tenantId)))).map(market => ({ _id: market._id, name: market.name, tenantId: market.tenantId ?? null }));
+    const page = await ctx.db.query("markets").withIndex("by_tenant").order("desc").paginate({
+      ...args.paginationOpts,
+      numItems: Math.max(1, Math.min(50, Math.floor(args.paginationOpts.numItems))),
+    });
+    const rows = await Promise.all(page.page.map(async market => {
+      if (market.deletedAt !== undefined || market.status === "deleted") return null;
+      const tenant = market.tenantId ? await ctx.db.get(market.tenantId) : null;
+      if (market.tenantId && (!tenant || !canTenantOperate(tenant.status))) return null;
+      return { _id: market._id, name: market.name, tenantId: market.tenantId ?? null };
+    }));
+    return { ...page, page: rows.filter((row): row is NonNullable<typeof row> => row !== null) };
   },
 });
 

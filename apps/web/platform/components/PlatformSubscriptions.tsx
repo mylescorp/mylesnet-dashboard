@@ -8,6 +8,7 @@ import { useMutation, useQuery } from "@/app/lib/convex";
 import { tenantControl, type PlatformTenant, type EntitlementStatus } from "@/lib/convex/tenantControl";
 import { useUserProfile } from "@/shared/components/UserProfileContext";
 import { StatusPill, Field, TextInput } from "@/shared/components/ui";
+import { canManagePlatformTenants } from "@/platform/permissions";
 
 const entitlementTone: Record<EntitlementStatus, "success" | "warning" | "danger" | "neutral"> = {
   active: "success",
@@ -25,7 +26,7 @@ export function PlatformSubscriptions() {
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const canManage = user?.roles.some((role) => ["platform_owner", "platform_admin"].includes(role.slug));
+  const canManage = canManagePlatformTenants(user?.roles.map((role) => role.slug));
 
   return (
     <div className="workspace-page tenant-control-page">
@@ -62,7 +63,7 @@ export function PlatformSubscriptions() {
   );
 }
 
-type EntitlementDates = { startsAt?: number; expiresAt?: number; trialEndsAt?: number };
+type EntitlementDates = { startsAt?: number | null; expiresAt?: number | null; trialEndsAt?: number | null };
 
 function toLocalInput(ms: number): string {
   const d = new Date(ms);
@@ -70,8 +71,10 @@ function toLocalInput(ms: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function parseLocalInput(value: string): number | undefined {
-  return value ? new Date(value).getTime() : undefined;
+function parseLocalInput(value: string): number | null {
+  if (!value) return null;
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
 }
 
 function EntitlementDialog({ tenant, onClose, onSave, working }: { tenant: PlatformTenant; onClose: () => void; onSave: (planId: string, status: EntitlementStatus, dates: EntitlementDates) => Promise<void>; working: boolean }) {

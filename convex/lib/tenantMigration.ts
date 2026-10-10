@@ -92,6 +92,7 @@ export const TENANT_OWNED_TABLES: readonly string[] = [
  * Used by the plan to assert the exemption set stays correct.
  */
 export const PLATFORM_OWNED_TABLES: readonly string[] = [
+  "tenantRelationships",
   "users",
   "roles",
   "invitations",
@@ -102,6 +103,11 @@ export const PLATFORM_OWNED_TABLES: readonly string[] = [
   "standardSiteKit",
   "platformPlanCatalog",
   "platformPlanCatalogMeta",
+  "platformWhiteLabelDefaults",
+  "platformDataRequests",
+  "platformApiKeys",
+  "platformRadiusServers",
+  "platformSlaPolicies",
   "platformRevenueSnapshots",
   "system_settings",
   "migrationRuns",

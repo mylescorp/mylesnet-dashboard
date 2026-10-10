@@ -22,3 +22,7 @@ test("suspension cannot convert a provisioning or cancelled tenant", () => {
 test("repeating the suspension is idempotent", () => {
   assert.deepEqual(decideTenantLifecycleTransition("suspended", "suspended", "trial"), { changed: false, status: "suspended", statusBeforeSuspension: "trial" });
 });
+
+test("pending deletion tenants cannot be restored through the suspend lifecycle action", () => {
+  assert.throws(() => decideTenantLifecycleTransition("pending_deletion", "active"), /cannot be restored/);
+});

@@ -1,6 +1,6 @@
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import type { Doc } from "./_generated/dataModel";
 import { requirePlatformSubRole } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 import { nextProvisioningStatus, isValidFirmwareLabel } from "./lib/provisioningCore";
@@ -18,22 +18,20 @@ const provisioningStatus = v.union(
 
 /** Platform view of the device provisioning queue (spec B2). */
 export const listProvisioningRequests = query({
-  args: { status: v.optional(provisioningStatus), marketId: v.optional(v.id("markets")) },
+  args: { paginationOpts: paginationOptsValidator, status: v.optional(provisioningStatus), marketId: v.optional(v.id("markets")) },
   handler: async (ctx, args) => {
     await requirePlatformSubRole(ctx, readers);
-    let rows: Doc<"provisioningRequests">[];
+    let query = ctx.db.query("provisioningRequests").withIndex("by_requestedAt").order("desc");
     if (args.marketId && args.status) {
-      rows = await ctx.db.query("provisioningRequests").withIndex("by_market_status_requestedAt", q => q.eq("marketId", args.marketId!).eq("status", args.status!)).order("desc").take(200);
+      query = ctx.db.query("provisioningRequests").withIndex("by_market_status_requestedAt", q => q.eq("marketId", args.marketId!).eq("status", args.status!)).order("desc");
     } else if (args.marketId) {
-      rows = await ctx.db.query("provisioningRequests").withIndex("by_market_requestedAt", q => q.eq("marketId", args.marketId!)).order("desc").take(200);
+      query = ctx.db.query("provisioningRequests").withIndex("by_market_requestedAt", q => q.eq("marketId", args.marketId!)).order("desc");
     } else if (args.status) {
-      rows = await ctx.db.query("provisioningRequests").withIndex("by_status_requestedAt", q => q.eq("status", args.status!)).order("desc").take(200);
-    } else {
-      rows = await ctx.db.query("provisioningRequests").order("desc").take(200);
+      query = ctx.db.query("provisioningRequests").withIndex("by_status_requestedAt", q => q.eq("status", args.status!)).order("desc");
     }
-    rows = rows.sort((a, b) => b.requestedAt - a.requestedAt);
-    return Promise.all(
-      rows.map(async (row) => {
+    const page = await query.paginate({ ...args.paginationOpts, numItems: Math.max(1, Math.min(100, Math.floor(args.paginationOpts.numItems))) });
+    const rows = await Promise.all(
+      page.page.map(async (row) => {
         const [requester, decider, market] = await Promise.all([
           ctx.db.get(row.requesterId),
           row.decidedBy ? ctx.db.get(row.decidedBy) : null,
@@ -49,6 +47,7 @@ export const listProvisioningRequests = query({
         };
       }),
     );
+    return { ...page, page: rows };
   },
 });
 
@@ -291,13 +290,20 @@ export const markProvisioningDeployed = mutation({
 });
 
 export const listMarketsForQueue = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
     await requirePlatformSubRole(ctx, managers);
-    const [markets, tenants] = await Promise.all([ctx.db.query("markets").collect(), ctx.db.query("tenants").collect()]);
-    const tenantStatus = new Map(tenants.map(tenant => [tenant._id, tenant.status]));
-    const tenantName = new Map(tenants.map(tenant => [tenant._id, tenant.name]));
-    return markets.filter(market => market.deletedAt === undefined && market.status !== "deleted" && (!market.tenantId || canTenantOperate(tenantStatus.get(market.tenantId)))).map(market => ({ _id: market._id, name: market.name, tenantId: market.tenantId ?? null, tenantName: market.tenantId ? tenantName.get(market.tenantId) ?? null : null }));
+    const page = await ctx.db.query("markets").withIndex("by_tenant").order("desc").paginate({
+      ...args.paginationOpts,
+      numItems: Math.max(1, Math.min(50, Math.floor(args.paginationOpts.numItems))),
+    });
+    const rows = await Promise.all(page.page.map(async market => {
+      if (market.deletedAt !== undefined || market.status === "deleted") return null;
+      const tenant = market.tenantId ? await ctx.db.get(market.tenantId) : null;
+      if (market.tenantId && (!tenant || !canTenantOperate(tenant.status))) return null;
+      return { _id: market._id, name: market.name, tenantId: market.tenantId ?? null, tenantName: tenant?.name ?? null };
+    }));
+    return { ...page, page: rows.filter((row): row is NonNullable<typeof row> => row !== null) };
   },
 });
 

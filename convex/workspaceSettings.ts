@@ -3,6 +3,7 @@ import { mutation, query } from "./_generated/server";
 import { requireTenantPermission, resolveTenantAccess, resolveUserByIdentity } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 import { tenantRoleHasPermission } from "./lib/permissions";
+import { inheritPlatformBranding, mergeTenantBranding } from "./lib/workspaceBrandingCore";
 
 type SettingsSection = "branding" | "operations" | "billing" | "communications";
 
@@ -39,19 +40,19 @@ function wholeNumber(value: unknown, fallback: number, min: number, max: number)
   return typeof value === "number" && Number.isInteger(value) && value >= min && value <= max ? value : fallback;
 }
 
-function normalize(settings: unknown, tenantName?: string) {
+function normalize(settings: unknown, tenantName?: string, inheritedBranding?: { supportEmail: string; supportPhone: string; brandColor: string }) {
   const source = settings && typeof settings === "object" ? settings as Record<string, unknown> : {};
   const branding = source.branding && typeof source.branding === "object" ? source.branding as Record<string, unknown> : {};
   const operations = source.operations && typeof source.operations === "object" ? source.operations as Record<string, unknown> : {};
   const billing = source.billing && typeof source.billing === "object" ? source.billing as Record<string, unknown> : {};
   const communications = source.communications && typeof source.communications === "object" ? source.communications as Record<string, unknown> : {};
-  const color = text(branding.brandColor, 7, defaultSettings.branding.brandColor).toUpperCase();
+  const inherited = inheritPlatformBranding(branding, inheritedBranding, defaultSettings.branding.brandColor);
   return {
     branding: {
       networkName: text(branding.networkName, 120, tenantName ?? defaultSettings.branding.networkName),
-      supportEmail: text(branding.supportEmail, 160),
-      supportPhone: text(branding.supportPhone, 20),
-      brandColor: /^#[0-9A-F]{6}$/.test(color) ? color : defaultSettings.branding.brandColor,
+      supportEmail: text(branding.supportEmail, 160) || inherited.supportEmail,
+      supportPhone: text(branding.supportPhone, 20) || inherited.supportPhone,
+      brandColor: inherited.brandColor,
       termsAccepted: branding.termsAccepted === true,
     },
     operations: {
@@ -86,9 +87,10 @@ export const get = query({
     const { tenantId } = access;
     const tenant = await ctx.db.get(tenantId);
     if (!tenant) return { workspace: null, settings: normalize(undefined), canManage: false };
+    const inheritedBranding = await ctx.db.query("platformWhiteLabelDefaults").withIndex("by_key", q => q.eq("key", "default")).first();
     return {
       workspace: { name: tenant.name, country: tenant.country, timezone: tenant.timezone, currency: tenant.currency },
-      settings: normalize(tenant.settings, tenant.name),
+      settings: normalize(tenant.settings, tenant.name, inheritedBranding ?? undefined),
       canManage: tenantRoleHasPermission(access.role, "settings:manage"),
     };
   },
@@ -103,10 +105,26 @@ export const update = mutation({
     const { tenantId, user } = await requireTenantPermission(ctx, "settings:manage");
     const tenant = await ctx.db.get(tenantId);
     if (!tenant) throw new Error("Workspace unavailable");
-    const settings = normalize(tenant.settings, tenant.name);
+    const inheritedBranding = await ctx.db.query("platformWhiteLabelDefaults").withIndex("by_key", q => q.eq("key", "default")).first();
+    const rawSettings = tenant.settings && typeof tenant.settings === "object" ? tenant.settings as Record<string, unknown> : {};
+    const rawSection = rawSettings[args.section] && typeof rawSettings[args.section] === "object"
+      ? rawSettings[args.section] as Record<string, unknown>
+      : {};
     const incoming = args.value && typeof args.value === "object" ? args.value as Record<string, unknown> : {};
-    const next = normalize({ ...settings, [args.section]: incoming }, tenant.name);
-    await ctx.db.patch(tenantId, { settings: next, updatedAt: Date.now() });
+    const normalizedNext = normalize({ ...rawSettings, [args.section]: { ...rawSection, ...incoming } }, tenant.name, inheritedBranding ?? undefined);
+    const normalizedSection = normalizedNext[args.section] as unknown as Record<string, unknown>;
+    let nextSection: Record<string, unknown> = { ...rawSection };
+    if (args.section === "branding") {
+      const current = normalize(rawSettings, tenant.name, inheritedBranding ?? undefined).branding;
+      nextSection = mergeTenantBranding(rawSection, incoming, current);
+    }
+    for (const key of Object.keys(incoming)) {
+      if (!Object.prototype.hasOwnProperty.call(normalizedSection, key)) continue;
+      const value = normalizedSection[key];
+      if (args.section !== "branding" || !["supportEmail", "supportPhone", "brandColor"].includes(key)) nextSection[key] = value;
+    }
+    const nextSettings = { ...rawSettings, [args.section]: nextSection };
+    await ctx.db.patch(tenantId, { settings: nextSettings, updatedAt: Date.now() });
     await logAudit(ctx, {
       action: "workspace.settings.update",
       entityTable: "tenants",
@@ -114,7 +132,7 @@ export const update = mutation({
       changedBy: user._id,
       after: { section: args.section },
     });
-    return next[args.section];
+    return normalize(nextSettings, tenant.name, inheritedBranding ?? undefined)[args.section];
   },
 });
 

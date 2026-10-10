@@ -3,24 +3,34 @@
 import { userFacingMessage } from "@/shared/lib/user-facing-error";
 
 import { useState } from "react";
+import { usePaginatedQuery } from "convex/react";
 import { Flag, Plus, Save, Trash2 } from "lucide-react";
 import { useMutation, useQuery } from "@/app/lib/convex";
 import { useUserProfile } from "@/shared/components/UserProfileContext";
 import { featureFlags, type FeatureFlag } from "@/lib/convex/featureFlags";
 import { tenantControl } from "@/lib/convex/tenantControl";
+import { hasAnyRole } from "@/shared/auth/rbac";
 
-const canManageFlag = (roles: { slug: string }[] | undefined) =>
-  roles?.some((role) =>
-    ["platform_owner", "platform_admin", "ops_manager"].includes(role.slug),
-  );
+const isSuperAdmin = (roles: { slug: string }[] | undefined) =>
+  hasAnyRole(roles?.map((role) => role.slug) ?? [], ["platform_super_admin", "platform_owner", "platform_admin"]);
+
+const isOps = (roles: { slug: string }[] | undefined) =>
+  hasAnyRole(roles?.map((role) => role.slug) ?? [], ["platform_ops", "ops_manager"]);
+
+const canEditFlag = (roles: { slug: string }[] | undefined, flag: FeatureFlag) =>
+  isSuperAdmin(roles) || (isOps(roles) && flag.category === "infrastructure");
 
 const canDeleteFlag = (roles: { slug: string }[] | undefined) =>
-  roles?.some((role) => ["platform_owner", "platform_admin"].includes(role.slug));
+  hasAnyRole(roles?.map((role) => role.slug) ?? [], ["platform_super_admin", "platform_owner", "platform_admin"]);
 
 export function PlatformFeatureFlags() {
   const { user } = useUserProfile();
   const flags = useQuery(featureFlags.list, {});
-  const tenants = useQuery(tenantControl.listForPlatform, {});
+  const { results: tenants, status: tenantPageStatus, loadMore: loadMoreTenants } = usePaginatedQuery(
+    tenantControl.listPlatformTenantTargetsPage,
+    {},
+    { initialNumItems: 50 },
+  );
   const setFlag = useMutation(featureFlags.set);
   const removeFlag = useMutation(featureFlags.remove);
   const [creating, setCreating] = useState(false);
@@ -28,8 +38,8 @@ export function PlatformFeatureFlags() {
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const canManage = canManageFlag(user?.roles);
-  const canDelete = canDeleteFlag(user?.roles);
+  const canCreate = isSuperAdmin(user?.roles);
+  const canDelete = canDeleteFlag(user?.roles) ?? false;
 
   const active = flags?.filter((flag) => flag.enabled) ?? [];
   const rolledOut = flags?.filter((flag) => flag.enabled && flag.tenantIds && flag.tenantIds.length > 0) ?? [];
@@ -44,7 +54,7 @@ export function PlatformFeatureFlags() {
             Percentage rollouts and per-tenant overrides for platform capabilities.
           </p>
         </div>
-        {canManage ? (
+        {canCreate ? (
           <button type="button" className="primary-button" onClick={() => setCreating(true)}>
             <Plus size={17} aria-hidden="true" />Create control
           </button>
@@ -58,7 +68,7 @@ export function PlatformFeatureFlags() {
         <Metric label="Controls" value={flags?.length ?? "—"} detail="total defined" />
         <Metric label="Active" value={active.length} detail="enabled now" />
         <Metric label="Targeted releases" value={rolledOut.length} detail="tenant-specific controls" />
-        <Metric label="Controls available" value={canManage ? "Full" : "Read-only"} detail={canManage ? "Manage controls" : "View controls"} />
+        <Metric label="Controls available" value={canDelete ? "Full" : isOps(user?.roles) ? "Infrastructure" : "Read-only"} detail={canDelete ? "Create, update, and delete" : isOps(user?.roles) ? "Update classified infrastructure controls" : "View controls"} />
       </section>
 
       <section className="section-heading"><div><p className="eyebrow">Service controls</p><h2>Availability controls</h2></div><span className="section-count">{flags?.length ?? 0} controls</span></section>
@@ -83,6 +93,7 @@ export function PlatformFeatureFlags() {
                   </span>
                 </div>
                 <p className="tenant-card-meta">{flag.description || "No description"}</p>
+                <p className="tenant-card-meta">Scope: {flag.category === "infrastructure" ? "Infrastructure" : flag.category === "general" ? "General" : "Unclassified · super-admin only"}</p>
                 <p className="tenant-card-meta">
                   {flag.tenantIds && flag.tenantIds.length > 0
                     ? `Override: ${flag.tenantIds.length} tenant${flag.tenantIds.length === 1 ? "" : "s"}`
@@ -91,9 +102,9 @@ export function PlatformFeatureFlags() {
                       : "Global toggle"}
                 </p>
               </div>
-              {canManage ? (
+              {canEditFlag(user?.roles, flag) || canDelete ? (
                 <div className="tenant-card-actions">
-                  <button type="button" className="secondary-button" onClick={() => setEditing(flag)}>Edit</button>
+                  {canEditFlag(user?.roles, flag) ? <button type="button" className="secondary-button" onClick={() => setEditing(flag)}>Edit</button> : null}
                   {canDelete ? (
                     <button
                       type="button"
@@ -122,7 +133,10 @@ export function PlatformFeatureFlags() {
       {creating || editing ? (
         <FlagEditor
           flag={editing}
-          tenants={tenants ?? []}
+          tenants={tenants}
+          tenantPageStatus={tenantPageStatus}
+          loadMoreTenants={loadMoreTenants}
+          canSetCategory={canDelete}
           onClose={() => { setCreating(false); setEditing(null); }}
           onSave={async (input) => {
             setError(null); setNotice(null);
@@ -153,12 +167,15 @@ function Metric({ label, value, detail }: { label: string; value: string | numbe
 }
 
 function FlagEditor(
-  { flag, tenants, onClose, onSave }: {
+  { flag, tenants, tenantPageStatus, loadMoreTenants, canSetCategory, onClose, onSave }: {
     flag: FeatureFlag | null;
     tenants: { _id: string; name: string }[];
+    tenantPageStatus: "LoadingFirstPage" | "CanLoadMore" | "LoadingMore" | "Exhausted";
+    loadMoreTenants: (count: number) => void;
+    canSetCategory: boolean;
     onClose: () => void;
     onSave: (input: {
-      key: string; valueJson: string; enabled: boolean; description?: string; tenantIds?: string[];
+      key: string; valueJson: string; enabled: boolean; description?: string; tenantIds?: string[]; category?: "infrastructure" | "general";
     }) => Promise<{ ok: boolean; id: string | null }>;
   },
 ) {
@@ -166,6 +183,7 @@ function FlagEditor(
   const parsed = flag ? safeParse(flag.valueJson) : null;
   const [key, setKey] = useState(initial.key);
   const [description, setDescription] = useState(flag?.description ?? "");
+  const [category, setCategory] = useState<"infrastructure" | "general">(flag?.category === "infrastructure" ? "infrastructure" : "general");
   const [enabled, setEnabled] = useState(flag?.enabled ?? true);
   const [mode, setMode] = useState<"global" | "tenantOverride" | "rollout">(
     flag && flag.tenantIds && flag.tenantIds.length > 0
@@ -196,6 +214,7 @@ function FlagEditor(
           key: key.trim(),
           valueJson: buildValueJson(),
           enabled,
+          category: canSetCategory ? category : undefined,
           description: description.trim() || undefined,
           tenantIds: mode === "tenantOverride" ? tenantIds : undefined,
         });
@@ -225,6 +244,7 @@ function FlagEditor(
                 <option value="off">Off</option>
               </select>
             </label>
+            {canSetCategory ? <label className="pf-field"><span className="pf-label">Control scope</span><select className="pf-input" value={category} onChange={event => setCategory(event.target.value as typeof category)}><option value="general">General platform</option><option value="infrastructure">Infrastructure</option></select></label> : null}
             <label className="pf-field">
               <span className="pf-label">Rollout strategy</span>
               <select className="pf-input" value={mode} onChange={(event) => setMode(event.target.value as typeof mode)}>
@@ -243,11 +263,15 @@ function FlagEditor(
               <label className="pf-field pf-field-wide">
                 <span className="pf-label">Allowed tenants</span>
                 <select className="pf-input" size={4} multiple value={tenantIds} onChange={(event) => {
-                  const options = Array.from(event.target.selectedOptions).map((option) => option.value);
-                  setTenantIds(options);
+                  const loadedIds = new Set(tenants.map(tenant => tenant._id));
+                  const preserved = tenantIds.filter(id => !loadedIds.has(id));
+                  const selected = Array.from(event.target.selectedOptions).map(option => option.value);
+                  setTenantIds(Array.from(new Set([...preserved, ...selected])));
                 }}>
                   {tenants.map((tenant) => <option key={tenant._id} value={tenant._id}>{tenant.name}</option>)}
                 </select>
+                <small className="table-subtext">{tenants.length} tenant options loaded. Selected organizations outside the loaded options are preserved.</small>
+                {tenantPageStatus === "CanLoadMore" || tenantPageStatus === "LoadingMore" ? <button type="button" className="secondary-button" disabled={tenantPageStatus === "LoadingMore"} onClick={() => loadMoreTenants(50)}>{tenantPageStatus === "LoadingMore" ? "Loading…" : "Load more tenants"}</button> : null}
               </label>
             ) : null}
           </div>

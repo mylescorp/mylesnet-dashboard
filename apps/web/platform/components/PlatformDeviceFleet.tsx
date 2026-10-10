@@ -4,9 +4,11 @@ import { useMemo, useState } from "react";
 import { usePaginatedQuery } from "convex/react";
 import Link from "next/link";
 import { Cpu, Save } from "lucide-react";
-import { useMutation, useQuery } from "@/app/lib/convex";
+import { useMutation } from "@/app/lib/convex";
 import { useUserProfile } from "@/shared/components/UserProfileContext";
 import { fleet, type FleetRow } from "@/lib/convex/fleet";
+import { userFacingMessage } from "@/shared/lib/user-facing-error";
+import { hasAnyRole } from "@/shared/auth/rbac";
 
 const STATUS_FILTERS = [
   { key: "all", label: "All devices" },
@@ -25,9 +27,7 @@ const STATUS_TONE: Record<string, StatusTone> = {
 };
 
 const canEdit = (roles: { slug: string }[] | undefined) =>
-  roles?.some((role) =>
-    ["platform_owner", "platform_admin", "ops_manager"].includes(role.slug),
-  );
+  hasAnyRole(roles?.map((role) => role.slug) ?? [], ["platform_super_admin", "platform_owner", "platform_admin", "platform_ops", "ops_manager"]);
 
 export function PlatformDeviceFleet() {
   const { user } = useUserProfile();
@@ -39,7 +39,7 @@ export function PlatformDeviceFleet() {
     { includeArchived: showArchived, ...(filter === "all" ? {} : { provisioningStatus: filter as FleetRow["provisioningStatus"] & string }) },
     { initialNumItems: 50 },
   );
-  const markets = useQuery(fleet.listMarkets, editable ? {} : "skip");
+  const { results: markets, status: marketPageStatus, loadMore: loadMoreMarkets } = usePaginatedQuery(fleet.listMarkets, editable ? {} : "skip", { initialNumItems: 50 });
   const register = useMutation(fleet.register);
   const updateFleet = useMutation(fleet.update);
   const archiveFleet = useMutation(fleet.archive);
@@ -61,7 +61,7 @@ export function PlatformDeviceFleet() {
       await register({ ...newDevice, name: newDevice.name.trim(), deviceKind: newDevice.deviceKind.trim(), macAddress: newDevice.macAddress.trim() || undefined, firmwareVersion: newDevice.firmwareVersion.trim() || undefined });
       setNewDevice({ marketId: "", name: "", deviceKind: "", macAddress: "", firmwareVersion: "" });
       setNotice("Device registered as unprovisioned. It is not marked trusted until provisioning review is completed.");
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "Device could not be registered."); }
+    } catch (caught) { setError(userFacingMessage(caught, "Device could not be registered.")); }
     finally { setCreating(false); }
   }
 
@@ -69,7 +69,7 @@ export function PlatformDeviceFleet() {
     const reason = window.prompt(`Reason for archiving ${row.name}`);
     if (!reason?.trim()) return;
     try { await archiveFleet({ deviceId: row._id, reason }); setNotice("Device archived."); }
-    catch (caught) { setError(caught instanceof Error ? caught.message : "Device could not be archived."); }
+    catch (caught) { setError(userFacingMessage(caught, "Device could not be archived.")); }
   }
 
   return (
@@ -95,12 +95,12 @@ export function PlatformDeviceFleet() {
       </section>
 
       {editable ? <form className="pf-panel" onSubmit={event => void createDevice(event)} style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", marginBottom: 20 }}>
-        <label className="pf-field"><span className="pf-label">Organization market</span><select required className="pf-input" value={newDevice.marketId} onChange={event => setNewDevice(value => ({ ...value, marketId: event.target.value }))}><option value="">Choose a market…</option>{(markets ?? []).map(market => <option key={market._id} value={market._id}>{market.name}</option>)}</select></label>
+        <label className="pf-field"><span className="pf-label">Organization market</span><select required className="pf-input" value={newDevice.marketId} onChange={event => setNewDevice(value => ({ ...value, marketId: event.target.value }))}><option value="">Choose a market…</option>{markets.map(market => <option key={market._id} value={market._id}>{market.name}</option>)}</select>{marketPageStatus === "CanLoadMore" || marketPageStatus === "LoadingMore" ? <button type="button" className="secondary-button" disabled={marketPageStatus === "LoadingMore"} onClick={() => loadMoreMarkets(50)}>{marketPageStatus === "LoadingMore" ? "Loading…" : "Load more markets"}</button> : null}</label>
         <label className="pf-field"><span className="pf-label">Device name</span><input required minLength={2} maxLength={120} className="pf-input" value={newDevice.name} onChange={event => setNewDevice(value => ({ ...value, name: event.target.value }))} /></label>
         <label className="pf-field"><span className="pf-label">Model</span><input required minLength={2} maxLength={80} className="pf-input" value={newDevice.deviceKind} onChange={event => setNewDevice(value => ({ ...value, deviceKind: event.target.value }))} /></label>
         <label className="pf-field"><span className="pf-label">MAC address (optional)</span><input className="pf-input" placeholder="00:11:22:33:44:55" value={newDevice.macAddress} onChange={event => setNewDevice(value => ({ ...value, macAddress: event.target.value }))} /></label>
         <label className="pf-field"><span className="pf-label">Firmware (optional)</span><input className="pf-input" maxLength={80} value={newDevice.firmwareVersion} onChange={event => setNewDevice(value => ({ ...value, firmwareVersion: event.target.value }))} /></label>
-        <div style={{ display: "flex", alignItems: "end" }}><button className="pf-button" disabled={creating || !markets?.length}>{creating ? "Registering…" : "Register unprovisioned device"}</button></div>
+        <div style={{ display: "flex", alignItems: "end" }}><button className="pf-button" disabled={creating || marketPageStatus === "LoadingFirstPage" || !markets.length}>{creating ? "Registering…" : "Register unprovisioned device"}</button></div>
       </form> : null}
 
       <section className="section-heading">
@@ -185,7 +185,7 @@ export function PlatformDeviceFleet() {
               setEditRow(null);
               setNotice("Device fleet profile updated.");
             } catch (caught) {
-              setError(caught instanceof Error ? caught.message : "Update failed.");
+              setError(userFacingMessage(caught, "Device could not be updated."));
             }
           }}
         />

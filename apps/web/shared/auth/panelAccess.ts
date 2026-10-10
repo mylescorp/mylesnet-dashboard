@@ -1,3 +1,5 @@
+import { expandPlatformRoleAliases } from "./rbac.ts";
+
 /**
  * Server-route panel access policy.
  *
@@ -58,7 +60,8 @@ export const PANEL_ROLE_REQUIREMENTS = {
 export type ProtectedPanel = keyof typeof PANEL_ROLE_REQUIREMENTS;
 
 export function hasPanelAccess(roleSlugs: readonly string[], panel: ProtectedPanel): boolean {
-  return PANEL_ROLE_REQUIREMENTS[panel].some((role) => roleSlugs.includes(role));
+  const effectiveRoles = expandPlatformRoleAliases(roleSlugs);
+  return PANEL_ROLE_REQUIREMENTS[panel].some((role) => effectiveRoles.has(role));
 }
 
 /**

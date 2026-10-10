@@ -44,11 +44,11 @@ crons.hourly(
   {},
 );
 
-// Payout settlement sweep: approved -> processing after the confirmation window.
+// Finalize expired tenant deletion grace periods while preserving records for retention work.
 crons.hourly(
-  "payout settlement sweep",
-  { minuteUTC: 30 },
-  internal.payouts.autoAdvancePayouts,
+  "tenant deletion grace period sweep",
+  { minuteUTC: 40 },
+  internal.tenantControl.finalizeExpiredDeletions,
   {},
 );
 

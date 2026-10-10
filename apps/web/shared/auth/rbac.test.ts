@@ -15,6 +15,7 @@ import {
 
 test("panelForRole maps role slugs to canonical panels", () => {
   assert.equal(panelForRole("platform_owner"), "platform");
+  assert.equal(panelForRole("org-platform_owner"), "platform");
   assert.equal(panelForRole("platform_admin"), "platform");
   assert.equal(panelForRole("network_operator"), "network");
   assert.equal(panelForRole("agent"), "dashboard");
@@ -36,6 +37,8 @@ test("hasRole / hasAnyRole implement all-vs-any semantics", () => {
   assert.equal(hasRole(["platform_owner"], []), true);
   assert.equal(hasAnyRole(["agent"], ["platform_owner", "agent"]), true);
   assert.equal(hasAnyRole(["agent"], ["platform_owner"]), false);
+  assert.equal(hasAnyRole(["org-platform_owner"], ["platform_super_admin", "platform_owner"]), true);
+  assert.equal(hasRole(["org-platform_owner"], ["platform_owner"]), true);
   assert.equal(hasAnyRole(["agent"], []), true);
 });
 
@@ -60,6 +63,7 @@ test("normalizeRoleClaims supports singular and plural AuthKit role claims", () 
   assert.deepEqual(normalizeRoleClaims("platform_owner", undefined), ["platform_owner"]);
   assert.deepEqual(normalizeRoleClaims(undefined, ["tenant_admin"]), ["tenant_admin"]);
   assert.deepEqual(normalizeRoleClaims("platform_owner", ["platform_owner", "platform_admin"]), ["platform_owner", "platform_admin"]);
+  assert.deepEqual(normalizeRoleClaims(undefined, { org_1: ["org-platform_owner"] }), ["org-platform_owner"]);
 });
 
 test("flattenOrgScopedRoles handles org-scoped role claims", () => {
@@ -71,6 +75,7 @@ test("flattenOrgScopedRoles handles org-scoped role claims", () => {
 
 test("isPlatformStaff flags platform staff roles", () => {
   assert.equal(isPlatformStaff(["platform_owner"]), true);
+  assert.equal(isPlatformStaff(["org-platform_owner"]), true);
   assert.equal(isPlatformStaff(["platform_admin", "agent"]), true);
   assert.equal(isPlatformStaff(["agent"]), false);
   assert.equal(isPlatformStaff([]), false);

@@ -8,15 +8,18 @@ import {
   isClientTenantOverride,
   isTenantActive,
   isTenantSuspended,
+  resolveTenantForIdentity,
   resolvedTenantOrNull,
   selectBootstrapOwner,
   tenantMembershipStatusFromWorkos,
 } from "./tenantCore.ts";
 
 test("tenant resolution denies an unresolved organization instead of selecting a bootstrap tenant", () => {
+  assert.equal(resolveTenantForIdentity(true, undefined), null);
+  assert.equal(resolveTenantForIdentity(true, null), null);
+  assert.equal(resolveTenantForIdentity(true, "tenant_from_org"), "tenant_from_org");
+  assert.equal(resolveTenantForIdentity(false, "legacy_bootstrap"), null);
   assert.equal(resolvedTenantOrNull(undefined), null);
-  assert.equal(resolvedTenantOrNull(null), null);
-  assert.equal(resolvedTenantOrNull("tenant_from_org"), "tenant_from_org");
 });
 
 test("bootstrapTenant owner selection refuses an empty or ownerless database before tenant creation", () => {

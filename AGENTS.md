@@ -8,6 +8,28 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 <!-- END:nextjs-agent-rules -->
 
+
+## Owner-priority objective: MylesNet platform to production
+
+This is a persistent owner directive across agents and sessions. At the start of each MylesNet task, inspect this objective and its progress record before choosing other MylesNet work. Resume the production program and keep it the top MylesNet priority until the release acceptance criteria below are met, unless the owner explicitly redirects, pauses, or cancels it. Do not treat a plan, partial implementation, green local build, or preview deployment as completion.
+
+Canonical progress record: `docs/development/platform-panel-production-plan.md`. Update it with completed phases, evidence, blockers, and the next concrete task at the end of each meaningful implementation session. Preserve all pre-existing dirty work; never reset, clean, or discard it. Use an isolated writable worktree for implementation when the owner checkout is dirty.
+
+### Production objective and fixed decisions
+
+Deliver the platform control plane in a separately deployable `apps/admin` app, preserving shipped `/platform` paths. Establish the planned `apps/network` boundary for `/admin`; do not remove legacy app surfaces before the no-deletion audit. Complete all 46 in-scope modules from the owner matrix; C2 remains excluded. Use the real `PLATFORM_SUB_ROLE_MAP`; every spec-silent role cell is denied. C4 uses tenant-owned gateway credentials, with finance restricted to non-secret updates. OPS O1 updates are restricted to approved storage/network-related fields. E4 route is `/platform/referrals`; I3 route is `/platform/feedback`, both with minimal auditable workflows. Require mandatory MFA for every platform role, 30-minute inactivity timeout, warning at 25 minutes, and 12-hour absolute session lifetime.
+
+### Required delivery phases
+
+1. Re-baseline the current branch, review and preserve all dirty changes, reconcile module counts/statuses and decisions, and complete the separate no-deletion audit.
+2. Build the app boundaries and shared role-aware navigation, route gates, Convex authorization, session/MFA enforcement, safe errors, and audit controls.
+3. Complete every in-scope module and its real payment, communications, provisioning, telemetry, and RADIUS integration against approved sandbox contracts and production services.
+4. Prove every role/verb cell, tenant isolation, direct-route denial, secret handling, audit trail, session behavior, accessibility, light/dark UI, failure recovery, scale, and migration safety.
+5. Pass repository CI/security gates; deploy to verified non-production targets, exercise recovery/rollback, then release the matching Convex and web apps to approved production targets with monitoring and operational handoff.
+
+Production is complete only when all in-scope modules are accepted, no known critical/high authorization/security findings remain, required tests and gates pass on the release commit, integrations and monitoring are verified in production, rollback/recovery evidence exists, and the owner-approved release record is current. Never invent deployment targets or access/print secret values; stop only the affected deployment step when required credentials, contracts, or owner approvals are unavailable, and continue other safe work.
+
+
 ## Agent Skills
 
 This project has access to reusable agent skills from multiple sources:

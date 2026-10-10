@@ -49,6 +49,13 @@ export default async function proxy(request: NextRequest, event: NextFetchEvent)
     url.pathname = pathname.replace(/\/+$/, "") || "/";
     return NextResponse.redirect(url, 308);
   }
+  // API keys are the sole auth mechanism for the versioned external API. Do
+  // not redirect API clients into the interactive WorkOS login flow.
+  if (pathname === "/api/platform/v1/organizations" && (request.method === "GET" || request.method === "HEAD")) {
+    const response = NextResponse.next();
+    applySecurityHeaders(response);
+    return response;
+  }
   const password = process.env.WORKOS_COOKIE_PASSWORD;
   if (!password || password.length < 32) {
     return new NextResponse("Service configuration is incomplete.", { status: 503 });

@@ -8,7 +8,7 @@ import { tenantControl, type PlatformTenant, type TenantStatus } from "@/lib/con
 import { userFacingMessage } from "@/shared/lib/user-facing-error";
 
 const statusTone: Record<TenantStatus, "success" | "warning" | "danger" | "neutral"> = {
-  provisioning: "warning", active: "success", trial: "warning", suspended: "danger", cancelled: "neutral",
+  provisioning: "warning", active: "success", trial: "warning", suspended: "danger", pending_deletion: "warning", cancelled: "neutral",
 };
 
 function Status({ status }: { status: TenantStatus }) {
