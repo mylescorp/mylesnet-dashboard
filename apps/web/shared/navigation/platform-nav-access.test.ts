@@ -71,6 +71,7 @@ test("sidebar visibility matches representative canonical grants for all five su
     {
       role: "platform_super_admin",
       expected: {
+        "/platform/health": true,
         "/platform/billing": true,
         "/platform/commissions/payouts": true,
         "/platform/infrastructure/devices": true,
@@ -85,6 +86,7 @@ test("sidebar visibility matches representative canonical grants for all five su
     {
       role: "platform_ops",
       expected: {
+        "/platform/health": true,
         "/platform/billing": false,
         "/platform/commissions/payouts": false,
         "/platform/infrastructure/devices": true,
@@ -99,6 +101,7 @@ test("sidebar visibility matches representative canonical grants for all five su
     {
       role: "platform_finance",
       expected: {
+        "/platform/health": true,
         "/platform/billing": true,
         "/platform/commissions/payouts": true,
         "/platform/infrastructure/devices": false,
@@ -113,6 +116,7 @@ test("sidebar visibility matches representative canonical grants for all five su
     {
       role: "platform_support",
       expected: {
+        "/platform/health": true,
         "/platform/billing": false,
         "/platform/commissions/payouts": false,
         "/platform/infrastructure/devices": true,
@@ -127,6 +131,7 @@ test("sidebar visibility matches representative canonical grants for all five su
     {
       role: "platform_readonly",
       expected: {
+        "/platform/health": true,
         "/platform/billing": true,
         "/platform/commissions/payouts": false,
         "/platform/infrastructure/devices": true,

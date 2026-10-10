@@ -11,6 +11,7 @@ const platformRoles = {
 /** Explicit routes whose canonical matrix denies at least one platform sub-role. */
 export const PLATFORM_NAV_ROLE_SCOPES: Readonly<Record<string, readonly string[]>> = {
   "/platform": [...platformRoles.superAdmin, ...platformRoles.ops, ...platformRoles.finance, ...platformRoles.support, ...platformRoles.readonly],
+  "/platform/health": [...platformRoles.superAdmin, ...platformRoles.ops, ...platformRoles.finance, ...platformRoles.support, ...platformRoles.readonly],
   "/platform/organizations": [...platformRoles.superAdmin, ...platformRoles.ops, ...platformRoles.finance, ...platformRoles.support, ...platformRoles.readonly],
   "/platform/organizations/new": [...platformRoles.superAdmin, ...platformRoles.ops],
   "/platform/organizations/[id]/suspend": [...platformRoles.superAdmin, ...platformRoles.ops],

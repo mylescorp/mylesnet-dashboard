@@ -60,3 +60,9 @@ Prepared the reviewed platform feature bundle on `feat/restore-platform-features
 - **Changes:** Added a shared server route gate driven by the same explicit role matrix as sidebar visibility. Applied it to platform routes that previously relied only on broad platform membership. Added route matrix entries for tenant suspend/restore and the audit-log alias. Added a test that every registered route remains visible to both platform owner slugs.
 - **Verification:** Web typecheck passed; root Node tests passed 42/42; full lint had 0 errors and 11 warnings; focused ESLint passed with an ignored test-file warning; `git diff --check` passed. The app-local Jest script cannot parse Next's TypeScript `--showConfig`; the repo root Node test script is the working suite.
 - **Status:** Changes are isolated on `fix/platform-owner-access-rbac`; no authenticated session/browser test, deploy, push, or Greptile review has occurred. Port 3000 and the owner checkout were untouched.
+
+### 2026-10-10 — M1 system health initial surface
+
+- **Changes:** Added `/platform/health`, an all-sub-role read-only route, sidebar link, and reactive Convex query. It reports Convex reachability plus bounded, payload-free WorkOS webhook samples; missing Vercel and uptime integrations are labeled unmonitored.
+- **Verification:** Web and direct Convex TypeScript checks passed; root Node suite passed 42/42; focused ESLint passed with one ignored-test-file warning; full lint had 0 errors and 11 existing warnings; `git diff --check` passed.
+- **Status:** M1 is partial until external monitoring, authenticated runtime, and deployment verification are available. No provider credentials or payloads are read or returned.
