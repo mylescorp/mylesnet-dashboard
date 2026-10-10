@@ -1,7 +1,7 @@
 import { QueryCtx, MutationCtx } from "../_generated/server";
 import { Id } from "../_generated/dataModel";
 import { isPlatformUser, resolveRoles, resolveUserByIdentity } from "./auth";
-import { assertNoClientOverride, assertTenantMatch, canTenantOperate, resolveTenantForIdentity } from "./tenantCore";
+import { assertNoClientOverride, assertRelationshipScopeWithinLimit, assertTenantMatch, canTenantOperate, resolveTenantForIdentity } from "./tenantCore";
 import { organizationIdFromWorkosIdentity } from "./workosIdentity";
 
 export {
@@ -166,7 +166,8 @@ async function assertTenantRelationshipChainOperable(ctx: QueryCtx | MutationCtx
     if (visited.has(childId)) continue;
     visited.add(childId);
     if (visited.size > 100 || ++reads > 100) throw new Error("Unauthorized: organization relationship scope exceeds safety limits");
-    const links = await ctx.db.query("tenantRelationships").withIndex("by_child", q => q.eq("childTenantId", childId)).collect();
+    const links = await ctx.db.query("tenantRelationships").withIndex("by_child", q => q.eq("childTenantId", childId)).take(101);
+    assertRelationshipScopeWithinLimit(links.length);
     for (const link of links) {
       if (link.deletedAt !== undefined) continue;
       if (link.status !== "active") throw new Error("Unauthorized: agency or reseller access is suspended");

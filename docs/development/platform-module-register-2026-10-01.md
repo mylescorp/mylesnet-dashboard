@@ -38,8 +38,8 @@ The status column records the supplied audit snapshot. Revalidate route, backend
 | C4 | Payment gateway `/platform/settings/payments` | SA CRUD; FIN U non-secret only; OPS — | Not present |
 | C5 | Reconciliation `/platform/billing/reconciliation` | SA/FIN CRUD; OPS R | Not present |
 | C6 | Session/billing anomalies `/platform/billing/anomalies` | SA RU; FIN R; OPS RU | Not present |
-| D1 | Agencies/resellers `/platform/agencies`, `/platform/resellers` | SA CRUD; OPS/FIN/SUP R | Not present |
-| D2 | Agency suspension `/platform/agencies/[id]/suspend` | SA CRUD; others R | Not present |
+| D1 | Agencies/resellers `/platform/agencies`, `/platform/resellers` | SA CRUD; OPS/FIN/SUP R | Partial; both registry routes, paged relationship CRUD, audit writes, and explicit read-only non-SA roles exist; live role verification remains open |
+| D2 | Agency suspension `/platform/agencies/[id]/suspend` | SA CRUD; others R | Partial; audited suspend/restore flows propagate through descendant relationship links and tenant auth checks reject suspended chains; production authenticated cascade verification remains open |
 | D3 | Provisioning approvals `/platform/onboarding/approvals` | SA CRU; SUP R | Partial |
 | E1 | Commission ledger `/platform/commissions` | SA/FIN CRUD; OPS R | Partial |
 | E2 | Payouts `/platform/commissions/payouts`, `/[id]` | SA/FIN CRUD; OPS — | Partial |
@@ -147,3 +147,8 @@ The page and sidebar already limited `/platform/commissions/rates` to super-admi
 ## 2026-10-10 B3 RADIUS fleet re-audit
 
 The checked-out branch contains `/platform/infrastructure/radius`, a paginated platform fleet registry with SA/OPS create, update, archive, and restore actions, audit records, and read-only views for finance/support/readonly roles. The screen explicitly marks uptime, latency, sessions, and authentication rates as unreported until trusted telemetry is integrated. B3 is therefore Partial, not absent or confirmed. This repository has no verified RADIUS telemetry source; do not populate these metrics with samples.
+
+
+## 2026-10-10 D1/D2 relationship oversight re-audit
+
+The branch has separate agency and reseller registry routes, paginated relationship reads, super-admin relationship create/update/archive, audit records, and role-gated lifecycle pages. Suspension/restoration updates descendant relationship links; tenant authentication denies access when any ancestor link is suspended. Bounded the tenant relationship-chain read to 101 rows and fail closed above the 100-link safety limit instead of collecting an unbounded index result. Added pure boundary tests for the limit. D1/D2 remain Partial pending authenticated cross-role and deployed cascade verification.

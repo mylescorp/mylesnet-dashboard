@@ -84,6 +84,13 @@ export function canTenantOperate(status: TenantStatus | undefined): boolean {
   return status === undefined || status === "trial" || status === "active";
 }
 
+/** Fail closed if a relationship traversal reaches its bounded read limit. */
+export function assertRelationshipScopeWithinLimit(linkCount: number, limit = 100): void {
+  if (!Number.isInteger(linkCount) || linkCount < 0 || !Number.isInteger(limit) || limit < 1 || linkCount > limit) {
+    throw new Error("Unauthorized: organization relationship scope exceeds safety limits");
+  }
+}
+
 /**
  * A suspended tenant must be denied write/read automation (exception paths
  * like finance reconciliation or emergency disable are opt-in later).

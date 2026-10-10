@@ -91,3 +91,10 @@ Prepared the reviewed platform feature bundle on `feat/restore-platform-features
 - **Changes:** Reclassified B3 from absent to partial based on the checked-out platform route, CRUD backend, audit writes, role gates, and read-only UI. The register and production plan now identify telemetry ingestion as the remaining blocker.
 - **Verification:** File-grounded route/backend/UI review and `git diff --check` passed. No telemetry integration or authenticated role test was performed.
 - **Status:** Awaiting an approved trusted telemetry source; no sample metrics were introduced.
+
+
+### 2026-10-10 — D1/D2 partner relationship access boundary
+
+- **Changes:** Re-audited agency/reseller registries and lifecycle flows. Replaced an unbounded tenant relationship `.collect()` with `.take(101)` and a fail-closed 100-link limit; added boundary coverage. Updated module status and production-plan evidence.
+- **Verification:** Tenant and partner lifecycle tests passed; direct Convex and web typechecks passed; `git diff --check` passed.
+- **Status:** Relationship suspension propagates across linked descendants and tenant auth rejects suspended chains. Live authenticated role and deployed cascade verification remain outstanding.

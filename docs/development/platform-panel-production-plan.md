@@ -166,3 +166,8 @@ Moved CSV parsing into a tested shared core and added pre-mutation validation fo
 ## 2026-10-10 B3 RADIUS fleet re-audit
 
 The isolated branch includes a RADIUS server registry at `/platform/infrastructure/radius`, with SA/OPS audited management and read-only fleet metrics for other canonical roles. Metrics are rendered as unreported because the repo does not contain an established trusted RADIUS telemetry source. Keep B3 partial until a provider/agent contract is approved, metrics ingestion is implemented, and all-role access is exercised against a deployed backend.
+
+
+## 2026-10-10 D1/D2 agency and reseller oversight re-audit
+
+The current branch includes separate paginated registries for agencies and resellers, SA-only relationship CRUD, role-gated suspension/restoration, audit events, and descendant relationship propagation. Tenant auth checks reject any suspended relationship in the chain. The auth traversal now reads at most 101 incoming links per node and fails closed above the 100-link limit. Keep these modules partial until authenticated all-role tests and deployed cascade behavior are verified.
