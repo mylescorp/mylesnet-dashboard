@@ -1,4 +1,4 @@
-import { expandPlatformRoleAliases } from "@/shared/auth/rbac";
+import { expandPlatformRoleAliases } from "../shared/auth/rbac.ts";
 
 const TENANT_OPERATIONS_ROLES = new Set([
   "platform_super_admin",

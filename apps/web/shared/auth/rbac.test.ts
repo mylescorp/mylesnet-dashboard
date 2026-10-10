@@ -13,6 +13,13 @@ import {
   toClaimArray,
   normalizeRoleClaims,
 } from "./rbac.ts";
+import {
+  canDeletePlatformTenant,
+  canManagePlatformInfrastructure,
+  canManagePlatformPlans,
+  canManagePlatformTenants,
+  canManagePlatformWhiteLabel,
+} from "../../platform/permissions.ts";
 
 test("panelForRole maps role slugs to canonical panels", () => {
   assert.equal(panelForRole("platform_owner"), "platform");
@@ -90,4 +97,16 @@ test("platform access management follows super-admin sub-role, including org ali
   assert.equal(isPlatformSuperAdmin(["ops_manager"]), false);
   assert.equal(isPlatformSuperAdmin(["platform_support"]), false);
   assert.equal(isPlatformSuperAdmin(["platform_readonly"]), false);
+});
+
+test("platform UI write controls match the tenant, finance, infrastructure, and white-label role matrices", () => {
+  const allowed = (check: (roles: string[]) => boolean, yes: string[], no: string[]) => {
+    for (const role of yes) assert.equal(check([role]), true, `${role} should be allowed`);
+    for (const role of no) assert.equal(check([role]), false, `${role} should be denied`);
+  };
+  allowed(canManagePlatformTenants, ["platform_owner", "platform_admin", "ops_manager", "org-platform_owner", "org-platform_admin"], ["finance_manager", "platform_support", "platform_readonly"]);
+  allowed(canDeletePlatformTenant, ["platform_owner", "platform_admin", "org-platform_owner", "org-platform_admin"], ["ops_manager", "finance_manager", "platform_support", "platform_readonly"]);
+  allowed(canManagePlatformPlans, ["platform_owner", "platform_admin", "finance_manager", "org-platform_owner", "org-platform_admin"], ["ops_manager", "platform_support", "platform_readonly"]);
+  allowed(canManagePlatformInfrastructure, ["platform_owner", "platform_admin", "ops_manager", "org-platform_owner", "org-platform_admin"], ["finance_manager", "platform_support", "platform_readonly"]);
+  allowed(canManagePlatformWhiteLabel, ["platform_owner", "platform_admin", "org-platform_owner", "org-platform_admin"], ["ops_manager", "finance_manager", "platform_support", "platform_readonly"]);
 });

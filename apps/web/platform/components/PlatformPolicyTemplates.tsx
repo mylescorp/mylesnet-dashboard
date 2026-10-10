@@ -7,16 +7,17 @@ import { EmptyState, StatusPill } from "@/shared/components/ui";
 import { platformPolicyTemplates, type PolicyAccessType, type PolicyFields, type PolicyTemplate, type PolicyTemplateWithCurrent, type PolicyVersion } from "@/shared/convex/platformPolicyTemplates";
 import { userFacingMessage } from "@/shared/lib/user-facing-error";
 import { canManagePlatformInfrastructure } from "@/platform/permissions";
+import { omitUndefinedFields } from "@/convex/lib/platformPolicyTemplateCore";
 
 type Draft = {
-  code: string; name: string; description: string; accessType: PolicyAccessType; changeNote: string;
+  code: string; name: string; description: string; accessType: PolicyAccessType | ""; changeNote: string;
   downloadMbps: string; uploadMbps: string; burstDownloadMbps: string; burstUploadMbps: string; burstThresholdPercent: string; burstWindowSeconds: string;
   concurrentSessions: string; deviceLimit: string; dataQuotaGb: string; timeQuotaHours: string; fairUseAfterGb: string; fairUseDownloadMbps: string; fairUseUploadMbps: string;
   vlanId: string; ipPool: string; staticIpAllowed: boolean; dnsServers: string; scheduleStart: string; scheduleEnd: string;
   idleTimeoutMinutes: string; sessionTimeoutHours: string; firewallProfile: string; serviceEnabled: boolean;
 };
 
-const blankDraft = (): Draft => ({ code: "", name: "", description: "", accessType: "both", changeNote: "", downloadMbps: "20", uploadMbps: "5", burstDownloadMbps: "", burstUploadMbps: "", burstThresholdPercent: "", burstWindowSeconds: "", concurrentSessions: "1", deviceLimit: "1", dataQuotaGb: "", timeQuotaHours: "", fairUseAfterGb: "", fairUseDownloadMbps: "", fairUseUploadMbps: "", vlanId: "", ipPool: "", staticIpAllowed: false, dnsServers: "", scheduleStart: "", scheduleEnd: "", idleTimeoutMinutes: "", sessionTimeoutHours: "", firewallProfile: "", serviceEnabled: true });
+const blankDraft = (): Draft => ({ code: "", name: "", description: "", accessType: "", changeNote: "", downloadMbps: "", uploadMbps: "", burstDownloadMbps: "", burstUploadMbps: "", burstThresholdPercent: "", burstWindowSeconds: "", concurrentSessions: "", deviceLimit: "", dataQuotaGb: "", timeQuotaHours: "", fairUseAfterGb: "", fairUseDownloadMbps: "", fairUseUploadMbps: "", vlanId: "", ipPool: "", staticIpAllowed: false, dnsServers: "", scheduleStart: "", scheduleEnd: "", idleTimeoutMinutes: "", sessionTimeoutHours: "", firewallProfile: "", serviceEnabled: false });
 
 function fromVersion(current: PolicyVersion): Omit<Draft, "code" | "name" | "description" | "accessType" | "changeNote"> {
   return {
@@ -34,14 +35,14 @@ function fromVersion(current: PolicyVersion): Omit<Draft, "code" | "name" | "des
 
 function optionalNumber(value: string): number | undefined { return value.trim() ? Number(value) : undefined; }
 function fieldsFromDraft(draft: Draft): PolicyFields {
-  return {
+  return omitUndefinedFields({
     downloadMbps: Number(draft.downloadMbps), uploadMbps: Number(draft.uploadMbps), burstDownloadMbps: optionalNumber(draft.burstDownloadMbps), burstUploadMbps: optionalNumber(draft.burstUploadMbps),
     burstThresholdPercent: optionalNumber(draft.burstThresholdPercent), burstWindowSeconds: optionalNumber(draft.burstWindowSeconds), concurrentSessions: Number(draft.concurrentSessions), deviceLimit: Number(draft.deviceLimit),
     dataQuotaGb: optionalNumber(draft.dataQuotaGb), timeQuotaHours: optionalNumber(draft.timeQuotaHours), fairUseAfterGb: optionalNumber(draft.fairUseAfterGb), fairUseDownloadMbps: optionalNumber(draft.fairUseDownloadMbps), fairUseUploadMbps: optionalNumber(draft.fairUseUploadMbps),
     vlanId: optionalNumber(draft.vlanId), ipPool: draft.ipPool.trim() || undefined, staticIpAllowed: draft.staticIpAllowed, dnsServers: draft.dnsServers.split(",").map((ip) => ip.trim()).filter(Boolean),
     scheduleStart: draft.scheduleStart || undefined, scheduleEnd: draft.scheduleEnd || undefined, idleTimeoutMinutes: optionalNumber(draft.idleTimeoutMinutes), sessionTimeoutHours: optionalNumber(draft.sessionTimeoutHours),
     firewallProfile: draft.firewallProfile.trim() || undefined, serviceEnabled: draft.serviceEnabled,
-  };
+  });
 }
 
 export function PlatformPolicyTemplates() {
@@ -74,14 +75,17 @@ export function PlatformPolicyTemplates() {
   function setValue<K extends keyof Draft>(key: K, value: Draft[K]) { setDraft((old) => ({ ...old, [key]: value })); }
 
   async function save(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setWorking(true); setError(""); setMessage("");
+    event.preventDefault(); setError(""); setMessage("");
+    const accessType = draft.accessType;
+    if (!accessType) { setError("Choose an access type for this policy template."); return; }
+    setWorking(true);
     try {
       const fields = fieldsFromDraft(draft);
       if (selected) {
-        await update({ templateId: selected._id, expectedVersion: selected.currentVersion, name: draft.name, description: draft.description, accessType: draft.accessType, fields, changeNote: draft.changeNote });
+        await update({ templateId: selected._id, expectedVersion: selected.currentVersion, name: draft.name, description: draft.description, accessType, fields, changeNote: draft.changeNote });
         setMessage("A new policy version was saved.");
       } else {
-        await create({ code: draft.code, name: draft.name, description: draft.description, accessType: draft.accessType, fields, changeNote: draft.changeNote });
+        await create({ code: draft.code, name: draft.name, description: draft.description, accessType, fields, changeNote: draft.changeNote });
         setMessage("Policy template created.");
       }
       setEditing(false); setSelected(null);
@@ -119,7 +123,7 @@ export function PlatformPolicyTemplates() {
     {editing ? <div className="profile-modal-overlay" role="dialog" aria-modal="true" aria-label={selected ? "Edit policy template" : "Create policy template"}><form className="profile-modal-dialog" onSubmit={(event) => void save(event)}><header className="profile-modal-header"><div><p className="eyebrow">Versioned policy</p><h2 className="page-title">{selected ? `Edit ${selected.name}` : "New policy template"}</h2></div><button className="profile-modal-close" type="button" onClick={() => setEditing(false)} aria-label="Close">×</button></header><div className="modal-body"><div className="form-grid">
       {!selected ? <Field label="Template code"><input className="pf-input" required minLength={2} maxLength={40} pattern="[a-z][a-z0-9-]{1,39}" value={draft.code} onChange={(event) => setValue("code", event.target.value)} /></Field> : null}
       <Field label="Name"><input className="pf-input" required minLength={2} maxLength={80} value={draft.name} onChange={(event) => setValue("name", event.target.value)} /></Field>
-      <Field label="Access type"><select className="pf-input" value={draft.accessType} onChange={(event) => setValue("accessType", event.target.value as PolicyAccessType)}><option value="pppoe">PPPoE</option><option value="hotspot">Hotspot</option><option value="both">Both</option></select></Field>
+      <Field label="Access type"><select className="pf-input" required value={draft.accessType} onChange={(event) => setValue("accessType", event.target.value as Draft["accessType"])}><option value="" disabled>Select access type</option><option value="pppoe">PPPoE</option><option value="hotspot">Hotspot</option><option value="both">Both</option></select></Field>
       <Field label="Description" wide><textarea className="pf-input" rows={2} maxLength={500} value={draft.description} onChange={(event) => setValue("description", event.target.value)} /></Field>
       <Field label="Download speed (Mbps)"><input className="pf-input" type="number" required min="0.1" max="10000" step="0.1" value={draft.downloadMbps} onChange={(event) => setValue("downloadMbps", event.target.value)} /></Field>
       <Field label="Upload speed (Mbps)"><input className="pf-input" type="number" required min="0.1" max="10000" step="0.1" value={draft.uploadMbps} onChange={(event) => setValue("uploadMbps", event.target.value)} /></Field>
@@ -136,7 +140,7 @@ export function PlatformPolicyTemplates() {
       <Field label="Fair-use upload (Mbps)"><input className="pf-input" type="number" min="0.1" value={draft.fairUseUploadMbps} onChange={(event) => setValue("fairUseUploadMbps", event.target.value)} /></Field>
       <Field label="VLAN ID"><input className="pf-input" type="number" min="1" max="4094" value={draft.vlanId} onChange={(event) => setValue("vlanId", event.target.value)} /></Field>
       <Field label="IP pool name"><input className="pf-input" maxLength={100} value={draft.ipPool} onChange={(event) => setValue("ipPool", event.target.value)} /></Field>
-      <Field label="DNS servers (IPv4, comma-separated)" wide><input className="pf-input" placeholder="1.1.1.1, 8.8.8.8" value={draft.dnsServers} onChange={(event) => setValue("dnsServers", event.target.value)} /></Field>
+      <Field label="DNS servers (IPv4, comma-separated)" wide><input className="pf-input" value={draft.dnsServers} onChange={(event) => setValue("dnsServers", event.target.value)} /></Field>
       <Field label="Schedule start (24-hour)"><input className="pf-input" type="time" value={draft.scheduleStart} onChange={(event) => setValue("scheduleStart", event.target.value)} /></Field>
       <Field label="Schedule end (24-hour)"><input className="pf-input" type="time" value={draft.scheduleEnd} onChange={(event) => setValue("scheduleEnd", event.target.value)} /></Field>
       <Field label="Idle timeout (minutes)"><input className="pf-input" type="number" min="1" max="10080" value={draft.idleTimeoutMinutes} onChange={(event) => setValue("idleTimeoutMinutes", event.target.value)} /></Field>
