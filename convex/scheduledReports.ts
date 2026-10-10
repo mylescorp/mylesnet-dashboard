@@ -4,7 +4,9 @@ import { internal } from "./_generated/api";
 import { requirePermission, requirePlatformUser } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 import { dayOf, monthOf } from "./lib/finance";
-import { enforceTenantOnResource, readScopedTenant } from "./lib/tenant";
+import { canTenantOperate, enforceTenantOnResource, readScopedTenant } from "./lib/tenant";
+import { readTenantFilter } from "./lib/tenantIsolationCore";
+import { organizationIdFromWorkosIdentity } from "./lib/workosIdentity";
 import type { Id } from "./_generated/dataModel";
 
 /**
@@ -12,6 +14,11 @@ import type { Id } from "./_generated/dataModel";
  * calls `triggerDueReports` which generates the artifact (CSV/PDF bytes via
  * _storage) and logs a `reportExports` row. Manual "generate now" runs the
  * same action.
+ *
+ * Definitions and exports are tenant-owned. A tenant reader sees only rows
+ * carrying their active tenant id; a Platform control-plane reader sees all.
+ * A tenant write may only touch a report that its tenant owns. An unscoped
+ * (legacy) report is never writable from a tenant.
  */
 
 export type ReportDataset = "revenue" | "subscribers" | "financials";
@@ -20,7 +27,15 @@ export const listScheduledReports = query({
   args: {},
   handler: async (ctx) => {
     await requirePermission(ctx, "reports:generate");
-    return (await ctx.db.query("scheduledReports").collect()).sort((a, b) => a.name.localeCompare(b.name));
+    const scope = await readScopedTenant(ctx);
+    const tenantId = readTenantFilter(scope);
+    const rows = tenantId
+      ? await ctx.db
+          .query("scheduledReports")
+          .withIndex("by_tenant", (q) => q.eq("tenantId", tenantId))
+          .collect()
+      : await ctx.db.query("scheduledReports").collect();
+    return rows.sort((a, b) => a.name.localeCompare(b.name));
   },
 });
 
@@ -28,8 +43,16 @@ export const listReportExports = query({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
     await requirePermission(ctx, "reports:read");
-    const rows = await ctx.db.query("reportExports").order("desc").take(args.limit ?? 50);
-    return rows;
+    const limit = args.limit ?? 50;
+    const scope = await readScopedTenant(ctx);
+    const tenantId = readTenantFilter(scope);
+    const rows = tenantId
+      ? await ctx.db
+          .query("reportExports")
+          .withIndex("by_tenant", (q) => q.eq("tenantId", tenantId))
+          .collect()
+      : await ctx.db.query("reportExports").order("desc").take(limit);
+    return rows.sort((a, b) => b.createdAt - a.createdAt).slice(0, limit);
   },
 });
 
@@ -46,7 +69,7 @@ export const createScheduledReport = mutation({
     const user = await requirePermission(ctx, "reports:generate");
     const scope = await readScopedTenant(ctx);
     const id = await ctx.db.insert("scheduledReports", {
-      tenantId: scope.tenantId ?? undefined,
+      tenantId: readTenantFilter(scope) ?? undefined,
       name: args.name,
       reportType: args.reportType,
       recipients: args.recipients,
@@ -103,14 +126,33 @@ function toCsv(header: string[], rows: (string | number | undefined)[][]): strin
   return [header.map(escape).join(","), ...rows.map((row) => row.map(escape).join(","))].join("\n");
 }
 
-/** Build rows for a dataset. Runs inside actions via runQuery. */
+/**
+ * Build rows for a dataset. Runs inside actions via runQuery.
+ *
+ * When `tenantId` is supplied the rows are restricted to that tenant; when it
+ * is omitted the caller is a Platform control-plane reader and the rows are
+ * unscoped. A tenant-owned scheduled report always passes its tenant id.
+ */
 export const collectReportRows = internalQuery({
-  args: { dataset: v.string(), month: v.optional(v.string()) },
+  args: {
+    dataset: v.string(),
+    month: v.optional(v.string()),
+    tenantId: v.optional(v.id("tenants")),
+  },
   handler: async (ctx, args) => {
     const month = args.month ?? monthOf(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const tenantId = args.tenantId;
     switch (args.dataset) {
       case "revenue": {
-        const snapshots = await ctx.db.query("dailySnapshots").withIndex("by_date", (q) => q.lte("date", dayOf(Date.now()))).collect();
+        const snapshots = tenantId
+          ? await ctx.db
+              .query("dailySnapshots")
+              .withIndex("by_tenant", (q) => q.eq("tenantId", tenantId))
+              .collect()
+          : await ctx.db
+              .query("dailySnapshots")
+              .withIndex("by_date", (q) => q.lte("date", dayOf(Date.now())))
+              .collect();
         return {
           header: ["date", "marketId", "revenueLocal", "revenueUSD", "salesCount", "newSubscribers", "netContributionLocal", "currency"],
           rows: snapshots
@@ -120,7 +162,12 @@ export const collectReportRows = internalQuery({
         };
       }
       case "subscribers": {
-        const subs = await ctx.db.query("subscriberSnapshots").collect();
+        const subs = tenantId
+          ? await ctx.db
+              .query("subscriberSnapshots")
+              .withIndex("by_tenant", (q) => q.eq("tenantId", tenantId))
+              .collect()
+          : await ctx.db.query("subscriberSnapshots").collect();
         return {
           header: ["date", "marketId", "activeCount", "newCount", "renewalCount", "renewalRate", "avgPlanPriceLocal", "currency"],
           rows: subs
@@ -130,8 +177,18 @@ export const collectReportRows = internalQuery({
         };
       }
       case "financials": {
-        const fin = await ctx.db.query("marketFinancials").withIndex("by_month", (q) => q.eq("month", month)).collect();
-        const exp = await ctx.db.query("expenses").withIndex("by_month", (q) => q.eq("month", month)).collect();
+        const fin = tenantId
+          ? (await ctx.db
+              .query("marketFinancials")
+              .withIndex("by_tenant", (q) => q.eq("tenantId", tenantId))
+              .collect()).filter((f) => f.month === month)
+          : await ctx.db.query("marketFinancials").withIndex("by_month", (q) => q.eq("month", month)).collect();
+        const exp = tenantId
+          ? (await ctx.db
+              .query("expenses")
+              .withIndex("by_tenant", (q) => q.eq("tenantId", tenantId))
+              .collect()).filter((e) => e.month === month)
+          : await ctx.db.query("expenses").withIndex("by_month", (q) => q.eq("month", month)).collect();
         return {
           header: ["marketId", "revenueLocal", "revenueUSD", "variableCostLocal", "netContributionLocal", "breakEvenStatus", "expenseCount"],
           rows: fin.map((f) => [
@@ -151,6 +208,31 @@ export const collectReportRows = internalQuery({
   },
 });
 
+/**
+ * Resolve the active tenant for a caller-supplied WorkOS organization id,
+ * validated by that user's active membership. Actions cannot read the database
+ * directly, so `generateReport` hands the already-verified user id and the
+ * organization claim from its own identity to this internal query. An unmapped
+ * organization or inactive membership yields null (a Platform reader).
+ */
+export const resolveCallerTenant = internalQuery({
+  args: { userId: v.id("users"), organizationId: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    if (!args.organizationId) return null;
+    const tenant = await ctx.db
+      .query("tenants")
+      .withIndex("by_workosOrganizationId", (q) => q.eq("workosOrganizationId", args.organizationId!))
+      .first();
+    if (!tenant || !canTenantOperate(tenant.status)) return null;
+    const membership = await ctx.db
+      .query("tenantMemberships")
+      .withIndex("by_user_tenant", (q) => q.eq("userId", args.userId).eq("tenantId", tenant._id))
+      .first();
+    if (!membership || membership.status !== "active") return null;
+    return tenant._id;
+  },
+});
+
 /** Generate one report artifact now (manual or scheduled). */
 export const generateReport = action({
   args: {
@@ -167,9 +249,15 @@ export const generateReport = action({
     })) as { _id: Id<"users"> } | null;
     if (!reporter) throw new Error("Unauthorized");
 
+    const tenantId = await ctx.runQuery(internal.scheduledReports.resolveCallerTenant, {
+      userId: reporter._id,
+      organizationId: organizationIdFromWorkosIdentity(identity),
+    });
+
     const data = await ctx.runQuery(internal.scheduledReports.collectReportRows, {
       dataset: args.dataset,
       month: args.scopeFilter?.month,
+      tenantId: tenantId ?? undefined,
     });
 
     let fileId: string | undefined;
@@ -191,6 +279,7 @@ export const generateReport = action({
       scopeFilter: args.scopeFilter,
       dataset: args.dataset,
       fileId: fileId as never,
+      tenantId: tenantId ?? undefined,
     });
     return { exportId };
   },
@@ -204,9 +293,11 @@ export const recordExport = internalMutation({
     scopeFilter: v.optional(v.any()),
     dataset: v.optional(v.string()),
     fileId: v.optional(v.id("_storage")),
+    tenantId: v.optional(v.id("tenants")),
   },
   handler: async (ctx, args) => {
     return await ctx.db.insert("reportExports", {
+      tenantId: args.tenantId,
       scheduledReportId: args.scheduledReportId,
       requestedBy: args.requestedBy,
       format: args.format,
@@ -251,6 +342,7 @@ export const triggerDueReports = internalAction({
         const data = await ctx.runQuery(internal.scheduledReports.collectReportRows, {
           dataset,
           month: now.toISOString().slice(0, 7),
+          tenantId: report.tenantId,
         });
         const blob = new Blob([toCsv(data.header, data.rows)], { type: "text/csv" });
         const fileId = (await ctx.storage.store(blob)) as string;
@@ -261,6 +353,7 @@ export const triggerDueReports = internalAction({
           scopeFilter: report.scopeFilter,
           dataset,
           fileId: fileId as never,
+          tenantId: report.tenantId,
         });
         await ctx.runMutation(internal.scheduledReports.touchLastRun, { reportId: report._id });
         generated.push(report.name);

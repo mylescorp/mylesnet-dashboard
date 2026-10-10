@@ -1,20 +1,59 @@
 import { v } from "convex/values";
-import { query } from "./_generated/server";
+import { QueryCtx, query } from "./_generated/server";
+import { Id } from "./_generated/dataModel";
 import { requirePermission } from "./lib/auth";
+import { ReadScope, assertTenantMatch, readScopedTenant } from "./lib/tenant";
+import { readTenantFilter } from "./lib/tenantIsolationCore";
 import { dayOf } from "./lib/finance";
 
 /**
  * Performance analytics (spec "Performance Reporting"). Pure aggregations over
- * billing snapshots and ledgers — no per-row scans of raw data.
+ * billing snapshots and ledgers, not per-row scans of raw data.
+ *
+ * Reads are tenant-scoped: a tenant reader only ever aggregates rows owned by
+ * their active tenant, while a Platform control-plane reader may read across
+ * tenants. Row queries go through the tenant index so a tenant read never
+ * scans another tenant's data.
  */
+
+/**
+ * A client-supplied market filter is honoured only for a market the caller is
+ * allowed to see. Platform readers are unrestricted; a tenant reader must own
+ * the market and may not reference an unscoped (legacy) market.
+ */
+async function assertScopedMarket(
+  ctx: QueryCtx,
+  scope: ReadScope,
+  marketId: Id<"markets"> | undefined,
+): Promise<void> {
+  if (!marketId || !scope.enforced) return;
+  const market = await ctx.db.get(marketId);
+  if (!market || market.tenantId === undefined || market.tenantId === null) {
+    throw new Error("Unauthorized: market is not assigned to the active tenant");
+  }
+  assertTenantMatch(scope.tenantId, market.tenantId, "market");
+}
+
 export const getRevenueTrend = query({
   args: { marketId: v.optional(v.id("markets")), days: v.optional(v.number()) },
   handler: async (ctx, args) => {
     await requirePermission(ctx, "analytics:read");
     const days = args.days ?? 30;
     const from = dayOf(Date.now() - days * 24 * 60 * 60 * 1000);
-    const rows = await ctx.db.query("dailySnapshots").withIndex("by_date", (q) => q.gte("date", from)).collect();
-    const filtered = args.marketId ? rows.filter((r) => r.marketId === args.marketId) : rows;
+    const scope = await readScopedTenant(ctx);
+    await assertScopedMarket(ctx, scope, args.marketId);
+    const tenantId = readTenantFilter(scope);
+    const rows = tenantId
+      ? await ctx.db
+          .query("dailySnapshots")
+          .withIndex("by_tenant", (q) => q.eq("tenantId", tenantId))
+          .collect()
+      : await ctx.db
+          .query("dailySnapshots")
+          .withIndex("by_date", (q) => q.gte("date", from))
+          .collect();
+    const inRange = rows.filter((r) => r.date >= from);
+    const filtered = args.marketId ? inRange.filter((r) => r.marketId === args.marketId) : inRange;
     const byDate = new Map<string, { revenueLocal: number; revenueUSD: number; netContributionLocal: number; newSubscribers: number; salesCount: number }>();
     for (const row of filtered) {
       const entry = byDate.get(row.date) ?? { revenueLocal: 0, revenueUSD: 0, netContributionLocal: 0, newSubscribers: 0, salesCount: 0 };
@@ -52,7 +91,16 @@ export const getSubscriberTrend = query({
     await requirePermission(ctx, "subscriber_snapshots:read");
     const days = args.days ?? 30;
     const from = dayOf(Date.now() - days * 24 * 60 * 60 * 1000);
-    const rows = (await ctx.db.query("subscriberSnapshots").collect())
+    const scope = await readScopedTenant(ctx);
+    await assertScopedMarket(ctx, scope, args.marketId);
+    const tenantId = readTenantFilter(scope);
+    const scoped = tenantId
+      ? await ctx.db
+          .query("subscriberSnapshots")
+          .withIndex("by_tenant", (q) => q.eq("tenantId", tenantId))
+          .collect()
+      : await ctx.db.query("subscriberSnapshots").collect();
+    const rows = scoped
       .filter((s) => s.date >= from && (!args.marketId || s.marketId === args.marketId))
       .sort((a, b) => a.date.localeCompare(b.date));
     const byDate = new Map<string, { activeCount: number; newCount: number }>();
@@ -72,8 +120,20 @@ export const getTopAgents = query({
     await requirePermission(ctx, "agents:read");
     const days = args.days ?? 30;
     const from = Date.now() - days * 24 * 60 * 60 * 1000;
-    const activity = await ctx.db.query("agentActivity").withIndex("by_time", (q) => q.gte("occurredAt", from)).collect();
-    const filtered = args.marketId ? activity.filter((a) => a.marketId === args.marketId) : activity;
+    const scope = await readScopedTenant(ctx);
+    await assertScopedMarket(ctx, scope, args.marketId);
+    const tenantId = readTenantFilter(scope);
+    const activity = tenantId
+      ? await ctx.db
+          .query("agentActivity")
+          .withIndex("by_tenant", (q) => q.eq("tenantId", tenantId))
+          .collect()
+      : await ctx.db
+          .query("agentActivity")
+          .withIndex("by_time", (q) => q.gte("occurredAt", from))
+          .collect();
+    const inWindow = activity.filter((a) => a.occurredAt >= from);
+    const filtered = args.marketId ? inWindow.filter((a) => a.marketId === args.marketId) : inWindow;
     const summary = new Map<string, { count: number; revenueLocal: number; currency: string }>();
     for (const a of filtered) {
       const entry = summary.get(a.agentId) ?? { count: 0, revenueLocal: 0, currency: a.currency };
@@ -81,7 +141,10 @@ export const getTopAgents = query({
       entry.revenueLocal += a.amountLocal;
       summary.set(a.agentId, entry);
     }
-    const agents = new Map((await ctx.db.query("agents").collect()).map((a) => [a._id, a.name]));
+    const agentRows = tenantId
+      ? await ctx.db.query("agents").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect()
+      : await ctx.db.query("agents").collect();
+    const agents = new Map(agentRows.map((a) => [a._id, a.name]));
     return Array.from(summary.entries())
       .map(([agentId, s]) => ({ agentId, agentName: agents.get(agentId as never) ?? agentId, ...s }))
       .sort((a, b) => b.revenueLocal - a.revenueLocal)
@@ -95,8 +158,20 @@ export const getSalesMix = query({
     await requirePermission(ctx, "business_events:read");
     const days = args.days ?? 30;
     const from = Date.now() - days * 24 * 60 * 60 * 1000;
-    const activity = await ctx.db.query("agentActivity").withIndex("by_time", (q) => q.gte("occurredAt", from)).collect();
-    const filtered = args.marketId ? activity.filter((a) => a.marketId === args.marketId) : activity;
+    const scope = await readScopedTenant(ctx);
+    await assertScopedMarket(ctx, scope, args.marketId);
+    const tenantId = readTenantFilter(scope);
+    const activity = tenantId
+      ? await ctx.db
+          .query("agentActivity")
+          .withIndex("by_tenant", (q) => q.eq("tenantId", tenantId))
+          .collect()
+      : await ctx.db
+          .query("agentActivity")
+          .withIndex("by_time", (q) => q.gte("occurredAt", from))
+          .collect();
+    const inWindow = activity.filter((a) => a.occurredAt >= from);
+    const filtered = args.marketId ? inWindow.filter((a) => a.marketId === args.marketId) : inWindow;
     const mix = new Map<string, { count: number; revenueLocal: number; planId?: string }>();
     for (const a of filtered) {
       const key = a.planCode ?? a.action;

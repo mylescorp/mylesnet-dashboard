@@ -724,6 +724,7 @@ export default defineSchema({
     commissionAccruedLocal: v.optional(v.number()),
     platformFeeLocal: v.optional(v.number()),
   })
+    .index("by_tenant", ["tenantId"])
     .index("by_agent", ["agentId"])
     .index("by_agent_market", ["agentId", "marketId"])
     .index("by_market_time", ["marketId", "occurredAt"])
@@ -840,6 +841,7 @@ export default defineSchema({
     currency: v.string(),
     createdAt: v.number(),
   })
+    .index("by_tenant", ["tenantId"])
     .index("by_market_date", ["marketId", "date"])
     .index("by_date", ["date"]),
 
@@ -908,6 +910,7 @@ export default defineSchema({
     lastRunAt: v.optional(v.number()),
     createdAt: v.number(),
   })
+    .index("by_tenant", ["tenantId"])
     .index("by_enabled", ["enabled", "frequency"])
     .index("by_type", ["reportType"]),
 
@@ -926,6 +929,7 @@ export default defineSchema({
     viewedAt: v.optional(v.number()),
     createdAt: v.number(),
   })
+    .index("by_tenant", ["tenantId"])
     .index("by_requested", ["requestedBy", "createdAt"])
     .index("by_status", ["status"])
     .index("by_report", ["scheduledReportId"]),
