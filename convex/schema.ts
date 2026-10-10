@@ -688,6 +688,7 @@ export default defineSchema({
     enteredAt: v.number(),
   })
     .index("by_tenant", ["tenantId"])
+    .index("by_tenant_month", ["tenantId", "month"])
     .index("by_market_month", ["marketId", "month"])
     .index("by_month", ["month"]),
 
@@ -705,6 +706,7 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_tenant", ["tenantId"])
+    .index("by_tenant_date", ["tenantId", "date"])
     .index("by_market_date", ["marketId", "date"])
     .index("by_date", ["date"]),
 
@@ -725,6 +727,7 @@ export default defineSchema({
     platformFeeLocal: v.optional(v.number()),
   })
     .index("by_tenant", ["tenantId"])
+    .index("by_tenant_time", ["tenantId", "occurredAt"])
     .index("by_agent", ["agentId"])
     .index("by_agent_market", ["agentId", "marketId"])
     .index("by_market_time", ["marketId", "occurredAt"])
@@ -756,6 +759,7 @@ export default defineSchema({
     notes: v.optional(v.string()),
   })
     .index("by_tenant", ["tenantId"])
+    .index("by_tenant_month", ["tenantId", "month"])
     .index("by_market_month", ["marketId", "month"])
     .index("by_month", ["month"])
     .index("by_type", ["type"]),
@@ -842,6 +846,7 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_tenant", ["tenantId"])
+    .index("by_tenant_date", ["tenantId", "date"])
     .index("by_market_date", ["marketId", "date"])
     .index("by_date", ["date"]),
 
@@ -930,6 +935,7 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_tenant", ["tenantId"])
+    .index("by_tenant_created", ["tenantId", "createdAt"])
     .index("by_requested", ["requestedBy", "createdAt"])
     .index("by_status", ["status"])
     .index("by_report", ["scheduledReportId"]),
