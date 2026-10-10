@@ -14,7 +14,7 @@
     "test": "jest --passWithNoTests"
   },
   "dependencies": {
-    "@convex-dev/auth": "^0.0.95",
+    "@convex-dev/auth": "^0.0.96",
     "@convex-dev/workos": "^0.0.3",
     "@convex-dev/workos-authkit": "^0.2.9",
     "@mylesnet/ui": "workspace:*",
