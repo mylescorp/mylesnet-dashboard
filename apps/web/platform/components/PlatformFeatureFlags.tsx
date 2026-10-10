@@ -9,18 +9,19 @@ import { useMutation, useQuery } from "@/app/lib/convex";
 import { useUserProfile } from "@/shared/components/UserProfileContext";
 import { featureFlags, type FeatureFlag } from "@/lib/convex/featureFlags";
 import { tenantControl } from "@/lib/convex/tenantControl";
+import { hasAnyRole } from "@/shared/auth/rbac";
 
 const isSuperAdmin = (roles: { slug: string }[] | undefined) =>
-  roles?.some(role => ["platform_super_admin", "platform_owner", "platform_admin"].includes(role.slug)) ?? false;
+  hasAnyRole(roles?.map((role) => role.slug) ?? [], ["platform_super_admin", "platform_owner", "platform_admin"]);
 
 const isOps = (roles: { slug: string }[] | undefined) =>
-  roles?.some(role => ["platform_ops", "ops_manager"].includes(role.slug)) ?? false;
+  hasAnyRole(roles?.map((role) => role.slug) ?? [], ["platform_ops", "ops_manager"]);
 
 const canEditFlag = (roles: { slug: string }[] | undefined, flag: FeatureFlag) =>
   isSuperAdmin(roles) || (isOps(roles) && flag.category === "infrastructure");
 
 const canDeleteFlag = (roles: { slug: string }[] | undefined) =>
-  roles?.some((role) => ["platform_super_admin", "platform_owner", "platform_admin"].includes(role.slug));
+  hasAnyRole(roles?.map((role) => role.slug) ?? [], ["platform_super_admin", "platform_owner", "platform_admin"]);
 
 export function PlatformFeatureFlags() {
   const { user } = useUserProfile();

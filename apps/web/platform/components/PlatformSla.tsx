@@ -6,9 +6,10 @@ import { platformSla, type PlatformSlaPolicy, type SlaCategory } from "@/shared/
 import { useUserProfile } from "@/shared/components/UserProfileContext";
 import { EmptyState, StatusPill } from "@/shared/components/ui";
 import { userFacingMessage } from "@/shared/lib/user-facing-error";
+import { hasAnyRole } from "@/shared/auth/rbac";
 
 const categoryLabel: Record<SlaCategory, string> = { network: "Network", billing: "Billing", account: "Account" };
-const canManageSlas = (roles: { slug: string }[] | undefined) => roles?.some(role => ["platform_super_admin", "platform_owner", "platform_admin"].includes(role.slug)) ?? false;
+const canManageSlas = (roles: { slug: string }[] | undefined) => hasAnyRole(roles?.map((role) => role.slug) ?? [], ["platform_super_admin", "platform_owner", "platform_admin"]);
 
 export function PlatformSla() {
   const { user } = useUserProfile();

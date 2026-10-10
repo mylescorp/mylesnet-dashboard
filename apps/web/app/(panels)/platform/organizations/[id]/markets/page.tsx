@@ -6,12 +6,13 @@ import type { Id } from "@/convex/_generated/dataModel";
 export default async function PlatformOrganizationMarketsPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
   await requirePanelAccess("platform");
+  const { id } = await params;
   return (
     <QueryErrorBoundary>
-      <PlatformMarkets tenantId={params.id as Id<"tenants">} />
+      <PlatformMarkets tenantId={id as Id<"tenants">} />
     </QueryErrorBoundary>
   );
 }

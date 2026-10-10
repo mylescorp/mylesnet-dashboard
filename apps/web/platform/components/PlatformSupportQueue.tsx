@@ -8,12 +8,13 @@ import { platformSupport, type PlatformTicketCategory, type PlatformTicketStatus
 import { useUserProfile } from "@/shared/components/UserProfileContext";
 import { EmptyState, StatusPill } from "@/shared/components/ui";
 import { userFacingMessage } from "@/shared/lib/user-facing-error";
+import { hasAnyRole } from "@/shared/auth/rbac";
 
 const categories: PlatformTicketCategory[] = ["network", "billing", "account"];
 const statuses: PlatformTicketStatus[] = ["open", "in_progress", "waiting_on_customer", "resolved", "closed"];
 const roles = (slugs: string[]) => ({
-  canWriteAll: slugs.some(slug => ["platform_super_admin", "platform_owner", "platform_admin", "platform_support"].includes(slug)),
-  canRead: slugs.some(slug => ["platform_super_admin", "platform_owner", "platform_admin", "platform_support", "platform_ops", "ops_manager", "platform_finance", "finance_manager"].includes(slug)),
+  canWriteAll: hasAnyRole(slugs, ["platform_super_admin", "platform_owner", "platform_admin", "platform_support"]),
+  canRead: hasAnyRole(slugs, ["platform_super_admin", "platform_owner", "platform_admin", "platform_support", "platform_ops", "ops_manager", "platform_finance", "finance_manager"]),
 });
 
 export function PlatformSupportQueue() {

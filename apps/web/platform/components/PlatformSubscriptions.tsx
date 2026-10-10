@@ -8,6 +8,7 @@ import { useMutation, useQuery } from "@/app/lib/convex";
 import { tenantControl, type PlatformTenant, type EntitlementStatus } from "@/lib/convex/tenantControl";
 import { useUserProfile } from "@/shared/components/UserProfileContext";
 import { StatusPill, Field, TextInput } from "@/shared/components/ui";
+import { canManagePlatformTenants } from "@/platform/permissions";
 
 const entitlementTone: Record<EntitlementStatus, "success" | "warning" | "danger" | "neutral"> = {
   active: "success",
@@ -25,7 +26,7 @@ export function PlatformSubscriptions() {
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const canManage = user?.roles.some((role) => ["platform_owner", "platform_admin"].includes(role.slug));
+  const canManage = canManagePlatformTenants(user?.roles.map((role) => role.slug));
 
   return (
     <div className="workspace-page tenant-control-page">

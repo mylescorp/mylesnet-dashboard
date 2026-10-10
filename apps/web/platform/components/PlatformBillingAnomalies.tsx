@@ -7,6 +7,7 @@ import { useUserProfile } from "@/shared/components/UserProfileContext";
 import { StatusPill } from "@/shared/components/ui";
 import { platformBillingAnomalies, type PlatformBillingAnomaly } from "@/shared/convex/platformBillingAnomalies";
 import { userFacingMessage } from "@/shared/lib/user-facing-error";
+import { hasAnyRole } from "@/shared/auth/rbac";
 
 const WRITE_ROLES = ["platform_super_admin", "platform_ops", "platform_owner", "platform_admin", "ops_manager"];
 const TITLES: Record<PlatformBillingAnomaly["anomalyType"], string> = {
@@ -19,7 +20,7 @@ const money = (amount: number, currency: string) => `${currency} ${amount.toLoca
 export function PlatformBillingAnomalies() {
   const { user } = useUserProfile();
   const roles = user?.roles.map(role => role.slug) ?? [];
-  const canReview = roles.some(role => WRITE_ROLES.includes(role));
+  const canReview = hasAnyRole(roles, WRITE_ROLES);
   const [days, setDays] = useState(30);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");

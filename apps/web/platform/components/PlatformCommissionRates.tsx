@@ -6,12 +6,13 @@ import { useMutation, useQuery } from "@/app/lib/convex";
 import { useUserProfile } from "@/shared/components/UserProfileContext";
 import { platformCommissionRates } from "@/shared/convex/platformCommissionRates";
 import { userFacingMessage } from "@/shared/lib/user-facing-error";
+import { hasAnyRole } from "@/shared/auth/rbac";
 
 const MANAGERS = ["platform_super_admin", "platform_owner", "platform_admin", "platform_finance", "finance_manager"];
 export function PlatformCommissionRates() {
   const { user } = useUserProfile();
   const roles = user?.roles.map(role => role.slug) ?? [];
-  const canManage = roles.some(role => MANAGERS.includes(role));
+  const canManage = hasAnyRole(roles, MANAGERS);
   const global = useQuery(platformCommissionRates.getGlobal, {});
   const { results: overrides, status: overrideStatus, loadMore: loadMoreOverrides } = usePaginatedQuery(platformCommissionRates.listOverrides, {}, { initialNumItems: 20 });
   const { results: agencies, status: agencyStatus, loadMore: loadMoreAgencies } = usePaginatedQuery(platformCommissionRates.agencyOptions, {}, { initialNumItems: 50 });

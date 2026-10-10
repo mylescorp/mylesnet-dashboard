@@ -38,7 +38,6 @@ const authMembershipResultValidator = v.object({
   organizationId: v.string(),
   expectedStatus: v.union(v.literal("active"), v.literal("pending"), v.literal("revoked")),
   alreadyApplied: v.boolean(),
-  alreadyEffective: v.boolean(),
 });
 const resetAuthorizationValidator = v.object({
   actorUserId: v.id("users"),
@@ -68,7 +67,7 @@ async function authorizeMembershipAction(ctx: Parameters<typeof requirePlatformU
     return {
       requestId: args.requestId, actorUserId: actor._id, targetUserId: args.userId,
       workosUserId: completed.workosUserId, organizationId: completed.organizationId,
-      expectedStatus: args.status, alreadyApplied: true, alreadyEffective: true,
+      expectedStatus: args.status, alreadyApplied: true,
     };
   }
   if (args.status === "active" && !isSuperAdmin) throw new Error("Unauthorized: only a platform super-admin can restore access");
@@ -98,7 +97,6 @@ async function authorizeMembershipAction(ctx: Parameters<typeof requirePlatformU
     organizationId: tenant.workosOrganizationId,
     expectedStatus: membership.status,
     alreadyApplied: false,
-    alreadyEffective: membership.status === args.status,
   };
 }
 
@@ -186,12 +184,12 @@ export const updateMembership = action({
   handler: async (ctx, args) => {
     const authorized = await ctx.runQuery(internal.platformUserDirectory.authorizeMembershipChange, args);
     if (authorized.alreadyApplied) return { updated: true };
-    if (!authorized.alreadyEffective) {
-      if (args.status === "revoked") {
-        await deactivateOrganizationMembership(authorized.organizationId, authorized.workosUserId);
-      } else {
-        await reactivateOrganizationMembership(authorized.organizationId, authorized.workosUserId);
-      }
+    // Local membership state can be ahead of the provider webhook. Always
+    // reconcile the identity provider unless this request ID was completed.
+    if (args.status === "revoked") {
+      await deactivateOrganizationMembership(authorized.organizationId, authorized.workosUserId);
+    } else {
+      await reactivateOrganizationMembership(authorized.organizationId, authorized.workosUserId);
     }
     await ctx.runMutation(internal.platformUserDirectory.applyMembershipStatus, {
       userId: args.userId,

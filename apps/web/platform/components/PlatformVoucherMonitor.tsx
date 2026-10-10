@@ -7,6 +7,7 @@ import { ShieldAlert } from "lucide-react";
 import { useMutation, useQuery } from "@/app/lib/convex";
 import { useUserProfile } from "@/shared/components/UserProfileContext";
 import { voucherFraud, type RedemptionMonitorRow } from "@/lib/convex/voucherFraud";
+import { hasAnyRole } from "@/shared/auth/rbac";
 
 const SIGNAL_LABEL: Record<string, string> = {
   duplicate_code: "Duplicate code",
@@ -15,9 +16,7 @@ const SIGNAL_LABEL: Record<string, string> = {
 };
 
 const canManage = (roles: { slug: string }[] | undefined) =>
-  roles?.some((role) =>
-    ["platform_super_admin", "platform_ops", "platform_owner", "platform_admin", "ops_manager"].includes(role.slug),
-  );
+  hasAnyRole(roles?.map((role) => role.slug) ?? [], ["platform_super_admin", "platform_ops", "platform_owner", "platform_admin", "ops_manager"]);
 
 export function PlatformVoucherMonitor() {
   const { user } = useUserProfile();

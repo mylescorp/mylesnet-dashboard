@@ -16,6 +16,7 @@ import {
 import { useMutation, useQuery } from "@/app/lib/convex";
 import { tenantControl, type EntitlementStatus, type TenantStatus } from "@/lib/convex/tenantControl";
 import { useUserProfile } from "@/shared/components/UserProfileContext";
+import { canManagePlatformTenants } from "@/platform/permissions";
 import { StatusPill, EmptyState, formatDateTime } from "@/shared/components/ui";
 
 const formatTs = (ts: number | null | undefined) => formatDateTime(ts ?? undefined);
@@ -44,7 +45,7 @@ export function PlatformTenantDetail({ tenantId }: { tenantId: string }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const canManage = user?.roles.some((role) => ["platform_owner", "platform_admin"].includes(role.slug));
+  const canManage = canManagePlatformTenants(user?.roles.map((role) => role.slug));
 
   const tenant = detail;
   if (tenant === undefined) return <p className="pf-muted">Loading tenant detail…</p>;

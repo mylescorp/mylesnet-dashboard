@@ -150,9 +150,12 @@ export const updatePlatformTicket = mutation({
     const patch: Record<string, unknown> = { updatedAt: now };
     if (args.subject !== undefined) patch.subject = args.subject.trim();
     if (args.description !== undefined) patch.description = args.description.trim();
-    if (args.category !== undefined) {
+    if (args.category !== undefined && args.category !== currentCategory) {
       patch.category = args.category;
-      Object.assign(patch, await platformTicketDeadlines(ctx, args.category, now));
+      // A classification correction must not erase time already spent waiting.
+      Object.assign(patch, await platformTicketDeadlines(ctx, args.category, ticket.createdAt));
+    } else if (args.category !== undefined) {
+      patch.category = args.category;
     }
     if (args.priority !== undefined) patch.priority = args.priority;
     if (args.ticketStatus !== undefined) {

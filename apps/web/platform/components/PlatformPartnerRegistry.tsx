@@ -6,6 +6,7 @@ import { useMutation } from "@/app/lib/convex";
 import { useUserProfile } from "@/shared/components/UserProfileContext";
 import { userFacingMessage } from "@/shared/lib/user-facing-error";
 import { platformPartners, type PartnerType } from "@/shared/convex/platformPartners";
+import { hasAnyRole } from "@/shared/auth/rbac";
 
 const EDIT_ROLES = ["platform_super_admin", "platform_owner", "platform_admin"];
 const READ_ROLES = [...EDIT_ROLES, "platform_ops", "ops_manager", "platform_finance", "finance_manager", "platform_support", "platform_readonly", "readonly"];
@@ -13,8 +14,8 @@ const READ_ROLES = [...EDIT_ROLES, "platform_ops", "ops_manager", "platform_fina
 export function PlatformPartnerRegistry({ type }: { type: PartnerType }) {
   const { user } = useUserProfile();
   const roles = user?.roles.map(role => role.slug) ?? [];
-  const canRead = roles.some(role => READ_ROLES.includes(role));
-  const canEdit = roles.some(role => EDIT_ROLES.includes(role));
+  const canRead = hasAnyRole(roles, READ_ROLES);
+  const canEdit = hasAnyRole(roles, EDIT_ROLES);
   const heading = type === "agency" ? "Agencies" : "Resellers";
   const singular = type === "agency" ? "Agency" : "Reseller";
   const [error, setError] = useState<string | null>(null);

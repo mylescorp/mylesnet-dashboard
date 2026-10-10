@@ -7,6 +7,7 @@ import { useUserProfile } from "@/shared/components/UserProfileContext";
 import { StatusPill } from "@/shared/components/ui";
 import { platformReconciliation, type ReconciliationRun, type ReconciliationRow, type StatementImportRow } from "@/shared/convex/platformReconciliation";
 import { userFacingMessage } from "@/shared/lib/user-facing-error";
+import { hasAnyRole } from "@/shared/auth/rbac";
 
 const ADMIN = ["platform_super_admin", "platform_owner", "platform_admin"];
 const FINANCE = ["platform_finance", "finance_manager"];
@@ -57,7 +58,7 @@ function toImportRows(source: string): StatementImportRow[] {
 export function PlatformPaymentReconciliation() {
   const { user } = useUserProfile();
   const roles = user?.roles.map(role => role.slug) ?? [];
-  const canImport = roles.some(role => [...ADMIN, ...FINANCE].includes(role));
+  const canImport = hasAnyRole(roles, [...ADMIN, ...FINANCE]);
   const [gateway, setGateway] = useState(""); const [statementName, setStatementName] = useState(""); const [csv, setCsv] = useState("");
   const [selected, setSelected] = useState<ReconciliationRun | null>(null); const [error, setError] = useState(""); const [notice, setNotice] = useState(""); const [busy, setBusy] = useState(false);
   const { results: runs, status: runStatus, loadMore: loadMoreRuns } = usePaginatedQuery(platformReconciliation.listRuns, {}, { initialNumItems: 20 });

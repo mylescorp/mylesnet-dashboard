@@ -15,7 +15,7 @@ export type PanelName = "platform" | "network" | "dashboard" | "reseller" | "age
  * single-dashboard estate; multi-panel roles land with Phase 2/5-6.
  */
 export const PANEL_ROLE_PREFIXES: Record<PanelName, string[]> = {
-  platform: ["platform"],
+  platform: ["platform", "org-platform"],
   network: ["network", "super_admin", "admin_ops"],
   dashboard: ["agent", "dashboard", "tenant", "sales"],
   reseller: ["reseller"],
@@ -47,13 +47,26 @@ export function roleMatchesPanel(roleSlugs: string[], panel: PanelName): boolean
 /** True when the user holds every required role. */
 export function hasRole(roleSlugs: string[], requiredRoles: string[]): boolean {
   if (requiredRoles.length === 0) return true;
-  return requiredRoles.every((role) => roleSlugs.includes(role));
+  const effectiveRoles = expandPlatformRoleAliases(roleSlugs);
+  return requiredRoles.every((role) => effectiveRoles.has(role));
 }
 
 /** True when the user holds at least one of the required roles. */
 export function hasAnyRole(roleSlugs: string[], requiredRoles: string[]): boolean {
   if (requiredRoles.length === 0) return true;
-  return requiredRoles.some((role) => roleSlugs.includes(role));
+  const effectiveRoles = expandPlatformRoleAliases(roleSlugs);
+  return requiredRoles.some((role) => effectiveRoles.has(role));
+}
+
+/** WorkOS organization-scoped platform roles are equivalent to their legacy system-role slugs. */
+export function expandPlatformRoleAliases(roleSlugs: readonly string[]): Set<string> {
+  const effectiveRoles = new Set(roleSlugs);
+  for (const slug of roleSlugs) {
+    if (slug === "org-platform_owner" || slug === "org-platform_admin" || slug === "org-platform_support") {
+      effectiveRoles.add(slug.slice(4));
+    }
+  }
+  return effectiveRoles;
 }
 
 /** True when every required permission is present in the token claims. */
@@ -97,5 +110,5 @@ export function flattenOrgScopedRoles(value: unknown): string[] {
 
 /** True when any held role is a platform staff role (platform_*). */
 export function isPlatformStaff(roleSlugs: string[]): boolean {
-  return roleSlugs.some((slug) => slug === "platform" || slug.startsWith("platform_") || slug.startsWith("platform:"));
+  return roleSlugs.some((slug) => slug === "platform" || slug.startsWith("platform_") || slug.startsWith("platform:") || slug.startsWith("org-platform_"));
 }

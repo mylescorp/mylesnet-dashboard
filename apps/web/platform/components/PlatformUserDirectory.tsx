@@ -7,12 +7,13 @@ import { EmptyState, StatusPill } from "@/shared/components/ui";
 import { platformUserDirectory } from "@/shared/convex/platformUserDirectory";
 import type { DirectoryUser } from "@/shared/convex/platformUserDirectory";
 import { userFacingMessage } from "@/shared/lib/user-facing-error";
+import { hasAnyRole } from "@/shared/auth/rbac";
 
 export function PlatformUserDirectory() {
   const { user } = useUserProfile();
   const roleSlugs = user?.roles.map((role) => role.slug) ?? [];
-  const isSuperAdmin = roleSlugs.includes("platform_super_admin") || roleSlugs.includes("platform_owner") || roleSlugs.includes("platform_admin");
-  const isSupport = roleSlugs.includes("platform_support");
+  const isSuperAdmin = hasAnyRole(roleSlugs, ["platform_super_admin", "platform_owner", "platform_admin"]);
+  const isSupport = hasAnyRole(roleSlugs, ["platform_support"]);
   const [searchInput, setSearchInput] = useState("");
   const [searchEmail, setSearchEmail] = useState("");
   const [cursor, setCursor] = useState<string | null>(null);

@@ -8,6 +8,7 @@ import { useMutation } from "@/app/lib/convex";
 import { useUserProfile } from "@/shared/components/UserProfileContext";
 import { fleet, type FleetRow } from "@/lib/convex/fleet";
 import { userFacingMessage } from "@/shared/lib/user-facing-error";
+import { hasAnyRole } from "@/shared/auth/rbac";
 
 const STATUS_FILTERS = [
   { key: "all", label: "All devices" },
@@ -26,9 +27,7 @@ const STATUS_TONE: Record<string, StatusTone> = {
 };
 
 const canEdit = (roles: { slug: string }[] | undefined) =>
-  roles?.some((role) =>
-    ["platform_super_admin", "platform_owner", "platform_admin", "platform_ops", "ops_manager"].includes(role.slug),
-  );
+  hasAnyRole(roles?.map((role) => role.slug) ?? [], ["platform_super_admin", "platform_owner", "platform_admin", "platform_ops", "ops_manager"]);
 
 export function PlatformDeviceFleet() {
   const { user } = useUserProfile();
