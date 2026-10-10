@@ -48,5 +48,7 @@ const PLATFORM_NAV_ROLE_SCOPES: Record<string, string[]> = {
 
 export function canSeePlatformNavRoute(href: string, roleSlugs: string[], fallbackRoles?: string[]): boolean {
   const requiredRoles = PLATFORM_NAV_ROLE_SCOPES[href] ?? fallbackRoles;
-  return !requiredRoles || hasAnyRole(roleSlugs, requiredRoles);
+  // A new platform route must opt into an explicit role scope before it can
+  // appear in navigation. This keeps spec-silent role cells denied by default.
+  return requiredRoles !== undefined && hasAnyRole(roleSlugs, requiredRoles);
 }

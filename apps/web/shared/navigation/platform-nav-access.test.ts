@@ -47,7 +47,8 @@ test("canonical platform route scope takes precedence over legacy item roles", (
     false,
   );
 
-  // Unmapped routes continue to use the navigation item's fallback role list.
+  // Unmapped routes require an explicit fallback role list.
+  assert.equal(canSeePlatformNavRoute("/platform/unregistered-module", ["platform_owner"]), false);
   assert.equal(
     canSeePlatformNavRoute("/platform/legacy-module", ["platform_owner"], ["finance_manager"]),
     false,
