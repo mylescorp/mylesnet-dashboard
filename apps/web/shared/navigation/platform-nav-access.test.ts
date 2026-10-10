@@ -57,3 +57,69 @@ test("canonical platform route scope takes precedence over legacy item roles", (
     true,
   );
 });
+
+test("sidebar visibility matches representative canonical grants for all five sub-roles", () => {
+  const roleCells: Array<{ role: string; expected: Record<string, boolean> }> = [
+    {
+      role: "platform_super_admin",
+      expected: {
+        "/platform/billing": true,
+        "/platform/commissions/payouts": true,
+        "/platform/infrastructure/devices": true,
+        "/platform/analytics/tenant-health": true,
+        "/platform/support": true,
+        "/platform/security/data-requests": true,
+      },
+    },
+    {
+      role: "platform_ops",
+      expected: {
+        "/platform/billing": false,
+        "/platform/commissions/payouts": false,
+        "/platform/infrastructure/devices": true,
+        "/platform/analytics/tenant-health": false,
+        "/platform/support": true,
+        "/platform/security/data-requests": false,
+      },
+    },
+    {
+      role: "platform_finance",
+      expected: {
+        "/platform/billing": true,
+        "/platform/commissions/payouts": true,
+        "/platform/infrastructure/devices": false,
+        "/platform/analytics/tenant-health": false,
+        "/platform/support": true,
+        "/platform/security/data-requests": false,
+      },
+    },
+    {
+      role: "platform_support",
+      expected: {
+        "/platform/billing": false,
+        "/platform/commissions/payouts": false,
+        "/platform/infrastructure/devices": true,
+        "/platform/analytics/tenant-health": true,
+        "/platform/support": true,
+        "/platform/security/data-requests": true,
+      },
+    },
+    {
+      role: "platform_readonly",
+      expected: {
+        "/platform/billing": true,
+        "/platform/commissions/payouts": false,
+        "/platform/infrastructure/devices": true,
+        "/platform/analytics/tenant-health": false,
+        "/platform/support": false,
+        "/platform/security/data-requests": false,
+      },
+    },
+  ];
+
+  for (const { role, expected } of roleCells) {
+    for (const [route, visible] of Object.entries(expected)) {
+      assert.equal(canSeePlatformNavRoute(route, [role]), visible, `${role} visibility for ${route}`);
+    }
+  }
+});
