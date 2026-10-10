@@ -32,3 +32,28 @@ test("sidebar route scopes follow the platform sub-role grants", () => {
   assert.equal(canSeePlatformNavRoute("/platform/access", ["platform_support"]), true);
   assert.equal(canSeePlatformNavRoute("/platform/audit", ["platform_support"]), true);
 });
+
+test("canonical platform route scope takes precedence over legacy item roles", () => {
+  // The canonical matrix grants owners billing access even when a legacy
+  // navigation item only lists finance, and denies ops even if that item lists
+  // owners. This prevents stale item-level roles from widening or narrowing
+  // platform access inconsistently.
+  assert.equal(
+    canSeePlatformNavRoute("/platform/billing", ["platform_owner"], ["finance_manager"]),
+    true,
+  );
+  assert.equal(
+    canSeePlatformNavRoute("/platform/billing", ["ops_manager"], ["platform_owner"]),
+    false,
+  );
+
+  // Unmapped routes continue to use the navigation item's fallback role list.
+  assert.equal(
+    canSeePlatformNavRoute("/platform/legacy-module", ["platform_owner"], ["finance_manager"]),
+    false,
+  );
+  assert.equal(
+    canSeePlatformNavRoute("/platform/legacy-module", ["finance_manager"], ["finance_manager"]),
+    true,
+  );
+});
