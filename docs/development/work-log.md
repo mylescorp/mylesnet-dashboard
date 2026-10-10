@@ -194,19 +194,9 @@ separate archive policy.
 - Baseline: clean local main at `8ceb418` reproduced C5 reconciliation errors (nullable `reason`, two invalid `StatusPill` props, missing `Receipt`, and payment-status union mismatch), plus a missing `PageProps` type before Next generated route types and a sandbox `.tsbuildinfo` write error. Blame attributes all five C5 errors to `8ceb418`. Current PR base `origin/main` at `2493c6c` passes typecheck; tests pass 171/171; lint has zero errors and 15 warnings.
 - Gate build: before rebasing, production compilation succeeded and typecheck stopped on the five C5 errors from stale local main. No process was stopped; the owner's dev server was not touched.
 - Changes: amended steps 3 and 8 in repo/vault gate, added the PR template baseline section, recorded the vault work-log path, and prepared a mirror-divergence report.
-- Status: local-main C5 failures do not exist on current origin/main and are not current PR baseline failures. Rebased the gate onto `origin/main` so the PR contains one commit and no unrelated history. The rebased branch passed `pnpm typecheck`, `pnpm test` (171/171), `pnpm lint` (zero errors, 15 warnings), and `pnpm build` (131 generated pages). GitHub CI security fails its production dependency audit on unchanged baseline `next` below patched 16.3.8 (GHSA-cjq9-62q9-8jv4); secret scanning passed. Do not change runtime dependencies in this gate PR. Greptile review remains pending.
+- Status: local-main C5 failures do not exist on current origin/main and are not current PR baseline failures. Rebased the gate onto `origin/main` so the PR contains one commit and no unrelated history. The rebased branch passed `pnpm typecheck`, `pnpm test` (171/171), `pnpm lint` (zero errors, 15 warnings), and `pnpm build` (131 generated pages). GitHub CI security fails its production dependency audit on unchanged baseline `next` below patched 16.3.8 (GHSA-cjq9-62q9-8jv4); secret scanning passed. Do not change runtime dependencies in this gate PR. Review details: see PR #73.
 
 
-### 2026-10-10 - Greptile review round 1
+### 2026-10-10 - Greptile review
 
-- Review: Greptile returned 4/5 with two P2 findings about post-review record commits and the mapped work-log path. Both findings were valid.
-- Changes: Final review record updates are now committed before the final review; the final Greptile summary on the final commit is canonical score evidence, with no record-only commit after 5/5. Vault reference step 3 now names `products/mylesnet/work-log.md`. Repo and vault gate wording match.
-- Status: Fix commit pushed to PR #73. Waiting for re-review; no branch protection changes applied.
-
-
-### 2026-10-10 - Greptile review round 2
-
-- Review: Greptile returned 5/5 on commit `7eddb3b`; both round 1 findings were fixed and no new findings were raised.
-- Changes: Logged PR #73 in the vault review note, index, and lessons. Updated the vault reference and gate instructions to make the final reviewed commit sequence explicit.
-- CI: Vercel, Vercel Preview Comments, and quality passed. Security fails the unchanged baseline dependency audit for `next` below patched 16.3.8; secret scanning passed.
-- Status: The review-record commit is being prepared and must receive Greptile 5/5. PR remains open and unmerged; branch protection was not changed.
+- Review record: see PR #73.
