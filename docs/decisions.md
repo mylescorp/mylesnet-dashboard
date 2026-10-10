@@ -813,3 +813,8 @@ Routes: `/platform/feature-flags` (list + create/edit/delete),
 - The owner-provided platform list A1–O2 is authoritative and tracked in `docs/development/platform-module-register-2026-10-01.md`. It contains 45 IDs, with C2 tenant SaaS invoices explicitly excluded (44 build modules). This supersedes the earlier 36-ID rollup. The supplied historical verification snapshot must be rechecked against current `main` before completion claims.
 - C1 is platform revenue visibility (MRR/ARR); do not implement tenant invoice issuance/payment capture under C2.
 - A2 implementation started at `/platform/organizations/[id]/markets`; it is incomplete pending full CRUD and authorization/isolation evidence.
+
+
+## 2026-10-10 Greptile review tooling
+
+- Added Greptile review configuration and repository guidance as review tooling only. No runtime dependency or production technology was added; the technology stack contract remains unchanged.
