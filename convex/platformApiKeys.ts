@@ -4,15 +4,11 @@ import { mutation, query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { requirePlatformSubRole } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
-import { isPlatformApiKeyActive } from "./lib/platformApiKeysCore";
+import { isPlatformApiKeyActive, publicPlatformApiKey } from "./lib/platformApiKeysCore";
 
 const apiScope = v.union(
   v.literal("organizations:read"),
 );
-
-function publicKey(key: { _id: string; name: string; prefix: string; scopes: string[]; createdAt: number; expiresAt?: number; revokedAt?: number }) {
-  return { _id: key._id, name: key.name, prefix: key.prefix, scopes: key.scopes, createdAt: key.createdAt, expiresAt: key.expiresAt ?? null, revokedAt: key.revokedAt ?? null };
-}
 
 async function sha256Hex(value: string) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
@@ -41,7 +37,7 @@ export const list = query({
     const result = await ctx.db.query("platformApiKeys").withIndex("by_createdAt").order("desc").paginate({
       ...args.paginationOpts, numItems: Math.min(50, Math.max(1, Math.floor(args.paginationOpts.numItems))),
     });
-    return { ...result, page: result.page.map(publicKey) };
+    return { ...result, page: result.page.map(publicPlatformApiKey) };
   },
 });
 

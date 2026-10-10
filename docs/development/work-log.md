@@ -105,3 +105,10 @@ Prepared the reviewed platform feature bundle on `feat/restore-platform-features
 - **Changes:** Removed readonly from the agency/reseller registry UI readers, matching the canonical spec-silent denial and Convex query. Centralized read and SA-only management helpers and added allow/deny tests for canonical roles and legacy aliases.
 - **Verification:** Focused tests passed; web typecheck passed; focused ESLint passed with the expected ignored-test-file warning; `git diff --check` passed.
 - **Status:** Authenticated browser/backend role verification remains open. GitHub remains unreachable in this environment; no PR or Greptile review was started.
+
+
+### 2026-10-10 — G4 platform API-key disclosure review
+
+- **Changes:** Extracted the public API-key row projection and added a test proving list responses omit token digests and creator/revocation identities. Reclassified G4 as partial because the public resource scope is currently only `organizations:read`.
+- **Verification:** API-key/role tests passed; direct Convex and web typechecks passed; `git diff --check` passed.
+- **Status:** One-time token issuance and digest-only storage exist. Broader endpoint scope, authenticated role verification, and deployed verification remain open.

@@ -10,3 +10,23 @@ export function validatePlatformKeyInput(nameInput: string, scopesInput: string[
 export function isPlatformApiKeyActive(key: { revokedAt?: number; expiresAt?: number }, now: number): boolean {
   return key.revokedAt === undefined && (key.expiresAt === undefined || key.expiresAt > now);
 }
+
+export function publicPlatformApiKey(key: {
+  _id: string;
+  name: string;
+  prefix: string;
+  scopes: string[];
+  createdAt: number;
+  expiresAt?: number;
+  revokedAt?: number;
+}) {
+  return {
+    _id: key._id,
+    name: key.name,
+    prefix: key.prefix,
+    scopes: key.scopes,
+    createdAt: key.createdAt,
+    expiresAt: key.expiresAt ?? null,
+    revokedAt: key.revokedAt ?? null,
+  };
+}

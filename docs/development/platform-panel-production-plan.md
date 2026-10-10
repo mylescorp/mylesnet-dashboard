@@ -176,3 +176,8 @@ The current branch includes separate paginated registries for agencies and resel
 ## 2026-10-10 D1 partner registry role alignment
 
 Aligned the agency/reseller UI read helper with Convex and the canonical matrix. Spec-silent readonly users no longer render the registry query; SA/OPS/FIN/SUP retain read access and only SA sees management controls. Pure role tests cover allow/deny cases. Authenticated live-role verification remains a production gate.
+
+
+## 2026-10-10 G4 API-key disclosure review
+
+The platform API-key list projection now has a regression test proving it omits token digests and creator/revocation identities. SA write and OPS read gates remain; newly issued raw tokens are returned once while only the digest is persisted. The public API currently implements only `organizations:read`; keep G4 partial until the approved API resource contract is complete and roles are verified against a deployed backend.

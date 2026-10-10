@@ -49,7 +49,7 @@ The status column records the supplied audit snapshot. Revalidate route, backend
 | G1 | Platform users and roles `/platform/access` | SA CRUD; others R, no self-elevation | Partial; full management and read-only summary unified on `/platform/access`; `/access` redirects there |
 | G2 | User directory `/platform/users/directory` | SA RU; SUP RU limited disable/reset; others R | Not present |
 | G3 | Roles `/platform/roles` | SA CRUD; others R | Partial |
-| G4 | Platform API keys `/platform/api-keys` | SA CRUD; OPS R; FIN — | Not present |
+| G4 | Platform API keys `/platform/api-keys` | SA CRUD; OPS R; FIN — | Partial; SA can issue/edit/revoke one-time tokens, OPS can list, only token digests are stored, and public projection omits credential/identity fields; currently only `organizations:read` is implemented |
 | H1 | Broadcast `/platform/communications` | SA CRUD; SUP CR with co-sign for all tenants | Partial |
 | H2 | SMS `/platform/communications/sms` | SA CRUD; SUP CR | Partial |
 | H3 | Email `/platform/communications/email` | SA CRUD; SUP CR | Not present |
@@ -157,3 +157,8 @@ The branch has separate agency and reseller registry routes, paginated relations
 ## 2026-10-10 D1 partner registry UI authorization
 
 The agency/reseller component previously considered `platform_readonly` and `readonly` eligible readers even though D1 has no readonly grant and the Convex list query denies them. Moved its read/write checks to shared tested helpers: SA/OPS/FIN/SUP can read; only SA can manage. Route/sidebar matrix and backend gates already matched the canonical D1 rule. Focused RBAC and sidebar tests, web typecheck, focused ESLint, and diff checks pass. Authenticated browser/backend verification remains outstanding.
+
+
+## 2026-10-10 G4 API-key disclosure review
+
+The existing `/platform/api-keys` surface uses SA-only key mutations, SA/OPS list access, one-time token return, and digest-only storage. Extracted the public row projection and added a regression test proving token digest, creator identity, and revoker identity are not exposed by the list query. Scope is currently limited to `organizations:read`, so G4 remains Partial pending the approved API resource contract, authenticated role checks, and deployed verification.
