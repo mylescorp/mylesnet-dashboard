@@ -63,6 +63,7 @@ test("normalizeRoleClaims supports singular and plural AuthKit role claims", () 
   assert.deepEqual(normalizeRoleClaims("platform_owner", undefined), ["platform_owner"]);
   assert.deepEqual(normalizeRoleClaims(undefined, ["tenant_admin"]), ["tenant_admin"]);
   assert.deepEqual(normalizeRoleClaims("platform_owner", ["platform_owner", "platform_admin"]), ["platform_owner", "platform_admin"]);
+  assert.deepEqual(normalizeRoleClaims(undefined, { org_1: ["org-platform_owner"] }), ["org-platform_owner"]);
 });
 
 test("flattenOrgScopedRoles handles org-scoped role claims", () => {

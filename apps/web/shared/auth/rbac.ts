@@ -97,7 +97,7 @@ export function toClaimArray(value: unknown): string[] {
  * authoritative tenant/data checks.
  */
 export function normalizeRoleClaims(role: unknown, roles: unknown): string[] {
-  return [...new Set([...toClaimArray(role), ...toClaimArray(roles)])];
+  return [...new Set([...flattenOrgScopedRoles(role), ...flattenOrgScopedRoles(roles)])];
 }
 
 /** Flatten org-scoped role claims shaped `{ [orgId]: string[] }` into one list. */

@@ -3,7 +3,7 @@ import { mutation, query } from "./_generated/server";
 import { requireTenantPermission, resolveTenantAccess, resolveUserByIdentity } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 import { tenantRoleHasPermission } from "./lib/permissions";
-import { inheritPlatformBranding } from "./lib/workspaceBrandingCore";
+import { inheritPlatformBranding, mergeTenantBranding } from "./lib/workspaceBrandingCore";
 
 type SettingsSection = "branding" | "operations" | "billing" | "communications";
 
@@ -113,27 +113,15 @@ export const update = mutation({
     const incoming = args.value && typeof args.value === "object" ? args.value as Record<string, unknown> : {};
     const normalizedNext = normalize({ ...rawSettings, [args.section]: { ...rawSection, ...incoming } }, tenant.name, inheritedBranding ?? undefined);
     const normalizedSection = normalizedNext[args.section] as unknown as Record<string, unknown>;
-    const nextSection: Record<string, unknown> = { ...rawSection };
+    let nextSection: Record<string, unknown> = { ...rawSection };
+    if (args.section === "branding") {
+      const current = normalize(rawSettings, tenant.name, inheritedBranding ?? undefined).branding;
+      nextSection = mergeTenantBranding(rawSection, incoming, current);
+    }
     for (const key of Object.keys(incoming)) {
       if (!Object.prototype.hasOwnProperty.call(normalizedSection, key)) continue;
       const value = normalizedSection[key];
-      if (args.section === "branding" && (key === "supportEmail" || key === "supportPhone")) {
-        const inheritedValue = inheritedBranding?.[key];
-        const submitted = typeof incoming[key] === "string" ? (incoming[key] as string).trim() : "";
-        if (!submitted || submitted === inheritedValue) delete nextSection[key];
-        else nextSection[key] = value;
-      } else if (args.section === "branding" && key === "brandColor") {
-        const submitted = typeof incoming[key] === "string" ? (incoming[key] as string).trim().toUpperCase() : "";
-        if (!submitted || submitted === inheritedBranding?.brandColor) {
-          delete nextSection[key];
-          delete nextSection.brandColorOverride;
-        } else {
-          nextSection[key] = value;
-          nextSection.brandColorOverride = true;
-        }
-      } else {
-        nextSection[key] = value;
-      }
+      if (args.section !== "branding" || !["supportEmail", "supportPhone", "brandColor"].includes(key)) nextSection[key] = value;
     }
     const nextSettings = { ...rawSettings, [args.section]: nextSection };
     await ctx.db.patch(tenantId, { settings: nextSettings, updatedAt: Date.now() });
