@@ -464,7 +464,7 @@
 .landing-section-inner {
   width: min(var(--landing-container), 100%);
   margin: 0 auto;
-  padding-inline: clamp(20px, 3vw, 40px);
+  padding-inline: var(--page-gutter);
 }
 
 .landing-section-head {
@@ -600,7 +600,7 @@
 /* Thin wrapper: the hero card inside carries the band's visual weight. */
 .landing-page-banner {
   position: relative;
-  padding: var(--landing-section-padding-md) var(--space-4) clamp(32px, 4vw, 48px);
+  padding: var(--landing-section-padding-md) 0 clamp(32px, 4vw, 48px);
 }
 
 .landing-page-banner-inner {
@@ -608,7 +608,7 @@
   z-index: 1;
   width: min(var(--landing-container), 100%);
   margin: 0 auto;
-  padding-inline: clamp(20px, 3vw, 40px);
+  padding-inline: var(--page-gutter);
 }
 
 .landing-prose {
@@ -1016,7 +1016,7 @@ a.landing-card:hover {
   position: relative;
   border-top: 1px solid var(--line);
   background: linear-gradient(180deg, var(--surface) 0%, color-mix(in srgb, var(--primary) 5%, var(--surface)) 100%);
-  padding: var(--landing-section-padding-md) var(--space-4) var(--space-6);
+  padding: var(--landing-section-padding-md) 0 var(--space-6);
 }
 
 /* Connectivity-line hairline across the top edge. */
@@ -1034,7 +1034,7 @@ a.landing-card:hover {
 .landing-footer-inner {
   width: min(var(--landing-container), 100%);
   margin: 0 auto;
-  padding-inline: clamp(20px, 3vw, 40px);
+  padding-inline: var(--page-gutter);
 }
 
 /* The whole footer is one card: masthead, sitemap, and legal bar inside a
@@ -2019,9 +2019,9 @@ a.landing-card:hover {
 .landing-audiences-pills { gap: var(--space-2); }
 .landing-audience-pill { padding: var(--space-2) var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-full); background: var(--surface-muted); color: var(--text); }
 
-.landing-section, .landing-section-alt { padding: var(--landing-section-padding-md) var(--space-4); }
+.landing-section, .landing-section-alt { padding-block: var(--landing-section-padding-md); padding-inline: 0; }
 .landing-section-alt { background: var(--surface-muted); }
-.landing-section-inner { width: min(var(--landing-container), 100%); margin-inline: auto; }
+.landing-section-inner { width: min(var(--landing-container), 100%); margin-inline: auto; padding-inline: var(--page-gutter); }
 .landing-section-head { max-width: 46rem; margin-bottom: var(--space-10); }
 .landing-section-head-center { margin-inline: auto; text-align: center; }
 .landing-section-head-left { text-align: left; }
@@ -2052,9 +2052,9 @@ a.landing-card:hover {
 .landing-preview-chart-bar { display: block; flex: 1; background: var(--primary-action); border-radius: var(--radius-xs) var(--radius-xs) 0 0; }
 .landing-preview-chart-bar-0 { height: 42%; }.landing-preview-chart-bar-1 { height: 58%; }.landing-preview-chart-bar-2 { height: 40%; }.landing-preview-chart-bar-3 { height: 66%; }.landing-preview-chart-bar-4 { height: 52%; }.landing-preview-chart-bar-5 { height: 78%; }.landing-preview-chart-bar-6 { height: 62%; }.landing-preview-chart-bar-7 { height: 88%; }.landing-preview-chart-bar-8 { height: 70%; }.landing-preview-chart-bar-9 { height: 56%; }.landing-preview-chart-bar-10 { height: 74%; }.landing-preview-chart-bar-11 { height: 64%; }
 
-.landing-page-banner-inner { width: min(var(--landing-container), 100%); margin-inline: auto; max-width: 52rem; }
+.landing-page-banner-inner { width: min(var(--landing-container), 100%); margin-inline: auto; max-width: 52rem; padding-inline: var(--page-gutter); }
 .landing-cta-section { padding-block-start: var(--landing-section-padding-lg); padding-block-end: var(--landing-section-padding-lg); }
-.landing-footer-inner { width: min(var(--landing-container), 100%); margin-inline: auto; }
+.landing-footer-inner { width: min(var(--landing-container), 100%); margin-inline: auto; padding-inline: var(--page-gutter); }
 .landing-pricing { gap: var(--space-8); margin-top: var(--space-8); }
 .landing-plans-grid { gap: var(--space-4); }
 .landing-plan-card { padding: var(--space-7); }
@@ -2064,7 +2064,7 @@ a.landing-card:hover {
 .landing-plan-cta { margin-top: var(--space-6); }
 
 @media (max-width: 1140px) { .landing-nav { display: flex; justify-content: space-between; min-height: var(--space-16); } .landing-nav-links, .landing-nav-cta { display: none; } .landing-nav-toggle { display: inline-flex; } }
-@media (max-width: 560px) { .landing-brand-name { font-size: var(--font-size-400); } .landing-preview-wrap { padding-inline: 0; } .landing-preview { border-radius: var(--radius-lg); } .landing-section, .landing-section-alt, .landing-page-banner, .landing-cta-section, .landing-footer { padding-inline: var(--space-3); } .landing-card, .landing-plan-card { padding: var(--space-5); } }
+@media (max-width: 560px) { .landing-brand-name { font-size: var(--font-size-400); } .landing-preview-wrap { padding-inline: 0; } .landing-preview { border-radius: var(--radius-lg); } .landing-section, .landing-section-alt, .landing-page-banner, .landing-footer { padding-inline: 0; } .landing-cta-section { padding-inline: var(--page-gutter); } .landing-card, .landing-plan-card { padding: var(--space-5); } }
 
 /* Homepage refresh inspired by the direct, product-led Bitwave page flow.
    Keep the shared palette and spacing contract; only compose existing tokens. */

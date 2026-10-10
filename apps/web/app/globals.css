@@ -1767,7 +1767,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .workspace-card {
   overflow: hidden;
   background: var(--surface);
-  box-shadow: none;
+  box-shadow: var(--card-shadow);
 }
 
 .pf-panel { padding: var(--card-padding); }

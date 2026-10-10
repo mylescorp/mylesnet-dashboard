@@ -119,7 +119,7 @@ async function cssFiles(directory) {
 
 const rootTokenBlocks = (cssText) => {
   const blocks = [];
-  const re = /:root\s*\{/g;
+  const re = /:root(?:\[[^\]]+\])?\s*\{/g;
   let match;
   while ((match = re.exec(cssText))) {
     let depth = 0;

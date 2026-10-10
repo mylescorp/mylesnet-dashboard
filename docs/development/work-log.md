@@ -207,3 +207,10 @@ separate archive policy.
 - **Changes:** Added shared page gutter and card shape, border, padding, gap, and elevation tokens; made workspace and landing cards consume them; moved landing fonts back to the existing shared font tokens; aligned landing content width to the documented 1140px token; made native controls follow the resolved light/dark scheme; extended typed token references and token-check guards; corrected source paths and updated repository and canonical vault token documentation.
 - **Verification:** Design-token check, full web TypeScript check, and `git diff --check` passed. ESLint completed with zero errors and 15 existing warnings. Production build was blocked by the isolated worktree's dependency symlinks: Turbopack rejects links outside the worktree and the webpack fallback could not parse TypeScript's config output. Browser visual review could not run because the sandbox denied binding the local dev server port.
 - **Status:** Changes are in isolated branch `feat/unified-design-system` at `/home/myles/Work/mylesnet-design-system`. The source checkout's existing uncommitted changes remain untouched. The vault work-log entry is synchronized.
+
+### 2026-10-10 — Greptile design-token review fixes
+
+- **Scope:** Address all three valid findings from Greptile's 4/5 review on PR #77.
+- **Changes:** Restored the shared card shadow on workspace/panel cards; unified the landing section, page-banner, and footer inner gutters while removing double outer insets; expanded landing-token guard coverage to include attribute-qualified theme roots such as `:root[data-theme="dark"]`.
+- **Verification:** Design-token check and `git diff --check` passed. A temporary dark-theme landing-token override was rejected by the updated guard. CI, security, CodeQL, and Vercel preview were green on the reviewed commit before these fixes; this follow-up commit requires fresh review/checks.
+- **Status:** Fixes are prepared for the next commit to PR #77; Greptile 5/5 remains the required endpoint.

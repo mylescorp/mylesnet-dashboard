@@ -183,9 +183,13 @@ gap, and elevation continue to resolve through these shared tokens.
 
 The landing surface keeps its display typography, section rhythm, and decorative
 glass effects, but does not redefine the shared container, card shape, or card
-spacing. Its maximum content width follows `--landing-container` (1140px) and
-its cards use the shared card tokens. `color-scheme` follows the resolved theme
-so native form controls use matching light and dark rendering.
+spacing. Its page container, section inner wrappers, banners, and footer all use
+`--page-gutter` without stacking a second outer gutter. Its maximum content width
+follows `--landing-container` (1140px) and its cards use the shared card tokens.
+Workspace and panel cards retain the shared default elevation. `color-scheme`
+follows the resolved theme so native form controls use matching light and dark
+rendering. The token checker treats attribute-qualified root blocks, including
+`:root[data-theme="dark"]`, as token-definition blocks for contract enforcement.
 
 ## Shared component specifications
 
