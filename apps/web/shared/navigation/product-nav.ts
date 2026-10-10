@@ -73,7 +73,10 @@ export function productNavGroups(principal: ShellPrincipal, pathname: string, pr
       const roleAllowed = panel === "platform"
         ? canSeePlatformNavRoute(item.href, roleSlugs, item.roles)
         : (!item.roles || hasAnyRole(roleSlugs, item.roles));
-      return (!item.permission || principal.permissions.includes(item.permission)) && roleAllowed;
+      // Platform sidebar visibility follows the explicit platform sub-role
+      // matrix. Generic tenant permissions are not the policy source here.
+      const permissionAllowed = panel === "platform" || !item.permission || principal.permissions.includes(item.permission);
+      return permissionAllowed && roleAllowed;
     }),
   })).filter((group) => group.items.length > 0);
 }
