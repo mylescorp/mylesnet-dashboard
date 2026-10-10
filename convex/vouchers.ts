@@ -189,6 +189,7 @@ export const markVoucherSold = mutation({
           const commissionAmount = batch.priceEach * assignment.commissionRate;
           if (commissionAmount > 0) {
             await ctx.db.insert("commissions", {
+              tenantId: market?.tenantId,
               agentId: voucher.ownerAgentId,
               marketId: voucher.marketId,
               voucherId: voucher._id,
