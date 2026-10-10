@@ -109,3 +109,11 @@ Updated rollup: **2 Confirmed** (F1, K), **21 Partial**, **21 Not present**, **1
 4. Add telemetry ingestion to B1; add device-side provisioning execution for B2 only after the worker/device contract is established.
 5. Re-audit each remaining module ID on the checked-out branch with route, gate, UI, and test evidence.
 6. Keep all pre-existing local edits intact; reconcile the upstream-behind checkout before release.
+
+## 2026-10-10 RBAC and navigation recheck
+
+On branch `fix/platform-owner-access-rbac`, role/sidebar work now includes: a central route matrix taking precedence over stale per-link role arrays; fail-closed visibility for platform routes without an explicit matrix or fallback; Platform revenue linked at `/platform/billing`; and organization creation controls and route restricted to super-admin/ops. `platform_owner`, `platform_admin`, and the supported organization-scoped owner alias resolve to the super-admin scope. The organization creation form now invokes the existing provisioning action and collects the required administrator email instead of logging input and returning to the list.
+
+Verification on the isolated worktree: 41/41 repository tests pass, web typecheck passes, focused ESLint passes, and the full lint command exits successfully with 15 warnings (no errors). A production build remains unverified: Turbopack failed to bind an internal port in the sandbox; the webpack retry failed to parse TypeScript `--showConfig`. No authenticated browser test or deployment was performed. The `gh` credential is invalid and GitHub DNS failed, so these commits have not been pushed or reviewed by Greptile. The 2026-10-01 supplied status column above is a historical snapshot, not a current complete module audit.
+
+Next: continue per-module backend/UI/RBAC and integration audit; resolve the D3 client-provisioning request source from an approved workflow before changing signup semantics. The repo objective currently names additional E4 and I3 modules while the owner-provided canonical list contains 45 IDs; track this scope discrepancy explicitly and do not silently omit either requirement.
