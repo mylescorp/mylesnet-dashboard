@@ -66,6 +66,7 @@ export const buildDailySnapshot = internalMutation({
     const revenueUSD = await localToUsd(ctx, revenueLocal, market.currency, date);
 
     const row = {
+      tenantId: market.tenantId,
       marketId: args.marketId,
       date,
       revenueLocal,

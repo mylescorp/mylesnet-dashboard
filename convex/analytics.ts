@@ -46,14 +46,13 @@ export const getRevenueTrend = query({
     const rows = tenantId
       ? await ctx.db
           .query("dailySnapshots")
-          .withIndex("by_tenant", (q) => q.eq("tenantId", tenantId))
+          .withIndex("by_tenant_date", (q) => q.eq("tenantId", tenantId).gte("date", from))
           .collect()
       : await ctx.db
           .query("dailySnapshots")
           .withIndex("by_date", (q) => q.gte("date", from))
           .collect();
-    const inRange = rows.filter((r) => r.date >= from);
-    const filtered = args.marketId ? inRange.filter((r) => r.marketId === args.marketId) : inRange;
+    const filtered = args.marketId ? rows.filter((r) => r.marketId === args.marketId) : rows;
     const byDate = new Map<string, { revenueLocal: number; revenueUSD: number; netContributionLocal: number; newSubscribers: number; salesCount: number }>();
     for (const row of filtered) {
       const entry = byDate.get(row.date) ?? { revenueLocal: 0, revenueUSD: 0, netContributionLocal: 0, newSubscribers: 0, salesCount: 0 };
@@ -97,7 +96,7 @@ export const getSubscriberTrend = query({
     const scoped = tenantId
       ? await ctx.db
           .query("subscriberSnapshots")
-          .withIndex("by_tenant", (q) => q.eq("tenantId", tenantId))
+          .withIndex("by_tenant_date", (q) => q.eq("tenantId", tenantId).gte("date", from))
           .collect()
       : await ctx.db.query("subscriberSnapshots").collect();
     const rows = scoped
@@ -126,14 +125,13 @@ export const getTopAgents = query({
     const activity = tenantId
       ? await ctx.db
           .query("agentActivity")
-          .withIndex("by_tenant", (q) => q.eq("tenantId", tenantId))
+          .withIndex("by_tenant_time", (q) => q.eq("tenantId", tenantId).gte("occurredAt", from))
           .collect()
       : await ctx.db
           .query("agentActivity")
           .withIndex("by_time", (q) => q.gte("occurredAt", from))
           .collect();
-    const inWindow = activity.filter((a) => a.occurredAt >= from);
-    const filtered = args.marketId ? inWindow.filter((a) => a.marketId === args.marketId) : inWindow;
+    const filtered = args.marketId ? activity.filter((a) => a.marketId === args.marketId) : activity;
     const summary = new Map<string, { count: number; revenueLocal: number; currency: string }>();
     for (const a of filtered) {
       const entry = summary.get(a.agentId) ?? { count: 0, revenueLocal: 0, currency: a.currency };
@@ -164,14 +162,13 @@ export const getSalesMix = query({
     const activity = tenantId
       ? await ctx.db
           .query("agentActivity")
-          .withIndex("by_tenant", (q) => q.eq("tenantId", tenantId))
+          .withIndex("by_tenant_time", (q) => q.eq("tenantId", tenantId).gte("occurredAt", from))
           .collect()
       : await ctx.db
           .query("agentActivity")
           .withIndex("by_time", (q) => q.gte("occurredAt", from))
           .collect();
-    const inWindow = activity.filter((a) => a.occurredAt >= from);
-    const filtered = args.marketId ? inWindow.filter((a) => a.marketId === args.marketId) : inWindow;
+    const filtered = args.marketId ? activity.filter((a) => a.marketId === args.marketId) : activity;
     const mix = new Map<string, { count: number; revenueLocal: number; planId?: string }>();
     for (const a of filtered) {
       const key = a.planCode ?? a.action;
