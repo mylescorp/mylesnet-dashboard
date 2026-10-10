@@ -171,3 +171,8 @@ The isolated branch includes a RADIUS server registry at `/platform/infrastructu
 ## 2026-10-10 D1/D2 agency and reseller oversight re-audit
 
 The current branch includes separate paginated registries for agencies and resellers, SA-only relationship CRUD, role-gated suspension/restoration, audit events, and descendant relationship propagation. Tenant auth checks reject any suspended relationship in the chain. The auth traversal now reads at most 101 incoming links per node and fails closed above the 100-link limit. Keep these modules partial until authenticated all-role tests and deployed cascade behavior are verified.
+
+
+## 2026-10-10 D1 partner registry role alignment
+
+Aligned the agency/reseller UI read helper with Convex and the canonical matrix. Spec-silent readonly users no longer render the registry query; SA/OPS/FIN/SUP retain read access and only SA sees management controls. Pure role tests cover allow/deny cases. Authenticated live-role verification remains a production gate.

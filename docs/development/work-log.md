@@ -98,3 +98,10 @@ Prepared the reviewed platform feature bundle on `feat/restore-platform-features
 - **Changes:** Re-audited agency/reseller registries and lifecycle flows. Replaced an unbounded tenant relationship `.collect()` with `.take(101)` and a fail-closed 100-link limit; added boundary coverage. Updated module status and production-plan evidence.
 - **Verification:** Tenant and partner lifecycle tests passed; direct Convex and web typechecks passed; `git diff --check` passed.
 - **Status:** Relationship suspension propagates across linked descendants and tenant auth rejects suspended chains. Live authenticated role and deployed cascade verification remain outstanding.
+
+
+### 2026-10-10 — D1 partner registry RBAC alignment
+
+- **Changes:** Removed readonly from the agency/reseller registry UI readers, matching the canonical spec-silent denial and Convex query. Centralized read and SA-only management helpers and added allow/deny tests for canonical roles and legacy aliases.
+- **Verification:** Focused tests passed; web typecheck passed; focused ESLint passed with the expected ignored-test-file warning; `git diff --check` passed.
+- **Status:** Authenticated browser/backend role verification remains open. GitHub remains unreachable in this environment; no PR or Greptile review was started.

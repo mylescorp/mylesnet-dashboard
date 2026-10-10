@@ -19,6 +19,8 @@ import {
   canManagePlatformPlans,
   canManagePlatformTenants,
   canManagePlatformWhiteLabel,
+  canManagePlatformPartnerRegistry,
+  canReadPlatformPartnerRegistry,
 } from "../../platform/permissions.ts";
 
 test("panelForRole maps role slugs to canonical panels", () => {
@@ -109,4 +111,13 @@ test("platform UI write controls match the tenant, finance, infrastructure, and 
   allowed(canManagePlatformPlans, ["platform_owner", "platform_admin", "finance_manager", "org-platform_owner", "org-platform_admin"], ["ops_manager", "platform_support", "platform_readonly"]);
   allowed(canManagePlatformInfrastructure, ["platform_owner", "platform_admin", "ops_manager", "org-platform_owner", "org-platform_admin"], ["finance_manager", "platform_support", "platform_readonly"]);
   allowed(canManagePlatformWhiteLabel, ["platform_owner", "platform_admin", "org-platform_owner", "org-platform_admin"], ["ops_manager", "finance_manager", "platform_support", "platform_readonly"]);
+});
+
+test("agency and reseller registry UI matches the D1 read and write matrix", () => {
+  const allowed = (check: (roles: readonly string[] | undefined) => boolean, yes: string[], no: string[]) => {
+    for (const role of yes) assert.equal(check([role]), true, `${role} should be allowed`);
+    for (const role of no) assert.equal(check([role]), false, `${role} should be denied`);
+  };
+  allowed(canReadPlatformPartnerRegistry, ["platform_owner", "platform_ops", "ops_manager", "platform_finance", "finance_manager", "platform_support"], ["platform_readonly", "readonly", "tenant_admin"]);
+  allowed(canManagePlatformPartnerRegistry, ["platform_owner", "platform_admin", "org-platform_owner", "org-platform_admin"], ["platform_ops", "platform_finance", "platform_support", "platform_readonly"]);
 });
