@@ -28,8 +28,14 @@ Applies to every feature, bug fix, refactor, docs, or config change. Linear is n
 
 This project has access to reusable agent skills from multiple sources:
 
-### Local Skills (`C:\Users\Admin\.agents\skills\`)
-Core opencode skills for code review, automation, subagents, loops, hooks, and more. Load via `/skill-name` when needed.
+### Local Skills
+
+On the MylesNet workstation, check `/home/myles/.codex/skills/` and the
+available Codex plugin skills. In a repository-only environment, check
+`.agents/skills/` and the initialized `vendor/davidondrej-skills/skills/`
+submodule. These locations vary by environment; do not rely on the historical
+Windows path `C:\Users\Admin\.agents\skills\`. If no applicable skill is
+available, proceed using the repository instructions.
 
 ### David Ondrej Skills (`vendor/davidondrej-skills/skills/`)
 Additional agent skills for orchestration, research, thinking, ops, and skill authoring. Reference the `SKILL.md` in each subfolder before use:
@@ -49,6 +55,13 @@ Before starting any coding task, check available skills in `.agents/skills/` and
 - Build work converges to the stack's monorepo shape (`apps/`, `convex/`, `services/`, `packages/`, `infrastructure/`) per the migration gates in `docs/architecture/MylesNet_Multi_Tenant_ISP_Radius_SaaS_Technical_Specification_v3.md`. The current single Next.js app is the pre-migration state, not the target.
 - Keep `docs/technology-stack.md` and `docs/architecture/MylesNet_Multi_Tenant_ISP_Radius_SaaS_Technical_Specification_v3.md` identical to `/home/myles/Projects/mylescorp-brain/products/mylesnet/technology-stack.md` and `/home/myles/Projects/mylescorp-brain/products/mylesnet/Reports/MylesNet_Multi_Tenant_ISP_Radius_SaaS_Technical_Specification_v3.md`; a divergence is drift.
 
+## Local Vault Reference (Required)
+
+- Configured vault: `/home/myles/Projects/mylescorp-brain/`. Read `docs/vault-reference.md` at the start of meaningful MylesNet work.
+- Repo work log: `docs/development/work-log.md`; vault copy: `/home/myles/Projects/mylescorp-brain/products/mylesnet/work-log.md`. Keep the records synchronized.
+- Greptile review results are logged under `products/mylesnet/greptile-review/` in the vault and in `docs/development/work-log.md`.
+- Do not inspect or print `.env*`, `.aws`, `.vercel`, `.convex`, or other secret-store values. Preserve vault edits and never initialize a Git repository in the vault.
+
 ## No technology stack exposure
 
 - Read `docs/no-technology-stack-exposure.md` before changing any UI, API response, authentication, integration, error boundary, loading state, form, notification, or panel route.
@@ -66,11 +79,3 @@ Before starting any coding task, check available skills in `.agents/skills/` and
 - `docs/agent-threads/` is the archival home for **notable** agent sessions — a byte-identical mirror of `/home/myles/Projects/mylescorp-brain/products/mylesnet/agent-threads/`. Check its `README.md` index at session start for recent context.
 - One thread = one pair: `YYYY-MM-DD-<slug>.md` (verbatim transcript with a summary/decision block up top) + `YYYY-MM-DD-<slug>.json` (structured twin for querying).
 - Archive only notable sessions (decisions, approvals, audits, investigations). Whenever one materially changes the product, record it here **and** copy both files identical into the vault `products/mylesnet/agent-threads/` (vault canonical); a divergence is drift.
-
-
-## Local Vault Reference (Required)
-
-- Configured vault: `/home/myles/Projects/mylescorp-brain/`. Read `docs/vault-reference.md` at the start of meaningful MylesNet work.
-- Repo work log: `docs/development/work-log.md`; vault copy: `/home/myles/Projects/mylescorp-brain/products/mylesnet/work-log.md`. Keep the records synchronized.
-- Greptile review results are logged under `products/mylesnet/greptile-review/` in the vault and in `docs/development/work-log.md`.
-- Do not inspect or print `.env*`, `.aws`, `.vercel`, `.convex`, or other secret-store values. Preserve vault edits and never initialize a Git repository in the vault.

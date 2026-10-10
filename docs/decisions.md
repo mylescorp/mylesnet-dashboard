@@ -1,5 +1,12 @@
 # Build decisions
 
+## Next.js security maintenance — 2026-10-08
+
+- **Decision:** Upgrade the web app's exact `next` and `eslint-config-next` pins from 16.3.6/16.3.5 to 16.3.8, and regenerate the pnpm lockfile.
+- **Reason:** CI's production dependency audit identified the installed Next.js version as affected by the September 2026 security release. Next.js identifies 16.3.8 as the patched Active LTS version.
+- **Scope:** Framework and matching lint configuration only; no application API or architecture changes.
+- **Verification:** Lockfile resolution completed. CI must verify the production audit, lint, typecheck, tests, and production build before merge.
+
 ## L2 audit hash chain — close-out decision (2026-09-15)
 
 - **Decision (Option C):** the audit hash chain ships as *new chain from

@@ -19,7 +19,7 @@ MylesNet will be a pnpm/Turborepo monorepo: Vercel hosts the web product; Convex
 | Layer | Selected technology |
 |---|---|
 | Monorepo | pnpm, Turborepo, TypeScript |
-| Web | Next.js, React, Tailwind CSS, shadcn/ui, Radix UI, React Hook Form, Zod, TanStack Table, ECharts |
+| Web | Next.js 16.3.8, React 19.2.8, Tailwind CSS, shadcn/ui, Radix UI, React Hook Form, Zod, TanStack Table, ECharts |
 | Product hosting | Vercel |
 | Public edge | Cloudflare DNS, wildcard tenant subdomains, WAF, DDoS protection, rate limits |
 | SaaS backend | Convex queries, mutations, actions, HTTP routes, crons, subscriptions, and database |
@@ -98,6 +98,7 @@ Working notes that make each layer production-grade. Expand a section (with evid
 - Turborepo for build/task caching; cache keys include env vars, lockfile, and generated package contracts so stale outputs cannot ship.
 - TypeScript strict everywhere; shared schemas live in `packages/schemas`, shared contracts in `packages/api-contracts`, so the API layer cannot silently diverge from the UI.
 - Version discipline: pin runtime dependencies exactly (or by lockfile); upgrade via the change procedure in the Drift Control section below.
+- **2026-10-08 security patch:** Next.js and `eslint-config-next` are pinned to 16.3.8 to remediate the September 2026 Next.js security release. See `docs/decisions.md` for the maintenance record.
 - Do not add a package not on this stack; if a gap is real, record it in this file first (see Drift Control).
 
 ## Web and multi-portal delivery
