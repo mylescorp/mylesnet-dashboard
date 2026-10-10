@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
 import { requirePermission } from "./lib/auth";
-import { enforceTenantOnResource, readTenantList } from "./lib/tenant";
+import { enforceTenantOnResource, readScopedTenant, readTenantList } from "./lib/tenant";
 import type { Doc } from "./_generated/dataModel";
 import { dayOf } from "./lib/finance";
 
@@ -60,11 +60,18 @@ export const getSubscriberTrend = query({
     if (args.marketId && !(await enforceTenantOnResource(ctx, await ctx.db.get(args.marketId), "market"))) throw new Error("Market not found");
     const days = args.days ?? 30;
     const from = dayOf(Date.now() - days * 24 * 60 * 60 * 1000);
-    const snapshotRows = await readTenantList<Doc<"subscriberSnapshots">>(ctx, {
-      all: () => ctx.db.query("subscriberSnapshots").collect(),
-      tenant: (tenantId) => ctx.db.query("subscriberSnapshots").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
-      legacy: () => ctx.db.query("subscriberSnapshots").withIndex("by_tenant", (q) => q.eq("tenantId", undefined)).collect(),
-    });
+    const scope = await readScopedTenant(ctx);
+    let snapshotRows: Doc<"subscriberSnapshots">[];
+    if (!scope.enforced) {
+      snapshotRows = await ctx.db.query("subscriberSnapshots").collect();
+    } else {
+      const tenantMarkets = args.marketId
+        ? [await ctx.db.get(args.marketId)].filter((market) => market !== null)
+        : await ctx.db.query("markets").withIndex("by_tenant", (q) => q.eq("tenantId", scope.tenantId!)).collect();
+      snapshotRows = (await Promise.all(tenantMarkets.map((market) =>
+        ctx.db.query("subscriberSnapshots").withIndex("by_market_date", (q) => q.eq("marketId", market._id).gte("date", from)).collect()
+      ))).flat();
+    }
     const rows = snapshotRows
       .filter((s) => s.date >= from && (!args.marketId || s.marketId === args.marketId))
       .sort((a, b) => a.date.localeCompare(b.date));

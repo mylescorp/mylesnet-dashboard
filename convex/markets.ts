@@ -194,7 +194,6 @@ export const reportOperatingCost = mutation({
     const user = await requirePermission(ctx, "markets:manage");
     const market = await enforceTenantOnResource(ctx, await ctx.db.get(args.marketId), "market");
     if (!market) throw new Error("Market not found");
-    const scope = await readScopedTenant(ctx);
     const existing = await ctx.db
       .query("marketOperatingCosts")
       .withIndex("by_market_month", (q) =>
@@ -202,10 +201,11 @@ export const reportOperatingCost = mutation({
       )
       .first();
 
+    if (existing?.tenantId && existing.tenantId !== market.tenantId) throw new Error("Operating cost ownership does not match its market");
+
     if (existing) {
-      await enforceTenantOnResource(ctx, existing, "market operating cost");
       await ctx.db.patch(existing._id, {
-        tenantId: scope.enforced ? scope.tenantId ?? undefined : existing.tenantId,
+        tenantId: market.tenantId,
         airtelDataCost: args.airtelDataCost,
         electricityCost: args.electricityCost,
         currency: args.currency,
@@ -223,7 +223,7 @@ export const reportOperatingCost = mutation({
     }
 
     const costId = await ctx.db.insert("marketOperatingCosts", {
-      tenantId: scope.enforced ? scope.tenantId ?? undefined : undefined,
+      tenantId: market.tenantId,
       marketId: args.marketId,
       yearMonth: args.yearMonth,
       airtelDataCost: args.airtelDataCost,

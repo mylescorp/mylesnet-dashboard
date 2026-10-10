@@ -128,7 +128,7 @@ export default function BandwidthCalculatorTool() {
       return `≈ ${formatBits(derived.bits)} moved at ${formatSpeed(Number(speedValue) * speedFactor(speedUnit))} over ${formatDuration(Number(timeValue) * timeFactor(timeUnit))}.`;
     }
     return `≈ ${formatSpeed(derived.bps)} needed to move ${formatBits(Number(sizeValue) * sizeFactor(sizeUnit))} in ${formatDuration(Number(timeValue) * timeFactor(timeUnit))}.`;
-  }, [mode, derived, sizeValid, speedValid, timeValid, sizeValue, sizeUnit, speedValue, speedUnit, timeValue, timeUnit]);
+  }, [derived, sizeValue, sizeUnit, speedValue, speedUnit, timeValue, timeUnit]);
 
   const reset = () => {
     setMode("time");
