@@ -66,6 +66,7 @@ export const applyAvatar = internalMutation({
       entityTable: "users",
       entityId: user._id,
       changedBy: user._id,
+      tenantId: null,
       after: { storageId: args.storageId },
     });
   },
@@ -99,6 +100,7 @@ export const clearAvatar = internalMutation({
       entityTable: "users",
       entityId: user._id,
       changedBy: user._id,
+      tenantId: null,
       after: { avatarRemoved: true },
     });
   },

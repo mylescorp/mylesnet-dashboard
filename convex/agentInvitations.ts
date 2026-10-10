@@ -72,6 +72,7 @@ export const createInvitation = mutation({
       entityTable: "agentInvitations",
       entityId: invitationId,
       changedBy: user._id,
+      tenantId: null,
       after: { email: args.email, name: args.name },
     });
 
@@ -106,6 +107,7 @@ export const revokeInvitation = mutation({
       entityTable: "agentInvitations",
       entityId: args.invitationId,
       changedBy: user._id,
+      tenantId: null,
     });
   },
 });

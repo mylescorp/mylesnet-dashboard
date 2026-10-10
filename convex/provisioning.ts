@@ -140,6 +140,7 @@ export const requestDeviceProvisioning = mutation({
         entityTable: "platformDevices",
         entityId: device._id,
         changedBy: user._id,
+        tenantId: device?.tenantId ?? market.tenantId ?? null,
         before: { provisioningStatus: device.provisioningStatus ?? "unprovisioned" },
         after: { provisioningStatus: "pending", requestId },
       });
@@ -150,6 +151,7 @@ export const requestDeviceProvisioning = mutation({
       entityTable: "provisioningRequests",
       entityId: requestId,
       changedBy: user._id,
+      tenantId: tenantId ?? null,
       after: {
         marketId: args.marketId,
         deviceId: args.deviceId,
@@ -213,6 +215,7 @@ export const decideProvisioningRequest = mutation({
         entityTable: "platformDevices",
         entityId: device._id,
         changedBy: user._id,
+        tenantId: device?.tenantId ?? request.tenantId ?? null,
         before: { provisioningStatus: device.provisioningStatus ?? "unprovisioned" },
         after: { provisioningStatus, requestId: args.requestId, decision: args.decision },
       });
@@ -223,6 +226,7 @@ export const decideProvisioningRequest = mutation({
       entityTable: "provisioningRequests",
       entityId: args.requestId,
       changedBy: user._id,
+      tenantId: request.tenantId ?? null,
       before: { status: request.status },
       after: { status: next, note },
     });
@@ -274,6 +278,7 @@ export const markProvisioningDeployed = mutation({
         entityTable: "platformDevices",
         entityId: device._id,
         changedBy: user._id,
+        tenantId: device?.tenantId ?? request.tenantId ?? null,
         before: { provisioningStatus: device.provisioningStatus ?? "unprovisioned", firmwareVersion: device.firmwareVersion ?? null },
         after: { provisioningStatus: "provisioned", firmwareVersion: request.requestedFirmware ?? device.firmwareVersion ?? null, requestId: args.requestId },
       });
@@ -284,6 +289,7 @@ export const markProvisioningDeployed = mutation({
       entityTable: "provisioningRequests",
       entityId: args.requestId,
       changedBy: user._id,
+      tenantId: request.tenantId ?? null,
       before: { status: request.status },
       after: { status: next },
     });
@@ -309,6 +315,6 @@ export const deleteProvisioningRequest = mutation({
     if (!request) throw new Error("Provisioning request not found");
     if (request.status === "pending" || request.status === "approved") throw new Error("Only rejected or deployed requests may be deleted");
     await ctx.db.delete(request._id);
-    await logAudit(ctx, { action: "provisioning.deleted", entityTable: "provisioningRequests", entityId: request._id, changedBy: actor._id, before: { status: request.status, marketId: request.marketId, deviceId: request.deviceId ?? null } });
+    await logAudit(ctx, { action: "provisioning.deleted", entityTable: "provisioningRequests", entityId: request._id, changedBy: actor._id, tenantId: request.tenantId ?? null, before: { status: request.status, marketId: request.marketId, deviceId: request.deviceId ?? null } });
   },
 });

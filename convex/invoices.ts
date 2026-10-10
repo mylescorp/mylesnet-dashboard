@@ -124,6 +124,7 @@ export const create = mutation({
       entityTable: "invoices",
       entityId: id,
       changedBy: user._id,
+      tenantId,
       after: { invoiceNumber: args.invoiceNumber, total: args.total },
     });
 
@@ -175,6 +176,7 @@ export const update = mutation({
       entityTable: "invoices",
       entityId: id,
       changedBy: user._id,
+      tenantId,
       before: invoice,
       after: updates,
     });
@@ -209,6 +211,7 @@ export const issue = mutation({
       entityTable: "invoices",
       entityId: args.id,
       changedBy: user._id,
+      tenantId,
       before: { status: invoice.status },
       after: { status: "issued" },
     });
@@ -243,6 +246,7 @@ export const markPaid = mutation({
       entityTable: "invoices",
       entityId: args.id,
       changedBy: user._id,
+      tenantId,
       before: { status: invoice.status },
       after: { status: "paid" },
     });
@@ -279,6 +283,7 @@ export const cancel = mutation({
       entityTable: "invoices",
       entityId: args.id,
       changedBy: user._id,
+      tenantId,
       before: { status: invoice.status },
       after: { status: "cancelled", reason: args.reason },
     });

@@ -32,7 +32,7 @@ export const createForTenant = mutation({
     const { name, country, currency } = normalizeMarketInput(args);
     const now = Date.now();
     const marketId = await ctx.db.insert("markets", { tenantId: args.tenantId, name, country, currency, lifecycleStatus: "planned", status: "active", createdAt: now, updatedAt: now });
-    await logAudit(ctx, { action: "platform.market.create", entityTable: "markets", entityId: marketId, changedBy: user._id, after: { tenantId: args.tenantId, tenantName: tenant.name, name } });
+    await logAudit(ctx, { action: "platform.market.create", entityTable: "markets", entityId: marketId, changedBy: user._id, tenantId: args.tenantId, after: { tenantId: args.tenantId, tenantName: tenant.name, name } });
     return marketId;
   },
 });
@@ -45,7 +45,7 @@ export const setLifecycle = mutation({
     assertMarketBelongsToTenant(market, args.tenantId);
     if (market.status === "deleted") throw new Error("Restore this market before changing its lifecycle");
     await ctx.db.patch(args.marketId, { lifecycleStatus: args.lifecycleStatus, updatedAt: Date.now() });
-    await logAudit(ctx, { action: "platform.market.lifecycle", entityTable: "markets", entityId: args.marketId, changedBy: user._id, before: { lifecycleStatus: market.lifecycleStatus }, after: { lifecycleStatus: args.lifecycleStatus } });
+    await logAudit(ctx, { action: "platform.market.lifecycle", entityTable: "markets", entityId: args.marketId, changedBy: user._id, tenantId: args.tenantId, before: { lifecycleStatus: market.lifecycleStatus }, after: { lifecycleStatus: args.lifecycleStatus } });
   },
 });
 
@@ -58,7 +58,7 @@ export const updateForTenant = mutation({
     if (market.status === "deleted") throw new Error("Restore this market before editing it");
     const { name, country, currency } = normalizeMarketInput(args);
     await ctx.db.patch(args.marketId, { name, country, currency, updatedAt: Date.now() });
-    await logAudit(ctx, { action: "platform.market.update", entityTable: "markets", entityId: args.marketId, changedBy: user._id, before: { name: market.name, country: market.country, currency: market.currency }, after: { name, country, currency } });
+    await logAudit(ctx, { action: "platform.market.update", entityTable: "markets", entityId: args.marketId, changedBy: user._id, tenantId: args.tenantId, before: { name: market.name, country: market.country, currency: market.currency }, after: { name, country, currency } });
   },
 });
 
@@ -73,7 +73,7 @@ export const softDeleteForTenant = mutation({
     assertNoActiveMarketAssignments(assignments.length);
     const now = Date.now();
     await ctx.db.patch(args.marketId, { status: "deleted", deletedAt: now, deletedBy: user._id, deleteReason: args.reason.trim() || "Archived from platform organization markets", updatedAt: now });
-    await logAudit(ctx, { action: "platform.market.archive", entityTable: "markets", entityId: args.marketId, changedBy: user._id, before: { status: market.status }, after: { status: "deleted" } });
+    await logAudit(ctx, { action: "platform.market.archive", entityTable: "markets", entityId: args.marketId, changedBy: user._id, tenantId: args.tenantId, before: { status: market.status }, after: { status: "deleted" } });
   },
 });
 
@@ -87,6 +87,6 @@ export const restoreForTenant = mutation({
     if (market.status !== "deleted") throw new Error("Market is not archived");
     const now = Date.now();
     await ctx.db.patch(args.marketId, { status: "active", deletedAt: undefined, deletedBy: undefined, deleteReason: undefined, restoredAt: now, restoredBy: user._id, updatedAt: now });
-    await logAudit(ctx, { action: "platform.market.restore", entityTable: "markets", entityId: args.marketId, changedBy: user._id, before: { status: market.status }, after: { status: "active" } });
+    await logAudit(ctx, { action: "platform.market.restore", entityTable: "markets", entityId: args.marketId, changedBy: user._id, tenantId: args.tenantId, before: { status: market.status }, after: { status: "active" } });
   },
 });
