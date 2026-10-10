@@ -1,7 +1,7 @@
 import { makeFunctionReference } from "convex/server";
 
 export type SlaCategory = "network" | "billing" | "account";
-export type PlatformSlaPolicy = { _id: string; category: SlaCategory; firstResponseMinutes: number; resolutionMinutes: number; createdAt: number; updatedAt: number };
+export type PlatformSlaPolicy = { _id: string | null; category: SlaCategory; firstResponseMinutes: number; resolutionMinutes: number; createdAt: number | null; updatedAt: number | null; isOverride: boolean };
 
 export const platformSla = {
   list: makeFunctionReference<"query", Record<string, never>, PlatformSlaPolicy[]>("platformSla:list"),

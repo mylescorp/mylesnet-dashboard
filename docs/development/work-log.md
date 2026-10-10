@@ -66,3 +66,9 @@ Prepared the reviewed platform feature bundle on `feat/restore-platform-features
 - **Changes:** Added `/platform/health`, an all-sub-role read-only route, sidebar link, and reactive Convex query. It reports Convex reachability plus bounded, payload-free WorkOS webhook samples; missing Vercel and uptime integrations are labeled unmonitored.
 - **Verification:** Web and direct Convex TypeScript checks passed; root Node suite passed 42/42; focused ESLint passed with one ignored-test-file warning; full lint had 0 errors and 11 existing warnings; `git diff --check` passed.
 - **Status:** M1 is partial until external monitoring, authenticated runtime, and deployment verification are available. No provider credentials or payloads are read or returned.
+
+### 2026-10-10 — I2 effective SLA configuration
+
+- **Changes:** SLA read now returns effective targets for all three ticket categories with explicit fallback/override source. Super-admin can configure fallback rows, update overrides, and restore built-in fallback. Support sees targets read-only. Extracted target validation and network-priority rules for tests.
+- **Verification:** Web and direct Convex typechecks passed; root Node suite passed 42/42; focused ESLint passed; full lint had 0 errors and 11 warnings; `git diff --check` passed.
+- **Status:** I2 remains partial pending authenticated role/runtime and production database verification.

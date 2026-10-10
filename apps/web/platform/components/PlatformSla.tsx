@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useMutation, useQuery } from "@/app/lib/convex";
 import { platformSla, type PlatformSlaPolicy, type SlaCategory } from "@/shared/convex/platformSla";
 import { useUserProfile } from "@/shared/components/UserProfileContext";
-import { EmptyState, StatusPill } from "@/shared/components/ui";
+import { StatusPill } from "@/shared/components/ui";
 import { userFacingMessage } from "@/shared/lib/user-facing-error";
 import { hasAnyRole } from "@/shared/auth/rbac";
 
@@ -25,9 +25,11 @@ export function PlatformSla() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const canManage = canManageSlas(user?.roles);
-  const existingCategories = new Set(policies?.map(policy => policy.category) ?? []);
+  const existingCategories = new Set(policies?.filter(policy => policy.isOverride).map(policy => policy.category) ?? []);
+  const overrideCount = policies?.filter(policy => policy.isOverride).length ?? 0;
 
   function startEdit(policy: PlatformSlaPolicy) {
+    if (!policy._id) return;
     setEditing(policy); setCategory(policy.category); setFirstResponse(String(policy.firstResponseMinutes)); setResolution(String(policy.resolutionMinutes)); setError(""); setMessage("");
   }
   function reset() { setEditing(null); setCategory("network"); setFirstResponse("15"); setResolution("240"); }
@@ -36,14 +38,17 @@ export function PlatformSla() {
     event.preventDefault(); setBusy(true); setError(""); setMessage("");
     const firstResponseMinutes = Number(firstResponse); const resolutionMinutes = Number(resolution);
     try {
-      if (editing) await update({ policyId: editing._id, firstResponseMinutes, resolutionMinutes });
-      else await create({ category, firstResponseMinutes, resolutionMinutes });
+      if (editing) {
+        if (!editing._id) throw new Error("Built-in defaults cannot be edited directly.");
+        await update({ policyId: editing._id, firstResponseMinutes, resolutionMinutes });
+      } else await create({ category, firstResponseMinutes, resolutionMinutes });
       setMessage(`${categoryLabel[category]} SLA ${editing ? "updated" : "created"}.`); reset();
     } catch (caught) { setError(userFacingMessage(caught, "SLA policy could not be saved.")); }
     finally { setBusy(false); }
   }
 
   async function deletePolicy(policy: PlatformSlaPolicy) {
+    if (!policy._id) return;
     if (!window.confirm(`Delete the ${categoryLabel[policy.category]} SLA policy? New tickets in that category will use the system fallback until a new policy is created.`)) return;
     setBusy(true); setError(""); setMessage("");
     try { await remove({ policyId: policy._id }); setMessage(`${categoryLabel[policy.category]} SLA policy deleted.`); if (editing?._id === policy._id) reset(); }
@@ -61,8 +66,8 @@ export function PlatformSla() {
       <label className="pf-field"><span className="pf-label">Resolution (minutes)</span><input className="pf-input" type="number" min="1" max="525600" step="1" required value={resolution} onChange={event => setResolution(event.target.value)} /></label>
       <div style={{ display: "flex", alignItems: "end", gap: 8 }}><button className="pf-button" disabled={busy}>{busy ? "Saving…" : editing ? "Save changes" : "Add policy"}</button>{editing ? <button type="button" className="secondary-button" onClick={reset}>Cancel</button> : null}</div>
     </form> : null}
-    <section className="pf-panel"><div className="section-heading"><div><p className="eyebrow">Response commitments</p><h2>Category targets</h2></div><span className="section-count">{policies?.length ?? 0} configured</span></div>
-      {policies === undefined ? <p className="pf-muted">Loading SLA policies…</p> : policies.length === 0 ? <EmptyState title="No category overrides" body="The support queue is using built-in defaults. Super-admins can configure explicit category targets here." /> : <div className="pf-table-wrap"><table className="pf-table"><thead><tr><th>Category</th><th>First response</th><th>Resolution</th>{canManage ? <th>Actions</th> : null}</tr></thead><tbody>{policies.map(policy => <tr key={policy._id}><td><strong>{categoryLabel[policy.category]}</strong></td><td>{formatMinutes(policy.firstResponseMinutes)}</td><td>{formatMinutes(policy.resolutionMinutes)}</td>{canManage ? <td><div className="cell-actions"><button type="button" className="secondary-button" onClick={() => startEdit(policy)}>Edit</button><button type="button" className="secondary-button" disabled={busy} onClick={() => void deletePolicy(policy)}>Delete</button></div></td> : null}</tr>)}</tbody></table></div>}
+    <section className="pf-panel"><div className="section-heading"><div><p className="eyebrow">Response commitments</p><h2>Category targets</h2></div><span className="section-count">{overrideCount} overrides</span></div>
+      {policies === undefined ? <p className="pf-muted">Loading SLA policies…</p> : <div className="pf-table-wrap"><table className="pf-table"><thead><tr><th>Category</th><th>First response</th><th>Resolution</th><th>Source</th>{canManage ? <th>Actions</th> : null}</tr></thead><tbody>{policies.map(policy => <tr key={policy.category}><td><strong>{categoryLabel[policy.category]}</strong></td><td>{formatMinutes(policy.firstResponseMinutes)}</td><td>{formatMinutes(policy.resolutionMinutes)}</td><td>{policy.isOverride ? "Configured override" : "Built-in fallback"}</td>{canManage ? <td><div className="cell-actions">{policy.isOverride ? <><button type="button" className="secondary-button" onClick={() => startEdit(policy)}>Edit</button><button type="button" className="secondary-button" disabled={busy} onClick={() => void deletePolicy(policy)}>Use fallback</button></> : <button type="button" className="secondary-button" onClick={() => { setCategory(policy.category); setFirstResponse(String(policy.firstResponseMinutes)); setResolution(String(policy.resolutionMinutes)); setEditing(null); setError(""); setMessage(""); }}>Configure override</button>}</div></td> : null}</tr>)}</tbody></table></div>}
     </section>
   </main>;
 }

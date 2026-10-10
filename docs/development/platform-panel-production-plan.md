@@ -153,3 +153,7 @@ Several platform pages previously used only the broad panel gate and deferred ac
 ## 2026-10-10 continuation — M1 system health initial implementation
 
 Added `/platform/health` and its all-role read gate. The page refreshes periodically, confirms Convex query reachability, and displays bounded aggregate WorkOS webhook-delivery/queue samples without event payloads or failure details. Vercel and uptime are explicitly marked unmonitored because integrations are absent. Checks: web and direct Convex TypeScript pass, root tests 42/42, full lint 0 errors with 11 existing warnings, focused ESLint and `git diff --check` pass. M1 remains partial pending real Vercel/uptime integrations, live authenticated role tests, and deployment verification.
+
+## 2026-10-10 continuation — I2 effective support SLAs
+
+Changed the SLA read model to show all three effective category targets, including built-in defaults and override source. Support remains read-only; super-admin can add, edit, or remove overrides. Removing an override returns the category to the existing fallback; network remains the fastest category under pure tested rules. Web/backend typechecks, 42/42 root tests, focused ESLint and diff check pass; full lint has no errors and 11 existing warnings. Authenticated role behavior and production Convex deployment remain unverified.
