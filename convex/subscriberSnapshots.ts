@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { internalMutation, query } from "./_generated/server";
 import { requirePermission } from "./lib/auth";
 import { dayOf } from "./lib/finance";
-import { enforceTenantOnResource } from "./lib/tenant";
+import { enforceTenantOnResource, readScopedTenant } from "./lib/tenant";
 
 /**
  * Subscriber snapshot projections (spec §24 population model). Without live
@@ -61,6 +61,7 @@ export const computeSubscriberSnapshot = internalMutation({
       sales.length > 0 ? Math.round(sales.reduce((sum, r) => sum + r.amountLocal, 0) / sales.length) : undefined;
 
     const row = {
+      tenantId: market.tenantId,
       marketId: args.marketId,
       date,
       activeCount,
@@ -77,6 +78,7 @@ export const computeSubscriberSnapshot = internalMutation({
       .withIndex("by_market_date", (q) => q.eq("marketId", args.marketId).eq("date", date))
       .first();
     if (existing) {
+      if (existing.tenantId && existing.tenantId !== market.tenantId) throw new Error("Snapshot ownership does not match its market");
       await ctx.db.replace(existing._id, row);
       return { updated: true, id: existing._id, ...row };
     }
