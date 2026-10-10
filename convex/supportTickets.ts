@@ -269,7 +269,22 @@ export const getPlatformTicket = query({
     const actor = await getPlatformTicketActor(ctx);
     const ticket = await ctx.db.get(args.ticketId);
     if (!ticket || ticket.deletedAt !== undefined || !mayReadTicketCategory(actor, ticket.category ?? "account")) return null;
-    return ticket;
+    const [tenant, market] = await Promise.all([
+      ticket.tenantId ? ctx.db.get(ticket.tenantId) : null,
+      ticket.marketId ? ctx.db.get(ticket.marketId) : null,
+    ]);
+    return {
+      subject: ticket.subject,
+      description: ticket.description,
+      category: ticket.category ?? "account",
+      priority: ticket.priority,
+      ticketStatus: ticket.ticketStatus,
+      tenantName: tenant?.name ?? null,
+      marketName: market?.name ?? null,
+      createdAt: ticket.createdAt,
+      firstResponseDueAt: ticket.firstResponseDueAt ?? null,
+      resolutionDueAt: ticket.resolutionDueAt ?? null,
+    };
   },
 });
 

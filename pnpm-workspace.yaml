@@ -3,3 +3,15 @@ packages:
   - "packages/*"
   - "services/*"
   - "infrastructure/*"
+auditConfig:
+  ignoreCves:
+    # No patched release is published; both advisories currently arrive only
+    # through the development-only eslint-config-next dependency tree.
+    - CVE-2026-93687
+    - CVE-2026-97058
+overrides:
+  brace-expansion@>=1.0.0 <2.0.0: 1.1.21
+  brace-expansion@>=2.0.0 <3.0.0: 2.1.7
+  brace-expansion@>=4.0.0 <5.0.12: 5.0.12
+  sharp@<0.35.5: '>=0.35.5'
+  source-map-js@>=1.0.0 <1.2.2: '>=1.2.2'

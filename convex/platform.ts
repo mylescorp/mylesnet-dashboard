@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
-import { Id } from "./_generated/dataModel";
+import { Id, type Doc } from "./_generated/dataModel";
 import { listAuditLog as readAuditLog } from "./lib/auditLog";
 import { AUDIT_CHAIN_VERIFY_RUN_ID } from "./auditChainVerify";
 import {
@@ -102,7 +102,8 @@ export const getAuditLogEntry = query({
   args: { auditId: v.id("auditLog") },
   handler: async (ctx, args) => {
     await requirePlatformUser(ctx);
-    return await ctx.db.get(args.auditId);
+    const entry = await ctx.db.get(args.auditId);
+    return entry ? presentAuditEntry(ctx, entry) : null;
   },
 });
 
@@ -115,13 +116,39 @@ export const listAuditLogPage = query({
   },
   handler: async (ctx, args) => {
     await requirePlatformUser(ctx);
-    return readAuditLog(ctx, {
+    const page = await readAuditLog(ctx, {
       entityTable: args.entityTable,
       limit: args.limit,
       cursor: args.cursor ?? null,
     });
+    return { ...page, items: await Promise.all(page.items.map((entry) => presentAuditEntry(ctx, entry))) };
   },
 });
+
+async function presentAuditEntry(ctx: import("./_generated/server").QueryCtx, entry: Doc<"auditLog">) {
+  const actor = await ctx.db.get(entry.changedBy);
+  const labelFields = ["name", "title", "subject", "tenantName", "marketName", "planName", "serverName", "deviceName", "code", "accountNumber"];
+  const labelFrom = (json: string | undefined): string | null => {
+    if (!json) return null;
+    try {
+      const values = JSON.parse(json) as Record<string, unknown>;
+      for (const field of labelFields) {
+        const value = values[field];
+        if (typeof value === "string" && value.trim()) return value.trim().slice(0, 120);
+      }
+    } catch { /* Legacy malformed audit payloads have no display label. */ }
+    return null;
+  };
+  return {
+    _id: entry._id,
+    action: entry.action,
+    entityTable: entry.entityTable,
+    entityLabel: labelFrom(entry.afterJson) ?? labelFrom(entry.beforeJson) ?? "Record",
+    actorName: actor?.name ?? actor?.email ?? "Former platform user",
+    timestamp: entry.timestamp,
+    chainSequence: entry.chainSequence ?? null,
+  };
+}
 
 /**
  * Report the state of the background audit-chain verification sweep — a low

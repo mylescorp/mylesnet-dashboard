@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useQuery } from "@/app/lib/convex";
 import { platformPanel, type AuditLogEntry } from "@/lib/convex/platformPanel";
 import { formatDateTime } from "@/shared/components/ui";
-import Link from "next/link";
 
 export function PlatformAuditLog() {
   const [entityTable, setEntityTable] = useState<string | undefined>(undefined);
@@ -66,13 +65,14 @@ export function PlatformAuditLog() {
         <div className="section-heading"><div><p className="eyebrow">Entries</p><h2>Change history</h2></div><span className="section-count">{audit?.items.length ?? 0} in this page</span></div>
         {audit === undefined ? <p className="pf-muted">Loading audit log…</p> : audit.items.length === 0 ? <p className="pf-muted">No audit entries match the current filter.</p> : (
           <>
-            <div className="pf-table-wrap"><table className="pf-table"><thead><tr><th>Timestamp</th><th>Action</th><th>Entity type</th><th>Actor</th></tr></thead><tbody>
+            <div className="pf-table-wrap"><table className="pf-table"><thead><tr><th>Timestamp</th><th>Action</th><th>Entity type</th><th>Record</th><th>Actor</th></tr></thead><tbody>
               {audit.items.map((entry: AuditLogEntry) => (
                 <tr key={entry._id}>
                   <td>{formatDateTime(entry.timestamp)}</td>
-                  <td><Link href={`/platform/audit-log/${entry._id}`}><code>{entry.action}</code></Link></td>
+                  <td><code>{entry.action}</code></td>
                   <td>{entry.entityTable.replace(/([A-Z])/g, " $1")}</td>
-                  <td>Platform user</td>
+                  <td>{entry.entityLabel}</td>
+                  <td>{entry.actorName}</td>
                 </tr>
               ))}
             </tbody></table></div>

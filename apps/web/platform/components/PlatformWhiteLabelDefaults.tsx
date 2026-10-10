@@ -24,7 +24,7 @@ export function PlatformWhiteLabelDefaults() {
 
   const supportEmail = supportEmailDraft ?? defaults?.supportEmail ?? "";
   const supportPhone = supportPhoneDraft ?? defaults?.supportPhone ?? "";
-  const brandColor = brandColorDraft ?? defaults?.brandColor ?? "#FA8200";
+  const brandColor = brandColorDraft ?? defaults?.brandColor ?? "";
 
   if (!canManage) return <main className="workspace-page"><EmptyState title="Super-admin access required" body="White-label defaults can only be viewed and managed by platform super-admins." /></main>;
 
@@ -63,7 +63,7 @@ export function PlatformWhiteLabelDefaults() {
           <form onSubmit={event => void submit(event)} className="form-grid">
             <label className="pf-field"><span className="pf-label">Default support email</span><input className="pf-input" type="email" maxLength={160} value={supportEmail} onChange={event => setSupportEmailDraft(event.target.value)} /></label>
             <label className="pf-field"><span className="pf-label">Default support phone</span><input className="pf-input" maxLength={20} value={supportPhone} onChange={event => setSupportPhoneDraft(event.target.value)} /></label>
-            <label className="pf-field"><span className="pf-label">Default brand color</span><div style={{ display: "flex", gap: 8 }}><input aria-label="Choose default brand color" type="color" value={/^#[0-9A-Fa-f]{6}$/.test(brandColor) ? brandColor : "#FA8200"} onChange={event => setBrandColorDraft(event.target.value.toUpperCase())} /><input className="pf-input" required pattern="#[0-9A-Fa-f]{6}" maxLength={7} value={brandColor} onChange={event => setBrandColorDraft(event.target.value)} /></div></label>
+            <label className="pf-field"><span className="pf-label">Default brand color</span><div style={{ display: "flex", gap: 8 }}><input key={brandColor || "brand-color"} aria-label="Choose default brand color" type="color" defaultValue={/^#[0-9A-Fa-f]{6}$/.test(brandColor) ? brandColor : undefined} onChange={event => setBrandColorDraft(event.target.value.toUpperCase())} /><input className="pf-input" required pattern="#[0-9A-Fa-f]{6}" maxLength={7} value={brandColor} onChange={event => setBrandColorDraft(event.target.value)} /></div></label>
             <div className="modal-actions"><button className="primary-button" type="submit" disabled={busy}>{busy ? "Saving…" : "Save defaults"}</button><button className="secondary-button" type="button" onClick={() => void reset()} disabled={busy}>Reset built-in defaults</button></div>
           </form>
         )}

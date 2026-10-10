@@ -121,7 +121,7 @@ export const collectReportRows = internalQuery({
     switch (args.dataset) {
       case "revenue": {
         const snapshots = args.tenantId
-          ? await ctx.db.query("dailySnapshots").withIndex("by_tenant", (q) => q.eq("tenantId", args.tenantId!)).collect()
+          ? await readTenantDailySnapshots(ctx, args.tenantId)
           : await ctx.db.query("dailySnapshots").withIndex("by_date", (q) => q.lte("date", dayOf(Date.now()))).collect();
         return {
           header: ["date", "marketId", "revenueLocal", "revenueUSD", "salesCount", "newSubscribers", "netContributionLocal", "currency"],
@@ -133,7 +133,7 @@ export const collectReportRows = internalQuery({
       }
       case "subscribers": {
         const subs = args.tenantId
-          ? await ctx.db.query("subscriberSnapshots").withIndex("by_tenant", (q) => q.eq("tenantId", args.tenantId!)).collect()
+          ? await readTenantSubscriberSnapshots(ctx, args.tenantId)
           : await ctx.db.query("subscriberSnapshots").collect();
         return {
           header: ["date", "marketId", "activeCount", "newCount", "renewalCount", "renewalRate", "avgPlanPriceLocal", "currency"],
@@ -172,6 +172,35 @@ export const collectReportRows = internalQuery({
     }
   },
 });
+
+/** Include pre-tenant snapshots by resolving each row through its verified market owner. */
+async function tenantMarkets(ctx: import("./_generated/server").QueryCtx, tenantId: Id<"tenants">) {
+  return ctx.db.query("markets").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect();
+}
+
+async function readTenantDailySnapshots(ctx: import("./_generated/server").QueryCtx, tenantId: Id<"tenants">) {
+  const [scoped, markets] = await Promise.all([
+    ctx.db.query("dailySnapshots").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
+    tenantMarkets(ctx, tenantId),
+  ]);
+  const legacyByMarket = await Promise.all(markets.map((market) =>
+    ctx.db.query("dailySnapshots").withIndex("by_market_date", (q) => q.eq("marketId", market._id)).collect(),
+  ));
+  const rows = [...scoped, ...legacyByMarket.flat().filter((row) => row.tenantId === undefined)];
+  return [...new Map(rows.map((row) => [row._id, row])).values()];
+}
+
+async function readTenantSubscriberSnapshots(ctx: import("./_generated/server").QueryCtx, tenantId: Id<"tenants">) {
+  const [scoped, markets] = await Promise.all([
+    ctx.db.query("subscriberSnapshots").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
+    tenantMarkets(ctx, tenantId),
+  ]);
+  const legacyByMarket = await Promise.all(markets.map((market) =>
+    ctx.db.query("subscriberSnapshots").withIndex("by_market_date", (q) => q.eq("marketId", market._id)).collect(),
+  ));
+  const rows = [...scoped, ...legacyByMarket.flat().filter((row) => row.tenantId === undefined)];
+  return [...new Map(rows.map((row) => [row._id, row])).values()];
+}
 
 /** Authenticate manual report generation before the public action reads data. */
 export const authorizeReportGeneration = internalQuery({
