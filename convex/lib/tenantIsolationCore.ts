@@ -65,3 +65,43 @@ export function isDenialCatalogueComplete(
   for (const scenario of scenarios) expected.delete(scenario);
   return expected.size === 0;
 }
+
+/**
+ * Resolve the tenant id a tenant-scoped read must filter on.
+ *
+ * - A Platform control-plane reader (`enforced: false`) has no filter: it is
+ *   allowed to read across tenants.
+ * - A tenant reader (`enforced: true`) must always filter on a real id. An
+ *   enforced scope without an id is a programming error and throws, so a
+ *   missing id can never degrade into a silently unscoped, cross-tenant read.
+ */
+export function readTenantFilter<T>(scope: {
+  tenantId: T | null;
+  enforced: boolean;
+}): T | null {
+  if (!scope.enforced) return null;
+  if (scope.tenantId === null || scope.tenantId === undefined) {
+    throw new Error("Enforced tenant scope has no tenant id");
+  }
+  return scope.tenantId;
+}
+
+/**
+ * Decide whether a tenant reader may touch a resource with the given owner.
+ * Platform readers pass; tenant readers may never touch an unscoped (legacy)
+ * row or another tenant's row.
+ */
+export function decideTenantResourceWrite(
+  scope: { tenantId: string | null; enforced: boolean },
+  resourceTenantId: string | null | undefined,
+  resourceLabel: string,
+): string | null {
+  if (!scope.enforced) return null;
+  if (resourceTenantId === null || resourceTenantId === undefined) {
+    return `${resourceLabel} is not assigned to the active tenant`;
+  }
+  if (resourceTenantId !== scope.tenantId) {
+    return `${resourceLabel} belongs to another tenant`;
+  }
+  return null;
+}

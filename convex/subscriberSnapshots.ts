@@ -60,6 +60,7 @@ export const computeSubscriberSnapshot = internalMutation({
       sales.length > 0 ? Math.round(sales.reduce((sum, r) => sum + r.amountLocal, 0) / sales.length) : undefined;
 
     const row = {
+      tenantId: market.tenantId,
       marketId: args.marketId,
       date,
       activeCount,
