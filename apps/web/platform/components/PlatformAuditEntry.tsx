@@ -27,7 +27,8 @@ export function PlatformAuditEntry({ auditId }: { auditId: string }) {
             <dl className="pf-detail-grid">
               <div><dt>Timestamp</dt><dd>{formatDateTime(entry.timestamp)}</dd></div>
               <div><dt>Entity type</dt><dd>{entry.entityTable.replace(/([A-Z])/g, " $1")}</dd></div>
-              <div><dt>Actor</dt><dd>Platform user</dd></div>
+              <div><dt>Record</dt><dd>{entry.entityLabel}</dd></div>
+              <div><dt>Actor</dt><dd>{entry.actorName}</dd></div>
             </dl>
           </section>
           <section className="pf-panel"><p className="pf-muted">Detailed record values are restricted to authorized audit exports.</p></section>

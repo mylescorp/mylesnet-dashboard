@@ -151,8 +151,8 @@ export function PlatformDeviceFleet() {
               {visible.map((row) => (
                 <tr key={row._id}>
                   <td className="pf-cell-main"><Link href={`/platform/infrastructure/devices/${row._id}`}>{row.name}</Link>{row.deletedAt ? <small className="table-subtext">Archived</small> : null}</td>
-                  <td>{row.tenantName ?? row.tenantId ?? "—"}</td>
-                  <td>{row.marketName ?? row.marketId}</td>
+                  <td>{row.tenantName ?? "Unassigned"}</td>
+                  <td>{row.marketName ?? "Unknown market"}</td>
                   <td>{row.deviceKind}</td>
                   <td>{row.firmwareVersion ?? "—"}</td>
                   <td>{row.lastSeenAt ? formatTimestamp(row.lastSeenAt) : "Never"}</td>
@@ -247,8 +247,8 @@ function DeviceEditor(
         </header>
         <div className="modal-body">
           <div className="form-grid">
-            <div className="pf-field"><span className="pf-label">Tenant</span><p className="pf-static">{row.tenantName ?? row.tenantId ?? "—"}</p></div>
-            <div className="pf-field"><span className="pf-label">Market</span><p className="pf-static">{row.marketName ?? row.marketId}</p></div>
+            <div className="pf-field"><span className="pf-label">Tenant</span><p className="pf-static">{row.tenantName ?? "Unassigned"}</p></div>
+            <div className="pf-field"><span className="pf-label">Market</span><p className="pf-static">{row.marketName ?? "Unknown market"}</p></div>
             <label className="pf-field"><span className="pf-label">Device name</span><input required minLength={2} maxLength={120} className="pf-input" value={name} onChange={(event) => setName(event.target.value)} /></label>
             <label className="pf-field"><span className="pf-label">Model</span><input required minLength={2} maxLength={80} className="pf-input" value={deviceKind} onChange={(event) => setDeviceKind(event.target.value)} /></label>
             <label className="pf-field pf-field-wide">

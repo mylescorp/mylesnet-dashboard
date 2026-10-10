@@ -11,15 +11,10 @@ export type AuditLogEntry = {
   _id: string;
   action: string;
   entityTable: string;
-  entityId: string;
-  changedBy: string;
-  beforeJson?: string;
-  afterJson?: string;
+  entityLabel: string;
+  actorName: string;
   timestamp: number;
-  ip?: string;
-  chainSequence?: number;
-  prevHash?: string;
-  hash?: string;
+  chainSequence: number | null;
 };
 
 export type AuditLogPage = {

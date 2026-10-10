@@ -8,10 +8,16 @@ export type PlatformTicket = {
   tenantId?: string; tenantName?: string | null; marketId?: string; createdAt: number;
   firstResponseDueAt?: number; resolutionDueAt?: number; deletedAt?: number;
 };
+export type PlatformTicketDetail = {
+  subject: string; description: string; category: PlatformTicketCategory;
+  priority: PlatformTicket["priority"]; ticketStatus: PlatformTicketStatus;
+  tenantName: string | null; marketName: string | null; createdAt: number;
+  firstResponseDueAt: number | null; resolutionDueAt: number | null;
+};
 
 export const platformSupport = {
   list: makeFunctionReference<"query", { paginationOpts: { numItems: number; cursor: string | null }; category?: PlatformTicketCategory; ticketStatus?: PlatformTicketStatus; includeDeleted?: boolean }, import("convex/server").PaginationResult<PlatformTicket>> ("supportTickets:listPlatformTickets"),
-  get: makeFunctionReference<"query", { ticketId: string }, PlatformTicket | null>("supportTickets:getPlatformTicket"),
+  get: makeFunctionReference<"query", { ticketId: string }, PlatformTicketDetail | null>("supportTickets:getPlatformTicket"),
   create: makeFunctionReference<"mutation", { subject: string; description: string; category: PlatformTicketCategory; priority: PlatformTicket["priority"]; tenantId?: string; marketId?: string }, string>("supportTickets:createPlatformTicket"),
   update: makeFunctionReference<"mutation", { ticketId: string; subject?: string; description?: string; category?: PlatformTicketCategory; priority?: PlatformTicket["priority"]; ticketStatus?: PlatformTicketStatus }, { updated: boolean }>("supportTickets:updatePlatformTicket"),
   delete: makeFunctionReference<"mutation", { ticketId: string; reason: string }, { deleted: boolean }>("supportTickets:deletePlatformTicket"),

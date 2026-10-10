@@ -13,8 +13,7 @@ const readRoles = [...writeRoles, "platform_finance", "platform_support", "platf
 
 function toRow(server: Doc<"platformRadiusServers">) {
   return {
-    _id: server._id, name: server.name, hostname: server.hostname, region: server.region,
-    authPort: server.authPort, accountingPort: server.accountingPort, transport: server.transport,
+    _id: server._id, name: server.name, region: server.region, transport: server.transport,
     softwareVersion: server.softwareVersion ?? null, lifecycleStatus: server.lifecycleStatus,
     capacitySessions: server.capacitySessions ?? null, uptimePercent: server.uptimePercent ?? null,
     latencyMs: server.latencyMs ?? null, activeSessions: server.activeSessions ?? null,
@@ -38,9 +37,9 @@ export const list = query({
 export const get = query({
   args: { serverId: v.id("platformRadiusServers") },
   handler: async (ctx, args) => {
-    await requirePlatformSubRole(ctx, readRoles);
+    await requirePlatformSubRole(ctx, writeRoles);
     const server = await ctx.db.get(args.serverId);
-    return server ? toRow(server) : null;
+    return server ? { ...toRow(server), hostname: server.hostname, authPort: server.authPort, accountingPort: server.accountingPort } : null;
   },
 });
 
