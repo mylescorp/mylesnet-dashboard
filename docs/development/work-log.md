@@ -202,3 +202,11 @@ separate archive policy.
 - Review: Greptile returned 4/5 with two P2 findings about post-review record commits and the mapped work-log path. Both findings were valid.
 - Changes: Final review record updates are now committed before the final review; the final Greptile summary on the final commit is canonical score evidence, with no record-only commit after 5/5. Vault reference step 3 now names `products/mylesnet/work-log.md`. Repo and vault gate wording match.
 - Status: Fix commit pushed to PR #73. Waiting for re-review; no branch protection changes applied.
+
+
+### 2026-10-10 - Greptile review round 2
+
+- Review: Greptile returned 5/5 on commit `7eddb3b`; both round 1 findings were fixed and no new findings were raised.
+- Changes: Logged PR #73 in the vault review note, index, and lessons. Updated the vault reference and gate instructions to make the final reviewed commit sequence explicit.
+- CI: Vercel, Vercel Preview Comments, and quality passed. Security fails the unchanged baseline dependency audit for `next` below patched 16.3.8; secret scanning passed.
+- Status: The review-record commit is being prepared and must receive Greptile 5/5. PR remains open and unmerged; branch protection was not changed.
