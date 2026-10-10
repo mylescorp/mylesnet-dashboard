@@ -100,9 +100,12 @@ export function PlatformFeatureFlagDetail({ flag }: { flag: string }) {
               size={4}
               multiple
               value={tenantOverride ?? flagRow.tenantIds ?? []}
-              onChange={(event) =>
-                setTenantOverride(Array.from(event.target.selectedOptions).map((option) => option.value))
-              }
+              onChange={(event) => setTenantOverride(current => {
+                const loadedIds = new Set((tenants ?? []).map(tenant => tenant._id));
+                const preserved = (current ?? flagRow.tenantIds ?? []).filter(id => !loadedIds.has(id));
+                const selected = Array.from(event.target.selectedOptions).map(option => option.value);
+                return Array.from(new Set([...preserved, ...selected]));
+              })}
             >
               {(tenants ?? []).map((tenant) => (
                 <option key={tenant._id} value={tenant._id}>
@@ -110,7 +113,7 @@ export function PlatformFeatureFlagDetail({ flag }: { flag: string }) {
                 </option>
               ))}
             </select>
-            <small className="table-subtext">{tenants.length} tenant options loaded</small>
+            <small className="table-subtext">{tenants.length} tenant options loaded. Selected organizations outside the loaded options are preserved.</small>
             {tenantPageStatus === "CanLoadMore" || tenantPageStatus === "LoadingMore" ? <button type="button" className="secondary-button" disabled={tenantPageStatus === "LoadingMore"} onClick={() => loadMoreTenants(50)}>{tenantPageStatus === "LoadingMore" ? "Loading…" : "Load more tenants"}</button> : null}
           </label>
         ) : null}

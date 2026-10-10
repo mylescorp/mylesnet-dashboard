@@ -7,7 +7,7 @@ import { useUserProfile } from "@/shared/components/UserProfileContext";
 import { platformCommissionRates } from "@/shared/convex/platformCommissionRates";
 import { userFacingMessage } from "@/shared/lib/user-facing-error";
 
-const MANAGERS = ["platform_super_admin", "platform_finance"];
+const MANAGERS = ["platform_super_admin", "platform_owner", "platform_admin", "platform_finance", "finance_manager"];
 export function PlatformCommissionRates() {
   const { user } = useUserProfile();
   const roles = user?.roles.map(role => role.slug) ?? [];

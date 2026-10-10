@@ -109,6 +109,7 @@ export const backfillTenantSubscriberCount = internalMutation({
     const tenant = await ctx.db.get(args.tenantId);
     if (!tenant) throw new Error("Tenant not found");
     if (!args.cursor) {
+      if (tenant.subscriberCountBackfillRunning) throw new Error("Subscriber count backfill is already running");
       await ctx.db.patch(args.tenantId, { subscriberCountBackfillRunning: true });
     }
     const page = await ctx.db

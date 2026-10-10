@@ -67,6 +67,7 @@ import type * as lib_tenantIsolationCore from "../lib/tenantIsolationCore.js";
 import type * as lib_tenantLifecycleCore from "../lib/tenantLifecycleCore.js";
 import type * as lib_tenantMigration from "../lib/tenantMigration.js";
 import type * as lib_tenantProvisioning from "../lib/tenantProvisioning.js";
+import type * as lib_tenantSubscriberCountCore from "../lib/tenantSubscriberCountCore.js";
 import type * as lib_voucherFraudCore from "../lib/voucherFraudCore.js";
 import type * as lib_workosIdentity from "../lib/workosIdentity.js";
 import type * as lib_workosVerify from "../lib/workosVerify.js";
@@ -184,6 +185,7 @@ declare const fullApi: ApiFromModules<{
   "lib/tenantLifecycleCore": typeof lib_tenantLifecycleCore;
   "lib/tenantMigration": typeof lib_tenantMigration;
   "lib/tenantProvisioning": typeof lib_tenantProvisioning;
+  "lib/tenantSubscriberCountCore": typeof lib_tenantSubscriberCountCore;
   "lib/voucherFraudCore": typeof lib_voucherFraudCore;
   "lib/workosIdentity": typeof lib_workosIdentity;
   "lib/workosVerify": typeof lib_workosVerify;

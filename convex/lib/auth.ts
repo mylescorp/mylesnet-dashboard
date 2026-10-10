@@ -115,7 +115,30 @@ async function getActiveTenantMembership(ctx: QueryCtx | MutationCtx, user: Doc<
     .query("tenantMemberships")
     .withIndex("by_user_tenant", (q) => q.eq("userId", user._id).eq("tenantId", tenant._id))
     .first();
-  return membership?.status === "active" ? membership : null;
+  if (membership?.status !== "active") return null;
+  await assertTenantRelationshipChainActive(ctx, tenant._id);
+  return membership;
+}
+
+/** A suspended parent agency or reseller revokes access for all descendants. */
+async function assertTenantRelationshipChainActive(ctx: QueryCtx | MutationCtx, tenantId: Id<"tenants">) {
+  const pending = [tenantId];
+  const visited = new Set<string>();
+  while (pending.length > 0) {
+    const childId = pending.shift()!;
+    if (visited.has(String(childId))) continue;
+    visited.add(String(childId));
+    if (visited.size > 100) throw new Error("Unauthorized: organization relationship scope exceeds safety limits");
+    const relationships = await ctx.db.query("tenantRelationships")
+      .withIndex("by_child", q => q.eq("childTenantId", childId))
+      .take(101);
+    if (relationships.length > 100) throw new Error("Unauthorized: organization relationship scope exceeds safety limits");
+    for (const relationship of relationships) {
+      if (relationship.deletedAt !== undefined) continue;
+      if (relationship.status !== "active") throw new Error("Unauthorized: agency or reseller access is suspended");
+      pending.push(relationship.parentTenantId);
+    }
+  }
 }
 
 export async function resolveTenantAccess(ctx: QueryCtx | MutationCtx, user: Doc<"users">) {

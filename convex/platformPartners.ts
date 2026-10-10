@@ -104,6 +104,9 @@ export const update = mutation({
     if (!row || row.deletedAt !== undefined) throw new Error("Active partner relationship not found");
     const parentTenantId = args.parentTenantId ?? row.parentTenantId;
     const childTenantId = args.childTenantId ?? row.childTenantId;
+    if (row.status === "suspended" && (parentTenantId !== row.parentTenantId || childTenantId !== row.childTenantId)) {
+      throw new Error("Restore the relationship before changing its linked organizations");
+    }
     await validatePair(ctx, parentTenantId, childTenantId);
     if (parentTenantId !== row.parentTenantId || childTenantId !== row.childTenantId) {
       const duplicate = await ctx.db.query("tenantRelationships").withIndex("by_parent_child_type", q => q.eq("parentTenantId", parentTenantId).eq("childTenantId", childTenantId).eq("type", row.type)).first();

@@ -262,12 +262,14 @@ function FlagEditor(
               <label className="pf-field pf-field-wide">
                 <span className="pf-label">Allowed tenants</span>
                 <select className="pf-input" size={4} multiple value={tenantIds} onChange={(event) => {
-                  const options = Array.from(event.target.selectedOptions).map((option) => option.value);
-                  setTenantIds(options);
+                  const loadedIds = new Set(tenants.map(tenant => tenant._id));
+                  const preserved = tenantIds.filter(id => !loadedIds.has(id));
+                  const selected = Array.from(event.target.selectedOptions).map(option => option.value);
+                  setTenantIds(Array.from(new Set([...preserved, ...selected])));
                 }}>
                   {tenants.map((tenant) => <option key={tenant._id} value={tenant._id}>{tenant.name}</option>)}
                 </select>
-                <small className="table-subtext">{tenants.length} tenant options loaded</small>
+                <small className="table-subtext">{tenants.length} tenant options loaded. Selected organizations outside the loaded options are preserved.</small>
                 {tenantPageStatus === "CanLoadMore" || tenantPageStatus === "LoadingMore" ? <button type="button" className="secondary-button" disabled={tenantPageStatus === "LoadingMore"} onClick={() => loadMoreTenants(50)}>{tenantPageStatus === "LoadingMore" ? "Loading…" : "Load more tenants"}</button> : null}
               </label>
             ) : null}
