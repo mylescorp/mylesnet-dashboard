@@ -211,3 +211,10 @@ separate archive policy.
 ### 2026-10-10 — Greptile review
 
 - Review record: see PR #77.
+
+### 2026-10-10 - Tenant panel end-to-end program kickoff
+
+- **Scope:** Start the long-horizon program to make the tenant panel satisfy the full P1/P2/P3 list in `docs/tenant-panel-feature-list.md`.
+- **Changes:** Copied the feature list into the repo at `docs/tenant-panel-feature-list.md`; ran a repo-evidence audit of every feature ID and wrote `docs/tenant-panel-audit.md`; wrote program goal records `docs/goal/goal.md`, `progress.md`, `decisions.md`, `blockers.md`, and `lessons.md`.
+- **Verification:** Baseline gates on the isolated worktree are clean: `pnpm typecheck` passes and `pnpm test` passes 171/171. The owner checkout was left untouched.
+- **Status:** Audit complete. The tenant panel is a narrow billing and operations workspace; the large majority of features are Partial or Missing. Foundation defects to fix first: `logAudit` writes no `tenantId` (tenant audit log returns empty) and `analytics`, `scheduledReports`, and `notifications` are not tenant-scoped. Production deploy and live verification are blocked on an approved production Convex target/credential and a real test tenant. Work runs in the isolated worktree `/home/myles/Projects/mylesnet-tenant-panel` on `feat/tenant-panel-program`.
