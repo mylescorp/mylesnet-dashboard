@@ -3,6 +3,7 @@ import type { NavGroup, NavItem, RouteIndexItem } from "@mylesnet/ui";
 import { findActiveNavItem } from "@mylesnet/ui";
 import { hasPanelAccess, type ProtectedPanel } from "@/shared/auth/panelAccess";
 import { hasAnyRole } from "@/shared/auth/rbac";
+import { canSeePlatformNavRoute } from "./platform-nav-access";
 
 /** Presentation registry only. Server layouts and Convex remain authoritative. */
 export type ShellPanel = "platform" | "dashboard" | "admin" | "reseller" | "agency" | "partner";
@@ -10,50 +11,7 @@ export type ShellPrincipal = { isPlatform: boolean; roles: Array<{ slug: string 
 type RegisteredItem = NavItem & { permission?: string; roles?: string[] };
 type RegisteredGroup = { id: string; label: string; items: RegisteredItem[] };
 
-const platformRoles = {
-  superAdmin: ["platform_super_admin", "platform_owner", "platform_admin"],
-  ops: ["platform_ops", "ops_manager"],
-  finance: ["platform_finance", "finance_manager"],
-  support: ["platform_support"],
-  readonly: ["platform_readonly", "readonly"],
-};
 
-/** Explicit routes whose canonical matrix denies at least one platform sub-role. */
-const PLATFORM_NAV_ROLE_SCOPES: Record<string, string[]> = {
-  "/platform": [...platformRoles.superAdmin, ...platformRoles.ops, ...platformRoles.finance, ...platformRoles.support, ...platformRoles.readonly],
-  "/platform/organizations": [...platformRoles.superAdmin, ...platformRoles.ops, ...platformRoles.finance, ...platformRoles.support, ...platformRoles.readonly],
-  "/platform/subscriptions": [...platformRoles.superAdmin, ...platformRoles.ops, ...platformRoles.finance, ...platformRoles.support, ...platformRoles.readonly],
-  "/platform/billing": [...platformRoles.superAdmin, ...platformRoles.finance, ...platformRoles.readonly],
-  "/platform/billing/plans": [...platformRoles.superAdmin, ...platformRoles.finance, ...platformRoles.ops, ...platformRoles.support, ...platformRoles.readonly],
-  "/platform/billing/reconciliation": [...platformRoles.superAdmin, ...platformRoles.finance, ...platformRoles.ops],
-  "/platform/billing/anomalies": [...platformRoles.superAdmin, ...platformRoles.finance, ...platformRoles.ops],
-  "/platform/commissions": [...platformRoles.superAdmin, ...platformRoles.finance, ...platformRoles.ops],
-  "/platform/commissions/rates": [...platformRoles.superAdmin, ...platformRoles.finance],
-  "/platform/commissions/payouts": [...platformRoles.superAdmin, ...platformRoles.finance],
-  "/platform/analytics": [...platformRoles.superAdmin, ...platformRoles.finance, ...platformRoles.ops, ...platformRoles.readonly],
-  "/platform/analytics/leaderboard": [...platformRoles.superAdmin, ...platformRoles.readonly],
-  "/platform/analytics/scheduled-reports": [...platformRoles.superAdmin, ...platformRoles.finance],
-  "/platform/analytics/tenant-health": [...platformRoles.superAdmin, ...platformRoles.support],
-  "/platform/infrastructure/devices": [...platformRoles.superAdmin, ...platformRoles.ops, ...platformRoles.support, ...platformRoles.readonly],
-  "/platform/infrastructure/health": [...platformRoles.superAdmin, ...platformRoles.ops, ...platformRoles.support, ...platformRoles.readonly],
-  "/platform/infrastructure/radius": [...platformRoles.superAdmin, ...platformRoles.ops, ...platformRoles.finance, ...platformRoles.support, ...platformRoles.readonly],
-  "/platform/infrastructure/provisioning-queue": [...platformRoles.superAdmin, ...platformRoles.ops, ...platformRoles.finance, ...platformRoles.support, ...platformRoles.readonly],
-  "/platform/infrastructure/policy-templates": [...platformRoles.superAdmin, ...platformRoles.ops, ...platformRoles.finance, ...platformRoles.support, ...platformRoles.readonly],
-  "/platform/vouchers/packages": [...platformRoles.superAdmin, ...platformRoles.ops],
-  "/platform/vouchers/monitor": [...platformRoles.superAdmin, ...platformRoles.ops, ...platformRoles.finance],
-  "/platform/agencies": [...platformRoles.superAdmin, ...platformRoles.ops, ...platformRoles.finance, ...platformRoles.support],
-  "/platform/resellers": [...platformRoles.superAdmin, ...platformRoles.ops, ...platformRoles.finance, ...platformRoles.support],
-  "/platform/support": [...platformRoles.superAdmin, ...platformRoles.support, ...platformRoles.ops, ...platformRoles.finance],
-  "/platform/support/sla": [...platformRoles.superAdmin, ...platformRoles.support],
-  "/platform/access": [...platformRoles.superAdmin, ...platformRoles.ops, ...platformRoles.finance, ...platformRoles.support, ...platformRoles.readonly],
-  "/platform/users/directory": [...platformRoles.superAdmin, ...platformRoles.ops, ...platformRoles.finance, ...platformRoles.support, ...platformRoles.readonly],
-  "/platform/audit": [...platformRoles.superAdmin, ...platformRoles.ops, ...platformRoles.finance, ...platformRoles.support, ...platformRoles.readonly],
-  "/platform/security": [...platformRoles.superAdmin, ...platformRoles.ops, ...platformRoles.finance, ...platformRoles.support, ...platformRoles.readonly],
-  "/platform/api-keys": [...platformRoles.superAdmin, ...platformRoles.ops],
-  "/platform/security/data-requests": [...platformRoles.superAdmin, ...platformRoles.support],
-  "/platform/settings/white-label": [...platformRoles.superAdmin],
-  "/platform/feature-flags": [...platformRoles.superAdmin, ...platformRoles.ops, ...platformRoles.finance, ...platformRoles.support, ...platformRoles.readonly],
-};
 
 const dashboardGroups: RegisteredGroup[] = [
   { id: "workspace", label: "Workspace", items: [{ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, exact: true, permission: "dashboard:access" }] },
@@ -111,10 +69,11 @@ export function productNavGroups(principal: ShellPrincipal, pathname: string, pr
   return groups.map((group) => ({
     ...group,
     items: group.items.filter((item) => {
-      const routeRoles = panel === "platform" ? PLATFORM_NAV_ROLE_SCOPES[item.href] : undefined;
-      const requiredRoles = routeRoles ?? item.roles;
-      return (!item.permission || principal.permissions.includes(item.permission)) &&
-        (!requiredRoles || hasAnyRole(principal.roles.map((role) => role.slug), requiredRoles));
+      const roleSlugs = principal.roles.map((role) => role.slug);
+      const roleAllowed = panel === "platform"
+        ? canSeePlatformNavRoute(item.href, roleSlugs, item.roles)
+        : (!item.roles || hasAnyRole(roleSlugs, item.roles));
+      return (!item.permission || principal.permissions.includes(item.permission)) && roleAllowed;
     }),
   })).filter((group) => group.items.length > 0);
 }
