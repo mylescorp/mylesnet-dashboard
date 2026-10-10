@@ -69,6 +69,8 @@ test("sidebar visibility matches representative canonical grants for all five su
         "/platform/analytics/tenant-health": true,
         "/platform/support": true,
         "/platform/security/data-requests": true,
+        "/platform/agencies": true,
+        "/platform/settings": true,
       },
     },
     {
@@ -80,6 +82,8 @@ test("sidebar visibility matches representative canonical grants for all five su
         "/platform/analytics/tenant-health": false,
         "/platform/support": true,
         "/platform/security/data-requests": false,
+        "/platform/agencies": true,
+        "/platform/settings": true,
       },
     },
     {
@@ -91,6 +95,8 @@ test("sidebar visibility matches representative canonical grants for all five su
         "/platform/analytics/tenant-health": false,
         "/platform/support": true,
         "/platform/security/data-requests": false,
+        "/platform/agencies": true,
+        "/platform/settings": false,
       },
     },
     {
@@ -102,6 +108,8 @@ test("sidebar visibility matches representative canonical grants for all five su
         "/platform/analytics/tenant-health": true,
         "/platform/support": true,
         "/platform/security/data-requests": true,
+        "/platform/agencies": true,
+        "/platform/settings": false,
       },
     },
     {
@@ -113,6 +121,8 @@ test("sidebar visibility matches representative canonical grants for all five su
         "/platform/analytics/tenant-health": false,
         "/platform/support": false,
         "/platform/security/data-requests": false,
+        "/platform/agencies": false,
+        "/platform/settings": false,
       },
     },
   ];

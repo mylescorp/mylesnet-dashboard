@@ -42,6 +42,7 @@ const PLATFORM_NAV_ROLE_SCOPES: Record<string, string[]> = {
   "/platform/api-keys": [...platformRoles.superAdmin, ...platformRoles.ops],
   "/platform/security/data-requests": [...platformRoles.superAdmin, ...platformRoles.support],
   "/platform/settings/white-label": [...platformRoles.superAdmin],
+  "/platform/settings": [...platformRoles.superAdmin, ...platformRoles.ops],
   "/platform/feature-flags": [...platformRoles.superAdmin, ...platformRoles.ops, ...platformRoles.finance, ...platformRoles.support, ...platformRoles.readonly],
 };
 
