@@ -23,6 +23,7 @@ import { api } from "@/convex/_generated/api";
 import { avatarFallbackUrl } from "@/app/lib/avatar";
 import type { Id } from "@/convex/_generated/dataModel";
 import { PlatformAccess } from "@/platform/components/PlatformAccess";
+import { isPlatformSuperAdmin } from "@/shared/auth/rbac";
 
 type PlatformUser = NonNullable<ReturnType<typeof useQuery<typeof api.platform.getCurrentPlatformUser>>>;
 type UserRow = NonNullable<ReturnType<typeof useQuery<typeof api.platformUsers.listUsers>>>[number];
@@ -136,10 +137,7 @@ export default function AccessManagementPage() {
       </div>
     );
   }
-  if (currentUser == null || !currentUser.permissions.includes("users:manage")) {
-    if (currentUser?.permissions.includes("users:read")) {
-      return <PlatformAccess canReadInvitations={currentUser.permissions.includes("invitations:manage")} />;
-    }
+  if (currentUser == null) {
     return (
       <div className="workspace-page">
         <div className="pf-panel">
@@ -150,7 +148,12 @@ export default function AccessManagementPage() {
     );
   }
 
-  const canManageRoles = currentUser.permissions.includes("roles:manage");
+  const canManagePlatformAccess = isPlatformSuperAdmin(currentUser.roles.map((role) => role.slug));
+  if (!canManagePlatformAccess) {
+    return <PlatformAccess canReadInvitations={currentUser.permissions.includes("invitations:manage")} />;
+  }
+
+  const canManageRoles = canManagePlatformAccess;
   const tabs: { key: TabKey; label: string; icon: React.ReactNode; available: boolean }[] = [
     { key: "users", label: "Users", icon: <UsersRound size={16} />, available: true },
     { key: "roles", label: "Roles", icon: <ShieldCheck size={16} />, available: canManageRoles },

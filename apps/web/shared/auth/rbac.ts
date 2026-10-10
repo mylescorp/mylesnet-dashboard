@@ -112,3 +112,8 @@ export function flattenOrgScopedRoles(value: unknown): string[] {
 export function isPlatformStaff(roleSlugs: string[]): boolean {
   return roleSlugs.some((slug) => slug === "platform" || slug.startsWith("platform_") || slug.startsWith("platform:") || slug.startsWith("org-platform_"));
 }
+
+/** Canonical super-admin policy, including the organization-scoped WorkOS alias. */
+export function isPlatformSuperAdmin(roleSlugs: string[]): boolean {
+  return hasAnyRole(roleSlugs, ["platform_super_admin", "platform_owner", "platform_admin"]);
+}

@@ -7,6 +7,7 @@ import {
   hasPermission,
   hasRole,
   isPlatformStaff,
+  isPlatformSuperAdmin,
   panelForRole,
   roleMatchesPanel,
   toClaimArray,
@@ -79,4 +80,14 @@ test("isPlatformStaff flags platform staff roles", () => {
   assert.equal(isPlatformStaff(["platform_admin", "agent"]), true);
   assert.equal(isPlatformStaff(["agent"]), false);
   assert.equal(isPlatformStaff([]), false);
+});
+
+test("platform access management follows super-admin sub-role, including org alias", () => {
+  assert.equal(isPlatformSuperAdmin(["platform_owner"]), true);
+  assert.equal(isPlatformSuperAdmin(["platform_admin"]), true);
+  assert.equal(isPlatformSuperAdmin(["org-platform_owner"]), true);
+  assert.equal(isPlatformSuperAdmin(["platform_finance"]), false);
+  assert.equal(isPlatformSuperAdmin(["ops_manager"]), false);
+  assert.equal(isPlatformSuperAdmin(["platform_support"]), false);
+  assert.equal(isPlatformSuperAdmin(["platform_readonly"]), false);
 });
