@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { Doc } from "./_generated/dataModel";
 import { requirePermission } from "./lib/auth";
-import { readTenantList, enforceTenantOnResource } from "./lib/tenant";
+import { readTenantList, readScopedTenant, enforceTenantOnResource } from "./lib/tenant";
 import { logAudit } from "./lib/auditLog";
 
 /**
@@ -72,13 +72,15 @@ export const createTeam = mutation({
   args: { name: v.string(), leaderAgentId: v.optional(v.id("agents")) },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "teams:manage");
+    const scope = await readScopedTenant(ctx);
     const id = await ctx.db.insert("teams", {
+      tenantId: scope.tenantId ?? undefined,
       name: args.name,
       leaderAgentId: args.leaderAgentId,
       status: "active",
       createdAt: Date.now(),
     });
-    await logAudit(ctx, { action: "team.create", entityTable: "teams", entityId: id, changedBy: user._id, after: args });
+    await logAudit(ctx, { action: "team.create", entityTable: "teams", entityId: id, changedBy: user._id, tenantId: scope.tenantId, after: args });
     return id;
   },
 });
@@ -87,7 +89,8 @@ export const updateTeam = mutation({
   args: { teamId: v.id("teams"), name: v.optional(v.string()), leaderAgentId: v.optional(v.id("agents")) },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "teams:manage");
-    const team = await ctx.db.get(args.teamId);
+    const team = await enforceTenantOnResource(ctx, await ctx.db.get(args.teamId), "team");
+    if (!team) throw new Error("Team not found");
     const patch = { name: args.name, leaderAgentId: args.leaderAgentId };
     const cleaned = Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined));
     await ctx.db.patch(args.teamId, cleaned);
@@ -99,7 +102,8 @@ export const removeTeam = mutation({
   args: { teamId: v.id("teams") },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "teams:manage");
-    const team = await ctx.db.get(args.teamId);
+    const team = await enforceTenantOnResource(ctx, await ctx.db.get(args.teamId), "team");
+    if (!team) throw new Error("Team not found");
     await ctx.db.patch(args.teamId, { status: "removed", removedAt: Date.now(), removedBy: user._id });
     await logAudit(ctx, { action: "team.remove", entityTable: "teams", entityId: args.teamId, changedBy: user._id, tenantId: team?.tenantId });
   },
@@ -109,8 +113,8 @@ export const addTeamMember = mutation({
   args: { teamId: v.id("teams"), agentId: v.id("agents") },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "teams:manage");
-    const team = await ctx.db.get(args.teamId);
-    const agent = await ctx.db.get(args.agentId);
+    const team = await enforceTenantOnResource(ctx, await ctx.db.get(args.teamId), "team");
+    const agent = await enforceTenantOnResource(ctx, await ctx.db.get(args.agentId), "agent");
     if (!team || team.status !== "active") throw new Error("Team is not active");
     if (!agent) throw new Error("Agent not found");
     const existing = await ctx.db
@@ -120,6 +124,7 @@ export const addTeamMember = mutation({
       .first();
     if (existing) throw new Error("Agent already on this team");
     const id = await ctx.db.insert("teamMembers", {
+      tenantId: team.tenantId,
       teamId: args.teamId,
       agentId: args.agentId,
       joinedAt: Date.now(),
@@ -133,7 +138,8 @@ export const removeTeamMember = mutation({
   args: { teamId: v.id("teams"), agentId: v.id("agents") },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "teams:manage");
-    const team = await ctx.db.get(args.teamId);
+    const team = await enforceTenantOnResource(ctx, await ctx.db.get(args.teamId), "team");
+    if (!team) throw new Error("Team not found");
     const member = await ctx.db
       .query("teamMembers")
       .withIndex("by_team_member", (q) => q.eq("teamId", args.teamId).eq("agentId", args.agentId))

@@ -70,7 +70,7 @@ export const updateMarketLifecycleStatus = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "markets:manage");
-    const market = await ctx.db.get(args.marketId);
+    const market = await enforceTenantOnResource(ctx, await ctx.db.get(args.marketId), "market");
     if (!market) throw new Error("Market not found");
 
     await ctx.db.patch(args.marketId, {
@@ -105,7 +105,7 @@ export const softDeleteMarket = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "markets:manage");
-    const market = await ctx.db.get(args.marketId);
+    const market = await enforceTenantOnResource(ctx, await ctx.db.get(args.marketId), "market");
     if (!market) throw new Error("Market not found");
 
     const activeAssignments = await ctx.db
@@ -157,7 +157,7 @@ export const restoreMarket = mutation({
   args: { marketId: v.id("markets") },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "markets:manage");
-    const market = await ctx.db.get(args.marketId);
+    const market = await enforceTenantOnResource(ctx, await ctx.db.get(args.marketId), "market");
     if (!market) throw new Error("Market not found");
 
     // Restoring does NOT auto-reactivate whatever was reassigned away while
@@ -193,7 +193,8 @@ export const reportOperatingCost = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "markets:manage");
-    const market = await ctx.db.get(args.marketId);
+    const market = await enforceTenantOnResource(ctx, await ctx.db.get(args.marketId), "market");
+    if (!market) throw new Error("Market not found");
     const existing = await ctx.db
       .query("marketOperatingCosts")
       .withIndex("by_market_month", (q) =>

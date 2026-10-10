@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { requireMarketAccess, requirePermission } from "./lib/auth";
+import { enforceTenantOnResource } from "./lib/tenant";
 import { logAudit } from "./lib/auditLog";
 import { insertActivityLedger } from "./agentActivity";
 
@@ -77,7 +78,7 @@ export const generateVoucherBatch = mutation({
     const user = await requirePermission(ctx, "vouchers:manage");
     await requireMarketAccess(ctx, args.marketId, "operator");
     const now = Date.now();
-    const market = await ctx.db.get(args.marketId);
+    const market = await enforceTenantOnResource(ctx, await ctx.db.get(args.marketId), "market");
 
     const batchId = await ctx.db.insert("voucherBatches", {
       marketId: args.marketId,
@@ -140,7 +141,7 @@ export const allocateVoucherToAgent = mutation({
     const voucher = await ctx.db.get(args.voucherId);
     if (!voucher) throw new Error("Voucher not found");
     await requireMarketAccess(ctx, voucher.marketId, "operator");
-    const market = await ctx.db.get(voucher.marketId);
+    const market = await enforceTenantOnResource(ctx, await ctx.db.get(voucher.marketId), "market");
     await ctx.db.patch(args.voucherId, {
       ownerAgentId: args.agentId,
       voucherStatus: "owned",
@@ -167,7 +168,7 @@ export const markVoucherSold = mutation({
     await requireMarketAccess(ctx, voucher.marketId, "operator");
 
     const now = Date.now();
-    const market = await ctx.db.get(voucher.marketId);
+    const market = await enforceTenantOnResource(ctx, await ctx.db.get(voucher.marketId), "market");
     await ctx.db.patch(args.voucherId, {
       voucherStatus: "sold",
       soldAt: now,
@@ -246,7 +247,7 @@ export const redeemVoucher = mutation({
     const voucher = await ctx.db.get(args.voucherId);
     if (!voucher) throw new Error("Voucher not found");
     await requireMarketAccess(ctx, voucher.marketId, "operator");
-    const market = await ctx.db.get(voucher.marketId);
+    const market = await enforceTenantOnResource(ctx, await ctx.db.get(voucher.marketId), "market");
     if (voucher.voucherStatus === "redeemed") {
       throw new Error("Voucher already redeemed");
     }

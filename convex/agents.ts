@@ -103,8 +103,13 @@ export const assignAgentToMarket = mutation({
     const user = await requirePermission(ctx, "agents:manage");
     const now = Date.now();
 
+    const agent = await enforceTenantOnResource(ctx, await ctx.db.get(args.agentId), "agent");
+    if (!agent) throw new Error("Agent not found");
+    const market = await enforceTenantOnResource(ctx, await ctx.db.get(args.marketId), "market");
+    if (!market) throw new Error("Market not found");
+
     if (args.endPreviousAssignmentId) {
-      const prev = await ctx.db.get(args.endPreviousAssignmentId);
+      const prev = await enforceTenantOnResource(ctx, await ctx.db.get(args.endPreviousAssignmentId), "assignment");
       if (!prev) throw new Error("Previous assignment not found");
       await ctx.db.patch(args.endPreviousAssignmentId, {
         assignmentStatus: "ended",
@@ -114,6 +119,7 @@ export const assignAgentToMarket = mutation({
     }
 
     const assignmentId = await ctx.db.insert("agentMarketAssignments", {
+      tenantId: agent.tenantId ?? market.tenantId,
       agentId: args.agentId,
       marketId: args.marketId,
       assignmentStatus: "active",
@@ -122,13 +128,12 @@ export const assignAgentToMarket = mutation({
       startedAt: now,
     });
 
-    const agent = await ctx.db.get(args.agentId);
     await logAudit(ctx, {
       action: "agent.assignToMarket",
       entityTable: "agentMarketAssignments",
       entityId: assignmentId,
       changedBy: user._id,
-      tenantId: agent?.tenantId,
+      tenantId: agent.tenantId,
       after: { agentId: args.agentId, marketId: args.marketId },
     });
 
@@ -141,7 +146,7 @@ export const suspendAgent = mutation({
   args: { agentId: v.id("agents"), reason: v.string() },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "agents:manage");
-    const agent = await ctx.db.get(args.agentId);
+    const agent = await enforceTenantOnResource(ctx, await ctx.db.get(args.agentId), "agent");
     if (!agent) throw new Error("Agent not found");
 
     await ctx.db.patch(args.agentId, {
@@ -165,7 +170,7 @@ export const reactivateAgent = mutation({
   args: { agentId: v.id("agents") },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "agents:manage");
-    const agent = await ctx.db.get(args.agentId);
+    const agent = await enforceTenantOnResource(ctx, await ctx.db.get(args.agentId), "agent");
     if (!agent) throw new Error("Agent not found");
 
     await ctx.db.patch(args.agentId, {
@@ -197,7 +202,8 @@ export const offboardAgentStep1CloseAssignments = mutation({
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "agents:manage");
     const now = Date.now();
-    const agent = await ctx.db.get(args.agentId);
+    const agent = await enforceTenantOnResource(ctx, await ctx.db.get(args.agentId), "agent");
+    if (!agent) throw new Error("Agent not found");
 
     const activeAssignments = await ctx.db
       .query("agentMarketAssignments")
@@ -257,7 +263,11 @@ export const disposeOffboardingVoucher = mutation({
     if (args.disposition === "reassign" && !args.newOwnerAgentId) {
       throw new Error("newOwnerAgentId is required when reassigning");
     }
-    const voucher = await ctx.db.get(args.voucherId);
+    const voucher = await enforceTenantOnResource(ctx, await ctx.db.get(args.voucherId), "voucher");
+    if (!voucher) throw new Error("Voucher not found");
+    if (args.newOwnerAgentId) {
+      await enforceTenantOnResource(ctx, await ctx.db.get(args.newOwnerAgentId), "agent");
+    }
 
     await ctx.db.patch(args.voucherId, {
       ownerAgentId: args.disposition === "reassign" ? args.newOwnerAgentId : undefined,
@@ -289,14 +299,17 @@ export const offboardAgentFinalize = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "agents:manage");
-    const agent = await ctx.db.get(args.agentId);
+    const agent = await enforceTenantOnResource(ctx, await ctx.db.get(args.agentId), "agent");
     if (!agent) throw new Error("Agent not found");
+    const market = await enforceTenantOnResource(ctx, await ctx.db.get(args.marketId), "market");
+    if (!market) throw new Error("Market not found");
 
     const now = Date.now();
 
     // Final settlement enters the same accrue -> hold -> approve -> paid
     // pipeline as a normal commission, per Section 4.4 step 3.
     await ctx.db.insert("commissions", {
+      tenantId: agent.tenantId ?? market.tenantId,
       agentId: args.agentId,
       marketId: args.marketId,
       amount: args.finalSettlementAmount,
@@ -336,7 +349,7 @@ export const restoreAgent = mutation({
   args: { agentId: v.id("agents") },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "agents:manage");
-    const agent = await ctx.db.get(args.agentId);
+    const agent = await enforceTenantOnResource(ctx, await ctx.db.get(args.agentId), "agent");
     if (!agent) throw new Error("Agent not found");
 
     // Restoring an agent restores full history including unpaid commission

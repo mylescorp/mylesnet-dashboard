@@ -7,7 +7,7 @@ import {
   requirePlatformOwner,
   requirePlatformUser,
 } from "./lib/auth";
-import { readTenantList } from "./lib/tenant";
+import { readTenantList, readScopedTenant, enforceTenantOnResource } from "./lib/tenant";
 import { logAudit } from "./lib/auditLog";
 
 const DISPUTE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000; // 30 days, matches payout timeline
@@ -24,8 +24,12 @@ export const accrueCommission = mutation({
     const user = await requirePermission(ctx, "commissions:manage");
     const now = Date.now();
 
-    const market = await ctx.db.get(args.marketId);
+    const scope = await readScopedTenant(ctx);
+    const market = await enforceTenantOnResource(ctx, await ctx.db.get(args.marketId), "market");
+    if (!market) throw new Error("Market not found");
+    const tenantId = market.tenantId ?? scope.tenantId ?? undefined;
     const commissionId = await ctx.db.insert("commissions", {
+      tenantId,
       agentId: args.agentId,
       marketId: args.marketId,
       voucherId: args.voucherId,
@@ -42,7 +46,7 @@ export const accrueCommission = mutation({
       entityTable: "commissions",
       entityId: commissionId,
       changedBy: user._id,
-      tenantId: market?.tenantId,
+      tenantId: tenantId ?? null,
       after: { amount: args.amount, agentId: args.agentId },
     });
 
@@ -95,7 +99,7 @@ export const approveCommissionPayout = mutation({
   args: { commissionId: v.id("commissions"), requestedByUserId: v.optional(v.id("users")) },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "commissions:manage");
-    const commission = await ctx.db.get(args.commissionId);
+    const commission = await enforceTenantOnResource(ctx, await ctx.db.get(args.commissionId), "commission");
     if (!commission) throw new Error("Commission not found");
     const market = await ctx.db.get(commission.marketId);
     if (commission.payoutStatus !== "requested") {
@@ -125,7 +129,7 @@ export const markCommissionProcessing = mutation({
   args: { commissionId: v.id("commissions") },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "commissions:manage");
-    const commission = await ctx.db.get(args.commissionId);
+    const commission = await enforceTenantOnResource(ctx, await ctx.db.get(args.commissionId), "commission");
     if (!commission) throw new Error("Commission not found");
     const market = await ctx.db.get(commission.marketId);
     if (commission.payoutStatus !== "approved") {
@@ -148,7 +152,7 @@ export const markCommissionPaid = mutation({
   args: { commissionId: v.id("commissions") },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "commissions:manage");
-    const commission = await ctx.db.get(args.commissionId);
+    const commission = await enforceTenantOnResource(ctx, await ctx.db.get(args.commissionId), "commission");
     if (!commission) throw new Error("Commission not found");
     const market = await ctx.db.get(commission.marketId);
     if (commission.payoutStatus !== "processing") {

@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireMarketAccess, requirePermission } from "./lib/auth";
+import { enforceTenantOnResource } from "./lib/tenant";
 import { logAudit } from "./lib/auditLog";
 
 export const listSupportTickets = query({
@@ -62,8 +63,9 @@ export const createSupportTicket = mutation({
     const user = await requirePermission(ctx, "tickets:manage");
     if (args.marketId) await requireMarketAccess(ctx, args.marketId, "operator");
     const now = Date.now();
-    const market = args.marketId ? await ctx.db.get(args.marketId) : null;
+    const market = args.marketId ? await enforceTenantOnResource(ctx, await ctx.db.get(args.marketId), "market") : null;
     const ticketId = await ctx.db.insert("supportTickets", {
+      tenantId: market?.tenantId,
       subject: args.subject,
       description: args.description,
       ticketStatus: "open",
@@ -114,7 +116,7 @@ export const updateSupportTicket = mutation({
     const ticket = await ctx.db.get(args.ticketId);
     if (!ticket) throw new Error("Ticket not found");
     if (ticket.marketId) await requireMarketAccess(ctx, ticket.marketId, "operator");
-    const market = ticket.marketId ? await ctx.db.get(ticket.marketId) : null;
+    const market = ticket.marketId ? await enforceTenantOnResource(ctx, await ctx.db.get(ticket.marketId), "market") : null;
 
     const patch: Record<string, unknown> = { updatedAt: Date.now() };
     if (args.ticketStatus !== undefined) {
@@ -149,7 +151,7 @@ export const softDeleteTicket = mutation({
     const ticket = await ctx.db.get(args.ticketId);
     if (!ticket) throw new Error("Ticket not found");
     if (ticket.marketId) await requireMarketAccess(ctx, ticket.marketId, "operator");
-    const market = ticket.marketId ? await ctx.db.get(ticket.marketId) : null;
+    const market = ticket.marketId ? await enforceTenantOnResource(ctx, await ctx.db.get(ticket.marketId), "market") : null;
 
     await ctx.db.patch(args.ticketId, {
       deletedAt: Date.now(),
@@ -174,7 +176,7 @@ export const restoreTicket = mutation({
     const ticket = await ctx.db.get(args.ticketId);
     if (!ticket) throw new Error("Ticket not found");
     if (ticket.marketId) await requireMarketAccess(ctx, ticket.marketId, "operator");
-    const market = ticket.marketId ? await ctx.db.get(ticket.marketId) : null;
+    const market = ticket.marketId ? await enforceTenantOnResource(ctx, await ctx.db.get(ticket.marketId), "market") : null;
 
     await ctx.db.patch(args.ticketId, {
       deletedAt: undefined,
