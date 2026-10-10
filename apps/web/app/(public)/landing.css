@@ -2015,7 +2015,7 @@ a.landing-card:hover {
 .landing-preview-wrap { width: min(var(--landing-container), 100%); margin: var(--landing-section-padding-sm) auto 0; padding-inline: var(--page-gutter); }
 .landing-preview { border-color: var(--landing-glass-border); border-radius: var(--radius-xl); box-shadow: var(--shadow-lg); }
 .landing-preview-caption { margin-top: var(--space-4); }
-.landing-audiences { padding: var(--space-6) var(--page-gutter); border-block: 1px solid var(--line); background: var(--surface); }
+.landing-audiences { padding-block: var(--space-6); border-block: 1px solid var(--line); background: var(--surface); }
 .landing-audiences-pills { gap: var(--space-2); }
 .landing-audience-pill { padding: var(--space-2) var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-full); background: var(--surface-muted); color: var(--text); }
 
