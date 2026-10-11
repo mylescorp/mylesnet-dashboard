@@ -79,3 +79,7 @@ Before starting any coding task, check available skills in `.agents/skills/` and
 - `docs/agent-threads/` is the archival home for **notable** agent sessions — a byte-identical mirror of `/home/myles/Projects/mylescorp-brain/products/mylesnet/agent-threads/`. Check its `README.md` index at session start for recent context.
 - One thread = one pair: `YYYY-MM-DD-<slug>.md` (verbatim transcript with a summary/decision block up top) + `YYYY-MM-DD-<slug>.json` (structured twin for querying).
 - Archive only notable sessions (decisions, approvals, audits, investigations). Whenever one materially changes the product, record it here **and** copy both files identical into the vault `products/mylesnet/agent-threads/` (vault canonical); a divergence is drift.
+
+## Local route verification host
+
+Use only `http://localhost:3000` for local web startup and route verification. Do not use another port. If port 3000 is occupied or inaccessible, preserve the existing listener and report local verification as blocked until port 3000 is available.
