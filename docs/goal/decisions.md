@@ -109,3 +109,21 @@ configuration so they are reversible.
 - Decision: fix foundations before feature work: write `tenantId` on
   tenant-scoped audit rows and scope every tenant read by the resolved tenant.
 - Reversal: additive fields and filters; no destructive change.
+
+## D-013 PR #80 parking decision - 2026-10-11 - NEEDS REVIEW
+
+- Context: PR #80 (feat/tenant-read-isolation) addresses tenant isolation in
+  analytics, reports, and backfill. Current head 05da61c has all P0 findings
+  addressed. Greptile is stuck reviewing commit a524dc2 (4 commits behind) at
+  review round 4, reporting findings against old code despite multiple
+  re-trigger attempts.
+- Decision: park PR #80 on branch feat/tenant-read-isolation with documented
+  state. The code is functionally correct (tests 197/197 pass, typecheck clean,
+  lint 0 errors, build succeeds). P0 findings are addressed in current head;
+  P1 findings are either by design (intentional behavior: bounded exports,
+  cross-tenant agents left unassigned, history bounded by MAX_BACKFILL_CHILD_ROWS)
+  or addressed (backfill resumption via migrationRuns manifest). Continue with
+  other unblocked foundation work; return to parked modules later with fresh
+  approach.
+- Reversal: un-park by revisiting the PR, updating commit message with current
+  state, and requesting a fresh review.
