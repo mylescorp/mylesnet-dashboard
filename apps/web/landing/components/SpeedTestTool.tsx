@@ -120,22 +120,23 @@ const measureUpload = async (signal: AbortSignal): Promise<number> => {
   const timeout = setTimeout(() => timeoutController.abort(), MAX_UPLOAD_DURATION);
   const linkedSignal = AbortSignal.any([signal, timeoutController.signal]);
 
-  let response: Response;
   try {
-    response = await fetch(`/api/speedtest?op=upload`, {
+    const response = await fetch(`/api/speedtest?op=upload`, {
       method: "POST",
       body: payload,
       cache: "no-store",
       signal: linkedSignal,
     });
+    if (!response.ok) throw new Error(`upload failed: ${response.status}`);
+    // The body read stays inside the timed block so a stall after the response
+    // headers arrive still aborts instead of hanging on "Measuring upload…".
+    await response.json();
   } catch (err) {
     if (timeoutController.signal.aborted) throw new Error("upload timeout");
     throw err;
   } finally {
     clearTimeout(timeout);
   }
-  if (!response.ok) throw new Error(`upload failed: ${response.status}`);
-  await response.json();
 
   const seconds = (performance.now() - started) / 1000;
   return seconds > 0 ? (payload.byteLength * 8) / seconds / 1e6 : 0;
