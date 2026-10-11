@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Activity, Timer, RefreshCw, X } from "lucide-react";
 import { Button } from "@/shared/ui/button";
+import { userFacingMessage } from "@/shared/lib/user-facing-error";
 
 /**
  * Production-grade speed test component measuring against this site's endpoint.
@@ -115,12 +116,24 @@ const measureDownload = async (
 const measureUpload = async (signal: AbortSignal): Promise<number> => {
   const payload = new ArrayBuffer(UPLOAD_BYTES);
   const started = performance.now();
-  const response = await fetch(`/api/speedtest?op=upload`, {
-    method: "POST",
-    body: payload,
-    cache: "no-store",
-    signal,
-  });
+  const timeoutController = new AbortController();
+  const timeout = setTimeout(() => timeoutController.abort(), MAX_UPLOAD_DURATION);
+  const linkedSignal = AbortSignal.any([signal, timeoutController.signal]);
+
+  let response: Response;
+  try {
+    response = await fetch(`/api/speedtest?op=upload`, {
+      method: "POST",
+      body: payload,
+      cache: "no-store",
+      signal: linkedSignal,
+    });
+  } catch (err) {
+    if (timeoutController.signal.aborted) throw new Error("upload timeout");
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
   if (!response.ok) throw new Error(`upload failed: ${response.status}`);
   await response.json();
 
@@ -173,7 +186,9 @@ export default function SpeedTestTool() {
       setPhase("done");
     } catch (err) {
       if (signal.aborted) return;
-      setErrorMessage(err instanceof Error ? err.message : "Unknown error");
+      setErrorMessage(
+        userFacingMessage(err, "The test could not finish — please try again.")
+      );
       setPhase("error");
     } finally {
       if (!signal.aborted) {
