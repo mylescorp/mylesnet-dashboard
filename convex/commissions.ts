@@ -7,6 +7,7 @@ import {
   requirePlatformOwner,
   requirePlatformUser,
   requirePlatformSubRole,
+  resolveRoles,
 } from "./lib/auth";
 import { enforceTenantOnResource, readScopedTenant, readTenantList } from "./lib/tenant";
 import { logAudit } from "./lib/auditLog";
@@ -220,6 +221,7 @@ export const disputeCommission = mutation({
 
 export const listCommissionsByStatus = query({
   args: {
+    paginationOpts: paginationOptsValidator,
     payoutStatus: v.optional(
       v.union(
         v.literal("accrued"),
@@ -233,16 +235,29 @@ export const listCommissionsByStatus = query({
     ),
   },
   handler: async (ctx, args) => {
-    await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_finance", "platform_ops"]);
-    let rows = await readTenantList<Doc<"commissions">>(ctx, {
-      all: () => ctx.db.query("commissions").collect(),
-      tenant: (tenantId) =>
-        ctx.db.query("commissions").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
-      legacy: () =>
-        ctx.db.query("commissions").withIndex("by_tenant", (q) => q.eq("tenantId", undefined)).collect(),
-    });
-    if (args.payoutStatus) rows = rows.filter((c) => c.payoutStatus === args.payoutStatus!);
-    return rows.sort((a, b) => b.accruedAt - a.accruedAt).slice(0, 100);
+    const actor = await requirePermission(ctx, "commissions:read");
+    const roles = await resolveRoles(ctx, actor);
+    if (roles.some((role) => role.isPlatform)) {
+      await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_finance", "platform_ops"]);
+    }
+    const scope = await readScopedTenant(ctx);
+    const paginationOpts = {
+      ...args.paginationOpts,
+      numItems: Math.max(1, Math.min(50, args.paginationOpts.numItems)),
+    };
+    const page = scope.enforced
+      ? await ctx.db.query("commissions")
+          .withIndex("by_tenant", (q) => q.eq("tenantId", scope.tenantId!))
+          .order("desc")
+          .paginate(paginationOpts)
+      : await ctx.db.query("commissions")
+          .withIndex("by_accruedAt")
+          .order("desc")
+          .paginate(paginationOpts);
+    return {
+      ...page,
+      page: args.payoutStatus ? page.page.filter((commission) => commission.payoutStatus === args.payoutStatus) : page.page,
+    };
   },
 });
 

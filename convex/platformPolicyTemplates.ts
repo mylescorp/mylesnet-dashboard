@@ -1,7 +1,8 @@
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { requirePlatformSubRole, requirePlatformUser } from "./lib/auth";
+import { requirePlatformSubRole } from "./lib/auth";
+import { PLATFORM_SUB_ROLE_READERS } from "./lib/permissions";
 import { logAudit } from "./lib/auditLog";
 import { validatePolicy, type PolicyFields } from "./lib/platformPolicyTemplateCore";
 
@@ -50,7 +51,7 @@ export const list = query({
   args: { paginationOpts: paginationOptsValidator, includeArchived: v.optional(v.boolean()), includeDeleted: v.optional(v.boolean()) },
   returns: templatePageValidator,
   handler: async (ctx, args) => {
-    await requirePlatformUser(ctx);
+    await requirePlatformSubRole(ctx, [...PLATFORM_SUB_ROLE_READERS]);
     const pageSize = Math.max(1, Math.min(args.paginationOpts.numItems, 50));
     const source = args.includeArchived
       ? ctx.db.query("platformPolicyTemplates")
@@ -71,7 +72,7 @@ export const get = query({
   args: { templateId: v.id("platformPolicyTemplates") },
   returns: v.union(v.null(), v.object({ ...templateWithCurrentValidator.fields, versions: v.array(policyVersionValidator) })),
   handler: async (ctx, args) => {
-    await requirePlatformUser(ctx);
+    await requirePlatformSubRole(ctx, [...PLATFORM_SUB_ROLE_READERS]);
     const template = await ctx.db.get(args.templateId);
     if (!template) return null;
     const [current, versions] = await Promise.all([

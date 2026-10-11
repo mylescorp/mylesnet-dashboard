@@ -6,7 +6,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { logAudit } from "./lib/auditLog";
 import { requirePlatformSubRole, requirePlatformUser, resolveRoles, resolveUserByIdentity } from "./lib/auth";
-import { PLATFORM_SUB_ROLE_MAP } from "./lib/permissions";
+import { PLATFORM_SUB_ROLE_MAP, PLATFORM_SUB_ROLE_READERS } from "./lib/permissions";
 import { canTenantOperate, resolveTenantFromAuth } from "./lib/tenant";
 import { decideTenantLifecycleTransition } from "./lib/tenantLifecycleCore";
 import {
@@ -102,6 +102,7 @@ async function toPlatformTenant(ctx: QueryCtx, tenant: Doc<"tenants">) {
 export const backfillTenantSubscriberCount = internalMutation({
   args: {
     tenantId: v.id("tenants"),
+    actorUserId: v.id("users"),
     cursor: v.optional(v.union(v.string(), v.null())),
     accumulatedCount: v.optional(v.number()),
   },
@@ -112,21 +113,101 @@ export const backfillTenantSubscriberCount = internalMutation({
       if (tenant.subscriberCountBackfillRunning) throw new Error("Subscriber count backfill is already running");
       await ctx.db.patch(args.tenantId, { subscriberCountBackfillRunning: true });
     }
-    const page = await ctx.db
-      .query("subscribers")
-      .withIndex("by_tenant", (q) => q.eq("tenantId", args.tenantId))
-      .paginate({ numItems: 500, cursor: args.cursor ?? null });
+    let page;
+    try {
+      page = await ctx.db
+        .query("subscribers")
+        .withIndex("by_tenant", (q) => q.eq("tenantId", args.tenantId))
+        .paginate({ numItems: 500, cursor: args.cursor ?? null });
+    } catch {
+      const latestTenant = await ctx.db.get(args.tenantId);
+      if (latestTenant?.subscriberCountBackfillRunning) {
+        await ctx.db.patch(args.tenantId, { subscriberCountBackfillRunning: false });
+        await logAudit(ctx, {
+          action: "tenant.subscriber_count_backfill_failed",
+          entityTable: "tenants",
+          entityId: args.tenantId,
+          changedBy: args.actorUserId,
+          tenantId: args.tenantId,
+          before: { backfillRunning: true },
+          after: { backfillRunning: false, restartAvailable: true },
+        });
+      }
+      return { complete: false, subscriberCount: null, failed: true };
+    }
     const accumulatedCount = (args.accumulatedCount ?? 0) + page.page.filter((row) => row.deletedAt === undefined).length;
     if (page.isDone) {
       await ctx.db.patch(args.tenantId, { subscriberCount: accumulatedCount, subscriberCountBackfillRunning: false });
+      await logAudit(ctx, {
+        action: "tenant.subscriber_count_backfill_completed",
+        entityTable: "tenants",
+        entityId: args.tenantId,
+        changedBy: args.actorUserId,
+        tenantId: args.tenantId,
+        before: { subscriberCount: tenant.subscriberCount ?? null, backfillRunning: tenant.subscriberCountBackfillRunning ?? false },
+        after: { subscriberCount: accumulatedCount, backfillRunning: false },
+      });
       return { complete: true, subscriberCount: accumulatedCount };
     }
-    await ctx.scheduler.runAfter(0, internal.tenantControl.backfillTenantSubscriberCount, {
+    try {
+      await ctx.scheduler.runAfter(0, internal.tenantControl.backfillTenantSubscriberCount, {
+        tenantId: args.tenantId,
+        actorUserId: args.actorUserId,
+        cursor: page.continueCursor,
+        accumulatedCount,
+      });
+    } catch {
+      const latestTenant = await ctx.db.get(args.tenantId);
+      if (latestTenant?.subscriberCountBackfillRunning) {
+        await ctx.db.patch(args.tenantId, { subscriberCountBackfillRunning: false });
+        await logAudit(ctx, {
+          action: "tenant.subscriber_count_backfill_failed",
+          entityTable: "tenants",
+          entityId: args.tenantId,
+          changedBy: args.actorUserId,
+          tenantId: args.tenantId,
+          before: { backfillRunning: true },
+          after: { backfillRunning: false, restartAvailable: true },
+        });
+      }
+      return { complete: false, subscriberCount: null, failed: true };
+    }
+    await logAudit(ctx, {
+      action: "tenant.subscriber_count_backfill_progressed",
+      entityTable: "tenants",
+      entityId: args.tenantId,
+      changedBy: args.actorUserId,
       tenantId: args.tenantId,
-      cursor: page.continueCursor,
-      accumulatedCount,
+      before: { backfillRunning: tenant.subscriberCountBackfillRunning ?? false },
+      after: { backfillRunning: true, accumulatedCount },
     });
     return { complete: false, subscriberCount: null };
+  },
+});
+
+export const startSubscriberCountBackfill = mutation({
+  args: { tenantId: v.id("tenants") },
+  handler: async (ctx, args) => {
+    const actor = await requirePlatformSubRole(ctx, ["platform_super_admin"]);
+    const tenant = await ctx.db.get(args.tenantId);
+    if (!tenant || tenant.deletedAt !== undefined) throw new Error("Tenant not found");
+    if (tenant.subscriberCountBackfillRunning) throw new Error("Subscriber count backfill is already running");
+    await logAudit(ctx, {
+      action: "tenant.subscriber_count_backfill_started",
+      entityTable: "tenants",
+      entityId: tenant._id,
+      changedBy: actor._id,
+      tenantId: tenant._id,
+      before: { subscriberCount: tenant.subscriberCount ?? null, backfillRunning: false },
+      after: { backfillRunning: true },
+    });
+    await ctx.scheduler.runAfter(0, internal.tenantControl.backfillTenantSubscriberCount, {
+      tenantId: tenant._id,
+      actorUserId: actor._id,
+      cursor: null,
+      accumulatedCount: 0,
+    });
+    return { started: true };
   },
 });
 
@@ -134,7 +215,7 @@ export const backfillTenantSubscriberCount = internalMutation({
 export const listForPlatform = query({
   args: {},
   handler: async (ctx) => {
-    await requirePlatformUser(ctx);
+    await requirePlatformSubRole(ctx, [...PLATFORM_SUB_ROLE_READERS]);
     const tenants = await ctx.db.query("tenants").order("desc").collect();
     return Promise.all(tenants.filter(tenant => tenant.deletedAt === undefined).map(tenant => toPlatformTenant(ctx, tenant)));
   },
@@ -144,7 +225,7 @@ export const listForPlatform = query({
 export const listForPlatformPage = query({
   args: { paginationOpts: paginationOptsValidator },
   handler: async (ctx, args) => {
-    await requirePlatformUser(ctx);
+    await requirePlatformSubRole(ctx, [...PLATFORM_SUB_ROLE_READERS]);
     const page = await ctx.db.query("tenants").withIndex("by_createdAt").order("desc").paginate({
       ...args.paginationOpts,
       numItems: Math.max(1, Math.min(50, Math.floor(args.paginationOpts.numItems))),
@@ -160,7 +241,7 @@ export const listForPlatformPage = query({
 export const listPlatformTenantTargetsPage = query({
   args: { paginationOpts: paginationOptsValidator },
   handler: async (ctx, args) => {
-    await requirePlatformUser(ctx);
+    await requirePlatformSubRole(ctx, [...PLATFORM_SUB_ROLE_READERS]);
     const page = await ctx.db.query("tenants").withIndex("by_createdAt").order("desc").paginate({
       ...args.paginationOpts,
       numItems: Math.max(1, Math.min(50, Math.floor(args.paginationOpts.numItems))),
@@ -173,7 +254,7 @@ export const listPlatformTenantTargetsPage = query({
 export const listSubscriptionsPage = query({
   args: { paginationOpts: paginationOptsValidator },
   handler: async (ctx, args) => {
-    await requirePlatformUser(ctx);
+    await requirePlatformSubRole(ctx, [...PLATFORM_SUB_ROLE_READERS]);
     const page = await ctx.db.query("tenants").withIndex("by_createdAt").order("desc").paginate({
       ...args.paginationOpts,
       numItems: Math.max(1, Math.min(50, Math.floor(args.paginationOpts.numItems))),
@@ -206,7 +287,7 @@ export const listSubscriptionsPage = query({
 export const getPlatformOverview = query({
   args: {},
   handler: async (ctx) => {
-    await requirePlatformUser(ctx);
+    await requirePlatformSubRole(ctx, [...PLATFORM_SUB_ROLE_READERS]);
     const [tenantRows, entitlementRows] = await Promise.all([
       ctx.db.query("tenants").withIndex("by_createdAt").order("desc").collect(),
       ctx.db.query("entitlements").collect(),
@@ -475,7 +556,7 @@ export const updateTenant = mutation({
 export const getTenantDetail = query({
   args: { tenantId: v.id("tenants") },
   handler: async (ctx, args) => {
-    await requirePlatformUser(ctx);
+    await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_ops", "platform_finance", "platform_support", "platform_readonly"]);
     const tenant = await ctx.db.get(args.tenantId);
     if (!tenant || tenant.deletedAt !== undefined) return null;
     const [memberships, entitlement, markets] = await Promise.all([
