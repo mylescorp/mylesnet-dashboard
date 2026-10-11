@@ -75,7 +75,7 @@ export function parseStatementCsv(source: string): StatementImportRow[] {
   const headers = rows[0]!.map((value, index) => (index === 0 ? value.replace(/^\uFEFF/, "") : value).toLowerCase());
   const required = ["reference", "amount", "currency", "settled_at"];
   const indexes = required.map((name) => headers.indexOf(name));
-  if (indexes.some((index) => index < 0) || new Set(indexes).size !== required.length) {
+  if (indexes.some((index) => index < 0) || required.some((name) => headers.filter((header) => header === name).length !== 1)) {
     throw new Error("CSV headers must include reference, amount, currency, settled_at exactly once");
   }
   return rows.slice(1).map((values, index) => {

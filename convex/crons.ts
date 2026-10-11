@@ -28,6 +28,13 @@ crons.daily(
   {},
 );
 
+crons.daily(
+  "market analytics snapshot queue",
+  { hourUTC: 3, minuteUTC: 20 },
+  anyApi.dailySnapshots.enqueueMarketSnapshotPage,
+  { cursor: null },
+);
+
 // Scheduled report generation (daily digests + weekly/monthly exports).
 crons.daily(
   "scheduled report generation",

@@ -514,9 +514,12 @@ export const recordOrganizationMembership = internalMutation({
     } else if (args.status === "active") {
       if (args.organizationId === platformOrgId) {
         const patch: Record<string, unknown> = { isActive: true, deactivatedAt: undefined };
-        if (roleIds.length > 0) patch.roles = roleIds;
         const platformRole = roleSlugs.find((roleSlug) => PLATFORM_MIRROR_SLUGS.has(roleSlug));
-        if (platformRole) {
+        // A fresh platform-organization role claim is authoritative. Clear a
+        // stale legacy owner mirror when the new role is non-platform so a
+        // downgraded owner cannot regain access through migration recovery.
+        if (args.roleSlug !== undefined) {
+          patch.roles = roleIds;
           patch.platformRole = platformRole;
         }
         if (args.email !== undefined) patch.email = args.email.toLowerCase();

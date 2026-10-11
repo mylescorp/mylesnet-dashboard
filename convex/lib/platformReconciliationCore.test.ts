@@ -45,6 +45,7 @@ test("statement CSV parses quoted fields, escaped quotes, CRLF, and a UTF-8 BOM"
 
 test("statement CSV rejects missing headers or values, unmatched quotes, oversize files, and more than 500 rows", () => {
   assert.throws(() => parseStatementCsv("reference,amount,currency\nA,1,KES"));
+  assert.throws(() => parseStatementCsv("reference,amount,amount,currency,settled_at\nR1,1,999,KES,2026-10-07T10:00:00Z"));
   assert.throws(() => parseStatementCsv("reference,amount,currency,settled_at\nA,,KES,2026-10-07T10:00:00Z"));
   assert.throws(() => parseStatementCsv('reference,amount,currency,settled_at\n"A,1,KES,2026-10-07T10:00:00Z'));
   assert.throws(() => parseStatementCsv('reference,amount,currency,settled_at\n"A"x,1,KES,2026-10-07T10:00:00Z'));

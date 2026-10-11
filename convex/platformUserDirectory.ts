@@ -183,23 +183,39 @@ export const updateMembership = action({
   returns: v.object({ updated: v.boolean() }),
   handler: async (ctx, args) => {
     const authorized = await ctx.runQuery(internal.platformUserDirectory.authorizeMembershipChange, args);
-    if (authorized.alreadyApplied) return { updated: true };
-    // Local membership state can be ahead of the provider webhook. Always
-    // reconcile the identity provider unless this request ID was completed.
-    if (args.status === "revoked") {
-      await deactivateOrganizationMembership(authorized.organizationId, authorized.workosUserId);
-    } else {
-      await reactivateOrganizationMembership(authorized.organizationId, authorized.workosUserId);
+    if (!authorized.alreadyApplied) {
+      await ctx.runMutation(internal.platformUserDirectory.applyMembershipStatus, {
+        userId: args.userId,
+        tenantId: args.tenantId,
+        status: args.status,
+        expectedStatus: authorized.expectedStatus,
+        actorUserId: authorized.actorUserId,
+        requestId: authorized.requestId,
+      });
     }
-    await ctx.runMutation(internal.platformUserDirectory.applyMembershipStatus, {
-      userId: args.userId,
-      tenantId: args.tenantId,
-      status: args.status,
-      expectedStatus: authorized.expectedStatus,
-      actorUserId: authorized.actorUserId,
-      requestId: authorized.requestId,
-    });
-    return { updated: true };
+    // Local intent is persisted before the provider call. If another request
+    // races while it is in flight, reconcile the provider to the latest local
+    // state after every call instead of finishing with an obsolete command.
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const desired = await ctx.runQuery(internal.platformUserDirectory.getDesiredMembershipAccess, { userId: args.userId, tenantId: args.tenantId });
+      if (desired.status === "revoked") await deactivateOrganizationMembership(desired.organizationId, desired.workosUserId);
+      else await reactivateOrganizationMembership(desired.organizationId, desired.workosUserId);
+      const latest = await ctx.runQuery(internal.platformUserDirectory.getDesiredMembershipAccess, { userId: args.userId, tenantId: args.tenantId });
+      if (latest.status === desired.status) return { updated: true };
+    }
+    throw new Error("Workspace access changed repeatedly; retry after refreshing the directory");
+  },
+});
+
+export const getDesiredMembershipAccess = internalQuery({
+  args: { userId: v.id("users"), tenantId: v.id("tenants") },
+  returns: v.object({ organizationId: v.string(), workosUserId: v.string(), status: v.union(v.literal("active"), v.literal("revoked")) }),
+  handler: async (ctx, args) => {
+    const tenant = await ctx.db.get(args.tenantId);
+    const user = await ctx.db.get(args.userId);
+    const membership = await ctx.db.query("tenantMemberships").withIndex("by_user_tenant", q => q.eq("userId", args.userId).eq("tenantId", args.tenantId)).first();
+    if (!tenant?.workosOrganizationId || !user?.workosUserId || !membership || (membership.status !== "active" && membership.status !== "revoked")) throw new Error("Workspace access state is unavailable");
+    return { organizationId: tenant.workosOrganizationId, workosUserId: user.workosUserId, status: membership.status };
   },
 });
 
@@ -223,7 +239,6 @@ export const applyMembershipStatus = internalMutation({
     const completed = await ctx.db.query("platformUserAccessRequests").withIndex("by_requestId", q => q.eq("requestId", args.requestId)).first();
     if (completed) {
       if (completed.actorUserId !== args.actorUserId || completed.targetUserId !== args.userId || completed.tenantId !== args.tenantId || completed.status !== args.status) throw new Error("Access change request identifier has already been used");
-      return { updated: true };
     }
     const tenant = await ctx.db.get(args.tenantId);
     if (!tenant?.workosOrganizationId || (args.status === "active" && !canTenantOperate(tenant.status))) throw new Error("Workspace access is not available");
@@ -238,7 +253,7 @@ export const applyMembershipStatus = internalMutation({
         revokedAt: args.status === "revoked" ? Date.now() : undefined,
       });
     }
-    await logAudit(ctx, {
+    if (!completed) await logAudit(ctx, {
       action: args.status === "revoked" ? "global_user.tenant_access_disabled" : "global_user.tenant_access_restored",
       entityTable: "users",
       entityId: args.userId,
@@ -246,7 +261,7 @@ export const applyMembershipStatus = internalMutation({
       before: { tenantId: args.tenantId, status: args.expectedStatus },
       after: { tenantId: args.tenantId, status: args.status, requestId: args.requestId, alreadyEffective: membership.status === args.status },
     });
-    await ctx.db.insert("platformUserAccessRequests", {
+    if (!completed) await ctx.db.insert("platformUserAccessRequests", {
       requestId: args.requestId, actorUserId: args.actorUserId, targetUserId: args.userId,
       tenantId: args.tenantId, status: args.status, organizationId: tenant.workosOrganizationId,
       workosUserId: target.workosUserId, createdAt: Date.now(),

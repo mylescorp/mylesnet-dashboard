@@ -4,7 +4,7 @@ import { mutation, query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { requirePlatformSubRole } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
-import { isPlatformApiKeyActive, publicPlatformApiKey } from "./lib/platformApiKeysCore";
+import { isPlatformApiKeyActive, publicPlatformApiKey, validatePlatformKeyInput } from "./lib/platformApiKeysCore";
 
 const apiScope = v.union(
   v.literal("organizations:read"),
@@ -13,15 +13,6 @@ const apiScope = v.union(
 async function sha256Hex(value: string) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
-}
-
-export function validatePlatformKeyInput(nameInput: string, scopesInput: string[], expiresAt: number | undefined, now: number) {
-  const name = nameInput.trim();
-  if (!name || name.length > 80) throw new Error("Key name must be between 1 and 80 characters");
-  const scopes = [...new Set(scopesInput)];
-  if (!scopes.length || scopes.length > 4 || scopes.some(scope => !["organizations:read", "infrastructure:read", "billing:read", "support:read"].includes(scope))) throw new Error("Choose between 1 and 4 supported API scopes");
-  if (expiresAt !== undefined && (expiresAt <= now || expiresAt > now + 365 * 24 * 60 * 60 * 1000)) throw new Error("Expiry must be within the next 365 days");
-  return { name, scopes };
 }
 
 function newToken() {
