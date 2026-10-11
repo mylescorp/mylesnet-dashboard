@@ -219,6 +219,13 @@ separate archive policy.
 - **Verification:** Baseline gates on the isolated worktree are clean: `pnpm typecheck` passes and `pnpm test` passes 171/171. The owner checkout was left untouched.
 - **Status:** Audit complete. The tenant panel is a narrow billing and operations workspace; the large majority of features are Partial or Missing. Foundation defects to fix first: `logAudit` writes no `tenantId` (tenant audit log returns empty) and `analytics`, `scheduledReports`, and `notifications` are not tenant-scoped. Production deploy and live verification are blocked on an approved production Convex target/credential and a real test tenant. Work runs in the isolated worktree `/home/myles/Projects/mylesnet-tenant-panel` on `feat/tenant-panel-program`.
 
+### 2026-10-10 — Tenant analytics isolation and activity ownership
+
+- **Scope:** Close a verified cross-workspace read risk in tenant analytics and derive revenue-ledger ownership from trusted agent/market records.
+- **Changes:** Analytics reads now authorize the caller, verify a requested market belongs to the active workspace, and scope daily snapshots, subscriber snapshots, top-agent activity, and sales mix to verified tenant markets. Tagged rows use tenant/time or tenant/date indexes; legacy untagged rows are included only through markets owned by that workspace. New activity ledger rows derive `tenantId` from a verified market, require a same-workspace agent assignment (active for voucher sales), validate all assigned markets and any linked voucher, and validate monetary/date/currency values. Subscriber snapshot writes also stamp the market-derived tenant ID. Added composite indexes and pure ownership/scope regression tests.
+- **Verification:** `pnpm typecheck` passes for web and admin; `pnpm lint` passes with one existing warning in `BandwidthCalculatorTool.tsx`; all 45 tests pass; token checks and `git diff --check` pass.
+- **Status:** Implemented in the isolated `codex/platform-production` worktree; source files in the owner checkout remain untouched and the matching work-log/plan entries were synchronized. Remaining: migrate older untagged rows through the approved bounded migration process, authenticate role and tenant-isolation behavior against a non-production Convex deployment, and continue the full module/app-boundary/release plan.
+
 ### 2026-10-11 — Negative RSC performance timestamps
 
 - **Scope:** Fix the runtime error on guarded routes while retaining server-side authorization and redirects.

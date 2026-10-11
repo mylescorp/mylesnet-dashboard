@@ -77,3 +77,9 @@ The subscription screen manages entitlements only. It does not issue SaaS invoic
 - Verified WorkOS and Convex production deployment targets and credentials managed through their approved secret stores.
 - Production alert destinations, incident owners, and support staffing.
 - Owner approval and auditable guardrails for impersonation, API keys, deletion, and tenant offboarding.
+
+## 2026-10-10 continuation — Tenant analytics isolation and activity ownership
+
+Closed a verified tenant-boundary gap in `convex/analytics.ts`: tenant-facing snapshot trends, top-agent reports, and sales mix now authorize the active tenant, validate requested market ownership, and only read rows associated with its verified markets. Composite tenant/date and tenant/time indexes serve newly tagged rows; legacy untagged history is recovered through only the tenant's market indexes and de-duplicated. Agent activity writes now validate agent, market, assignment, optional voucher, and financial input ownership/shape, then stamp the market-derived `tenantId`; subscriber snapshot writes now stamp the same derived tenant ownership. Tests prove foreign tenant rows/markets are excluded, legacy rows require a verified market, and inactive/mixed-tenant assignments are rejected.
+
+Verification: web and admin typechecks pass; lint passes with one existing `BandwidthCalculatorTool.tsx` warning; 45/45 repository tests pass; token checks and `git diff --check` pass. This does not complete the tenant-function audit: authenticated backend integration tests and verified deployment remain required. The internal tenantId backfill is still gated; untagged rows remain readable only through market ownership in these analytics paths. Continue the full role/tenant-scope audit and app split on `codex/platform-production`. Source files in the owner checkout remain untouched; its canonical work-log/plan copies now include this record.
