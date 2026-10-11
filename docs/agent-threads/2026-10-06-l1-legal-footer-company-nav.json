@@ -14,29 +14,26 @@
     "navigation",
     "company"
   ],
-  "outcome": "Legal pages rewritten and verified; /company nav added with dropdown; Contact moved into dropdown to fit nav; padding 8→6px; /company index page; token checks pass; browser verified.",
-  "decision_block": [
-    "Contact moved from top-level nav into Company dropdown to resolve nav overflow (−1px headroom → comfortable fit with padding 8→6px)",
-    "Nav padding-inline `var(--space-2)` 8→6px is the only CSS change for nav fit; no gap/brand/CTA alterations",
-    "companyChildren single source for dropdown, footer column, and /company index cards — cannot drift apart",
-    "No new runtime packages or token values; token-pure CSS only",
-    "Footer Company column = companyChildren (identical 4 links); /company index reuses LandingCard/LandingCtaSection patterns"
+  "summary": "This session rewrote /legal/terms and /legal/privacy (merged PR #60), rebuilt the footer to premium spec, and added /company to the header nav with a dropdown of attached routes. Key resolution: nav was at capacity (itemSum 620 vs clientWidth 619, headroom -1px), so Contact was moved from the top-level nav slot into the Company dropdown. Nav padding-inline var(--space-2) 8->6px (only CSS change); nav fits with 23-37px gap to logo and 24px to CTA at 1141-1440px. /company index page created (banner + 2x2 LandingCard grid + closing LandingCtaSection) using shared companyChildren source. All checks pass: tsc 0, eslint 0, design-token check, browser verification.",
+  "verified_outcomes": [
+    "Legal pages /legal/terms and /legal/privacy rewritten live (PR #60)",
+    "Footer fully rebuilt per spec",
+    "/company added to header nav with dropdown",
+    "Contact moved from top-level nav slot into dropdown",
+    "Nav padding-inline 8->6px (only CSS change)",
+    "/company index page created with shared companyChildren source",
+    "No new runtime packages; token-pure CSS only",
+    "Desktop nav fit: 1141-1440px, no overlap, gaps 23-37/24px",
+    "Hover+focus both open dropdown; Escape closes",
+    "Mobile Sheet Company group with 4 subnav links; Escape closes cleanly",
+    "Sitemap /company and /company/about present; proxy allows anonymous"
   ],
-  "files_touched": [
+  "files_changed": [
     "apps/web/landing/content/navigation.ts",
     "apps/web/landing/routes/company/page.tsx",
     "apps/web/app/(public)/company/page.tsx",
     "apps/web/shared/public-routes.ts",
     "apps/web/app/(public)/landing.css"
   ],
-  "verification": {
-    "typecheck": "tsc --noEmit 0",
-    "eslint": "0",
-    "design_tokens": "check-design-tokens.mjs passes",
-    "browser_Desktop_nav": "gap logo→nav 23–37px, gap nav→CTA 24px, no overlap 1141–1440px",
-    "browser_Hover_dropdown": "opens, 2 columns × 4 links + descriptions, closes on leave/Escape",
-    "browser_Mobile_Sheet": "Company group with 4 subnav links; Escape closes cleanly",
-    "browser__company_page": "200, 2×2 cards, CTA, no horizontal overflow, no console errors",
-    "sitemap": "/company and /company/about present"
-  }
+  " Links": "- PR #60: 'Deploy latest MylesNet changes' (contains actual feature work)\n- PR #73: Greptile gate install, 5/5 on head 80a902c\n- Vault thread: docs/agent-threads/2026-10-06-l1-legal-footer-company-nav.md + .json"
 }
