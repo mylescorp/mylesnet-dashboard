@@ -61,6 +61,7 @@ export const PUBLIC_PATHS: string[] = [
   // Company & legal
   "/company",
   "/company/about",
+  "/company/mylescorp",
   "/legal/privacy",
   "/legal/terms",
 

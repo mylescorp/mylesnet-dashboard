@@ -1952,7 +1952,32 @@ a.landing-card:hover {
 /* Keep the header theme toggle at 32px like the Centipid-style 32px actions (mobile sheet keeps 40px). */
 .landing-nav-cta .landing-theme-toggle { width: var(--space-8); height: var(--space-8); }
 
-/* ---- Header dropdown nav (Features / Solutions / Resources) ---- */
+
+
+/* "View all" reveal button for a compacted dropdown column: keeps the panel
+   short at rest, expands the column in place on demand. Same chip treatment
+   as the aside links so it reads as part of the panel. */
+.landing-nav-dropdown-more {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  margin: var(--space-2) var(--space-4) 0;
+  padding: 6px var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--primary-text);
+  font-size: var(--font-size-100);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--space-6);
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease-out), background-color var(--duration-fast) var(--ease-out);
+}
+.landing-nav-dropdown-more:hover,
+.landing-nav-dropdown-more:focus-visible {
+  background: var(--landing-surface-tint);
+  color: var(--text-strong);
+}/* ---- Header dropdown nav (Features / Solutions / Resources) ---- */
 .landing-nav-item { position: relative; display: flex; align-items: center; }
 .landing-nav-link-trigger { gap: var(--space-1); }
 .landing-nav-chevron { transition: transform var(--duration-fast) var(--ease-out); }
