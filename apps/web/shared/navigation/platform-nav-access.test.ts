@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { readFileSync } from "node:fs";
 import { canSeePlatformNavRoute, PLATFORM_NAV_ROLE_SCOPES } from "./platform-nav-access.ts";
 
 test("every route registered in the platform access matrix is visible to the owner", () => {
@@ -27,6 +28,23 @@ test("platform owner has sidebar access to every owner-authorized module route",
     assert.equal(canSeePlatformNavRoute(route, ["platform_owner"]), true, `${route} should be visible to platform owner`);
     assert.equal(canSeePlatformNavRoute(route, ["org-platform_owner"]), true, `${route} should be visible to org-scoped platform owner`);
   }
+});
+
+test("owner sidebar renders every registered route and all menu routes have an explicit scope", () => {
+  const source = readFileSync(new URL("./product-nav.ts", import.meta.url), "utf8");
+  const routes = [...source.matchAll(/href: "(\/platform[^\"]*)"/g)].map(match => match[1]);
+  const uniqueRoutes = [...new Set(routes)];
+  for (const route of uniqueRoutes) {
+    assert.ok(PLATFORM_NAV_ROLE_SCOPES[route], `${route} needs an explicit role scope`);
+    assert.equal(canSeePlatformNavRoute(route, ["platform_owner"]), true, `${route} should render for the owner`);
+  }
+});
+
+test("menu role filtering keeps finance and ops within their route scopes", () => {
+  assert.equal(canSeePlatformNavRoute("/platform/billing", ["platform_owner"]), true);
+  assert.equal(canSeePlatformNavRoute("/platform/billing", ["ops_manager"]), false);
+  assert.equal(canSeePlatformNavRoute("/platform/billing", ["finance_manager"]), true);
+  assert.equal(canSeePlatformNavRoute("/platform/infrastructure/devices", ["finance_manager"]), false);
 });
 
 test("sidebar route scopes follow the platform sub-role grants", () => {

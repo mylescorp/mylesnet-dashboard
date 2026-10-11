@@ -85,6 +85,19 @@ export type PermissionSlug = (typeof PERMISSIONS)[number]["slug"];
 
 export const ALL_PERMISSION_SLUGS: string[] = PERMISSIONS.map((permission) => permission.slug);
 
+/** The platform owner is the immutable full-access principal, even if a stale
+ * or incorrectly edited role row has lost one of its permission entries. */
+export function effectivePermissionsForRoles(
+  roles: Array<{ slug: string; permissions: string[] }>,
+): string[] {
+  if (roles.some((role) => role.slug === "platform_owner")) return [...ALL_PERMISSION_SLUGS];
+  return Array.from(new Set(roles.flatMap((role) => role.permissions)));
+}
+
+export function needsLegacyPlatformOwnerRecovery(roleSlugs: readonly string[], legacyRole: string | null | undefined): boolean {
+  return legacyRole === "platform_owner" && !roleSlugs.includes("platform_owner");
+}
+
 /**
  * Tenant workspace roles are evaluated only with an active, organization-bound
  * tenant membership. They are deliberately separate from platform roles: a
@@ -444,4 +457,3 @@ export const PLATFORM_SUB_ROLE_MAP: Record<string, string[]> = {
   platform_support: ["platform_support"],
   platform_readonly: ["platform_readonly"],
 };
-

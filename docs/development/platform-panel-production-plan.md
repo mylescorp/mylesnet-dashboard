@@ -181,3 +181,7 @@ Aligned the agency/reseller UI read helper with Convex and the canonical matrix.
 ## 2026-10-10 G4 API-key disclosure review
 
 The platform API-key list projection now has a regression test proving it omits token digests and creator/revocation identities. SA write and OPS read gates remain; newly issued raw tokens are returned once while only the digest is persisted. The public API currently implements only `organizations:read`; keep G4 partial until the approved API resource contract is complete and roles are verified against a deployed backend.
+
+## 2026-10-11 continuation — owner access and sidebar
+
+Added top-level sidebar navigation for all implemented platform routes, backed by explicit centralized role scopes and regression tests for owner visibility and Finance/Ops denial cells. `/platform/access` remains full CRUD for super-admin and read-only for other roles. Hardened owner recovery against stale role IDs or incomplete permission rows: the `platform_owner` mirror restores its role, it receives the complete permission catalog, permission-based Convex guards recognize it as full access, and its system-role permission grants cannot be reduced. Port 3000 is occupied by the owner checkout and remains untouched, so it still does not display the isolated branch. Remaining: finish checks, authenticate and verify all five roles, integrate through a Greptile-reviewed PR, and recheck on the integrated port-3000 app.

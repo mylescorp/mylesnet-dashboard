@@ -6,6 +6,8 @@ import {
   PLATFORM_SUB_ROLE_MAP,
   TENANT_ROLE_PERMISSIONS,
   tenantRoleHasPermission,
+  effectivePermissionsForRoles,
+  needsLegacyPlatformOwnerRecovery,
 } from "./permissions";
 import { assertMfaCompliance as assertMfaCompliancePolicy } from "./mfa";
 import { canTenantOperate } from "./tenantCore";
@@ -87,9 +89,16 @@ export async function resolveRoles(
   const roleIds = user.roles;
   if (roleIds && roleIds.length > 0) {
     const rows = await Promise.all(roleIds.map((roleId) => ctx.db.get(roleId)));
-    return rows
+    const resolved = rows
       .filter((row): row is Doc<"roles"> => row !== null && row.deletedAt === undefined)
       .map(resolveRoleRow);
+    // The owner mirror is protected from ordinary role changes and deletion.
+    // Preserve its recovery path if a stale role id or partial backfill leaves
+    // the authoritative role array without the owner row.
+    if (needsLegacyPlatformOwnerRecovery(resolved.map((role) => role.slug), user.platformRole)) {
+      return [...resolved, virtualRole("platform_owner")];
+    }
+    return resolved;
   }
   if (user.platformRole !== undefined && user.platformRole !== null) {
     return [virtualRole(user.platformRole)];
@@ -191,11 +200,7 @@ export function hasPermission(
 }
 
 export function permissionsOf(roles: ResolvedRole[]): string[] {
-  const seen = new Set<string>();
-  for (const role of roles) {
-    for (const permission of role.permissions) seen.add(permission);
-  }
-  return Array.from(seen);
+  return effectivePermissionsForRoles(roles);
 }
 
 export function isPlatformUser(roles: ResolvedRole[]): boolean {
@@ -330,7 +335,7 @@ export async function requirePermission(
     throw new Error("Unauthorized: account is inactive");
   }
   const roles = await resolveRoles(ctx, user);
-  if (hasPermission(roles, permission) && isPlatformUser(roles)) return user;
+  if ((isPlatformOwner(roles) || hasPermission(roles, permission)) && isPlatformUser(roles)) return user;
 
   // Tenant permissions exist only within the active organization mapped to a
   // real tenant. They never satisfy a platform-role guard.

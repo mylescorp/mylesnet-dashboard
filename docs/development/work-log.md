@@ -112,3 +112,10 @@ Prepared the reviewed platform feature bundle on `feat/restore-platform-features
 - **Changes:** Extracted the public API-key row projection and added a test proving list responses omit token digests and creator/revocation identities. Reclassified G4 as partial because the public resource scope is currently only `organizations:read`.
 - **Verification:** API-key/role tests passed; direct Convex and web typechecks passed; `git diff --check` passed.
 - **Status:** One-time token issuance and digest-only storage exist. Broader endpoint scope, authenticated role verification, and deployed verification remain open.
+
+### 2026-10-11 — Platform owner access and sidebar visibility
+
+- **Scope:** Investigate why restored platform features do not appear for the owner and why role management can be unavailable.
+- **Changes:** Added sidebar entries for implemented platform routes and required every menu route to have an explicit central role scope. Added owner visibility and Finance/Ops filtering tests. Made `platform_owner` a recoverable full-access role even when the stored role list or permission array is stale, and made its role grants immutable at the backend and UI.
+- **Verification:** Full repository suite passed 239/239; web and targeted Convex TypeScript checks passed; focused frontend ESLint and `git diff --check` passed. The isolated production build stops before compilation because Next.js cannot parse TypeScript `--showConfig` output. Authenticated role behavior and Greptile review remain pending. Port 3000 is already served by the owner checkout, confirmed at `/home/myles/Projects/mylesnet-dashboard/apps/web`; it was not disturbed, so it cannot show this isolated branch before it is integrated.
+- **Status:** No authenticated account or browser verification was available. GitHub/Greptile status still needs checking after local gates. Some canonical modules have no implementation page and therefore are not linked as if they existed.

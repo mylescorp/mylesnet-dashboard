@@ -324,7 +324,8 @@ export const updateRole = action({
     const name = args.name !== undefined ? args.name.trim() : role.name;
     if (!name) throw new Error("A role name is required.");
     const description = args.description !== undefined ? args.description.trim() || undefined : role.description;
-    const permissions = args.permissions !== undefined ? Array.from(new Set(args.permissions)) : role.permissions;
+    const requestedPermissions = args.permissions !== undefined ? Array.from(new Set(args.permissions)) : role.permissions;
+    const permissions = role.slug === "platform_owner" ? [...ALL_PERMISSION_SLUGS] : requestedPermissions;
     for (const permission of permissions) {
       if (!permissionInCatalog(permission)) throw new Error(`Unknown permission: ${permission}`);
     }
