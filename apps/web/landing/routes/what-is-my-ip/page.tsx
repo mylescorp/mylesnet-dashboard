@@ -4,6 +4,7 @@ import { pageMetadata } from "@/landing/content/seo";
 import LandingCard from "@/landing/components/LandingCard";
 import LandingCtaSection from "@/landing/components/LandingCtaSection";
 import IpDisplay, { type IpField } from "@/landing/components/IpDisplay";
+import { classifyAddress } from "@/shared/lib/ip-address";
 
 export const metadata = pageMetadata(
   "What is my IP",
@@ -70,33 +71,6 @@ const decode = (value: string | null): string | null => {
   }
 };
 
-type AddressKind = "loopback" | "link-local" | "private" | "public" | "unknown";
-
-/** Classify IPv4 and IPv6 addresses the way an operator would. */
-const classifyAddress = (value: string | null): AddressKind => {
-  if (!value) return "unknown";
-  const addr = value.toLowerCase().split("%")[0]; // strip any zone id
-
-  // IPv4-mapped IPv6 (::ffff:1.2.3.4) classifies as its IPv4 address.
-  const mapped = addr.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/);
-  if (mapped) return classifyAddress(mapped[1]);
-
-  if (!addr.includes(":")) {
-    if (addr.startsWith("127.")) return "loopback";
-    if (addr.startsWith("169.254.")) return "link-local";
-    if (/^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(addr))
-      return "private";
-    if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(addr)) return "public";
-    return "unknown";
-  }
-
-  if (addr === "::1") return "loopback";
-  if (addr === "::") return "unknown";
-  if (addr.startsWith("fe80:")) return "link-local";
-  if (addr.startsWith("fc") || addr.startsWith("fd")) return "private"; // ULA fc00::/7
-  return "public";
-};
-
 export default async function WhatIsMyIpPage() {
   const headerStore = await headers();
 
@@ -130,10 +104,8 @@ export default async function WhatIsMyIpPage() {
 
   // Determine connection context for the guidance section.
   const addressKind = classifyAddress(ip);
-  const isPrivateRange =
-    addressKind === "private" ||
-    addressKind === "link-local" ||
-    addressKind === "loopback";
+  const isLocalOnly = addressKind === "loopback" || addressKind === "link-local";
+  const isPrivateRange = addressKind === "private";
   const isV6 = ip?.includes(":") ?? false;
   const hasMultipleForwards = forwarded && forwarded.split(",").length > 1;
   const looksLikeCgnat =
@@ -207,25 +179,31 @@ export default async function WhatIsMyIpPage() {
                 title={
                   looksLikeCgnat
                     ? "Likely carrier-grade NAT"
-                    : isPrivateRange
-                      ? "Behind NAT"
-                      : "Direct or ISP NAT"
+                    : isLocalOnly
+                      ? "Local-only address"
+                      : isPrivateRange
+                        ? "Behind NAT"
+                        : "Direct or ISP NAT"
                 }
                 body={
                   looksLikeCgnat
                     ? "Multiple addresses in the forwarding chain suggest you are behind carrier-grade NAT (common on mobile networks). Many subscribers share one public IP."
-                    : isPrivateRange
-                      ? "Carrier-grade NAT does not apply to a local address — the translation happens on your own router or upstream, one hop at a time."
-                      : "No carrier-grade NAT detected in the forwarding chain. Your ISP likely assigns a unique public IP per connection."
+                    : isLocalOnly
+                      ? "This address only exists on this machine or network segment, so no network translation is involved."
+                      : isPrivateRange
+                        ? "A private address means a router is translating between your network and the internet. Carrier-grade NAT would add a second layer upstream."
+                        : "No carrier-grade NAT detected in the forwarding chain. Your ISP likely assigns a unique public IP per connection."
                 }
               />
               <LandingCard
                 icon={<Network size={20} aria-hidden="true" />}
                 title="IPv6"
                 body={
-                  isV6
-                    ? "The address above is IPv6. Modern destinations may reach you here even when IPv4 still works — firewall and allow-list rules should cover both."
-                    : "The address above is IPv4. If your network also has IPv6, destinations may reach you over a different address — check your router status for the IPv6 prefix."
+                  addressKind === "unknown"
+                    ? "No address was reported, so there is no address family to describe."
+                    : isV6
+                      ? "The address above is IPv6. Modern destinations may reach you here even when IPv4 still works — firewall and allow-list rules should cover both."
+                      : "The address above is IPv4. If your network also has IPv6, destinations may reach you over a different address — check your router status for the IPv6 prefix."
                 }
               />
             </div>
