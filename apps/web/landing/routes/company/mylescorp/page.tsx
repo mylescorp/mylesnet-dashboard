@@ -227,12 +227,7 @@ export default function MylesCorpPage() {
                 eyebrow={leader.role}
                 title={leader.name}
                 body={leader.scope}
-                outcomes={[
-                  contact[leader.phoneKey]
-                    ? `Direct line ${contact[leader.phoneKey]}`
-                    : null,
-                  contact[leader.emailKey] ? `Email ${contact[leader.emailKey]}` : null,
-                ].filter((line): line is string => Boolean(line))}
+                outcomes={}
               />
             ))}
           </div>
