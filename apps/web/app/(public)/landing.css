@@ -2017,7 +2017,7 @@ a.landing-card:hover {
 .landing-preview-caption { margin-top: var(--space-4); }
 .landing-audiences { padding-block: var(--space-6); border-block: 1px solid var(--line); background: var(--surface); }
 .landing-audiences-pills { gap: var(--space-2); }
-.landing-audience-pill { padding: var(--space-2) var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-full); background: var(--surface-muted); color: var(--text); }
+.landing-audience-pill { padding: var(--space-2) var(--space-3); border-radius: var(--radius-full); background: var(--surface-muted); color: var(--text); }
 
 .landing-section, .landing-section-alt { padding-block: var(--landing-section-padding-md); padding-inline: 0; }
 .landing-section-alt { background: var(--surface-muted); }

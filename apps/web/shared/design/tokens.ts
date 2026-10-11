@@ -134,4 +134,7 @@ export const designToken = {
   },
 } as const;
 
+/** Built-in color input value aligned with the default light-theme brand token. */
+export const defaultBrandColorInput = "#FA8200";
+
 export type DesignToken = typeof designToken;
