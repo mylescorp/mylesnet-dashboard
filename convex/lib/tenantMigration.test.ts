@@ -4,11 +4,15 @@ import {
   DEFAULT_BACKFILL_BATCH_SIZE,
   MARKET_DERIVED_BACKFILL_TABLES,
   MARKET_SITE_RESCOPING,
+  MAX_BACKFILL_AGENT_PAGE,
+  MAX_BACKFILL_BATCH_SIZE,
+  MAX_BACKFILL_CHILD_ROWS,
   PLATFORM_OWNED_TABLES,
   TENANT_BACKFILL_RUN_ID,
   TENANT_BACKFILL_TABLE_ORDER,
   TENANT_FEATURE_FLAGS,
   TENANT_OWNED_TABLES,
+  clampBatchSize,
   isInventoryConsistent,
   isMarketScopedTable,
   singleTenantFromMarketTenants,
@@ -80,6 +84,27 @@ test("isInventoryConsistent accepts the canonical inventory and rejects drift", 
 test("run id and batch size are stable", () => {
   assert.equal(TENANT_BACKFILL_RUN_ID, "tenantid-backfill-001");
   assert.ok(DEFAULT_BACKFILL_BATCH_SIZE > 0 && DEFAULT_BACKFILL_BATCH_SIZE <= 500);
+});
+
+test("clampBatchSize keeps every positive input a usable page size", () => {
+  assert.equal(clampBatchSize(undefined), DEFAULT_BACKFILL_BATCH_SIZE);
+  assert.equal(clampBatchSize(0), DEFAULT_BACKFILL_BATCH_SIZE);
+  assert.equal(clampBatchSize(-5), DEFAULT_BACKFILL_BATCH_SIZE);
+  assert.equal(clampBatchSize(Number.NaN), DEFAULT_BACKFILL_BATCH_SIZE);
+  assert.equal(clampBatchSize(0.5), 1, "a positive fraction must not clamp to a zero page");
+  assert.equal(clampBatchSize(1), 1);
+  assert.equal(clampBatchSize(250.9), 250);
+  assert.equal(clampBatchSize(MAX_BACKFILL_BATCH_SIZE + 1), MAX_BACKFILL_BATCH_SIZE);
+});
+
+test("the agent page cap stays inside the per-transaction read budget", () => {
+  // Worst case per agent: capped assignments + activity, each with a market
+  // lookup; the whole page must stay under Convex's 32k-document read limit.
+  const maxReadsPerAgent = MAX_BACKFILL_CHILD_ROWS * 2 * 2;
+  assert.ok(
+    MAX_BACKFILL_AGENT_PAGE * maxReadsPerAgent < 32_000,
+    `${MAX_BACKFILL_AGENT_PAGE} agents exceed the read budget`,
+  );
 });
 
 test("market→site rescoping: phase is carry-along and every market-scoped table is tenant-owned", () => {

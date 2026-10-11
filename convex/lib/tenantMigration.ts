@@ -17,6 +17,26 @@ export const TENANT_BACKFILL_RUN_ID = "tenantid-backfill-001";
 /** Bounded batch size for the tenantId backfill. */
 export const DEFAULT_BACKFILL_BATCH_SIZE = 100;
 
+/** Smallest usable page size (`paginate` rejects a zero page). */
+export const MIN_BACKFILL_BATCH_SIZE = 1;
+
+/** Largest batch an operator may request for one invocation. */
+export const MAX_BACKFILL_BATCH_SIZE = 500;
+
+/**
+ * Clamp an operator batch size into a usable page size. A missing, non-finite,
+ * or non-positive value falls back to the default; every other value is floored
+ * and kept within `[MIN_BACKFILL_BATCH_SIZE, MAX_BACKFILL_BATCH_SIZE]` so a
+ * fractional input such as `0.5` still yields a valid non-zero page instead of
+ * a zero page `paginate` cannot accept.
+ */
+export function clampBatchSize(size: number | undefined): number {
+  if (size === undefined || !Number.isFinite(size) || size <= 0) {
+    return DEFAULT_BACKFILL_BATCH_SIZE;
+  }
+  return Math.min(MAX_BACKFILL_BATCH_SIZE, Math.max(MIN_BACKFILL_BATCH_SIZE, Math.floor(size)));
+}
+
 /**
  * Hard cap on the child rows read to resolve one agent's owner in a single
  * invocation. Agent history grows without bound, so reads are bounded to keep
@@ -26,6 +46,16 @@ export const DEFAULT_BACKFILL_BATCH_SIZE = 100;
  * guessing an owner.
  */
 export const MAX_BACKFILL_CHILD_ROWS = 400;
+
+/**
+ * Largest legacy-agent page resolved per invocation. Each agent may read up to
+ * `MAX_BACKFILL_CHILD_ROWS` assignments and the same again in activity, and
+ * each child row can cost a (cached) market lookup, so the page must stay small
+ * enough that the whole batch sits inside Convex's per-transaction read limit:
+ * 16 agents → at most ~25.7k child/market reads, comfortably below the 32k
+ * ceiling even before the agent documents themselves.
+ */
+export const MAX_BACKFILL_AGENT_PAGE = 16;
 
 /**
  * Tables whose legacy (`tenantId: undefined`) rows carry a `marketId` and so

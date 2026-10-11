@@ -6,12 +6,13 @@ import { selectBootstrapOwner } from "./lib/tenantCore.ts";
 import { requirePlatformSubRoleForUser } from "./lib/auth.ts";
 import { logAudit } from "./lib/auditLog.ts";
 import {
-  DEFAULT_BACKFILL_BATCH_SIZE,
+  MAX_BACKFILL_AGENT_PAGE,
   MAX_BACKFILL_CHILD_ROWS,
   TENANT_BACKFILL_RUN_ID,
   TENANT_BACKFILL_TABLE_ORDER,
   TENANT_FEATURE_FLAGS,
   TenantBackfillTable,
+  clampBatchSize,
   singleTenantFromMarketTenants,
 } from "./lib/tenantMigration.ts";
 
@@ -97,6 +98,11 @@ export const runTenantIdBackfill = internalMutation({
         startedAt: now,
         createdAt: now,
       });
+      await auditBackfillRun(ctx, actor._id, runDocId, {
+        status: "running",
+        tableIndex: 0,
+        rowsProcessed: 0,
+      });
     }
 
     const manifest = normalizeManifest(existing?.manifest);
@@ -114,6 +120,11 @@ export const runTenantIdBackfill = internalMutation({
         manifest,
         completedAt: Date.now(),
       });
+      await auditBackfillRun(ctx, actor._id, runDocId, {
+        status: "completed",
+        tableIndex: manifest.tableIndex,
+        rowsProcessed,
+      });
       return { status: "completed" as const, done: true, runId, rowsProcessed, manifest };
     }
 
@@ -130,6 +141,12 @@ export const runTenantIdBackfill = internalMutation({
         rowsProcessed: existing?.rowsProcessed ?? 0,
         manifest,
         startedBy: existing?.startedBy ?? actor._id,
+      });
+      await auditBackfillRun(ctx, actor._id, runDocId, {
+        status: "running",
+        table,
+        tableIndex: manifest.tableIndex,
+        rowsProcessed: existing?.rowsProcessed ?? 0,
       });
       return {
         status: "blocked" as const,
@@ -160,6 +177,12 @@ export const runTenantIdBackfill = internalMutation({
       manifest,
       startedBy: existing?.startedBy ?? actor._id,
       ...(allDone ? { completedAt: Date.now() } : {}),
+    });
+    await auditBackfillRun(ctx, actor._id, runDocId, {
+      status: allDone ? "completed" : "running",
+      table,
+      tableIndex: manifest.tableIndex,
+      rowsProcessed,
     });
 
     return {
@@ -199,11 +222,6 @@ function normalizeManifest(raw: unknown): BackfillManifest {
     ambiguous: { ...(value.ambiguous ?? {}) },
     done: { ...(value.done ?? {}) },
   };
-}
-
-function clampBatchSize(size: number | undefined): number {
-  if (!Number.isFinite(size) || (size as number) <= 0) return DEFAULT_BACKFILL_BATCH_SIZE;
-  return Math.min(500, Math.floor(size as number));
 }
 
 /** The `tenant.backfill` flag is a `system_settings` boolean, off unless explicitly enabled. */
@@ -377,10 +395,15 @@ async function processBackfillTable(
       return { scanned: page.page.length, ...counts, isDone: page.isDone, continueCursor: page.continueCursor };
     }
     case "agents": {
+      // Resolving one agent reads up to `MAX_BACKFILL_CHILD_ROWS` assignments
+      // plus the same again in activity (each with a market lookup), so the page
+      // is capped well below the operator batch to keep the whole invocation
+      // inside Convex's per-transaction read limit.
+      const agentPageSize = Math.max(1, Math.min(batchSize, MAX_BACKFILL_AGENT_PAGE));
       const page = await ctx.db
         .query("agents")
         .order("asc")
-        .paginate({ numItems: batchSize, cursor });
+        .paginate({ numItems: agentPageSize, cursor });
       let patched = 0;
       let ambiguous = 0;
       for (const agent of page.page) {
@@ -421,6 +444,27 @@ async function auditBackfillAssignment(
     changedBy: actorUserId,
     tenantId,
     after: { assignedTenantId: tenantId },
+  });
+}
+
+/**
+ * Audit one change to the backfill run record. Every invocation that writes the
+ * run — start, advance, block, or completion — records the actor, the run, and
+ * only the routing facts (status, table, cursor progress, rows processed).
+ */
+async function auditBackfillRun(
+  ctx: MutationCtx,
+  actorUserId: Id<"users">,
+  runId: Id<"migrationRuns">,
+  after: { status: string; table?: string; tableIndex: number; rowsProcessed: number },
+): Promise<void> {
+  await logAudit(ctx, {
+    action: "tenant.backfill.run",
+    entityTable: "migrationRuns",
+    entityId: runId,
+    changedBy: actorUserId,
+    tenantId: null,
+    after,
   });
 }
 

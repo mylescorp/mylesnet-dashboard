@@ -259,6 +259,17 @@ export const resolveCallerTenant = internalQuery({
   args: { userId: v.id("users"), organizationId: v.optional(v.string()) },
   handler: async (ctx, args) => {
     if (!args.organizationId) return null;
+    // A removed or deactivated account must not keep exporting tenant data just
+    // because its membership row was left in place when the account changed.
+    const user = await ctx.db.get(args.userId);
+    if (
+      !user ||
+      user.isActive === false ||
+      user.deactivatedAt !== undefined ||
+      user.deletedAt !== undefined
+    ) {
+      return null;
+    }
     const tenant = await ctx.db
       .query("tenants")
       .withIndex("by_workosOrganizationId", (q) => q.eq("workosOrganizationId", args.organizationId!))
