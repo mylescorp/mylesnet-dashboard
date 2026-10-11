@@ -176,3 +176,22 @@ test("sidebar visibility matches representative canonical grants for all five su
     }
   }
 });
+
+test("concrete and organization-scoped roles preserve each canonical sidebar grant", () => {
+  const roleAliases: Array<{ canonical: string; concrete: string[] }> = [
+    { canonical: "platform_super_admin", concrete: ["platform_owner", "org-platform_owner", "org-platform_super_admin"] },
+    { canonical: "platform_ops", concrete: ["ops_manager", "org-platform_ops"] },
+    { canonical: "platform_finance", concrete: ["finance_manager", "org-platform_finance"] },
+    { canonical: "platform_support", concrete: ["org-platform_support"] },
+    { canonical: "platform_readonly", concrete: ["org-platform_readonly"] },
+  ];
+
+  for (const route of Object.keys(PLATFORM_NAV_ROLE_SCOPES)) {
+    for (const { canonical, concrete } of roleAliases) {
+      const expected = canSeePlatformNavRoute(route, [canonical]);
+      for (const role of concrete) {
+        assert.equal(canSeePlatformNavRoute(route, [role]), expected, `${role} should match ${canonical} on ${route}`);
+      }
+    }
+  }
+});

@@ -196,3 +196,5 @@ The canonical role matrix specifies full super-admin authority only for `platfor
 - Removed the final `platform_admin` super-admin bypasses found in platform ticket management and RADIUS connection-detail projections.
 - Verification: 262 tests across 45 files, web typecheck, targeted Convex typecheck, `git diff --check`, and lint with zero errors. Lint reports 11 unrelated unused-variable warnings. Build blocked by Turbopack worker bind `EPERM`; webpack fallback failed parsing TypeScript `--showConfig`.
 - Status: PR #81 cannot be updated or reviewed while `gh` token is invalid and api.github.com cannot resolve. Port 3000 was left untouched. Next: restore GitHub auth/network, push the RBAC fix commit to PR #81, obtain Greptile review on that exact head, then verify the merged app at port 3000 without restarting its listener.
+
+- 2026-10-11: Added a regression test comparing every sidebar route grant across canonical roles, stored concrete roles, and organization-scoped aliases. All 45 repository test-file jobs pass. Clarification: test runner job count is 45 files; the earlier 262 leaf-test count was not reproducible and should not be used in reporting.

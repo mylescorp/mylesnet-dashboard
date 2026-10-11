@@ -318,3 +318,7 @@ Prepared the reviewed platform feature bundle on `feat/restore-platform-features
 ## 2026-10-11 continuation — complete panel role-entry parity
 
 Added concrete `ops_manager` and `finance_manager` system roles to server panel-entry checks and panel selection so the backend identities produced by organization-scoped claims can enter Platform. Tightened the legacy `platform_admin` boundary in global ticket management and RADIUS connection-detail projections. Regression suite passes 262 tests across 45 files; `pnpm typecheck` and targeted Convex typecheck pass; `pnpm lint` has zero errors and 11 unrelated unused-variable warnings. Production build remains blocked by Turbopack worker socket `EPERM`; webpack fallback cannot parse TypeScript `--showConfig`. `gh auth status` reports an invalid token and GitHub API DNS resolution fails, so PR #81 has not received these fixes and no new Greptile review was possible. Port 3000 was not started or disturbed. See PR #81.
+
+## 2026-10-11 continuation - sidebar alias matrix regression
+
+Added exhaustive parity coverage requiring every registered sidebar route to produce the same allow or deny result for each canonical platform sub-role and its stored or WorkOS organization-scoped role aliases. The focused RBAC tests and full 45-file repository suite pass. Clarification: the runner reports 45 top-level test-file jobs, not a stable count of leaf assertions; use the file-level result rather than the earlier 262 figure. Greptile review remains unavailable until the local commit can be pushed to PR #81.
