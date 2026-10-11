@@ -17,9 +17,14 @@ export type AddressKind =
 const parseIpv4 = (value: string): number[] | null => {
   const parts = value.split(".");
   if (parts.length !== 4) return null;
-  const octets = parts.map((part) => Number(part));
-  if (octets.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) {
-    return null;
+  const octets: number[] = [];
+  for (const part of parts) {
+    // Require plain decimal digits: rejects empty octets, signs, whitespace,
+    // and scientific notation that Number() would otherwise accept.
+    if (!/^\d{1,3}$/.test(part)) return null;
+    const octet = Number(part);
+    if (octet > 255) return null;
+    octets.push(octet);
   }
   return octets;
 };

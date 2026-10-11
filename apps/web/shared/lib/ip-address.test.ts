@@ -56,3 +56,12 @@ test("returns unknown for missing or malformed input", () => {
   assert.equal(classifyAddress("1.2.3"), "unknown");
   assert.equal(classifyAddress("1.2.3.999"), "unknown");
 });
+
+test("rejects malformed IPv4 that Number() would otherwise accept", () => {
+  assert.equal(classifyAddress("203..113.7"), "unknown"); // empty octet
+  assert.equal(classifyAddress("1e2.1.2.3"), "unknown"); // scientific notation
+  assert.equal(classifyAddress("1.2.3."), "unknown"); // trailing dot
+  assert.equal(classifyAddress("+.1.2.3"), "unknown"); // sign
+  assert.equal(classifyAddress(" 1.2.3.4"), "public"); // surrounding space is trimmed
+  assert.equal(classifyAddress("1.2.3.4 "), "public");
+});
