@@ -1,0 +1,95 @@
+{
+  "common": {
+    "loading": "Chargement...",
+    "error": "Une erreur s'est produite",
+    "retry": "Réessayer",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "create": "Créer",
+    "search": "Rechercher",
+    "filter": "Filtrer",
+    "export": "Exporter",
+    "actions": "Actions",
+    "back": "Retour",
+    "next": "Suivant",
+    "previous": "Précédent",
+    "submit": "Soumettre",
+    "confirm": "Confirmer",
+    "close": "Fermer",
+    "yes": "Oui",
+    "no": "Non",
+    "selectAll": "Tout sélectionner",
+    "clear": "Effacer",
+    "apply": "Appliquer",
+    "reset": "Réinitialiser"
+  },
+  "dashboard": {
+    "title": "Tableau de bord",
+    "home": "Accueil",
+    "overview": "Vue d'ensemble",
+    "kpi": {
+      "revenue": "Revenus",
+      "activeSubscribers": "Abonnés actifs",
+      "newSubscribers": "Nouveaux abonnés",
+      "overdueBalance": "Solde en retard",
+      "openTickets": "Tickets ouverts",
+      "activeSessions": "Sessions actives"
+    }
+  },
+  "subscribers": {
+    "title": "Abonnés",
+    "list": "Abonnés",
+    "create": "Ajouter un abonné",
+    "edit": "Modifier l'abonné",
+    "profile": "Profil de l'abonné",
+    "status": {
+      "active": "Actif",
+      "pending": "En attente",
+      "suspended": "Suspendu",
+      "expired": "Expiré"
+    }
+  },
+  "billing": {
+    "title": "Facturation",
+    "invoices": "Factures",
+    "payments": "Paiements",
+    "createInvoice": "Créer une facture",
+    "recordPayment": "Enregistrer un paiement"
+  },
+  "settings": {
+    "title": "Paramètres",
+    "profile": "Profil",
+    "users": "Utilisateurs",
+    "roles": "Rôles",
+    "notifications": "Notifications"
+  },
+  "auth": {
+    "signIn": "Se connecter",
+    "signOut": "Se déconnecter",
+    "email": "E-mail",
+    "password": "Mot de passe",
+    "forgotPassword": "Mot de passe oublié?",
+    "noAccount": "Vous n'avez pas de compte?",
+    "hasAccount": "Vous avez déjà un compte?"
+  },
+  "errors": {
+    "required": "Ce champ est requis",
+    "invalidEmail": "Adresse e-mail invalide",
+    "invalidPhone": "Numéro de téléphone invalide",
+    "networkError": "Erreur réseau. Veuillez vérifier votre connexion.",
+    "unauthorized": "Vous n'êtes pas autorisé à effectuer cette action",
+    "notFound": "Ressource introuvable",
+    "serverError": "Erreur serveur. Veuillez réessayer plus tard."
+  },
+  "dates": {
+    "today": "Aujourd'hui",
+    "yesterday": "Hier",
+    "thisWeek": "Cette semaine",
+    "thisMonth": "Ce mois",
+    "lastWeek": "La semaine dernière",
+    "lastMonth": "Le mois dernier",
+    "customRange": "Période personnalisée"
+  }
+}

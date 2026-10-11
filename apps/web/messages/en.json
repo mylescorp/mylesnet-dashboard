@@ -1,0 +1,95 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "retry": "Retry",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "search": "Search",
+    "filter": "Filter",
+    "export": "Export",
+    "actions": "Actions",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous",
+    "submit": "Submit",
+    "confirm": "Confirm",
+    "close": "Close",
+    "yes": "Yes",
+    "no": "No",
+    "selectAll": "Select all",
+    "clear": "Clear",
+    "apply": "Apply",
+    "reset": "Reset"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "home": "Home",
+    "overview": "Overview",
+    "kpi": {
+      "revenue": "Revenue",
+      "activeSubscribers": "Active Subscribers",
+      "newSubscribers": "New Subscribers",
+      "overdueBalance": "Overdue Balance",
+      "openTickets": "Open Tickets",
+      "activeSessions": "Active Sessions"
+    }
+  },
+  "subscribers": {
+    "title": "Subscribers",
+    "list": "Subscribers",
+    "create": "Add Subscriber",
+    "edit": "Edit Subscriber",
+    "profile": "Subscriber Profile",
+    "status": {
+      "active": "Active",
+      "pending": "Pending",
+      "suspended": "Suspended",
+      "expired": "Expired"
+    }
+  },
+  "billing": {
+    "title": "Billing",
+    "invoices": "Invoices",
+    "payments": "Payments",
+    "createInvoice": "Create Invoice",
+    "recordPayment": "Record Payment"
+  },
+  "settings": {
+    "title": "Settings",
+    "profile": "Profile",
+    "users": "Users",
+    "roles": "Roles",
+    "notifications": "Notifications"
+  },
+  "auth": {
+    "signIn": "Sign In",
+    "signOut": "Sign Out",
+    "email": "Email",
+    "password": "Password",
+    "forgotPassword": "Forgot Password?",
+    "noAccount": "Don't have an account?",
+    "hasAccount": "Already have an account?"
+  },
+  "errors": {
+    "required": "This field is required",
+    "invalidEmail": "Invalid email address",
+    "invalidPhone": "Invalid phone number",
+    "networkError": "Network error. Please check your connection.",
+    "unauthorized": "You are not authorized to perform this action",
+    "notFound": "Resource not found",
+    "serverError": "Server error. Please try again later."
+  },
+  "dates": {
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "thisWeek": "This Week",
+    "thisMonth": "This Month",
+    "lastWeek": "Last Week",
+    "lastMonth": "Last Month",
+    "customRange": "Custom Range"
+  }
+}

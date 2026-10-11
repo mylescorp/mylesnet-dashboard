@@ -1,0 +1,95 @@
+{
+  "common": {
+    "loading": "Inapakaji...",
+    "error": "Kuna hitilafu",
+    "retry": "Jaribu tena",
+    "save": "Hifadhi",
+    "cancel": "Ghairi",
+    "delete": "Futa",
+    "edit": "Hariri",
+    "create": "Unda",
+    "search": "Tafuta",
+    "filter": "Chuja",
+    "export": "Toa",
+    "actions": "Hatua",
+    "back": "Rudi",
+    "next": "Ifuatayo",
+    "previous": "Iliyotangulia",
+    "submit": "Wasilisha",
+    "confirm": "Thibitisha",
+    "close": "Funga",
+    "yes": "Ndio",
+    "no": "Hapana",
+    "selectAll": "Chagua zote",
+    "clear": "Futa",
+    "apply": "Tumia",
+    "reset": "Weka upya"
+  },
+  "dashboard": {
+    "title": "Dashibodi",
+    "home": "Nyumbani",
+    "overview": "Muhtasari",
+    "kpi": {
+      "revenue": "Mapato",
+      "activeSubscribers": "Watumiaji Wako",
+      "newSubscribers": "Watumiaji Wapya",
+      "overdueBalance": "Salio Lililodhwa",
+      "openTickets": "Tiketi Zilizofunguli",
+      "activeSessions": "Sesheni Zilizo"
+    }
+  },
+  "subscribers": {
+    "title": "Watumiaji",
+    "list": "Watumiaji",
+    "create": "Ongeza Mtumiaji",
+    "edit": "Hariri Mtumiaji",
+    "profile": "Wasifu wa Mtumiaji",
+    "status": {
+      "active": "Amilifu",
+      "pending": "Inasubiri",
+      "suspended": "Imesitirishwa",
+      "expired": "Imekwisha"
+    }
+  },
+  "billing": {
+    "title": "Ukambi",
+    "invoices": "Anuani",
+    "payments": "Malipo",
+    "createInvoice": "Unda Anuani",
+    "recordPayment": "Rekodi Malipo"
+  },
+  "settings": {
+    "title": "Mipangilio",
+    "profile": "Wasifu",
+    "users": "Watumiaji",
+    "roles": "Vye",
+    "notifications": "Arifa"
+  },
+  "auth": {
+    "signIn": "Ingia",
+    "signOut": "Ondoka",
+    "email": "Barua pepe",
+    "password": "Nenosiri",
+    "forgotPassword": "Umesahau nenosiri?",
+    "noAccount": "Huna akaunti?",
+    "hasAccount": "Una akaunti tayari?"
+  },
+  "errors": {
+    "required": "Uga huu unahitajika",
+    "invalidEmail": "Barua pepe batili",
+    "invalidPhone": "Namba ya simu batili",
+    "networkError": "Hitilafu ya mtandao. Tafutia muunganiko wako.",
+    "unauthorized": "Haujaidhuriwa kufanya hatua hii",
+    "notFound": "Haijapatikana",
+    "serverError": "Hitilafu ya seva. Jaribu tena baadaye."
+  },
+  "dates": {
+    "today": "Leo",
+    "yesterday": "Jana",
+    "thisWeek": "Wiki hii",
+    "thisMonth": "Mwezi huu",
+    "lastWeek": "Wiki iliyopita",
+    "lastMonth": "Mwezi uliopita",
+    "customRange": "Kipindi cha kipekee"
+  }
+}
