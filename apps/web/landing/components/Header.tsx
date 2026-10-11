@@ -193,7 +193,7 @@ export default function Header() {
                                 }))
                               }
                             >
-                              {expanded ? "Show fewer" : `${group.moreLabel ?? "View all"} (+)`}
+                              {expanded ? "Show fewer" : `${group.moreLabel ?? "View all"} (+${hidden})`}
                             </button>
                           ) : null}
                         </div>
