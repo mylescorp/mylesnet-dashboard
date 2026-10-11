@@ -218,3 +218,12 @@ separate archive policy.
 - **Changes:** Copied the feature list into the repo at `docs/tenant-panel-feature-list.md`; ran a repo-evidence audit of every feature ID and wrote `docs/tenant-panel-audit.md`; wrote program goal records `docs/goal/goal.md`, `progress.md`, `decisions.md`, `blockers.md`, and `lessons.md`.
 - **Verification:** Baseline gates on the isolated worktree are clean: `pnpm typecheck` passes and `pnpm test` passes 171/171. The owner checkout was left untouched.
 - **Status:** Audit complete. The tenant panel is a narrow billing and operations workspace; the large majority of features are Partial or Missing. Foundation defects to fix first: `logAudit` writes no `tenantId` (tenant audit log returns empty) and `analytics`, `scheduledReports`, and `notifications` are not tenant-scoped. Production deploy and live verification are blocked on an approved production Convex target/credential and a real test tenant. Work runs in the isolated worktree `/home/myles/Projects/mylesnet-tenant-panel` on `feat/tenant-panel-program`.
+
+### 2026-10-11 — Negative RSC performance timestamps
+
+- **Scope:** Fix the runtime error on guarded routes while retaining server-side authorization and redirects.
+- **Evidence and change:** React's Server Component performance track attempted to measure errored or aborted components with a negative or uninitialized child end timestamp. Added a reproducible patch to the four pinned Next.js development client bundles that emits the profiling entry only when the end timestamp is valid, plus a regression test for the applied patch. No runtime package or auth behavior changed.
+- **Verification:** `pnpm typecheck` passed; repository `node --test` passed 31/31; `pnpm lint` passed with 15 pre-existing warnings; `pnpm build` passed using a non-secret local placeholder for `NEXT_PUBLIC_CONVEX_URL` and generated 131 routes. `pnpm audit --prod` could not reach the npm registry (DNS `EAI_AGAIN`). A controlled local run could not bind `localhost:3000` because the existing port is occupied, so its listener was preserved. No production deploy.
+- **Status:** Branch `fix/routes-negative-rsc-timestamp`; PR and review pending. See `docs/route-fix-log.md`.
+
+Correction note, 2026-10-11: the build command value shown in the entry above was a non-secret CI placeholder. Future committed work logs record the variable name only.
