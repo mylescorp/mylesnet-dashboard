@@ -463,3 +463,12 @@ export const PLATFORM_SUB_ROLE_MAP: Record<string, string[]> = {
   platform_support: ["platform_support"],
   platform_readonly: ["platform_readonly"],
 };
+
+/** Canonical roles allowed to read cross-tenant platform summaries. */
+export const PLATFORM_SUB_ROLE_READERS = [
+  "platform_super_admin",
+  "platform_ops",
+  "platform_finance",
+  "platform_support",
+  "platform_readonly",
+] as const;

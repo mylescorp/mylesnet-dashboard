@@ -4,7 +4,8 @@ import { action, internalMutation, internalQuery, query } from "./_generated/ser
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { logAudit } from "./lib/auditLog";
-import { requirePlatformUser, resolveRoles } from "./lib/auth";
+import { requirePlatformSubRole, requirePlatformUser, resolveRoles } from "./lib/auth";
+import { PLATFORM_SUB_ROLE_READERS } from "./lib/permissions";
 import { canTenantOperate } from "./lib/tenantCore";
 import { deactivateOrganizationMembership, reactivateOrganizationMembership, sendWorkosPasswordReset } from "./workos";
 
@@ -127,7 +128,7 @@ export const list = query({
   },
   returns: directoryPageValidator,
   handler: async (ctx, args) => {
-    await requirePlatformUser(ctx);
+    await requirePlatformSubRole(ctx, [...PLATFORM_SUB_ROLE_READERS]);
     let pageUsers;
     let continueCursor: string | null = null;
     let isDone = true;
@@ -240,23 +241,32 @@ export const recordMembershipSync = internalMutation({
   handler: async (ctx, args) => {
     const request = await ctx.db.query("platformUserAccessRequests").withIndex("by_requestId", q => q.eq("requestId", args.requestId)).first();
     if (!request || request.syncStatus !== "pending") return null;
-    if (args.succeeded && request.status === args.appliedStatus) {
-      const membership = await ctx.db.query("tenantMemberships")
-        .withIndex("by_user_tenant", q => q.eq("userId", request.targetUserId).eq("tenantId", request.tenantId)).first();
-      if (membership?.accessOverride === request.status) {
-        await ctx.db.patch(membership._id, { accessOverride: undefined, accessOverrideUpdatedAt: undefined });
-      }
-    }
+    const previousSyncStatus = request.syncStatus;
+    const previousAttempts = request.syncAttempts ?? 0;
+    // Keep the requested state as an override until a matching, sufficiently
+    // recent provider event confirms it. A successful API response alone does
+    // not carry the ordered event timestamp needed to safely clear the guard.
     const targetMembership = await ctx.db.query("tenantMemberships")
       .withIndex("by_user_tenant", q => q.eq("userId", request.targetUserId).eq("tenantId", request.tenantId)).first();
     const membershipDeleted = targetMembership?.providerMembershipDeletedAt !== undefined;
+    const syncStatus = membershipDeleted || (args.succeeded && request.status !== args.appliedStatus)
+      ? "superseded"
+      : args.succeeded ? "synced" : "pending";
+    const syncAttempts = previousAttempts + 1;
     await ctx.db.patch(request._id, {
-      syncStatus: membershipDeleted || (args.succeeded && request.status !== args.appliedStatus)
-        ? "superseded"
-        : args.succeeded ? "synced" : "pending",
-      syncAttempts: (request.syncAttempts ?? 0) + 1,
+      syncStatus,
+      syncAttempts,
       lastSyncAttemptAt: Date.now(),
       nextSyncAttemptAt: Date.now() + 5 * 60 * 1000,
+    });
+    await logAudit(ctx, {
+      action: "global_user.access_sync_recorded",
+      entityTable: "platformUserAccessRequests",
+      entityId: request._id,
+      changedBy: request.actorUserId,
+      tenantId: request.tenantId,
+      before: { syncStatus: previousSyncStatus, syncAttempts: previousAttempts },
+      after: { syncStatus, syncAttempts, appliedStatus: args.appliedStatus, succeeded: args.succeeded },
     });
     return null;
   },

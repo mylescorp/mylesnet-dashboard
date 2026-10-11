@@ -322,3 +322,17 @@ Added concrete `ops_manager` and `finance_manager` system roles to server panel-
 ## 2026-10-11 continuation - sidebar alias matrix regression
 
 Added exhaustive parity coverage requiring every registered sidebar route to produce the same allow or deny result for each canonical platform sub-role and its stored or WorkOS organization-scoped role aliases. The focused RBAC tests and full 45-file repository suite pass. Clarification: the runner reports 45 top-level test-file jobs, not a stable count of leaf assertions; use the file-level result rather than the earlier 262 figure. Greptile review remains unavailable until the local commit can be pushed to PR #81.
+
+### 2026-10-11 - Platform access review follow-up
+
+- **Scope:** Remediate security and authorization gaps found on the platform access/sidebar review; follow-up work is isolated from PR #81 after its review-round stop condition.
+- **Changes:** Replaced broad platform-membership reads with canonical sub-role gates for cross-tenant user, tenant, and policy-template queries; kept membership access overrides until a timestamped provider event confirms the requested state; audited sync/backfill mutations and made failed subscriber-count scans release their write-blocking flag; restored tenant-scoped commissions access and cursor pagination; removed internal implementation details from screen copy; corrected the D1 role test to deny spec-silent readonly access. See PR #81 for review context.
+- **Verification:** `pnpm test` passes 45/45 test-file jobs; web typecheck and targeted Convex typecheck pass; lint has zero errors and 11 existing warnings. On clean `origin/main` (`afcdcb0`), typecheck and tests pass and lint has zero errors with 15 warnings. The webpack build reaches the same environment-configuration failure on baseline and follow-up; the default Turbopack build is blocked in this worktree by worker-port `EPERM`.
+- **Status:** Follow-up branch is not yet integrated. Authenticated role-by-role runtime verification and the integrated port-3000 app remain outstanding. The owner's port-3000 listener was not accessed or disturbed.
+
+### 2026-10-11 — Platform access review findings follow-up
+
+- **Scope:** Fix the valid commission-pagination and subscriber-count backfill concurrency findings raised during review of the platform RBAC follow-up.
+- **Changes:** Commission status filtering now uses tenant/status indexes before pagination and permits only the specified platform super-admin, finance, and ops roles for cross-tenant views. Backfill start atomically claims the running flag before scheduling, preventing duplicate starts.
+- **Verification:** Web typecheck, targeted Convex typecheck, all 45 test-file jobs, and lint with zero errors passed. Lint reports 11 unrelated warnings. Production build remains blocked by worker-port `EPERM`; the webpack fallback cannot parse TypeScript `--showConfig` in this isolated worktree.
+- **Status:** Changes are on the separate review-fix branch. See PR #84. The owner checkout and port 3000 listener remain untouched.

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PLATFORM_SUB_ROLE_MAP } from "./permissions.ts";
+import { PLATFORM_SUB_ROLE_MAP, PLATFORM_SUB_ROLE_READERS } from "./permissions.ts";
 import { hasAllowedRole, hasCanonicalPlatformSuperAdminRole, resolveAllowedRoleSlugs } from "./platformRoleCore.ts";
 
 test("legacy platform admin cannot exercise super-admin-only behavior", () => {
@@ -8,6 +8,16 @@ test("legacy platform admin cannot exercise super-admin-only behavior", () => {
   assert.equal(hasCanonicalPlatformSuperAdminRole(["platform_super_admin"]), false);
   assert.equal(hasCanonicalPlatformSuperAdminRole(["platform_admin"]), false);
   assert.equal(hasCanonicalPlatformSuperAdminRole(["platform_admin", "platform_support"]), false);
+});
+
+test("cross-tenant platform summaries require a canonical sub-role", () => {
+  const allowed = resolveAllowedRoleSlugs([...PLATFORM_SUB_ROLE_READERS], PLATFORM_SUB_ROLE_MAP);
+  for (const role of ["platform_owner", "ops_manager", "finance_manager", "platform_support", "platform_readonly"]) {
+    assert.equal(hasAllowedRole([role], allowed), true, `${role} should read cross-tenant summaries`);
+  }
+  for (const role of ["platform_admin", "member", "custom_platform_role"]) {
+    assert.equal(hasAllowedRole([role], allowed), false, `${role} must be denied unless explicitly mapped`);
+  }
 });
 
 const marketReaders = [
@@ -104,15 +114,16 @@ test("RADIUS fleet reads allow all sub-roles and writes allow only super-admin a
   for (const role of ["finance_manager", "platform_support", "platform_readonly"]) assert.equal(hasAllowedRole([role], writers), false, `${role} must not write`);
 });
 
-test("agency and reseller oversight is readable by all sub-roles and writable only by super-admin", () => {
+test("agency and reseller oversight is readable by specified roles and writable only by super-admin", () => {
   const readers = resolveAllowedRoleSlugs(
-    ["platform_super_admin", "platform_ops", "platform_finance", "platform_support", "platform_readonly"],
+    ["platform_super_admin", "platform_ops", "platform_finance", "platform_support"],
     PLATFORM_SUB_ROLE_MAP,
   );
   const writers = resolveAllowedRoleSlugs(["platform_super_admin"], PLATFORM_SUB_ROLE_MAP);
-  for (const role of ["platform_owner", "ops_manager", "finance_manager", "platform_support", "platform_readonly"]) {
+  for (const role of ["platform_owner", "ops_manager", "finance_manager", "platform_support"]) {
     assert.equal(hasAllowedRole([role], readers), true, `${role} should read partner registries`);
   }
+  assert.equal(hasAllowedRole(["platform_readonly"], readers), false, "unspecified readonly role must be denied");
   for (const role of ["platform_owner"]) assert.equal(hasAllowedRole([role], writers), true, `${role} should manage partner links`);
   for (const role of ["ops_manager", "finance_manager", "platform_support", "platform_readonly"]) {
     assert.equal(hasAllowedRole([role], writers), false, `${role} must not manage partner links`);
