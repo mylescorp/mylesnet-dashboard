@@ -110,8 +110,7 @@ export const backfillTenantSubscriberCount = internalMutation({
     const tenant = await ctx.db.get(args.tenantId);
     if (!tenant) throw new Error("Tenant not found");
     if (!args.cursor) {
-      if (tenant.subscriberCountBackfillRunning) throw new Error("Subscriber count backfill is already running");
-      await ctx.db.patch(args.tenantId, { subscriberCountBackfillRunning: true });
+      if (!tenant.subscriberCountBackfillRunning) throw new Error("Subscriber count backfill was not started");
     }
     let page;
     try {
@@ -192,6 +191,7 @@ export const startSubscriberCountBackfill = mutation({
     const tenant = await ctx.db.get(args.tenantId);
     if (!tenant || tenant.deletedAt !== undefined) throw new Error("Tenant not found");
     if (tenant.subscriberCountBackfillRunning) throw new Error("Subscriber count backfill is already running");
+    await ctx.db.patch(tenant._id, { subscriberCountBackfillRunning: true });
     await logAudit(ctx, {
       action: "tenant.subscriber_count_backfill_started",
       entityTable: "tenants",

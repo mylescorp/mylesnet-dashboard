@@ -559,7 +559,10 @@ export default defineSchema({
     paidAt: v.optional(v.number()),
   })
     .index("by_tenant", ["tenantId"])
+    .index("by_tenant_and_accruedAt", ["tenantId", "accruedAt"])
+    .index("by_tenant_and_status_and_accruedAt", ["tenantId", "payoutStatus", "accruedAt"])
     .index("by_status", ["payoutStatus"])
+    .index("by_status_and_accruedAt", ["payoutStatus", "accruedAt"])
     .index("by_agent", ["agentId"])
     .index("by_accruedAt", ["accruedAt"]),
 

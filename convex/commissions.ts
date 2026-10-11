@@ -7,6 +7,7 @@ import {
   requirePlatformOwner,
   requirePlatformUser,
   requirePlatformSubRole,
+  resolveUserByIdentity,
   resolveRoles,
 } from "./lib/auth";
 import { enforceTenantOnResource, readScopedTenant, readTenantList } from "./lib/tenant";
@@ -235,10 +236,13 @@ export const listCommissionsByStatus = query({
     ),
   },
   handler: async (ctx, args) => {
-    const actor = await requirePermission(ctx, "commissions:read");
+    const actor = await resolveUserByIdentity(ctx);
+    if (!actor) throw new Error("Unauthenticated");
     const roles = await resolveRoles(ctx, actor);
     if (roles.some((role) => role.isPlatform)) {
       await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_finance", "platform_ops"]);
+    } else {
+      await requirePermission(ctx, "commissions:read");
     }
     const scope = await readScopedTenant(ctx);
     const paginationOpts = {
@@ -246,17 +250,27 @@ export const listCommissionsByStatus = query({
       numItems: Math.max(1, Math.min(50, args.paginationOpts.numItems)),
     };
     const page = scope.enforced
-      ? await ctx.db.query("commissions")
-          .withIndex("by_tenant", (q) => q.eq("tenantId", scope.tenantId!))
-          .order("desc")
-          .paginate(paginationOpts)
-      : await ctx.db.query("commissions")
-          .withIndex("by_accruedAt")
-          .order("desc")
-          .paginate(paginationOpts);
+      ? args.payoutStatus
+        ? await ctx.db.query("commissions")
+            .withIndex("by_tenant_and_status_and_accruedAt", (q) => q.eq("tenantId", scope.tenantId!).eq("payoutStatus", args.payoutStatus!))
+            .order("desc")
+            .paginate(paginationOpts)
+        : await ctx.db.query("commissions")
+            .withIndex("by_tenant_and_accruedAt", (q) => q.eq("tenantId", scope.tenantId!))
+            .order("desc")
+            .paginate(paginationOpts)
+      : args.payoutStatus
+        ? await ctx.db.query("commissions")
+            .withIndex("by_status_and_accruedAt", (q) => q.eq("payoutStatus", args.payoutStatus!))
+            .order("desc")
+            .paginate(paginationOpts)
+        : await ctx.db.query("commissions")
+            .withIndex("by_accruedAt")
+            .order("desc")
+            .paginate(paginationOpts);
     return {
       ...page,
-      page: args.payoutStatus ? page.page.filter((commission) => commission.payoutStatus === args.payoutStatus) : page.page,
+      page: page.page,
     };
   },
 });
