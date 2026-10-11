@@ -227,3 +227,10 @@ separate archive policy.
 - **Status:** Branch `fix/routes-negative-rsc-timestamp`; PR and review pending. See `docs/route-fix-log.md`.
 
 Correction note, 2026-10-11: the build command value shown in the entry above was a non-secret CI placeholder. Future committed work logs record the variable name only.
+
+### 2026-10-11 — Landing theme restoration
+
+- **Scope:** Restore the remaining reviewed landing and theme changes from the owner worktrees onto current `origin/main`.
+- **Changes:** The shared landing and panel token system from the design-system worktree is already present on the current base. Restored the audience-pill border adjustment, moved the early theme initializer into a public script, and added the default light-theme brand color input constant. The affiliate-policy route from the older source worktree is absent on current `origin/main` and was not recreated.
+- **Verification:** `pnpm typecheck`, `pnpm test` (32 tests), `pnpm lint` (zero errors, 15 existing warnings), `node --check` for the theme initializer, and `git diff --check` passed. `pnpm build` was attempted with a non-secret placeholder for `NEXT_PUBLIC_CONVEX_URL` but could not fetch Google Fonts because outbound network access was unavailable.
+- **Status:** Branch `feat/restore-landing-updates`; pull request review pending. No production deployment.
