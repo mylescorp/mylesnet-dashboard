@@ -29,3 +29,23 @@ export function shouldApplyMembershipProviderEvent(
   if (incomingUpdatedAt !== undefined && currentUpdatedAt !== undefined) return incomingUpdatedAt >= currentUpdatedAt;
   return deletionRecorded;
 }
+
+export function shouldApplyMembershipDeletion(
+  currentMembershipId: string | undefined,
+  deletedMembershipId: string,
+  currentUpdatedAt?: number,
+  deletedUpdatedAt?: number,
+  deletionRecorded = false,
+): boolean {
+  // A deletion event belongs to one provider membership. Never let a stale
+  // deletion for a previous membership revoke its replacement, even if the
+  // event was delivered later than the replacement event.
+  if (currentMembershipId === undefined || currentMembershipId !== deletedMembershipId) return false;
+  return shouldApplyMembershipProviderEvent(
+    currentMembershipId,
+    deletedMembershipId,
+    currentUpdatedAt,
+    deletedUpdatedAt,
+    deletionRecorded,
+  );
+}

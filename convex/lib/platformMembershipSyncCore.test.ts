@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { resolveMembershipSync, shouldApplyMembershipProviderEvent } from "./platformMembershipSyncCore.ts";
+import { resolveMembershipSync, shouldApplyMembershipDeletion, shouldApplyMembershipProviderEvent } from "./platformMembershipSyncCore.ts";
 
 test("provider observations cannot override a newer revoked access intent", () => {
   assert.deepEqual(resolveMembershipSync("revoked", "active"), { status: "revoked", clearOverride: false });
@@ -38,4 +38,14 @@ test("different membership IDs without timestamps require an explicit prior dele
 
 test("same-ID events without timestamps cannot undo a recorded deletion", () => {
   assert.equal(shouldApplyMembershipProviderEvent("same-id", "same-id", 20, undefined, true), false);
+});
+
+test("membership deletion applies only to the currently recorded provider membership", () => {
+  assert.equal(shouldApplyMembershipDeletion("current-id", "current-id", 20, 21), true);
+  assert.equal(shouldApplyMembershipDeletion("current-id", "old-id", 20, 30), false);
+  assert.equal(shouldApplyMembershipDeletion(undefined, "old-id", undefined, 30), false);
+});
+
+test("stale deletion timestamps do not revoke the matching membership", () => {
+  assert.equal(shouldApplyMembershipDeletion("same-id", "same-id", 30, 20), false);
 });
