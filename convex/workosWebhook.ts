@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { resolveMembershipSync } from "./lib/platformMembershipSyncCore";
 
 type EventPayload = Record<string, unknown>;
 
@@ -185,6 +186,7 @@ export const processWorkosEvent = internalMutation({
         organizationId,
         roleSlug: roleSlug ?? undefined,
         status,
+        providerUpdatedAt: parseWosTimestamp(pickString(payload, ["updated_at", "updatedAt", "created_at", "createdAt"]) ?? undefined) ?? undefined,
         email: email ?? undefined,
         name: name ?? undefined,
       });
@@ -220,7 +222,17 @@ export const processWorkosEvent = internalMutation({
             .withIndex("by_user_tenant", (q) => q.eq("userId", user._id).eq("tenantId", tenant._id))
             .first();
           if (tenantMembership) {
-            await ctx.db.patch(tenantMembership._id, { status: "revoked", revokedAt: Date.now() });
+            const providerUpdatedAt = parseWosTimestamp(pickString(payload, ["updated_at", "updatedAt", "created_at", "createdAt"]) ?? undefined) ?? undefined;
+            const { status: effectiveStatus, clearOverride: overrideConfirmed } = resolveMembershipSync(
+              tenantMembership.accessOverride, "revoked", tenantMembership.accessOverrideUpdatedAt, providerUpdatedAt,
+            );
+            await ctx.db.patch(tenantMembership._id, {
+              status: effectiveStatus,
+              providerUpdatedAt,
+              accessOverride: overrideConfirmed ? undefined : tenantMembership.accessOverride,
+              accessOverrideUpdatedAt: overrideConfirmed ? undefined : tenantMembership.accessOverrideUpdatedAt,
+              revokedAt: effectiveStatus === "revoked" ? Date.now() : undefined,
+            });
           }
         }
       }

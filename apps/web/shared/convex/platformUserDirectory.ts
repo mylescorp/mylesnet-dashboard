@@ -5,6 +5,7 @@ export type DirectoryMembership = {
   tenantName: string;
   role: string;
   status: "active" | "pending" | "revoked";
+  syncPending: boolean;
 };
 export type DirectoryUser = {
   _id: string;

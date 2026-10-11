@@ -35,6 +35,13 @@ crons.daily(
   { cursor: null },
 );
 
+crons.interval(
+  "retry platform membership access sync",
+  { minutes: 5 },
+  internal.platformUserAccessSync.retryPendingMembershipSyncs,
+  {},
+);
+
 // Scheduled report generation (daily digests + weekly/monthly exports).
 crons.daily(
   "scheduled report generation",

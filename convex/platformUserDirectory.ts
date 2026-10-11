@@ -14,6 +14,7 @@ const membershipReadValidator = v.object({
   tenantName: v.string(),
   role: v.string(),
   status: v.union(v.literal("active"), v.literal("pending"), v.literal("revoked")),
+  syncPending: v.boolean(),
 });
 const directoryUserValidator = v.object({
   _id: v.id("users"),
@@ -150,12 +151,17 @@ export const list = query({
       ]);
       const tenantMemberships = (await Promise.all(memberships.map(async (membership) => {
         const tenant = await ctx.db.get(membership.tenantId);
-        return tenant ? {
+        if (!tenant) return null;
+        const pendingSync = await ctx.db.query("platformUserAccessRequests")
+          .withIndex("by_target_tenant_created", q => q.eq("targetUserId", user._id).eq("tenantId", membership.tenantId))
+          .order("desc").first();
+        return {
           tenantId: tenant._id,
           tenantName: tenant.name,
           role: membership.role,
-          status: membership.status,
-        } : null;
+          status: membership.accessOverride ?? membership.status,
+          syncPending: pendingSync?.syncStatus === "pending",
+        };
       }))).filter((membership): membership is NonNullable<typeof membership> => membership !== null);
       return {
         _id: user._id,
@@ -196,14 +202,22 @@ export const updateMembership = action({
     // Local intent is persisted before the provider call. If another request
     // races while it is in flight, reconcile the provider to the latest local
     // state after every call instead of finishing with an obsolete command.
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      const desired = await ctx.runQuery(internal.platformUserDirectory.getDesiredMembershipAccess, { userId: args.userId, tenantId: args.tenantId });
-      if (desired.status === "revoked") await deactivateOrganizationMembership(desired.organizationId, desired.workosUserId);
-      else await reactivateOrganizationMembership(desired.organizationId, desired.workosUserId);
-      const latest = await ctx.runQuery(internal.platformUserDirectory.getDesiredMembershipAccess, { userId: args.userId, tenantId: args.tenantId });
-      if (latest.status === desired.status) return { updated: true };
+    try {
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const desired = await ctx.runQuery(internal.platformUserDirectory.getDesiredMembershipAccess, { userId: args.userId, tenantId: args.tenantId });
+        if (desired.status === "revoked") await deactivateOrganizationMembership(desired.organizationId, desired.workosUserId);
+        else await reactivateOrganizationMembership(desired.organizationId, desired.workosUserId);
+        const latest = await ctx.runQuery(internal.platformUserDirectory.getDesiredMembershipAccess, { userId: args.userId, tenantId: args.tenantId });
+        if (latest.status === desired.status) {
+          await ctx.runMutation(internal.platformUserDirectory.recordMembershipSync, { requestId: authorized.requestId, appliedStatus: desired.status, succeeded: true });
+          return { updated: true };
+        }
+      }
+      throw new Error("Workspace access changed repeatedly; retry after refreshing the directory");
+    } catch {
+      await ctx.runMutation(internal.platformUserDirectory.recordMembershipSync, { requestId: authorized.requestId, appliedStatus: args.status, succeeded: false });
+      throw new Error("Workspace access could not be synchronized. The requested change is saved and will retry.");
     }
-    throw new Error("Workspace access changed repeatedly; retry after refreshing the directory");
   },
 });
 
@@ -215,8 +229,40 @@ export const getDesiredMembershipAccess = internalQuery({
     const user = await ctx.db.get(args.userId);
     const membership = await ctx.db.query("tenantMemberships").withIndex("by_user_tenant", q => q.eq("userId", args.userId).eq("tenantId", args.tenantId)).first();
     if (!tenant?.workosOrganizationId || !user?.workosUserId || !membership || (membership.status !== "active" && membership.status !== "revoked")) throw new Error("Workspace access state is unavailable");
-    return { organizationId: tenant.workosOrganizationId, workosUserId: user.workosUserId, status: membership.status };
+    return { organizationId: tenant.workosOrganizationId, workosUserId: user.workosUserId, status: membership.accessOverride ?? membership.status };
   },
+});
+
+export const recordMembershipSync = internalMutation({
+  args: { requestId: v.string(), appliedStatus: membershipStatusValidator, succeeded: v.boolean() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const request = await ctx.db.query("platformUserAccessRequests").withIndex("by_requestId", q => q.eq("requestId", args.requestId)).first();
+    if (!request || request.syncStatus !== "pending") return null;
+    if (args.succeeded && request.status === args.appliedStatus) {
+      const membership = await ctx.db.query("tenantMemberships")
+        .withIndex("by_user_tenant", q => q.eq("userId", request.targetUserId).eq("tenantId", request.tenantId)).first();
+      if (membership?.accessOverride === request.status) {
+        await ctx.db.patch(membership._id, { accessOverride: undefined, accessOverrideUpdatedAt: undefined });
+      }
+    }
+    await ctx.db.patch(request._id, {
+      syncStatus: args.succeeded ? (request.status === args.appliedStatus ? "synced" : "superseded") : "pending",
+      syncAttempts: (request.syncAttempts ?? 0) + 1,
+      lastSyncAttemptAt: Date.now(),
+      nextSyncAttemptAt: Date.now() + 5 * 60 * 1000,
+    });
+    return null;
+  },
+});
+
+export const listPendingMembershipSyncs = internalQuery({
+  args: {},
+  returns: v.array(v.object({ requestId: v.string(), userId: v.id("users"), tenantId: v.id("tenants"), status: membershipStatusValidator })),
+  handler: async (ctx) => (await ctx.db.query("platformUserAccessRequests")
+    .withIndex("by_sync_status_next_attempt", q => q.eq("syncStatus", "pending").lte("nextSyncAttemptAt", Date.now()))
+    .order("asc").take(25))
+    .map(request => ({ requestId: request.requestId, userId: request.targetUserId, tenantId: request.tenantId, status: request.status })),
 });
 
 export const applyMembershipStatus = internalMutation({
@@ -246,10 +292,12 @@ export const applyMembershipStatus = internalMutation({
       .withIndex("by_user_tenant", (q) => q.eq("userId", args.userId).eq("tenantId", args.tenantId))
       .first();
     if (!membership) throw new Error("Workspace membership not found");
-    if (membership.status !== args.status) {
-      if (membership.status !== args.expectedStatus) throw new Error("Workspace membership has changed; refresh and review it");
+    if (membership.status !== args.status && membership.status !== args.expectedStatus) throw new Error("Workspace membership has changed; refresh and review it");
+    if (membership.status !== args.status || membership.accessOverride !== args.status) {
       await ctx.db.patch(membership._id, {
         status: args.status,
+        accessOverride: args.status,
+        accessOverrideUpdatedAt: Date.now(),
         revokedAt: args.status === "revoked" ? Date.now() : undefined,
       });
     }
@@ -264,7 +312,7 @@ export const applyMembershipStatus = internalMutation({
     if (!completed) await ctx.db.insert("platformUserAccessRequests", {
       requestId: args.requestId, actorUserId: args.actorUserId, targetUserId: args.userId,
       tenantId: args.tenantId, status: args.status, organizationId: tenant.workosOrganizationId,
-      workosUserId: target.workosUserId, createdAt: Date.now(),
+      workosUserId: target.workosUserId, syncStatus: "pending", syncAttempts: 0, nextSyncAttemptAt: Date.now(), createdAt: Date.now(),
     });
     return { updated: true };
   },

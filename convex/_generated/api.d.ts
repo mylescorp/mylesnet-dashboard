@@ -52,6 +52,7 @@ import type * as lib_platformBillingAnomalyCore from "../lib/platformBillingAnom
 import type * as lib_platformCommissionRateCore from "../lib/platformCommissionRateCore.js";
 import type * as lib_platformLeaderboardCore from "../lib/platformLeaderboardCore.js";
 import type * as lib_platformMarketsCore from "../lib/platformMarketsCore.js";
+import type * as lib_platformMembershipSyncCore from "../lib/platformMembershipSyncCore.js";
 import type * as lib_platformPartnerLifecycleCore from "../lib/platformPartnerLifecycleCore.js";
 import type * as lib_platformRadiusCore from "../lib/platformRadiusCore.js";
 import type * as lib_platformReconciliationCore from "../lib/platformReconciliationCore.js";
@@ -96,6 +97,7 @@ import type * as platformReconciliation from "../platformReconciliation.js";
 import type * as platformRevenue from "../platformRevenue.js";
 import type * as platformSla from "../platformSla.js";
 import type * as platformUserDirectory from "../platformUserDirectory.js";
+import type * as platformUserAccessSync from "../platformUserAccessSync.js";
 import type * as platformUsers from "../platformUsers.js";
 import type * as platformVoucherPackages from "../platformVoucherPackages.js";
 import type * as platformWhiteLabel from "../platformWhiteLabel.js";
@@ -170,6 +172,7 @@ declare const fullApi: ApiFromModules<{
   "lib/platformCommissionRateCore": typeof lib_platformCommissionRateCore;
   "lib/platformLeaderboardCore": typeof lib_platformLeaderboardCore;
   "lib/platformMarketsCore": typeof lib_platformMarketsCore;
+  "lib/platformMembershipSyncCore": typeof lib_platformMembershipSyncCore;
   "lib/platformPartnerLifecycleCore": typeof lib_platformPartnerLifecycleCore;
   "lib/platformRadiusCore": typeof lib_platformRadiusCore;
   "lib/platformReconciliationCore": typeof lib_platformReconciliationCore;
@@ -214,6 +217,7 @@ declare const fullApi: ApiFromModules<{
   platformRevenue: typeof platformRevenue;
   platformSla: typeof platformSla;
   platformUserDirectory: typeof platformUserDirectory;
+  platformUserAccessSync: typeof platformUserAccessSync;
   platformUsers: typeof platformUsers;
   platformVoucherPackages: typeof platformVoucherPackages;
   platformWhiteLabel: typeof platformWhiteLabel;

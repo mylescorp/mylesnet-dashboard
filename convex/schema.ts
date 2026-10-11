@@ -1190,6 +1190,11 @@ export default defineSchema({
     // Bounded to the Phase 2 permission catalogue; free string while migrating.
     role: v.string(),
     status: v.union(v.literal("active"), v.literal("pending"), v.literal("revoked")),
+    // Platform directory access changes are durable desired state. Provider
+    // webhooks may only clear this override after confirming the same state.
+    accessOverride: v.optional(v.union(v.literal("active"), v.literal("revoked"))),
+    accessOverrideUpdatedAt: v.optional(v.number()),
+    providerUpdatedAt: v.optional(v.number()),
     // WorkOS membership id once the per-tenant org exists (Phase 2).
     workosMembershipId: v.optional(v.string()),
     invitedAt: v.optional(v.number()),
@@ -1444,10 +1449,16 @@ export default defineSchema({
     targetUserId: v.id("users"),
     tenantId: v.id("tenants"),
     status: v.union(v.literal("active"), v.literal("revoked")),
+    syncStatus: v.optional(v.union(v.literal("pending"), v.literal("synced"), v.literal("superseded"))),
+    syncAttempts: v.optional(v.number()),
+    lastSyncAttemptAt: v.optional(v.number()),
+    nextSyncAttemptAt: v.optional(v.number()),
     organizationId: v.string(),
     workosUserId: v.string(),
     createdAt: v.number(),
-  }).index("by_requestId", ["requestId"]),
+  }).index("by_requestId", ["requestId"])
+    .index("by_target_tenant_created", ["targetUserId", "tenantId", "createdAt"])
+    .index("by_sync_status_next_attempt", ["syncStatus", "nextSyncAttemptAt"]),
 
   // Aggregate-only historical series for C1 platform contracted revenue.
   // Tenant invoices and cash collection are deliberately outside this record.

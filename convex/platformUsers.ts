@@ -6,6 +6,7 @@ import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 import { requirePermission, requirePlatformSubRole, resolveRoles, resolveUserByIdentity } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
+import { resolveMembershipSync } from "./lib/platformMembershipSyncCore";
 import { PLATFORM_SUB_ROLE_MAP, workosSlugForRole } from "./lib/permissions";
 import { tenantMembershipStatusFromWorkos } from "./lib/tenantCore";
 import {
@@ -441,6 +442,7 @@ export const recordOrganizationMembership = internalMutation({
     organizationId: v.string(),
     roleSlug: v.optional(v.string()),
     status: v.union(v.literal("active"), v.literal("inactive"), v.literal("pending")),
+    providerUpdatedAt: v.optional(v.number()),
     email: v.optional(v.string()),
     name: v.optional(v.string()),
   },
@@ -557,12 +559,20 @@ export const recordOrganizationMembership = internalMutation({
       .withIndex("by_user_tenant", (q) => q.eq("userId", user!._id).eq("tenantId", tenant._id))
       .first();
     if (existingTenantMembership) {
+      const providerStatus = tenantMembershipStatusFromWorkos(args.status);
+      const { status: effectiveStatus, clearOverride: overrideConfirmed } = resolveMembershipSync(
+        existingTenantMembership.accessOverride, providerStatus,
+        existingTenantMembership.accessOverrideUpdatedAt, args.providerUpdatedAt,
+      );
       await ctx.db.patch(existingTenantMembership._id, {
         workosMembershipId: args.workosMembershipId,
         role: args.roleSlug ?? existingTenantMembership.role,
-        status: tenantStatus,
-        joinedAt: tenantStatus === "active" ? existingTenantMembership.joinedAt ?? Date.now() : existingTenantMembership.joinedAt,
-        revokedAt: tenantStatus === "revoked" ? Date.now() : undefined,
+        status: effectiveStatus,
+        providerUpdatedAt: args.providerUpdatedAt,
+        accessOverride: overrideConfirmed ? undefined : existingTenantMembership.accessOverride,
+        accessOverrideUpdatedAt: overrideConfirmed ? undefined : existingTenantMembership.accessOverrideUpdatedAt,
+        joinedAt: effectiveStatus === "active" ? existingTenantMembership.joinedAt ?? Date.now() : existingTenantMembership.joinedAt,
+        revokedAt: effectiveStatus === "revoked" ? Date.now() : undefined,
       });
     } else {
       await ctx.db.insert("tenantMemberships", {
