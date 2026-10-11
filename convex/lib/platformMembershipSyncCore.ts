@@ -13,3 +13,19 @@ export function resolveMembershipSync(
   }
   return { status: override, clearOverride: false };
 }
+
+export function shouldApplyMembershipProviderEvent(
+  currentMembershipId: string | undefined,
+  incomingMembershipId: string,
+  currentUpdatedAt: number | undefined,
+  incomingUpdatedAt: number | undefined,
+  deletionRecorded: boolean,
+) {
+  if (deletionRecorded && currentMembershipId === incomingMembershipId && incomingUpdatedAt === undefined) return false;
+  if (currentMembershipId === undefined || currentMembershipId === incomingMembershipId) {
+    if (currentUpdatedAt !== undefined && incomingUpdatedAt !== undefined) return incomingUpdatedAt >= currentUpdatedAt;
+    return true;
+  }
+  if (incomingUpdatedAt !== undefined && currentUpdatedAt !== undefined) return incomingUpdatedAt >= currentUpdatedAt;
+  return deletionRecorded;
+}

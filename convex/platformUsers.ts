@@ -6,7 +6,7 @@ import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 import { requirePermission, requirePlatformSubRole, resolveRoles, resolveUserByIdentity } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
-import { resolveMembershipSync } from "./lib/platformMembershipSyncCore";
+import { resolveMembershipSync, shouldApplyMembershipProviderEvent } from "./lib/platformMembershipSyncCore";
 import { PLATFORM_SUB_ROLE_MAP, workosSlugForRole } from "./lib/permissions";
 import { tenantMembershipStatusFromWorkos } from "./lib/tenantCore";
 import {
@@ -554,11 +554,18 @@ export const recordOrganizationMembership = internalMutation({
     if (!tenant || !user || user.deletedAt !== undefined) return;
 
     const tenantStatus = tenantMembershipStatusFromWorkos(args.status);
+    let tenantMembershipEventAccepted = true;
     const existingTenantMembership = await ctx.db
       .query("tenantMemberships")
       .withIndex("by_user_tenant", (q) => q.eq("userId", user!._id).eq("tenantId", tenant._id))
       .first();
     if (existingTenantMembership) {
+      tenantMembershipEventAccepted = shouldApplyMembershipProviderEvent(
+        existingTenantMembership.workosMembershipId, args.workosMembershipId,
+        existingTenantMembership.providerUpdatedAt, args.providerUpdatedAt,
+        existingTenantMembership.providerMembershipDeletedAt !== undefined,
+      );
+      if (!tenantMembershipEventAccepted) return;
       const providerStatus = tenantMembershipStatusFromWorkos(args.status);
       const { status: effectiveStatus, clearOverride: overrideConfirmed } = resolveMembershipSync(
         existingTenantMembership.accessOverride, providerStatus,
@@ -569,6 +576,9 @@ export const recordOrganizationMembership = internalMutation({
         role: args.roleSlug ?? existingTenantMembership.role,
         status: effectiveStatus,
         providerUpdatedAt: args.providerUpdatedAt,
+        providerMembershipDeletedAt: existingTenantMembership.providerMembershipDeletedAt === undefined || args.workosMembershipId !== existingTenantMembership.workosMembershipId || (args.providerUpdatedAt !== undefined && args.providerUpdatedAt >= existingTenantMembership.providerMembershipDeletedAt)
+          ? undefined
+          : existingTenantMembership.providerMembershipDeletedAt,
         accessOverride: overrideConfirmed ? undefined : existingTenantMembership.accessOverride,
         accessOverrideUpdatedAt: overrideConfirmed ? undefined : existingTenantMembership.accessOverrideUpdatedAt,
         joinedAt: effectiveStatus === "active" ? existingTenantMembership.joinedAt ?? Date.now() : existingTenantMembership.joinedAt,
@@ -589,7 +599,7 @@ export const recordOrganizationMembership = internalMutation({
     // A provisioning tenant becomes usable only after WorkOS has confirmed an
     // active tenant-admin membership. This is deliberately webhook/sync driven
     // rather than a browser-side success assumption.
-    if (tenantStatus === "active" && args.roleSlug === "tenant_admin") {
+    if (tenantMembershipEventAccepted && tenantStatus === "active" && args.roleSlug === "tenant_admin") {
       await ctx.runMutation(internal.tenantControl.activateProvisionedTenant, {
         tenantId: tenant._id,
         ownerUserId: user._id,

@@ -1195,6 +1195,7 @@ export default defineSchema({
     accessOverride: v.optional(v.union(v.literal("active"), v.literal("revoked"))),
     accessOverrideUpdatedAt: v.optional(v.number()),
     providerUpdatedAt: v.optional(v.number()),
+    providerMembershipDeletedAt: v.optional(v.number()),
     // WorkOS membership id once the per-tenant org exists (Phase 2).
     workosMembershipId: v.optional(v.string()),
     invitedAt: v.optional(v.number()),

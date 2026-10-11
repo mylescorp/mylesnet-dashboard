@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { shouldApplyMembershipProviderEvent } from "./lib/platformMembershipSyncCore";
 
 type EventPayload = Record<string, unknown>;
 
@@ -220,13 +221,19 @@ export const processWorkosEvent = internalMutation({
             .query("tenantMemberships")
             .withIndex("by_user_tenant", (q) => q.eq("userId", user._id).eq("tenantId", tenant._id))
             .first();
-          if (tenantMembership) {
+          const providerDeletedAt = parseWosTimestamp(pickString(payload, ["updated_at", "updatedAt", "created_at", "createdAt"]) ?? undefined) ?? Date.now();
+          if (tenantMembership && shouldApplyMembershipProviderEvent(
+            tenantMembership.workosMembershipId, membershipId,
+            tenantMembership.providerUpdatedAt, providerDeletedAt,
+            tenantMembership.providerMembershipDeletedAt !== undefined,
+          )) {
             await ctx.db.patch(tenantMembership._id, {
               status: "revoked",
               accessOverride: undefined,
               accessOverrideUpdatedAt: undefined,
-              workosMembershipId: undefined,
-              revokedAt: Date.now(),
+              providerMembershipDeletedAt: providerDeletedAt,
+              providerUpdatedAt: providerDeletedAt,
+              revokedAt: providerDeletedAt,
             });
             const pendingRequests = await ctx.db.query("platformUserAccessRequests")
               .withIndex("by_target_tenant_created", q => q.eq("targetUserId", user._id).eq("tenantId", tenant._id))

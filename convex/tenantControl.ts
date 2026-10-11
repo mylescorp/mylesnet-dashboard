@@ -970,6 +970,7 @@ export const registerVerifiedTenant = internalMutation({
   args: {
     actorWorkosUserId: v.string(),
     ownerWorkosUserId: v.string(),
+    workosMembershipId: v.string(),
     workosOrganizationId: v.string(),
     name: v.string(),
     slug: v.string(),
@@ -1013,7 +1014,17 @@ export const registerVerifiedTenant = internalMutation({
       tenantId,
       role: "tenant_admin",
       status: "active",
+      workosMembershipId: args.workosMembershipId,
       joinedAt: now,
+    });
+    await ctx.db.insert("organizationMemberships", {
+      tenantId,
+      workosMembershipId: args.workosMembershipId,
+      workosUserId: args.ownerWorkosUserId,
+      organizationId: args.workosOrganizationId,
+      roleSlug: "tenant_admin",
+      status: "active",
+      syncedAt: now,
     });
     await logAudit(ctx, {
       action: "tenant.registered",
@@ -1050,8 +1061,12 @@ export const registerExistingOrganization = action({
     if (!membership || membership.status !== "active") {
       throw new Error("The supplied tenant owner does not have an active membership in that WorkOS organization");
     }
+    if (membership.role?.slug !== "tenant_admin" && !membership.roles?.some(role => role.slug === "tenant_admin")) {
+      throw new Error("The supplied tenant owner must have the tenant administrator role");
+    }
     return ctx.runMutation(internal.tenantControl.registerVerifiedTenant, {
       actorWorkosUserId: identity.subject,
+      workosMembershipId: membership.id,
       ...registration,
     });
   },
