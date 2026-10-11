@@ -58,6 +58,7 @@ export const recordActivity = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requirePlatformUser(ctx);
+    const agent = await ctx.db.get(args.agentId);
     await insertActivityLedger(ctx, {
       agentId: args.agentId,
       marketId: args.marketId,
@@ -75,6 +76,7 @@ export const recordActivity = mutation({
       entityTable: "agentActivity",
       entityId: args.agentId,
       changedBy: user._id,
+      tenantId: agent?.tenantId ?? null,
       after: { action: args.action, amountLocal: args.amountLocal },
     });
   },

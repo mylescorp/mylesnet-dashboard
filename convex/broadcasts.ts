@@ -120,6 +120,7 @@ export const createBroadcast = mutation({
       entityTable: "broadcasts",
       entityId: broadcastId,
       changedBy: user._id,
+      tenantId: null,
       after: {
         recipientCount: agents.length,
         targetScope: args.targetScope,

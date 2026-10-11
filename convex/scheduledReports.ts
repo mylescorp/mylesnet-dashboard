@@ -4,6 +4,7 @@ import { internal } from "./_generated/api";
 import { requirePermission, requirePlatformUser } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 import { dayOf, monthOf } from "./lib/finance";
+import { enforceTenantOnResource, readScopedTenant } from "./lib/tenant";
 import type { Id } from "./_generated/dataModel";
 
 /**
@@ -43,7 +44,9 @@ export const createScheduledReport = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "reports:generate");
+    const scope = await readScopedTenant(ctx);
     const id = await ctx.db.insert("scheduledReports", {
+      tenantId: scope.tenantId ?? undefined,
       name: args.name,
       reportType: args.reportType,
       recipients: args.recipients,
@@ -54,7 +57,7 @@ export const createScheduledReport = mutation({
       createdBy: user._id,
       createdAt: Date.now(),
     });
-    await logAudit(ctx, { action: "report.create", entityTable: "scheduledReports", entityId: id, changedBy: user._id, after: args });
+    await logAudit(ctx, { action: "report.create", entityTable: "scheduledReports", entityId: id, changedBy: user._id, tenantId: scope.tenantId, after: args });
     return id;
   },
 });
@@ -71,10 +74,12 @@ export const updateScheduledReport = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "reports:generate");
+    const existing = await enforceTenantOnResource(ctx, await ctx.db.get(args.reportId), "scheduled report");
+    if (!existing) throw new Error("Scheduled report not found");
     const patch = { name: args.name, recipients: args.recipients, frequency: args.frequency, scopeFilter: args.scopeFilter, format: args.format, enabled: args.enabled };
     const cleaned = Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined));
     await ctx.db.patch(args.reportId, cleaned);
-    await logAudit(ctx, { action: "report.update", entityTable: "scheduledReports", entityId: args.reportId, changedBy: user._id, after: cleaned });
+    await logAudit(ctx, { action: "report.update", entityTable: "scheduledReports", entityId: args.reportId, changedBy: user._id, tenantId: existing?.tenantId, after: cleaned });
   },
 });
 
@@ -82,8 +87,10 @@ export const deleteScheduledReport = mutation({
   args: { reportId: v.id("scheduledReports") },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "reports:generate");
+    const report = await enforceTenantOnResource(ctx, await ctx.db.get(args.reportId), "scheduled report");
+    if (!report) throw new Error("Scheduled report not found");
     await ctx.db.delete(args.reportId);
-    await logAudit(ctx, { action: "report.delete", entityTable: "scheduledReports", entityId: args.reportId, changedBy: user._id });
+    await logAudit(ctx, { action: "report.delete", entityTable: "scheduledReports", entityId: args.reportId, changedBy: user._id, tenantId: report?.tenantId });
   },
 });
 

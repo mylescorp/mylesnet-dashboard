@@ -1,7 +1,7 @@
 import { authkitMiddleware } from "@workos-inc/authkit-nextjs";
 import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server";
 import { TENANT_COOKIE_NAME, TENANT_COOKIE_MAX_AGE, baseCookieOptions } from "@/lib/auth/cookies";
-import { callbackUriForHost, resolveMylesnetHost } from "@/lib/auth/tenant";
+import { resolveMylesnetRequest } from "@/lib/auth/tenant";
 import { PUBLIC_PATHS } from "@/lib/public-routes";
 
 function authProxyForCallback(redirectUri: string) {
@@ -24,13 +24,9 @@ function applySecurityHeaders(response: NextResponse): void {
 }
 
 /** Set the tenant cookie from the request hostname (Cookie Handling). */
-function applyTenantCookie(request: NextRequest, response: NextResponse): void {
-  const host = resolveMylesnetHost(
-    request.nextUrl.hostname,
-    process.env.MYLESNET_PUBLIC_DOMAIN,
-  );
-  if (host.kind !== "tenant") return;
-  const slug = host.tenantSlug;
+function applyTenantCookie(request: NextRequest, response: NextResponse, tenantSlug: string | null): void {
+  if (!tenantSlug) return;
+  const slug = tenantSlug;
   if (request.cookies.get(TENANT_COOKIE_NAME)?.value === slug) return;
   response.cookies.set(
     TENANT_COOKIE_NAME,
@@ -60,14 +56,22 @@ export default async function proxy(request: NextRequest, event: NextFetchEvent)
   if (!password || password.length < 32) {
     return new NextResponse("Service configuration is incomplete.", { status: 503 });
   }
-  const host = resolveMylesnetHost(request.nextUrl.host, process.env.MYLESNET_PUBLIC_DOMAIN);
-  const redirectUri = callbackUriForHost(host, request.nextUrl.protocol);
+  // NextURL may contain the internal origin after proxying. Resolve against
+  // the incoming Host header so tenant subdomains and callback origins stay
+  // bound to the actual request host.
+  const routing = resolveMylesnetRequest(
+    request.headers,
+    request.nextUrl.host,
+    process.env.MYLESNET_PUBLIC_DOMAIN,
+    request.nextUrl.protocol,
+  );
+  const { redirectUri } = routing;
   if (!redirectUri) return new NextResponse("Unknown MylesNet host.", { status: 421 });
   try {
     const response = await authProxyForCallback(redirectUri)(request, event);
     if (response instanceof NextResponse) {
       applySecurityHeaders(response);
-      applyTenantCookie(request, response);
+      applyTenantCookie(request, response, routing.tenantSlug);
     }
     return response;
   } catch {

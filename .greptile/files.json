@@ -1,0 +1,40 @@
+{
+  "files": [
+    {
+      "path": "AGENTS.md",
+      "description": "Mandatory project rules, tenant authorization, audit, security, and delivery gates."
+    },
+    {
+      "path": "docs/technology-stack.md",
+      "description": "Authoritative allowed runtime technology contract."
+    },
+    {
+      "path": "docs/no-technology-stack-exposure.md",
+      "description": "Safe user-facing copy and error translation rules."
+    },
+    {
+      "path": "convex/schema.ts",
+      "description": "Convex table ownership, tenant IDs, and indexes."
+    },
+    {
+      "path": "convex/lib/auth.ts",
+      "description": "Shared server-side authorization helpers."
+    },
+    {
+      "path": "convex/lib/permissions.ts",
+      "description": "Permission and role matrix, including platform sub-role grants."
+    },
+    {
+      "path": "convex/lib/auditLog.ts",
+      "description": "Append-only audit entry contract."
+    },
+    {
+      "path": "convex/lib/mfa.ts",
+      "description": "MFA compliance and privileged-role checks."
+    },
+    {
+      "path": "docs/development/platform-panel-production-plan.md",
+      "description": "Platform production scope, module acceptance, and release gates."
+    }
+  ]
+}

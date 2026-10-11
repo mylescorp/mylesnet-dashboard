@@ -1,0 +1,57 @@
+{
+  "strictness": 2,
+  "autoReview": [
+    "open",
+    "push",
+    "rebase"
+  ],
+  "statusCheck": true,
+  "ignorePatterns": "convex/_generated/**\nvendor/**\n**/node_modules/**\npnpm-lock.yaml\npackage-lock.json\nyarn.lock\n",
+  "rules": [
+    {
+      "id": "tenant-isolation",
+      "rule": "Every Convex query and mutation that reads or writes tenant-owned data must enforce tenant isolation using server-derived identity and tenant scope. Platform-wide cross-tenant functions require their explicit platform sub-role gate.",
+      "severity": "high"
+    },
+    {
+      "id": "first-action-auth",
+      "rule": "The first action in every Convex function must enforce its authorization check before reading data or performing side effects.",
+      "severity": "high"
+    },
+    {
+      "id": "deny-unspecified-role-cells",
+      "rule": "Every role and operation cell not explicitly granted by PLATFORM_SUB_ROLE_MAP is denied. Never infer or broaden a permission from a similar role.",
+      "severity": "high"
+    },
+    {
+      "id": "no-secrets-or-env-exposure",
+      "rule": "Never expose secret values or environment values in source, logs, API responses, UI, docs, tests, or review artifacts.",
+      "severity": "high"
+    },
+    {
+      "id": "safe-user-facing-errors",
+      "rule": "User-facing output must not expose technology stack, provider, implementation, or filesystem details. Route every failure through the shared safe error translation boundary.",
+      "severity": "high"
+    },
+    {
+      "id": "no-placeholder-data",
+      "rule": "Do not add mock, placeholder, sample, fabricated, or hardcoded business data. Use verified persisted data and show unavailable values explicitly.",
+      "severity": "high"
+    },
+    {
+      "id": "audit-every-mutation",
+      "rule": "Every mutation must write an audit entry that records actor, action, and affected entity while excluding credentials and sensitive payloads.",
+      "severity": "high"
+    },
+    {
+      "id": "preserve-mfa-session-policy",
+      "rule": "Never weaken mandatory MFA or session rules: 30-minute inactivity timeout, warning at 25 minutes, and 12-hour absolute lifetime.",
+      "severity": "high"
+    },
+    {
+      "id": "runtime-stack-no-drift",
+      "rule": "Do not add a runtime dependency, service, provider, or infrastructure technology outside docs/technology-stack.md. Greptile review files are tooling and not runtime dependencies.",
+      "severity": "high"
+    }
+  ]
+}

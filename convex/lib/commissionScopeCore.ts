@@ -1,10 +1,10 @@
 /** Resolve safe tenant ownership for an accrued commission. */
-export function commissionTenantId(input: {
-  agentTenantId?: string | null;
-  marketTenantId?: string | null;
+export function commissionTenantId<TenantId extends string>(input: {
+  agentTenantId?: TenantId | null;
+  marketTenantId?: TenantId | null;
   activeAssignmentMatches: boolean;
   authenticatedTenantId?: string | null;
-}): string {
+}): TenantId {
   const { agentTenantId, marketTenantId, activeAssignmentMatches, authenticatedTenantId } = input;
   if (!agentTenantId || !marketTenantId) throw new Error("Commission ownership is unavailable.");
   if (agentTenantId !== marketTenantId) throw new Error("Agent and market must belong to the same workspace.");

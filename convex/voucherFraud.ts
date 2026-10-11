@@ -132,6 +132,7 @@ export const flagVoucher = mutation({
       entityTable: "vouchers",
       entityId: args.voucherId,
       changedBy: user._id,
+      tenantId: voucher.tenantId ?? null,
       after: {
         fraudFlagStatus: args.fraudFlagStatus,
         reason: args.reason ?? undefined,

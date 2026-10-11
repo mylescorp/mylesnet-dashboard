@@ -92,6 +92,7 @@ export const updateUserProfile = mutation({
       entityTable: "users",
       entityId: user._id,
       changedBy: user._id,
+      tenantId: null,
       after: patchData,
     });
 
@@ -299,6 +300,7 @@ export const applyUserAccess = internalMutation({
       entityTable: "users",
       entityId: target._id,
       changedBy: actor._id,
+      tenantId: null,
       after: {
         roleIds,
         primarySlug,
@@ -873,6 +875,7 @@ export const logUserAudit = internalMutation({
       entityTable: "users",
       entityId: args.userId,
       changedBy: args.actorUserId,
+      tenantId: null,
       after: args.after,
     });
   },

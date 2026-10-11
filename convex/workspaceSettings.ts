@@ -130,6 +130,7 @@ export const update = mutation({
       entityTable: "tenants",
       entityId: tenantId,
       changedBy: user._id,
+      tenantId,
       after: { section: args.section },
     });
     return normalize(nextSettings, tenant.name, inheritedBranding ?? undefined)[args.section];
@@ -150,6 +151,7 @@ export const reset = mutation({
       entityTable: "tenants",
       entityId: tenantId,
       changedBy: user._id,
+      tenantId,
       after: { section: args.section },
     });
     return normalize(remaining, tenant.name)[args.section];

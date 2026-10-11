@@ -136,6 +136,7 @@ export const setFeatureFlag = mutation({
         entityTable: "featureFlags",
         entityId: existing._id,
         changedBy: user._id,
+        tenantId: null,
         before: { enabled: existing.enabled, category: existing.category ?? null },
         after: { enabled: args.enabled, key: args.key, category },
       });
@@ -159,6 +160,7 @@ export const setFeatureFlag = mutation({
       entityTable: "featureFlags",
       entityId: id,
       changedBy: user._id,
+      tenantId: null,
       after: { key: args.key, enabled: args.enabled, category },
     });
     return id;
@@ -180,6 +182,7 @@ export const removeFeatureFlag = mutation({
       entityTable: "featureFlags",
       entityId: existing._id,
       changedBy: user._id,
+      tenantId: null,
       after: { key: existing.key, category: existing.category ?? null },
     });
   },

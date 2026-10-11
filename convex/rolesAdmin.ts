@@ -435,6 +435,7 @@ export const logRoleAudit = internalMutation({
       entityTable: "roles",
       entityId: args.roleId,
       changedBy: args.actorUserId,
+      tenantId: null,
       after: args.after,
     });
   },

@@ -103,12 +103,16 @@ export function needsLegacyPlatformOwnerRecovery(roleSlugs: readonly string[], l
  * tenant membership. They are deliberately separate from platform roles: a
  * tenant administrator can run their own ISP workspace but can never obtain
  * MylesNet platform control-plane access through this mapping.
+ *
+ * `audit_log:read` is intentionally NOT excluded: the tenant-scoped audit
+ * query filters every row by the caller's resolved tenant, so a tenant admin
+ * sees only their own tenant's trail. The platform audit surfaces are gated
+ * separately by `requirePlatformUser`, not by this permission.
  */
 const TENANT_ADMIN_EXCLUDED_PERMISSIONS = new Set<string>([
   "roles:manage",
   "users:manage",
   "organizations:read",
-  "audit_log:read",
   "investors:read",
   "investors:manage",
 ]);

@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: light;
   /* MylesNet design tokens. Semantic tokens are the UI contract; legacy aliases
      remain only while active routes still consume them. */
   --mn-orange-50: #fff7ee; --mn-orange-100: #ffeddb; --mn-orange-200: #ffc37a; --mn-orange-300: #ffab4d; --mn-orange-400: #ff9d3d; --mn-orange-500: #fa8200; --mn-orange-600: #d96e00; --mn-orange-700: #c86800; --mn-orange-800: #a84a00;
@@ -58,8 +59,10 @@
   --focus-ring: color-mix(in srgb, var(--primary) 45%, transparent); --focus-ring-offset: var(--surface);
 
   /* Layout, shell & component tokens */
-  --sb-w: 236px; --sb-w-collapsed: 64px; --tb-h: 56px; --sb-gap: 14px;
-  --shell-radius: 16px; --shell-padding: 14px; --shell-gap: 12px; --shell-border: var(--sand); --shell-shadow: 0 8px 24px rgba(14,17,22,0.06);
+  --sb-w: 236px; --sb-w-collapsed: 64px; --tb-h: 56px; --sb-gap: 16px;
+  --card-radius: var(--radius-lg); --card-border: var(--line); --card-padding: clamp(var(--space-4), 2.2vw, var(--space-6)); --card-padding-compact: var(--space-4); --card-gap: var(--space-3); --card-shadow: var(--shadow-sm); --card-shadow-hover: var(--shadow-md);
+  --page-gutter: clamp(var(--space-4), 3vw, var(--space-10)); --page-padding-block: var(--space-8);
+  --shell-radius: var(--radius-lg); --shell-padding: var(--space-4); --shell-gap: var(--space-3); --shell-border: var(--line); --shell-shadow: var(--shadow-rail);
   --sb-bg: var(--cream); --sb-border: var(--sand); --sb-hover: #0e11160d; --sb-surface: #eef0f4; --sb-indicator-bg: var(--sb-surface);
   --topbar-bg: #f6f7f9d9; --field-bg: var(--inp); --field-border: var(--line); --field-text: var(--txt); --field-placeholder: var(--txt-mute); --tbl-scroll-bg: var(--cream);
   --surface-inverse: var(--ink);
@@ -80,6 +83,7 @@
   --landing-section-padding-md: clamp(56px, 8vw, 88px);
   --landing-section-padding-lg: clamp(72px, 9vw, 116px);
   --landing-container: 1140px;
+  --landing-radius: var(--card-radius); --landing-radius-lg: var(--radius-xl);
   --landing-glass: color-mix(in srgb, var(--surface) 78%, transparent);
   --landing-glass-border: color-mix(in srgb, var(--line) 65%, transparent);
   --landing-primary-glow: color-mix(in srgb, var(--primary) 32%, transparent);
@@ -111,6 +115,7 @@
 }
 
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --ink: #e5e5e5; --ink-soft: #c4c4c4; --ink-muted: #a1a1a1; --ink-subtle: #7a7a7a; --ink-faint: #e5e5e51a;
   --cream: #202020; --paper: #1c1c1c; --surface-2: #2a2a2a; --bg: #1c1c1c; --popover: #262626;
   --sand: #ffffff12; --sand-mid: #ffffff1f;
@@ -1530,15 +1535,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
    same professional hierarchy without duplicating page-specific styling. */
 .app-shell { background: var(--canvas); }
 .app-main { overflow-x: clip; }
-.workspace-page { max-width: 1600px; padding: 36px 40px 48px; }
+.workspace-page { max-width: 1600px; padding: var(--page-padding-block) var(--page-gutter) calc(var(--page-padding-block) + var(--space-4)); }
 .page-heading { position: relative; margin-bottom: 32px; padding-bottom: 20px; border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent); }
 .page-heading > div { min-width: 0; }
 .page-title { font-weight: 780; letter-spacing: -.045em; }
 .page-subtitle { max-width: 760px; font-size: 13.5px; }
 .eyebrow { letter-spacing: .12em; }
 
-.workspace-card, .pf-panel { border-color: color-mix(in srgb, var(--line) 86%, transparent); border-radius: var(--radius-lg); box-shadow: 0 1px 2px rgb(0 0 0 / .04), 0 10px 30px rgb(0 0 0 / .035); }
-.workspace-card:hover { border-color: color-mix(in srgb, var(--line-strong) 72%, var(--line)); box-shadow: 0 2px 4px rgb(0 0 0 / .04), 0 16px 34px rgb(0 0 0 / .075); }
+.workspace-card, .pf-panel { border-color: var(--card-border); border-radius: var(--card-radius); box-shadow: var(--card-shadow); }
+.workspace-card:hover { border-color: var(--line-strong); box-shadow: var(--card-shadow-hover); }
 .workspace-card:has(button:hover), .workspace-card:has(a:hover) { border-color: color-mix(in srgb, var(--line-strong) 62%, var(--line)); }
 .section-heading { min-height: 46px; margin-bottom: 16px; }
 .section-heading h2, .quick-actions h2 { font-size: 20px; font-weight: 760; letter-spacing: -.028em; }
@@ -1594,14 +1599,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .live-indicator-badge { padding: 5px 10px; font-size: 11px; }
 
 @media (max-width: 1100px) {
-  .workspace-page { padding: 30px 26px 42px; }
+  :root { --page-gutter: var(--space-6); --page-padding-block: var(--space-7); }
 .sidebar { width: var(--sb-w); }
 .sidebar-collapsed { width: var(--sb-w-collapsed); }
   .unified-topbar { padding-inline: 24px; }
 }
 
 @media (max-width: 768px) {
-  .workspace-page { padding: 24px 18px 36px; }
+  :root { --page-gutter: var(--space-4); --page-padding-block: var(--space-6); }
   .page-heading { margin-bottom: 24px; padding-bottom: 16px; }
   .topbar-menu-btn { display: grid; }
   .unified-topbar { min-height: var(--tb-h); padding-inline: 16px; }
@@ -1616,7 +1621,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 
 @media (max-width: 540px) {
-  .workspace-page { padding-inline: 14px; }
+  .workspace-page { padding-inline: var(--space-4); }
   .page-title { font-size: 26px; }
   .page-subtitle { font-size: 13px; }
   .topbar-icon-btn { display: none; }
@@ -1762,12 +1767,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .workspace-card {
   overflow: hidden;
   background: var(--surface);
-  box-shadow: none;
+  box-shadow: var(--card-shadow);
 }
 
-.pf-panel {
-  padding: clamp(var(--space-4), 2.2vw, var(--space-6));
-}
+.pf-panel { padding: var(--card-padding); }
 
 .pf-panel:has(.pf-table-wrap) {
   padding: 0;
@@ -1784,7 +1787,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .metric-card {
   background: var(--surface);
-  box-shadow: none;
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
+  padding: var(--card-padding);
+  box-shadow: var(--card-shadow);
 }
 
 .card-metric-header {
@@ -2030,4 +2036,3 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
     animation-iteration-count: 1 !important;
   }
 }
-

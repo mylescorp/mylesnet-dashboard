@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getSignInUrl } from "@workos-inc/authkit-nextjs";
-import { callbackUriForHost, resolveMylesnetHost } from "@/lib/auth/tenant";
+import { callbackUriForHost, requestHostFromHeaders, resolveMylesnetHost } from "@/lib/auth/tenant";
 
 /**
  * WorkOS' initiate-login endpoint. AuthKit uses this for bookmarked hosted
@@ -9,7 +9,8 @@ import { callbackUriForHost, resolveMylesnetHost } from "@/lib/auth/tenant";
  * never renders a local credential form.
  */
 export async function GET(request: NextRequest) {
-  const host = resolveMylesnetHost(request.nextUrl.host, process.env.MYLESNET_PUBLIC_DOMAIN);
+  const requestHost = requestHostFromHeaders(request.headers, request.nextUrl.host);
+  const host = resolveMylesnetHost(requestHost, process.env.MYLESNET_PUBLIC_DOMAIN);
   const redirectUri = callbackUriForHost(host, request.nextUrl.protocol);
   if (!redirectUri) return NextResponse.redirect(new URL("/?error=unknown_host", request.url));
 

@@ -89,6 +89,17 @@ export const designToken = {
     radiusField: "var(--radius-field)",
     radiusBtn: "var(--radius-btn)",
     fieldNarrow: "var(--field-narrow)",
+    pageGutter: "var(--page-gutter)",
+    pagePaddingBlock: "var(--page-padding-block)",
+  },
+  card: {
+    radius: "var(--card-radius)",
+    border: "var(--card-border)",
+    padding: "var(--card-padding)",
+    paddingCompact: "var(--card-padding-compact)",
+    gap: "var(--card-gap)",
+    shadow: "var(--card-shadow)",
+    shadowHover: "var(--card-shadow-hover)",
   },
   motion: {
     fast: "var(--motion-fast)",

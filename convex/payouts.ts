@@ -71,14 +71,11 @@ export const createPayoutRequest = mutation({
     const user = await requirePermission(ctx, "payouts:manage");
     if (args.amountLocal <= 0) throw new Error("Amount must be positive");
     const scope = await readScopedTenant(ctx);
-    const market = args.marketId ? await ctx.db.get(args.marketId) : null;
+    const market = args.marketId ? await enforceTenantOnResource(ctx, await ctx.db.get(args.marketId), "market") : null;
     if (args.marketId && !market) throw new Error("Market not found");
-    if (scope.enforced && market && market.tenantId !== scope.tenantId) {
-      throw new Error("Unauthorized: market is outside the active workspace");
-    }
     const amountUSD = await localToUsd(ctx, args.amountLocal, args.currency);
     const id = await ctx.db.insert("payouts", {
-      tenantId: scope.enforced ? scope.tenantId! : market?.tenantId,
+      tenantId: market?.tenantId ?? scope.tenantId ?? undefined,
       type: args.type,
       payeeType: args.payeeType,
       payeeId: args.payeeId,
@@ -98,6 +95,7 @@ export const createPayoutRequest = mutation({
       entityTable: "payouts",
       entityId: id,
       changedBy: user._id,
+      tenantId: market?.tenantId ?? scope.tenantId,
       after: { amountUSD, tier: tierForAmountUsd(amountUSD) },
     });
     return id;
@@ -128,9 +126,9 @@ export const approvePayout = mutation({
   args: { payoutId: v.id("payouts"), otp: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "payouts:manage");
-    const payout = await ctx.db.get(args.payoutId);
+    const payout = await enforceTenantOnResource(ctx, await ctx.db.get(args.payoutId), "payout");
     if (!payout) throw new Error("Payout not found");
-    await enforceTenantOnResource(ctx, payout, "payout");
+    const market = payout.marketId ? await ctx.db.get(payout.marketId) : null;
     if (payout.status !== "pending_approval") throw new Error("Payout is not pending approval");
     assertPayoutTransition(payout.status, "approved");
 
@@ -164,6 +162,7 @@ export const approvePayout = mutation({
       entityTable: "payouts",
       entityId: args.payoutId,
       changedBy: user._id,
+      tenantId: payout.tenantId ?? market?.tenantId,
     });
   },
 });
@@ -172,12 +171,12 @@ export const markPayoutProcessing = mutation({
   args: { payoutId: v.id("payouts") },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "payouts:manage");
-    const payout = await ctx.db.get(args.payoutId);
+    const payout = await enforceTenantOnResource(ctx, await ctx.db.get(args.payoutId), "payout");
     if (!payout) throw new Error("Payout not found");
-    await enforceTenantOnResource(ctx, payout, "payout");
     assertPayoutTransition(payout.status, "processing");
+    const market = payout.marketId ? await ctx.db.get(payout.marketId) : null;
     await ctx.db.patch(args.payoutId, { status: "processing" });
-    await logAudit(ctx, { action: "payout.processing", entityTable: "payouts", entityId: args.payoutId, changedBy: user._id });
+    await logAudit(ctx, { action: "payout.processing", entityTable: "payouts", entityId: args.payoutId, changedBy: user._id, tenantId: payout.tenantId ?? market?.tenantId });
   },
 });
 
@@ -185,12 +184,12 @@ export const markPayoutPaid = mutation({
   args: { payoutId: v.id("payouts") },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "payouts:manage");
-    const payout = await ctx.db.get(args.payoutId);
+    const payout = await enforceTenantOnResource(ctx, await ctx.db.get(args.payoutId), "payout");
     if (!payout) throw new Error("Payout not found");
-    await enforceTenantOnResource(ctx, payout, "payout");
     assertPayoutTransition(payout.status, "paid");
+    const market = payout.marketId ? await ctx.db.get(payout.marketId) : null;
     await ctx.db.patch(args.payoutId, { status: "paid", processedAt: Date.now() });
-    await logAudit(ctx, { action: "payout.paid", entityTable: "payouts", entityId: args.payoutId, changedBy: user._id });
+    await logAudit(ctx, { action: "payout.paid", entityTable: "payouts", entityId: args.payoutId, changedBy: user._id, tenantId: payout.tenantId ?? market?.tenantId });
   },
 });
 
@@ -198,12 +197,12 @@ export const rejectPayout = mutation({
   args: { payoutId: v.id("payouts"), notes: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "payouts:manage");
-    const payout = await ctx.db.get(args.payoutId);
+    const payout = await enforceTenantOnResource(ctx, await ctx.db.get(args.payoutId), "payout");
     if (!payout) throw new Error("Payout not found");
-    await enforceTenantOnResource(ctx, payout, "payout");
     assertPayoutTransition(payout.status, "rejected");
+    const market = payout.marketId ? await ctx.db.get(payout.marketId) : null;
     await ctx.db.patch(args.payoutId, { status: "rejected", notes: args.notes });
-    await logAudit(ctx, { action: "payout.reject", entityTable: "payouts", entityId: args.payoutId, changedBy: user._id });
+    await logAudit(ctx, { action: "payout.reject", entityTable: "payouts", entityId: args.payoutId, changedBy: user._id, tenantId: payout.tenantId ?? market?.tenantId });
   },
 });
 
