@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { QueryCtx, query } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
-import { requirePermission } from "./lib/auth";
+import { requirePermission, requirePlatformSubRole } from "./lib/auth";
 import { ReadScope, assertTenantMatch, readScopedTenant } from "./lib/tenant";
 import { readTenantFilter } from "./lib/tenantIsolationCore";
 import { dayOf } from "./lib/finance";
@@ -12,9 +12,29 @@ import { dayOf } from "./lib/finance";
  *
  * Reads are tenant-scoped: a tenant reader only ever aggregates rows owned by
  * their active tenant, while a Platform control-plane reader may read across
- * tenants. Row queries go through the tenant index so a tenant read never
- * scans another tenant's data.
+ * tenants. A cross-tenant read is not granted by a generic platform
+ * permission or a missing owner: it requires one of the analytics platform
+ * sub-roles from the module register (J1: SA/FIN/OPS/RO), checked before the
+ * unscoped read while the tenant-scoped branch needs no sub-role. Row queries
+ * go through the tenant index so a tenant read never scans another tenant's
+ * data.
  */
+
+/**
+ * Platform sub-roles allowed to read unscoped (cross-tenant) analytics rows
+ * (module register J1: SA/FIN/OPS/RO read).
+ */
+const ANALYTICS_PLATFORM_SUB_ROLES: string[] = [
+  "platform_super_admin",
+  "platform_finance",
+  "platform_ops",
+  "platform_readonly",
+];
+
+/** Gate a cross-tenant analytics read on an explicit reporting sub-role. */
+async function requireCrossTenantAnalytics(ctx: QueryCtx): Promise<void> {
+  await requirePlatformSubRole(ctx, ANALYTICS_PLATFORM_SUB_ROLES);
+}
 
 /**
  * A client-supplied market filter is honoured only for a market the caller is
@@ -43,6 +63,7 @@ export const getRevenueTrend = query({
     const scope = await readScopedTenant(ctx);
     await assertScopedMarket(ctx, scope, args.marketId);
     const tenantId = readTenantFilter(scope);
+    if (!tenantId) await requireCrossTenantAnalytics(ctx);
     const rows = tenantId
       ? await ctx.db
           .query("dailySnapshots")
@@ -93,6 +114,7 @@ export const getSubscriberTrend = query({
     const scope = await readScopedTenant(ctx);
     await assertScopedMarket(ctx, scope, args.marketId);
     const tenantId = readTenantFilter(scope);
+    if (!tenantId) await requireCrossTenantAnalytics(ctx);
     const scoped = tenantId
       ? await ctx.db
           .query("subscriberSnapshots")
@@ -122,6 +144,7 @@ export const getTopAgents = query({
     const scope = await readScopedTenant(ctx);
     await assertScopedMarket(ctx, scope, args.marketId);
     const tenantId = readTenantFilter(scope);
+    if (!tenantId) await requireCrossTenantAnalytics(ctx);
     const activity = tenantId
       ? await ctx.db
           .query("agentActivity")
@@ -159,6 +182,7 @@ export const getSalesMix = query({
     const scope = await readScopedTenant(ctx);
     await assertScopedMarket(ctx, scope, args.marketId);
     const tenantId = readTenantFilter(scope);
+    if (!tenantId) await requireCrossTenantAnalytics(ctx);
     const activity = tenantId
       ? await ctx.db
           .query("agentActivity")

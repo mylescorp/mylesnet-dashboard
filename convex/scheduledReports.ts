@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { hasPermission, isPlatformUser, requirePermission, requirePlatformUser, resolveRoles } from "./lib/auth";
+import { hasPermission, hasPlatformSubRole, isPlatformUser, requirePermission, requirePlatformSubRole, requirePlatformUser, resolveRoles } from "./lib/auth";
 import { tenantRoleHasPermission } from "./lib/permissions";
 import { logAudit } from "./lib/auditLog";
 import { dayOf, monthOf } from "./lib/finance";
@@ -24,12 +24,24 @@ import type { Id } from "./_generated/dataModel";
 
 export type ReportDataset = "revenue" | "subscribers" | "financials";
 
+/**
+ * Platform sub-roles allowed to read unscoped (cross-tenant) reporting data.
+ * From the module register row J4 (scheduled reports): SA CRUD, FIN CRUD
+ * billing reports. A missing tenant owner is never permission to read across
+ * tenants; the caller must prove one of these roles first.
+ */
+const REPORT_PLATFORM_SUB_ROLES: string[] = ["platform_super_admin", "platform_finance"];
+
 export const listScheduledReports = query({
   args: {},
   handler: async (ctx) => {
     await requirePermission(ctx, "reports:generate");
     const scope = await readScopedTenant(ctx);
     const tenantId = readTenantFilter(scope);
+    if (!tenantId) {
+      // Cross-tenant read: explicit platform sub-role gate.
+      await requirePlatformSubRole(ctx, REPORT_PLATFORM_SUB_ROLES);
+    }
     const rows = tenantId
       ? await ctx.db
           .query("scheduledReports")
@@ -47,6 +59,10 @@ export const listReportExports = query({
     const limit = args.limit ?? 50;
     const scope = await readScopedTenant(ctx);
     const tenantId = readTenantFilter(scope);
+    if (!tenantId) {
+      // Cross-tenant read: explicit platform sub-role gate.
+      await requirePlatformSubRole(ctx, REPORT_PLATFORM_SUB_ROLES);
+    }
     const rows = tenantId
       ? await ctx.db
           .query("reportExports")
@@ -139,19 +155,26 @@ function nextMonthStart(month: string): string {
 /**
  * Build rows for a dataset. Runs inside actions via runQuery.
  *
- * When `tenantId` is supplied the rows are restricted to that tenant; when it
- * is omitted the caller is a Platform control-plane reader and the rows are
- * unscoped. A tenant-owned scheduled report always passes its tenant id.
+ * When `tenantId` is supplied the rows are restricted to that tenant. An
+ * unscoped (platform-wide) read is allowed only when the caller explicitly
+ * passes `platformWide: true` after proving a reporting platform sub-role;
+ * a missing tenant owner is never permission to read every tenant, so an
+ * unscoped call without that flag fails closed.
  */
 export const collectReportRows = internalQuery({
   args: {
     dataset: v.string(),
     month: v.optional(v.string()),
     tenantId: v.optional(v.id("tenants")),
+    platformWide: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const month = args.month ?? monthOf(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const tenantId = args.tenantId;
+    const platformWide = args.platformWide === true;
+    if (tenantId === undefined && !platformWide) {
+      throw new Error("Unauthorized: unscoped report data requires platform authorization");
+    }
     const ym = month.slice(0, 7);
     const monthStart = `${ym}-01`;
     const monthEnd = nextMonthStart(ym);
@@ -253,8 +276,9 @@ export const resolveCallerTenant = internalQuery({
 
 /**
  * Whether the caller may read platform-wide (unscoped) report data. Only an
- * explicit Platform role holding the `reports:generate` permission qualifies,
- * so an unresolved or denied tenant caller fails closed.
+ * explicit reporting platform sub-role holding the `reports:generate`
+ * permission qualifies, so an unresolved or denied tenant caller fails closed
+ * and a generic platform permission never substitutes for the sub-role gate.
  */
 export const canReadPlatformReports = internalQuery({
   args: { userId: v.id("users") },
@@ -262,7 +286,11 @@ export const canReadPlatformReports = internalQuery({
     const user = await ctx.db.get(args.userId);
     if (!user || user.deactivatedAt !== undefined || user.isActive === false) return false;
     const roles = await resolveRoles(ctx, user);
-    return isPlatformUser(roles) && hasPermission(roles, "reports:generate");
+    return (
+      isPlatformUser(roles) &&
+      hasPermission(roles, "reports:generate") &&
+      hasPlatformSubRole(roles, REPORT_PLATFORM_SUB_ROLES)
+    );
   },
 });
 
@@ -302,6 +330,8 @@ export const generateReport = action({
       dataset: args.dataset,
       month: args.scopeFilter?.month,
       tenantId: tenantId ?? undefined,
+      // The platform-wide path above already proved the reporting sub-role.
+      platformWide: tenantId ? false : true,
     });
 
     let fileId: string | undefined;
@@ -340,7 +370,7 @@ export const recordExport = internalMutation({
     tenantId: v.optional(v.id("tenants")),
   },
   handler: async (ctx, args) => {
-    return await ctx.db.insert("reportExports", {
+    const id = await ctx.db.insert("reportExports", {
       tenantId: args.tenantId,
       scheduledReportId: args.scheduledReportId,
       requestedBy: args.requestedBy,
@@ -352,6 +382,15 @@ export const recordExport = internalMutation({
       generatedAt: Date.now(),
       createdAt: Date.now(),
     });
+    await logAudit(ctx, {
+      action: "report.export",
+      entityTable: "reportExports",
+      entityId: id,
+      changedBy: args.requestedBy,
+      tenantId: args.tenantId ?? null,
+      after: { dataset: args.dataset, format: args.format },
+    });
+    return id;
   },
 });
 
@@ -383,10 +422,20 @@ export const triggerDueReports = internalAction({
             ? "financials"
             : "revenue";
       try {
+        // A scheduled report without a tenant is a platform-wide export: the
+        // creator must still hold the reporting sub-role at generation time.
+        // A missing owner is never permission to read every tenant.
+        if (report.tenantId === undefined) {
+          const authorized = await ctx.runQuery(internal.scheduledReports.canReadPlatformReports, {
+            userId: report.createdBy,
+          });
+          if (!authorized) continue;
+        }
         const data = await ctx.runQuery(internal.scheduledReports.collectReportRows, {
           dataset,
           month: now.toISOString().slice(0, 7),
           tenantId: report.tenantId,
+          platformWide: report.tenantId === undefined,
         });
         const blob = new Blob([toCsv(data.header, data.rows)], { type: "text/csv" });
         const fileId = (await ctx.storage.store(blob)) as string;

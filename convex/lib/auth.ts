@@ -431,10 +431,56 @@ export async function requirePlatformSubRole(
   ctx: QueryCtx | MutationCtx,
   allowedSubRoles: string[],
 ): Promise<Doc<"users">> {
-  const mappedSlugs = allowedSubRoles
+  const user = await getCurrentUserRecord(ctx);
+  if (user.isActive === false || user.deactivatedAt !== undefined) {
+    throw new Error("Unauthorized: account is inactive");
+  }
+  const roles = await resolveRoles(ctx, user);
+  if (!hasPlatformSubRole(roles, allowedSubRoles)) {
+    throw new Error("Unauthorized: insufficient role");
+  }
+  return user;
+}
+
+/**
+ * Same platform sub-role gate as `requirePlatformSubRole`, resolved against an
+ * explicit actor instead of the ambient session.
+ *
+ * Internal (CLI/server-invoked) functions have no session identity, so a
+ * privileged server-only operation that must still prove the acting operator
+ * holds a platform sub-role passes that operator's user id here. Unknown sub-role
+ * slugs pass through unchanged, so literal role slugs also work.
+ */
+export async function requirePlatformSubRoleForUser(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+  allowedSubRoles: string[],
+): Promise<Doc<"users">> {
+  const user = await ctx.db.get(userId);
+  if (!user || user.isActive === false || user.deactivatedAt !== undefined) {
+    throw new Error("Unauthorized: account is inactive");
+  }
+  const roles = await resolveRoles(ctx, user);
+  if (!hasPlatformSubRole(roles, allowedSubRoles)) {
+    throw new Error("Unauthorized: insufficient role");
+  }
+  return user;
+}
+
+/** True when any resolved role matches one of the allowed platform sub-roles. */
+export function hasPlatformSubRole(
+  roles: ResolvedRole[],
+  allowedSubRoles: string[],
+): boolean {
+  const mappedSlugs = mapSubRoles(allowedSubRoles);
+  return mappedSlugs.some((slug) => roles.some((role) => role.slug === slug));
+}
+
+/** Map spec sub-role slugs onto concrete seeded role slugs, de-duplicated. */
+function mapSubRoles(allowedSubRoles: string[]): string[] {
+  return allowedSubRoles
     .flatMap((sub) => PLATFORM_SUB_ROLE_MAP[sub] ?? [sub])
     .filter((slug, index, arr) => arr.indexOf(slug) === index);
-  return requireAnyRole(ctx, mappedSlugs);
 }
 
 /**

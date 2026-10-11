@@ -18,6 +18,16 @@ export const TENANT_BACKFILL_RUN_ID = "tenantid-backfill-001";
 export const DEFAULT_BACKFILL_BATCH_SIZE = 100;
 
 /**
+ * Hard cap on the child rows read to resolve one agent's owner in a single
+ * invocation. Agent history grows without bound, so reads are bounded to keep
+ * the batch inside Convex's per-transaction read limits; an agent whose
+ * assignments or activity exceed the cap cannot be resolved deterministically
+ * and is left unassigned (counted ambiguous) rather than failing the batch or
+ * guessing an owner.
+ */
+export const MAX_BACKFILL_CHILD_ROWS = 400;
+
+/**
  * Tables whose legacy (`tenantId: undefined`) rows carry a `marketId` and so
  * can be assigned to a tenant deterministically from `markets.tenantId`.
  */
@@ -26,6 +36,8 @@ export const MARKET_DERIVED_BACKFILL_TABLES = [
   "agentActivity",
   "subscriberSnapshots",
   "dailySnapshots",
+  "marketFinancials",
+  "expenses",
 ] as const;
 
 /**

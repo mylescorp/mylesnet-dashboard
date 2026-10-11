@@ -3,8 +3,11 @@ import { Id } from "./_generated/dataModel";
 import { MutationCtx, internalMutation, internalQuery } from "./_generated/server";
 import { BOOTSTRAP_TENANT_SLUG } from "./lib/tenant.ts";
 import { selectBootstrapOwner } from "./lib/tenantCore.ts";
+import { requirePlatformSubRoleForUser } from "./lib/auth.ts";
+import { logAudit } from "./lib/auditLog.ts";
 import {
   DEFAULT_BACKFILL_BATCH_SIZE,
+  MAX_BACKFILL_CHILD_ROWS,
   TENANT_BACKFILL_RUN_ID,
   TENANT_BACKFILL_TABLE_ORDER,
   TENANT_FEATURE_FLAGS,
@@ -28,14 +31,25 @@ import {
  *
  * The run is idempotent (reuses `runId = tenantid-backfill-001`), bounded
  * (one batch per invocation), resumable (cursor + table index in the run
- * manifest), and tracked in a `migrationRuns` row.
+ * manifest), and tracked in a `migrationRuns` row. Because it reads and changes
+ * records across every tenant, it requires an explicit platform sub-role actor:
+ * the supplied `actorUserId` must hold platform_super_admin, and every ownership
+ * change is written to the sealed audit chain with that actor.
  *
- * Run manually, one batch per invocation, until it reports `done: true`:
- *   npx convex run tenantMigrations:runTenantIdBackfill --args '{}'
+ * Run manually, one batch per invocation, until it reports `done: true`, passing
+ * the acting platform operator:
+ *   npx convex run tenantMigrations:runTenantIdBackfill \
+ *     --args '{"actorUserId":"<users._id>"}'
  */
 export const runTenantIdBackfill = internalMutation({
-  args: { batchSize: v.optional(v.number()) },
+  args: { batchSize: v.optional(v.number()), actorUserId: v.id("users") },
   handler: async (ctx, args) => {
+    // Explicit platform sub-role gate before reading the run or changing any
+    // ownership. Internal mutations are server-only, so the actor is supplied by
+    // the trusted caller and proven here.
+    const actor = await requirePlatformSubRoleForUser(ctx, args.actorUserId, [
+      "platform_super_admin",
+    ]);
     const runId = TENANT_BACKFILL_RUN_ID;
     const tables: readonly TenantBackfillTable[] = TENANT_BACKFILL_TABLE_ORDER;
     const batchSize = clampBatchSize(args.batchSize);
@@ -79,6 +93,7 @@ export const runTenantIdBackfill = internalMutation({
         manifest: emptyManifest(),
         requiredFlags: [TENANT_FEATURE_FLAGS.backfill],
         failedAssertions: [],
+        startedBy: actor._id,
         startedAt: now,
         createdAt: now,
       });
@@ -103,7 +118,28 @@ export const runTenantIdBackfill = internalMutation({
     }
 
     const table = tables[manifest.tableIndex];
-    const result = await processBackfillTable(ctx, table, manifest.tableCursor, batchSize);
+    const result = await processBackfillTable(ctx, table, manifest.tableCursor, batchSize, actor._id);
+
+    if (result.blocked) {
+      // A precondition for this table is missing (e.g. the bootstrap tenant has
+      // not been created yet). Do not advance the manifest so the same run
+      // resumes the table once the precondition exists.
+      await ctx.db.patch(runDocId, {
+        status: "running" as const,
+        cursor: manifest.tableCursor ?? undefined,
+        rowsProcessed: existing?.rowsProcessed ?? 0,
+        manifest,
+        startedBy: existing?.startedBy ?? actor._id,
+      });
+      return {
+        status: "blocked" as const,
+        done: false,
+        runId,
+        table,
+        reason: "bootstrap tenant required before this table can be assigned",
+        rowsProcessed: existing?.rowsProcessed ?? 0,
+      };
+    }
 
     manifest.counts[table] = (manifest.counts[table] ?? 0) + result.patched;
     manifest.ambiguous[table] = (manifest.ambiguous[table] ?? 0) + result.ambiguous;
@@ -122,6 +158,7 @@ export const runTenantIdBackfill = internalMutation({
       cursor: allDone ? undefined : (manifest.tableCursor ?? undefined),
       rowsProcessed,
       manifest,
+      startedBy: existing?.startedBy ?? actor._id,
       ...(allDone ? { completedAt: Date.now() } : {}),
     });
 
@@ -189,6 +226,8 @@ interface BackfillPageResult {
   ambiguous: number;
   isDone: boolean;
   continueCursor: string;
+  /** True when a required precondition for the table is missing (no progress). */
+  blocked?: boolean;
 }
 
 /** Resolver that caches market -> tenant lookups within one batch. */
@@ -207,13 +246,15 @@ function marketTenantResolver(ctx: MutationCtx) {
 
 /**
  * Process one bounded page for the given table, patching rows whose owner is
- * deterministically derivable and leaving the rest untouched.
+ * deterministically derivable and leaving the rest untouched. Every ownership
+ * change is written to the sealed audit chain with the acting platform actor.
  */
 async function processBackfillTable(
   ctx: MutationCtx,
   table: TenantBackfillTable,
   cursor: string | null,
   batchSize: number,
+  actorUserId: Id<"users">,
 ): Promise<BackfillPageResult> {
   const resolveMarketTenant = marketTenantResolver(ctx);
 
@@ -223,6 +264,20 @@ async function processBackfillTable(
         .query("tenants")
         .withIndex("by_slug", (q) => q.eq("slug", BOOTSTRAP_TENANT_SLUG))
         .first();
+      if (!bootstrap) {
+        // The bootstrap tenant is a hard precondition for the market batch.
+        // Without it every unassigned market would be skipped and the table
+        // marked done, so an early run could never repair those rows later.
+        // Block instead of advancing so the same run resumes once it exists.
+        return {
+          scanned: 0,
+          patched: 0,
+          ambiguous: 0,
+          isDone: false,
+          continueCursor: cursor ?? "",
+          blocked: true,
+        };
+      }
       const page = await ctx.db
         .query("markets")
         .order("asc")
@@ -231,11 +286,8 @@ async function processBackfillTable(
       let ambiguous = 0;
       for (const market of page.page) {
         if (market.tenantId !== undefined) continue;
-        if (!bootstrap) {
-          ambiguous += 1;
-          continue;
-        }
         await ctx.db.patch(market._id, { tenantId: bootstrap._id });
+        await auditBackfillAssignment(ctx, actorUserId, "markets", market._id, bootstrap._id);
         patched += 1;
       }
       return { scanned: page.page.length, patched, ambiguous, isDone: page.isDone, continueCursor: page.continueCursor };
@@ -245,76 +297,84 @@ async function processBackfillTable(
         .query("agentMarketAssignments")
         .order("asc")
         .paginate({ numItems: batchSize, cursor });
-      let patched = 0;
-      let ambiguous = 0;
-      for (const row of page.page) {
-        if (row.tenantId !== undefined) continue;
-        const tenantId = await resolveMarketTenant(row.marketId);
-        if (tenantId) {
-          await ctx.db.patch(row._id, { tenantId });
-          patched += 1;
-        } else {
-          ambiguous += 1;
-        }
-      }
-      return { scanned: page.page.length, patched, ambiguous, isDone: page.isDone, continueCursor: page.continueCursor };
+      const counts = await processMarketDerivedRows(
+        ctx,
+        page.page,
+        "agentMarketAssignments",
+        resolveMarketTenant,
+        actorUserId,
+      );
+      return { scanned: page.page.length, ...counts, isDone: page.isDone, continueCursor: page.continueCursor };
     }
     case "agentActivity": {
       const page = await ctx.db
         .query("agentActivity")
         .order("asc")
         .paginate({ numItems: batchSize, cursor });
-      let patched = 0;
-      let ambiguous = 0;
-      for (const row of page.page) {
-        if (row.tenantId !== undefined) continue;
-        const tenantId = await resolveMarketTenant(row.marketId);
-        if (tenantId) {
-          await ctx.db.patch(row._id, { tenantId });
-          patched += 1;
-        } else {
-          ambiguous += 1;
-        }
-      }
-      return { scanned: page.page.length, patched, ambiguous, isDone: page.isDone, continueCursor: page.continueCursor };
+      const counts = await processMarketDerivedRows(
+        ctx,
+        page.page,
+        "agentActivity",
+        resolveMarketTenant,
+        actorUserId,
+      );
+      return { scanned: page.page.length, ...counts, isDone: page.isDone, continueCursor: page.continueCursor };
     }
     case "subscriberSnapshots": {
       const page = await ctx.db
         .query("subscriberSnapshots")
         .order("asc")
         .paginate({ numItems: batchSize, cursor });
-      let patched = 0;
-      let ambiguous = 0;
-      for (const row of page.page) {
-        if (row.tenantId !== undefined) continue;
-        const tenantId = await resolveMarketTenant(row.marketId);
-        if (tenantId) {
-          await ctx.db.patch(row._id, { tenantId });
-          patched += 1;
-        } else {
-          ambiguous += 1;
-        }
-      }
-      return { scanned: page.page.length, patched, ambiguous, isDone: page.isDone, continueCursor: page.continueCursor };
+      const counts = await processMarketDerivedRows(
+        ctx,
+        page.page,
+        "subscriberSnapshots",
+        resolveMarketTenant,
+        actorUserId,
+      );
+      return { scanned: page.page.length, ...counts, isDone: page.isDone, continueCursor: page.continueCursor };
     }
     case "dailySnapshots": {
       const page = await ctx.db
         .query("dailySnapshots")
         .order("asc")
         .paginate({ numItems: batchSize, cursor });
-      let patched = 0;
-      let ambiguous = 0;
-      for (const row of page.page) {
-        if (row.tenantId !== undefined) continue;
-        const tenantId = await resolveMarketTenant(row.marketId);
-        if (tenantId) {
-          await ctx.db.patch(row._id, { tenantId });
-          patched += 1;
-        } else {
-          ambiguous += 1;
-        }
-      }
-      return { scanned: page.page.length, patched, ambiguous, isDone: page.isDone, continueCursor: page.continueCursor };
+      const counts = await processMarketDerivedRows(
+        ctx,
+        page.page,
+        "dailySnapshots",
+        resolveMarketTenant,
+        actorUserId,
+      );
+      return { scanned: page.page.length, ...counts, isDone: page.isDone, continueCursor: page.continueCursor };
+    }
+    case "marketFinancials": {
+      const page = await ctx.db
+        .query("marketFinancials")
+        .order("asc")
+        .paginate({ numItems: batchSize, cursor });
+      const counts = await processMarketDerivedRows(
+        ctx,
+        page.page,
+        "marketFinancials",
+        resolveMarketTenant,
+        actorUserId,
+      );
+      return { scanned: page.page.length, ...counts, isDone: page.isDone, continueCursor: page.continueCursor };
+    }
+    case "expenses": {
+      const page = await ctx.db
+        .query("expenses")
+        .order("asc")
+        .paginate({ numItems: batchSize, cursor });
+      const counts = await processMarketDerivedRows(
+        ctx,
+        page.page,
+        "expenses",
+        resolveMarketTenant,
+        actorUserId,
+      );
+      return { scanned: page.page.length, ...counts, isDone: page.isDone, continueCursor: page.continueCursor };
     }
     case "agents": {
       const page = await ctx.db
@@ -325,32 +385,10 @@ async function processBackfillTable(
       let ambiguous = 0;
       for (const agent of page.page) {
         if (agent.tenantId !== undefined) continue;
-        const assignments = await ctx.db
-          .query("agentMarketAssignments")
-          .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
-          .collect();
-        const assignmentTenants: Array<string | undefined> = [];
-        for (const assignment of assignments) {
-          const tenantId = await resolveMarketTenant(assignment.marketId);
-          assignmentTenants.push(tenantId ?? undefined);
-        }
-        let derived = singleTenantFromMarketTenants(assignmentTenants);
-        if (!derived) {
-          // Fall back to the agent's own activity markets when it has no
-          // (or only ambiguous) assignments.
-          const activity = await ctx.db
-            .query("agentActivity")
-            .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
-            .collect();
-          const activityTenants: Array<string | undefined> = [];
-          for (const entry of activity) {
-            const tenantId = await resolveMarketTenant(entry.marketId);
-            activityTenants.push(tenantId ?? undefined);
-          }
-          derived = singleTenantFromMarketTenants(activityTenants);
-        }
+        const derived = await resolveAgentTenant(ctx, agent._id, resolveMarketTenant);
         if (derived) {
-          await ctx.db.patch(agent._id, { tenantId: derived as Id<"tenants"> });
+          await ctx.db.patch(agent._id, { tenantId: derived });
+          await auditBackfillAssignment(ctx, actorUserId, "agents", agent._id, derived);
           patched += 1;
         } else {
           ambiguous += 1;
@@ -362,6 +400,120 @@ async function processBackfillTable(
       return { scanned: 0, patched: 0, ambiguous: 0, isDone: true, continueCursor: "" };
     }
   }
+}
+
+/**
+ * Audit one backfill ownership assignment on the sealed chain. The actor and
+ * the affected record are always recorded; the payload holds only the routing
+ * facts (table, row, assigned tenant), never row contents.
+ */
+async function auditBackfillAssignment(
+  ctx: MutationCtx,
+  actorUserId: Id<"users">,
+  table: string,
+  rowId: string,
+  tenantId: Id<"tenants">,
+): Promise<void> {
+  await logAudit(ctx, {
+    action: "tenant.backfill.assign",
+    entityTable: table,
+    entityId: rowId,
+    changedBy: actorUserId,
+    tenantId,
+    after: { assignedTenantId: tenantId },
+  });
+}
+
+/**
+ * Assign one page of market-derived legacy rows from their market's tenant and
+ * audit each ownership change. Rows without a market, or whose market has no
+ * tenant yet, stay unassigned and are counted as ambiguous.
+ */
+async function processMarketDerivedRows(
+  ctx: MutationCtx,
+  rows: ReadonlyArray<{
+    _id: string;
+    tenantId?: Id<"tenants"> | null;
+    marketId?: Id<"markets"> | null;
+  }>,
+  table: string,
+  resolveMarketTenant: (marketId: Id<"markets">) => Promise<Id<"tenants"> | null>,
+  actorUserId: Id<"users">,
+): Promise<{ patched: number; ambiguous: number }> {
+  let patched = 0;
+  let ambiguous = 0;
+  for (const row of rows) {
+    if (row.tenantId !== undefined) continue;
+    if (row.marketId === undefined || row.marketId === null) {
+      ambiguous += 1;
+      continue;
+    }
+    const tenantId = await resolveMarketTenant(row.marketId);
+    if (tenantId) {
+      await ctx.db.patch(row._id as never, { tenantId });
+      await auditBackfillAssignment(ctx, actorUserId, table, row._id, tenantId);
+      patched += 1;
+    } else {
+      ambiguous += 1;
+    }
+  }
+  return { patched, ambiguous };
+}
+
+/**
+ * Resolve the single owning tenant for a legacy agent, or null when it cannot
+ * be determined.
+ *
+ * Ownership evidence is read in bounded pages because agent history is
+ * unbounded: a bounded batch must never fail (and lose its cursor) on one
+ * oversized history, so an agent whose assignments or activity exceed the cap
+ * stays unassigned rather than failing the batch or guessing an owner.
+ *
+ * Market assignments give the strongest evidence: one distinct tenant wins;
+ * conflicting tenants leave the agent unassigned; and the activity fallback is
+ * used ONLY when the assignments provide no ownership evidence at all (no
+ * assignments, or none resolve to a tenant yet).
+ */
+async function resolveAgentTenant(
+  ctx: MutationCtx,
+  agentId: Id<"agents">,
+  resolveMarketTenant: (marketId: Id<"markets">) => Promise<Id<"tenants"> | null>,
+): Promise<Id<"tenants"> | null> {
+  const assignments = await ctx.db
+    .query("agentMarketAssignments")
+    .withIndex("by_agent", (q) => q.eq("agentId", agentId))
+    .order("asc")
+    .take(MAX_BACKFILL_CHILD_ROWS + 1);
+  if (assignments.length > MAX_BACKFILL_CHILD_ROWS) return null;
+
+  const assignmentTenants: Array<string | undefined> = [];
+  for (const assignment of assignments) {
+    const tenantId = await resolveMarketTenant(assignment.marketId);
+    assignmentTenants.push(tenantId ?? undefined);
+  }
+  const derived = singleTenantFromMarketTenants(assignmentTenants);
+  if (derived) return derived as Id<"tenants">;
+
+  // Conflict: assignments span more than one tenant. Keep the agent
+  // unassigned instead of letting single-tenant activity choose an owner.
+  const hasAssignmentEvidence = assignmentTenants.some((tenantId) => tenantId !== undefined);
+  if (hasAssignmentEvidence) return null;
+
+  // No ownership evidence from assignments: fall back to the agent's own
+  // activity markets, bounded the same way.
+  const activity = await ctx.db
+    .query("agentActivity")
+    .withIndex("by_agent", (q) => q.eq("agentId", agentId))
+    .order("asc")
+    .take(MAX_BACKFILL_CHILD_ROWS + 1);
+  if (activity.length > MAX_BACKFILL_CHILD_ROWS) return null;
+
+  const activityTenants: Array<string | undefined> = [];
+  for (const entry of activity) {
+    const tenantId = await resolveMarketTenant(entry.marketId);
+    activityTenants.push(tenantId ?? undefined);
+  }
+  return (singleTenantFromMarketTenants(activityTenants) as Id<"tenants"> | undefined) ?? null;
 }
 
 /**
