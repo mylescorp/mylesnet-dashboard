@@ -79,7 +79,7 @@
   --landing-section-padding-sm: clamp(42px, 6vw, 68px);
   --landing-section-padding-md: clamp(56px, 8vw, 88px);
   --landing-section-padding-lg: clamp(72px, 9vw, 116px);
-  --landing-container: 1140px;
+  --landing-container: 1440px;
   --landing-glass: color-mix(in srgb, var(--surface) 78%, transparent);
   --landing-glass-border: color-mix(in srgb, var(--line) 65%, transparent);
   --landing-primary-glow: color-mix(in srgb, var(--primary) 32%, transparent);

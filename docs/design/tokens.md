@@ -220,6 +220,14 @@ Token changes are product changes. A change must include intended semantic effec
 
 The shadcn/Tailwind bridge now uses isolated `--ui-*` aliases and Tailwind `--color-*` mappings. It must never redefine product semantic tokens such as `--primary`, `--muted`, or `--accent`: those are the public MylesNet contract and are consumed throughout the dashboard and landing surface. This is a runtime correctness repair, not a palette or semantic-meaning change.
 
+### Landing token and hover completion — 2026-10-07
+
+- **Value migration**: every raw `font-size`, `border-radius`, and `font-weight` value in `(public)/landing.css` moved to the nearest `--font-size-*`, `--radius-*`, and `--font-weight-*` step; raw easing keywords moved to `--ease-*`; superseded v2 hover/nav/card layers deleted. `:root` in landing.css now carries only landing-owned tokens (shared surfaces, tint, glow, display, and spacing live in `globals.css` with their dark remaps).
+- **Hover contract implemented**: all landing hover states resolve from semantic tokens — text links move to `--text-strong` (AA-safe against both canvases), surfaces move to `--landing-surface-tint`, actions move to `--primary-action-hover`, elevation uses `--shadow-lg`/`--shadow-md`, motion uses `--duration-*` with `--ease-*`, actions take `--radius-btn` while fields keep `--radius-field`. Status chips are pinned so bridge hover utilities cannot imply clickability.
+- **Verified in both themes**: light and dark computed-style probes of brand, nav, toggle, mobile links, CTAs, cards, FAQ triggers, footer links, photo credits, and chips all match the contract; rest and hover text colors meet AA against their backgrounds.
+- **Pipeline repair**: manual `-webkit-backdrop-filter` duplicates caused the CSS build to drop the unprefixed `backdrop-filter`, so the header glass blur never applied in modern browsers. The manual prefixed declarations were removed; autoprefixer regenerates them from the unprefixed source.
+- `npm run tokens:check`, typecheck, lint, and build all pass.
+
 ## Related records
 
 - [[design-brief]]

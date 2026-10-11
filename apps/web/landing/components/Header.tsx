@@ -229,7 +229,7 @@ export default function Header() {
                 return (
                   <div key={section.href} className="landing-mobile-group">
                     <Link
-                      className="text-lg font-medium hover:text-primary transition-colors"
+                      className="text-lg font-medium transition-colors"
                       href={section.href}
                       data-active={isActive ? "true" : undefined}
                       onClick={() => setMenuOpen(false)}
