@@ -87,6 +87,7 @@ async function authorizeMembershipAction(ctx: Parameters<typeof requirePlatformU
     .first();
   const expectedStatus = args.status === "revoked" ? "active" : "revoked";
   if (!membership || (membership.status !== expectedStatus && membership.status !== args.status)) throw new Error("Workspace membership has changed; refresh and review it");
+  if (args.status === "active" && !membership.workosMembershipId) throw new Error("A deleted workspace membership must be invited again before access can be restored");
   const tenant = await ctx.db.get(args.tenantId);
   if (!tenant?.workosOrganizationId) throw new Error("Workspace access is not connected");
   if (args.status === "active" && !canTenantOperate(tenant.status)) throw new Error("This workspace is not active");
@@ -228,7 +229,7 @@ export const getDesiredMembershipAccess = internalQuery({
     const tenant = await ctx.db.get(args.tenantId);
     const user = await ctx.db.get(args.userId);
     const membership = await ctx.db.query("tenantMemberships").withIndex("by_user_tenant", q => q.eq("userId", args.userId).eq("tenantId", args.tenantId)).first();
-    if (!tenant?.workosOrganizationId || !user?.workosUserId || !membership || (membership.status !== "active" && membership.status !== "revoked")) throw new Error("Workspace access state is unavailable");
+    if (!tenant?.workosOrganizationId || !user?.workosUserId || !membership?.workosMembershipId || (membership.status !== "active" && membership.status !== "revoked")) throw new Error("Workspace access state is unavailable");
     return { organizationId: tenant.workosOrganizationId, workosUserId: user.workosUserId, status: membership.accessOverride ?? membership.status };
   },
 });
@@ -246,8 +247,13 @@ export const recordMembershipSync = internalMutation({
         await ctx.db.patch(membership._id, { accessOverride: undefined, accessOverrideUpdatedAt: undefined });
       }
     }
+    const targetMembership = await ctx.db.query("tenantMemberships")
+      .withIndex("by_user_tenant", q => q.eq("userId", request.targetUserId).eq("tenantId", request.tenantId)).first();
+    const membershipDeleted = !targetMembership?.workosMembershipId;
     await ctx.db.patch(request._id, {
-      syncStatus: args.succeeded ? (request.status === args.appliedStatus ? "synced" : "superseded") : "pending",
+      syncStatus: membershipDeleted || (args.succeeded && request.status !== args.appliedStatus)
+        ? "superseded"
+        : args.succeeded ? "synced" : "pending",
       syncAttempts: (request.syncAttempts ?? 0) + 1,
       lastSyncAttemptAt: Date.now(),
       nextSyncAttemptAt: Date.now() + 5 * 60 * 1000,
@@ -292,6 +298,7 @@ export const applyMembershipStatus = internalMutation({
       .withIndex("by_user_tenant", (q) => q.eq("userId", args.userId).eq("tenantId", args.tenantId))
       .first();
     if (!membership) throw new Error("Workspace membership not found");
+    if (args.status === "active" && !membership.workosMembershipId) throw new Error("A deleted workspace membership must be invited again before access can be restored");
     if (membership.status !== args.status && membership.status !== args.expectedStatus) throw new Error("Workspace membership has changed; refresh and review it");
     if (membership.status !== args.status || membership.accessOverride !== args.status) {
       await ctx.db.patch(membership._id, {
