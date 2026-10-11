@@ -13,8 +13,8 @@ import { hasAnyRole } from "@/shared/auth/rbac";
 const categories: PlatformTicketCategory[] = ["network", "billing", "account"];
 const statuses: PlatformTicketStatus[] = ["open", "in_progress", "waiting_on_customer", "resolved", "closed"];
 const roles = (slugs: string[]) => ({
-  canWriteAll: hasAnyRole(slugs, ["platform_super_admin", "platform_owner", "platform_admin", "platform_support"]),
-  canRead: hasAnyRole(slugs, ["platform_super_admin", "platform_owner", "platform_admin", "platform_support", "platform_ops", "ops_manager", "platform_finance", "finance_manager"]),
+  canWriteAll: hasAnyRole(slugs, ["platform_super_admin", "platform_owner", "platform_support"]),
+  canRead: hasAnyRole(slugs, ["platform_super_admin", "platform_owner", "platform_support", "platform_ops", "ops_manager", "platform_finance", "finance_manager"]),
 });
 
 export function PlatformSupportQueue() {

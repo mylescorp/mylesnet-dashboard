@@ -825,3 +825,10 @@ Routes: `/platform/feature-flags` (list + create/edit/delete),
 ## 2026-10-10 Greptile review tooling
 
 - Added Greptile review configuration and repository guidance as review tooling only. No runtime dependency or production technology was added; the technology stack contract remains unchanged.
+
+## 2026-10-11 Canonical platform super-admin boundary
+
+- **Decision:** Only `platform_super_admin` and its concrete `platform_owner` role carry super-admin access. The legacy `platform_admin` role is not one of the five canonical sub-roles and must not inherit super-admin routes or writes. Organization-scoped WorkOS claims map to the corresponding canonical role before route evaluation; spec-silent roles are denied.
+- **Reason:** Sidebar visibility, server route guards, role management, platform user/invitation mutations, and Convex sub-role checks must enforce the same role matrix. Keeping `platform_admin` as a super-admin alias made the UI and backend inconsistent and granted access beyond the owner-defined matrix.
+- **Scope:** Apply the boundary to platform navigation and role-controlled platform workflows. Do not change the `platform_admin` role definition or its general non-platform permissions in this decision.
+- **Status:** Implemented in isolated worktree `fix/platform-owner-access-sync`; tests and type checks pass locally. Authenticated runtime proof and PR #81 Greptile review remain pending because GitHub authentication is currently invalid. See PR #81.

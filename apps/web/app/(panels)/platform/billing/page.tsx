@@ -9,9 +9,7 @@ const REVENUE_READ_ROLES = [
   "platform_finance",
   "platform_readonly",
   "platform_owner",
-  "platform_admin",
   "finance_manager",
-  "readonly",
 ];
 
 export default async function PlatformBillingPage() {

@@ -27,7 +27,7 @@ const STATUS_TONE: Record<string, StatusTone> = {
 };
 
 const canEdit = (roles: { slug: string }[] | undefined) =>
-  hasAnyRole(roles?.map((role) => role.slug) ?? [], ["platform_super_admin", "platform_owner", "platform_admin", "platform_ops", "ops_manager"]);
+  hasAnyRole(roles?.map((role) => role.slug) ?? [], ["platform_super_admin", "platform_owner", "platform_ops", "ops_manager"]);
 
 export function PlatformDeviceFleet() {
   const { user } = useUserProfile();

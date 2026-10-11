@@ -5,7 +5,7 @@ import { requireUser } from "@/shared/auth/session";
 import { QueryErrorBoundary } from "@/platform/components/QueryErrorBoundary";
 import { PlatformTenantLeaderboard } from "@/platform/components/PlatformTenantLeaderboard";
 
-const LEADERBOARD_READ_ROLES = ["platform_super_admin", "platform_readonly", "platform_owner", "platform_admin", "readonly"];
+const LEADERBOARD_READ_ROLES = ["platform_super_admin", "platform_readonly", "platform_owner"];
 
 export default async function PlatformLeaderboardPage() {
   await requirePanelAccess("platform");

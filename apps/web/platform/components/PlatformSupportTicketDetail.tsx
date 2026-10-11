@@ -14,7 +14,7 @@ export function PlatformSupportTicketDetail({ ticketId }: { ticketId: string }) 
   const ticket = useQuery(platformSupport.get, { ticketId });
   const update = useMutation(platformSupport.update);
   const [error, setError] = useState("");
-  const canManage = hasAnyRole(user?.roles.map((role) => role.slug) ?? [], ["platform_super_admin", "platform_owner", "platform_admin", "platform_support"]);
+  const canManage = hasAnyRole(user?.roles.map((role) => role.slug) ?? [], ["platform_super_admin", "platform_owner", "platform_support"]);
   if (ticket === undefined) return <p className="pf-muted">Loading ticket…</p>;
   if (!ticket) return <EmptyState title="Ticket not found" body="The ticket is missing, deleted, or outside your role scope." />;
   return <main className="workspace-page"><header className="page-heading"><div><p className="eyebrow"><Link href="/platform/support">Global ticket queue</Link></p><h1 className="page-title">{ticket.subject}</h1><p className="page-subtitle">{ticket.category ?? "account"} · {ticket.priority} · {ticket.ticketStatus.replaceAll("_", " ")}</p></div><StatusPill tone={ticket.ticketStatus === "resolved" || ticket.ticketStatus === "closed" ? "success" : "warning"}>{ticket.ticketStatus.replaceAll("_", " ")}</StatusPill></header>

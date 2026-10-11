@@ -224,6 +224,15 @@ export const getRolesByIds = internalQuery({
   },
 });
 
+/** G1 access mutations are reserved for the canonical super-admin role. */
+export const authorizePlatformAccessMutation = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const actor = await requirePlatformSubRole(ctx, ["platform_super_admin"]);
+    return { userId: actor._id, workosUserId: actor.workosUserId ?? null };
+  },
+});
+
 const PLATFORM_MIRROR_SLUGS = new Set(["platform_owner", "platform_admin", "platform_support", "agent"]);
 
 export const applyUserAccess = internalMutation({
@@ -241,8 +250,8 @@ export const applyUserAccess = internalMutation({
       throw new Error("Unauthorized");
     }
     const actorRoles = await resolveRoles(ctx, actor);
-    if (!actorRoles.some((role) => role.slug === "platform_owner" || role.slug === "platform_admin")) {
-      throw new Error("Unauthorized: admin role required");
+    if (!actorRoles.some((role) => role.slug === "platform_owner")) {
+      throw new Error("Unauthorized: platform super-admin role required");
     }
     const target = await ctx.db.get(args.userId);
     if (!target) throw new Error("User not found");
@@ -640,7 +649,7 @@ export const createUser = action({
     roleIds: v.optional(v.array(v.id("roles"))),
   },
   handler: async (ctx, args) => {
-    const actor = (await ctx.runQuery(internal.rolesInternal.authorize, { permission: "users:manage" })) as {
+    const actor = (await ctx.runQuery(internal.platformUsers.authorizePlatformAccessMutation, {})) as {
       userId: Id<"users">;
       workosUserId: string | null;
     };
@@ -756,7 +765,7 @@ export const createUserLocal = internalMutation({
 export const deleteUser = action({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
-    const actor = (await ctx.runQuery(internal.rolesInternal.authorize, { permission: "users:manage" })) as {
+    const actor = (await ctx.runQuery(internal.platformUsers.authorizePlatformAccessMutation, {})) as {
       userId: Id<"users">;
       workosUserId: string | null;
     };
@@ -820,7 +829,7 @@ export const softDeleteUserLocal = internalMutation({
 export const restoreUser = action({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
-    const actor = (await ctx.runQuery(internal.rolesInternal.authorize, { permission: "trash:manage" })) as {
+    const actor = (await ctx.runQuery(internal.platformUsers.authorizePlatformAccessMutation, {})) as {
       userId: Id<"users">;
       workosUserId: string | null;
     };

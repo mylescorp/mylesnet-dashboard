@@ -5,8 +5,8 @@ import { requireUser } from "@/shared/auth/session";
 import { PlatformRadiusFleet } from "@/platform/components/PlatformRadiusFleet";
 import { QueryErrorBoundary } from "@/platform/components/QueryErrorBoundary";
 
-const readers = ["platform_super_admin", "platform_ops", "platform_finance", "platform_support", "platform_readonly", "platform_owner", "platform_admin", "ops_manager", "finance_manager", "readonly"];
-const managers = ["platform_super_admin", "platform_ops", "platform_owner", "platform_admin", "ops_manager"];
+const readers = ["platform_super_admin", "platform_ops", "platform_finance", "platform_support", "platform_readonly", "platform_owner", "ops_manager", "finance_manager"];
+const managers = ["platform_super_admin", "platform_ops", "platform_owner", "ops_manager"];
 
 export default async function PlatformRadiusPage() {
   await requirePanelAccess("platform");

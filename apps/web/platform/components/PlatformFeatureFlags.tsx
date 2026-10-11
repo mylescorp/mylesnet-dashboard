@@ -12,7 +12,7 @@ import { tenantControl } from "@/lib/convex/tenantControl";
 import { hasAnyRole } from "@/shared/auth/rbac";
 
 const isSuperAdmin = (roles: { slug: string }[] | undefined) =>
-  hasAnyRole(roles?.map((role) => role.slug) ?? [], ["platform_super_admin", "platform_owner", "platform_admin"]);
+  hasAnyRole(roles?.map((role) => role.slug) ?? [], ["platform_super_admin", "platform_owner"]);
 
 const isOps = (roles: { slug: string }[] | undefined) =>
   hasAnyRole(roles?.map((role) => role.slug) ?? [], ["platform_ops", "ops_manager"]);
@@ -21,7 +21,7 @@ const canEditFlag = (roles: { slug: string }[] | undefined, flag: FeatureFlag) =
   isSuperAdmin(roles) || (isOps(roles) && flag.category === "infrastructure");
 
 const canDeleteFlag = (roles: { slug: string }[] | undefined) =>
-  hasAnyRole(roles?.map((role) => role.slug) ?? [], ["platform_super_admin", "platform_owner", "platform_admin"]);
+  hasAnyRole(roles?.map((role) => role.slug) ?? [], ["platform_super_admin", "platform_owner"]);
 
 export function PlatformFeatureFlags() {
   const { user } = useUserProfile();

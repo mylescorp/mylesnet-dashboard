@@ -6,8 +6,8 @@ import { requireUser } from "@/shared/auth/session";
 
 const ANALYTICS_READ_ROLES = [
   "platform_super_admin", "platform_finance", "platform_ops", "platform_readonly",
-  "platform_owner", "platform_admin", "ops_manager", "finance_manager", "readonly",
-  "org-platform_owner", "org-platform_admin",
+  "platform_owner", "ops_manager", "finance_manager",
+  "org-platform_owner",
 ];
 
 export default async function PlatformAnalyticsPage() {

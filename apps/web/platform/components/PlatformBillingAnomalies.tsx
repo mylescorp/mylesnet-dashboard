@@ -9,7 +9,7 @@ import { platformBillingAnomalies, type PlatformBillingAnomaly } from "@/shared/
 import { userFacingMessage } from "@/shared/lib/user-facing-error";
 import { hasAnyRole } from "@/shared/auth/rbac";
 
-const WRITE_ROLES = ["platform_super_admin", "platform_ops", "platform_owner", "platform_admin", "ops_manager"];
+const WRITE_ROLES = ["platform_super_admin", "platform_ops", "platform_owner", "ops_manager"];
 const TITLES: Record<PlatformBillingAnomaly["anomalyType"], string> = {
   stale_pending: "Stale pending payment",
   duplicate_reference: "Duplicate gateway reference",

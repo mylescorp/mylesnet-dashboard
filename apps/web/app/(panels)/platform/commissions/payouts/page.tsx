@@ -6,7 +6,7 @@ import { hasAnyRole } from "@/shared/auth/rbac";
 import { requireUser } from "@/shared/auth/session";
 
 const PAYOUT_ROLES = [
-  "platform_super_admin", "platform_finance", "platform_owner", "platform_admin", "finance_manager",
+  "platform_super_admin", "platform_finance", "platform_owner", "finance_manager",
 ];
 
 export default async function PlatformPayoutsPage() {

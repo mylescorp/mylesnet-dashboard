@@ -31,6 +31,7 @@ const PANEL_PREFIX_LOOKUP: ReadonlyMap<string, PanelName> = new Map(
 
 /** Panel name whose role prefixes include the given role slug, if any. */
 export function panelForRole(roleSlug: string): PanelName | null {
+  if (roleSlug === "ops_manager" || roleSlug === "finance_manager") return "platform";
   for (const prefix of PANEL_PREFIX_LOOKUP.keys()) {
     if (roleSlug === prefix || roleSlug.startsWith(`${prefix}_`) || roleSlug.startsWith(`${prefix}:`)) {
       return PANEL_PREFIX_LOOKUP.get(prefix) ?? null;
@@ -61,10 +62,18 @@ export function hasAnyRole(roleSlugs: string[], requiredRoles: string[]): boolea
 /** WorkOS organization-scoped platform roles are equivalent to their legacy system-role slugs. */
 export function expandPlatformRoleAliases(roleSlugs: readonly string[]): Set<string> {
   const effectiveRoles = new Set(roleSlugs);
+  const organizationRoleAliases: Readonly<Record<string, string>> = {
+    "org-platform_super_admin": "platform_super_admin",
+    "org-platform_owner": "platform_owner",
+    "org-platform_admin": "platform_admin",
+    "org-platform_ops": "ops_manager",
+    "org-platform_finance": "finance_manager",
+    "org-platform_support": "platform_support",
+    "org-platform_readonly": "platform_readonly",
+  };
   for (const slug of roleSlugs) {
-    if (slug === "org-platform_owner" || slug === "org-platform_admin" || slug === "org-platform_support") {
-      effectiveRoles.add(slug.slice(4));
-    }
+    const alias = organizationRoleAliases[slug];
+    if (alias) effectiveRoles.add(alias);
   }
   return effectiveRoles;
 }
@@ -110,10 +119,10 @@ export function flattenOrgScopedRoles(value: unknown): string[] {
 
 /** True when any held role is a platform staff role (platform_*). */
 export function isPlatformStaff(roleSlugs: string[]): boolean {
-  return roleSlugs.some((slug) => slug === "platform" || slug.startsWith("platform_") || slug.startsWith("platform:") || slug.startsWith("org-platform_"));
+  return roleSlugs.some((slug) => slug === "ops_manager" || slug === "finance_manager" || slug === "platform" || slug.startsWith("platform_") || slug.startsWith("platform:") || slug.startsWith("org-platform_"));
 }
 
 /** Canonical super-admin policy, including the organization-scoped WorkOS alias. */
 export function isPlatformSuperAdmin(roleSlugs: string[]): boolean {
-  return hasAnyRole(roleSlugs, ["platform_super_admin", "platform_owner", "platform_admin"]);
+  return hasAnyRole(roleSlugs, ["platform_super_admin", "platform_owner"]);
 }

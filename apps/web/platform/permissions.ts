@@ -4,24 +4,22 @@ const TENANT_OPERATIONS_ROLES = new Set([
   "platform_super_admin",
   "platform_ops",
   "platform_owner",
-  "platform_admin",
   "ops_manager",
 ]);
 
-const PLATFORM_SUPER_ADMIN_ROLES = new Set(["platform_super_admin", "platform_owner", "platform_admin"]);
+const PLATFORM_SUPER_ADMIN_ROLES = new Set(["platform_super_admin", "platform_owner"]);
 const PLATFORM_PLAN_MANAGEMENT_ROLES = new Set([
   "platform_super_admin",
   "platform_finance",
   "platform_owner",
-  "platform_admin",
   "finance_manager",
 ]);
 const PLATFORM_INFRASTRUCTURE_ROLES = new Set([
-  "platform_super_admin", "platform_ops", "platform_owner", "platform_admin", "ops_manager",
+  "platform_super_admin", "platform_ops", "platform_owner", "ops_manager",
 ]);
-const PLATFORM_WHITE_LABEL_ROLES = new Set(["platform_super_admin", "platform_owner", "platform_admin"]);
+const PLATFORM_WHITE_LABEL_ROLES = new Set(["platform_super_admin", "platform_owner"]);
 const PLATFORM_PARTNER_READ_ROLES = new Set([
-  "platform_super_admin", "platform_owner", "platform_admin",
+  "platform_super_admin", "platform_owner",
   "platform_ops", "ops_manager", "platform_finance", "finance_manager", "platform_support",
 ]);
 

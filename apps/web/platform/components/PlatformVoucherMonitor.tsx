@@ -16,7 +16,7 @@ const SIGNAL_LABEL: Record<string, string> = {
 };
 
 const canManage = (roles: { slug: string }[] | undefined) =>
-  hasAnyRole(roles?.map((role) => role.slug) ?? [], ["platform_super_admin", "platform_ops", "platform_owner", "platform_admin", "ops_manager"]);
+  hasAnyRole(roles?.map((role) => role.slug) ?? [], ["platform_super_admin", "platform_ops", "platform_owner", "ops_manager"]);
 
 export function PlatformVoucherMonitor() {
   const { user } = useUserProfile();

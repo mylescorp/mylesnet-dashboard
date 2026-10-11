@@ -5,7 +5,7 @@ import { requireUser } from "@/shared/auth/session";
 import { QueryErrorBoundary } from "@/platform/components/QueryErrorBoundary";
 import { PlatformBillingAnomalies } from "@/platform/components/PlatformBillingAnomalies";
 
-const C6_ROLES = ["platform_super_admin", "platform_finance", "platform_ops", "platform_owner", "platform_admin", "finance_manager", "ops_manager"];
+const C6_ROLES = ["platform_super_admin", "platform_finance", "platform_ops", "platform_owner", "finance_manager", "ops_manager"];
 export default async function PlatformBillingAnomaliesPage() {
   await requirePanelAccess("platform");
   const session = await requireUser();

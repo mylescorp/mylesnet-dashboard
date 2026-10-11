@@ -10,7 +10,7 @@ const requestStatus = v.union(v.literal("received"), v.literal("under_review"), 
 async function authorizeIntake(ctx: Parameters<typeof requirePlatformSubRole>[0]) {
   const user = await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_support"]);
   const roles = await resolveRoles(ctx, user);
-  const isSuperAdmin = roles.some(role => ["platform_super_admin", "platform_owner", "platform_admin"].includes(role.slug));
+  const isSuperAdmin = roles.some(role => ["platform_super_admin", "platform_owner"].includes(role.slug));
   const isSupport = roles.some(role => role.slug === "platform_support");
   if (!isSuperAdmin && !isSupport) throw new Error("Data-request intake is restricted to super-admin and support staff");
   return { user, isSuperAdmin, isSupport };

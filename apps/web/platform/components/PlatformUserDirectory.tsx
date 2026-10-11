@@ -12,7 +12,7 @@ import { hasAnyRole } from "@/shared/auth/rbac";
 export function PlatformUserDirectory() {
   const { user } = useUserProfile();
   const roleSlugs = user?.roles.map((role) => role.slug) ?? [];
-  const isSuperAdmin = hasAnyRole(roleSlugs, ["platform_super_admin", "platform_owner", "platform_admin"]);
+  const isSuperAdmin = hasAnyRole(roleSlugs, ["platform_super_admin", "platform_owner"]);
   const isSupport = hasAnyRole(roleSlugs, ["platform_support"]);
   const [searchInput, setSearchInput] = useState("");
   const [searchEmail, setSearchEmail] = useState("");

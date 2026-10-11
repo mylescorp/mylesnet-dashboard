@@ -8,8 +8,8 @@ import { PlatformApiKeys } from "@/platform/components/PlatformApiKeys";
 export default async function PlatformApiKeysPage() {
   await requirePanelAccess("platform");
   const user = await requireUser();
-  const roles = ["platform_super_admin", "platform_ops", "platform_owner", "platform_admin", "ops_manager"];
+  const roles = ["platform_super_admin", "platform_ops", "platform_owner", "ops_manager"];
   if (!hasAnyRole(user.roleSlugs, roles)) redirect("/no-access");
-  const canManage = hasAnyRole(user.roleSlugs, ["platform_super_admin", "platform_owner", "platform_admin"]);
+  const canManage = hasAnyRole(user.roleSlugs, ["platform_super_admin", "platform_owner"]);
   return <QueryErrorBoundary><PlatformApiKeys canManage={canManage} /></QueryErrorBoundary>;
 }

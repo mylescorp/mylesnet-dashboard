@@ -40,6 +40,13 @@ test("owner sidebar renders every registered route and all menu routes have an e
   }
 });
 
+test("legacy platform_admin does not inherit super-admin sidebar grants", () => {
+  for (const route of Object.keys(PLATFORM_NAV_ROLE_SCOPES)) {
+    assert.equal(canSeePlatformNavRoute(route, ["platform_admin"]), false, `${route} must deny the unscoped legacy admin role`);
+    assert.equal(canSeePlatformNavRoute(route, ["org-platform_admin"]), false, `${route} must deny the organization-scoped legacy admin role`);
+  }
+});
+
 test("menu role filtering keeps finance and ops within their route scopes", () => {
   assert.equal(canSeePlatformNavRoute("/platform/billing", ["platform_owner"]), true);
   assert.equal(canSeePlatformNavRoute("/platform/billing", ["ops_manager"]), false);

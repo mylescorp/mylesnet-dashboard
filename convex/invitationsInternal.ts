@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
-import { requirePermission, resolveRoles } from "./lib/auth";
+import { requirePlatformSubRole, resolveRoles } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 
 /**
@@ -12,9 +12,9 @@ import { logAudit } from "./lib/auditLog";
 
 /** Who is the caller (for attribution) and what is their highest role? */
 export const getInvitationAuthor = internalQuery({
-  args: { permission: v.string() },
-  handler: async (ctx, args) => {
-    const user = await requirePermission(ctx, args.permission);
+  args: {},
+  handler: async (ctx) => {
+    const user = await requirePlatformSubRole(ctx, ["platform_super_admin"]);
     const roles = await resolveRoles(ctx, user);
     const primary = roles.slice().sort((left, right) => right.rank - left.rank)[0];
     return {

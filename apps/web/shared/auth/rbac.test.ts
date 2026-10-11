@@ -25,6 +25,8 @@ import {
 
 test("panelForRole maps role slugs to canonical panels", () => {
   assert.equal(panelForRole("platform_owner"), "platform");
+  assert.equal(panelForRole("ops_manager"), "platform");
+  assert.equal(panelForRole("finance_manager"), "platform");
   assert.equal(panelForRole("org-platform_owner"), "platform");
   assert.equal(panelForRole("platform_admin"), "platform");
   assert.equal(panelForRole("network_operator"), "network");
@@ -49,6 +51,10 @@ test("hasRole / hasAnyRole implement all-vs-any semantics", () => {
   assert.equal(hasAnyRole(["agent"], ["platform_owner"]), false);
   assert.equal(hasAnyRole(["org-platform_owner"], ["platform_super_admin", "platform_owner"]), true);
   assert.equal(hasRole(["org-platform_owner"], ["platform_owner"]), true);
+  assert.equal(hasAnyRole(["org-platform_ops"], ["ops_manager"]), true);
+  assert.equal(hasAnyRole(["org-platform_finance"], ["finance_manager"]), true);
+  assert.equal(hasAnyRole(["org-platform_support"], ["platform_support"]), true);
+  assert.equal(hasAnyRole(["org-platform_readonly"], ["platform_readonly"]), true);
   assert.equal(hasAnyRole(["agent"], []), true);
 });
 
@@ -85,6 +91,8 @@ test("flattenOrgScopedRoles handles org-scoped role claims", () => {
 
 test("isPlatformStaff flags platform staff roles", () => {
   assert.equal(isPlatformStaff(["platform_owner"]), true);
+  assert.equal(isPlatformStaff(["ops_manager"]), true);
+  assert.equal(isPlatformStaff(["finance_manager"]), true);
   assert.equal(isPlatformStaff(["org-platform_owner"]), true);
   assert.equal(isPlatformStaff(["platform_admin", "agent"]), true);
   assert.equal(isPlatformStaff(["agent"]), false);
@@ -93,7 +101,7 @@ test("isPlatformStaff flags platform staff roles", () => {
 
 test("platform access management follows super-admin sub-role, including org alias", () => {
   assert.equal(isPlatformSuperAdmin(["platform_owner"]), true);
-  assert.equal(isPlatformSuperAdmin(["platform_admin"]), true);
+  assert.equal(isPlatformSuperAdmin(["platform_admin"]), false);
   assert.equal(isPlatformSuperAdmin(["org-platform_owner"]), true);
   assert.equal(isPlatformSuperAdmin(["platform_finance"]), false);
   assert.equal(isPlatformSuperAdmin(["ops_manager"]), false);
@@ -106,11 +114,11 @@ test("platform UI write controls match the tenant, finance, infrastructure, and 
     for (const role of yes) assert.equal(check([role]), true, `${role} should be allowed`);
     for (const role of no) assert.equal(check([role]), false, `${role} should be denied`);
   };
-  allowed(canManagePlatformTenants, ["platform_owner", "platform_admin", "ops_manager", "org-platform_owner", "org-platform_admin"], ["finance_manager", "platform_support", "platform_readonly"]);
-  allowed(canDeletePlatformTenant, ["platform_owner", "platform_admin", "org-platform_owner", "org-platform_admin"], ["ops_manager", "finance_manager", "platform_support", "platform_readonly"]);
-  allowed(canManagePlatformPlans, ["platform_owner", "platform_admin", "finance_manager", "org-platform_owner", "org-platform_admin"], ["ops_manager", "platform_support", "platform_readonly"]);
-  allowed(canManagePlatformInfrastructure, ["platform_owner", "platform_admin", "ops_manager", "org-platform_owner", "org-platform_admin"], ["finance_manager", "platform_support", "platform_readonly"]);
-  allowed(canManagePlatformWhiteLabel, ["platform_owner", "platform_admin", "org-platform_owner", "org-platform_admin"], ["ops_manager", "finance_manager", "platform_support", "platform_readonly"]);
+  allowed(canManagePlatformTenants, ["platform_owner", "ops_manager", "org-platform_owner"], ["platform_admin", "org-platform_admin", "finance_manager", "platform_support", "platform_readonly"]);
+  allowed(canDeletePlatformTenant, ["platform_owner", "org-platform_owner"], ["platform_admin", "org-platform_admin", "ops_manager", "finance_manager", "platform_support", "platform_readonly"]);
+  allowed(canManagePlatformPlans, ["platform_owner", "finance_manager", "org-platform_owner"], ["platform_admin", "org-platform_admin", "ops_manager", "platform_support", "platform_readonly"]);
+  allowed(canManagePlatformInfrastructure, ["platform_owner", "ops_manager", "org-platform_owner"], ["platform_admin", "org-platform_admin", "finance_manager", "platform_support", "platform_readonly"]);
+  allowed(canManagePlatformWhiteLabel, ["platform_owner", "org-platform_owner"], ["platform_admin", "org-platform_admin", "ops_manager", "finance_manager", "platform_support", "platform_readonly"]);
 });
 
 test("agency and reseller registry UI matches the D1 read and write matrix", () => {
@@ -118,6 +126,6 @@ test("agency and reseller registry UI matches the D1 read and write matrix", () 
     for (const role of yes) assert.equal(check([role]), true, `${role} should be allowed`);
     for (const role of no) assert.equal(check([role]), false, `${role} should be denied`);
   };
-  allowed(canReadPlatformPartnerRegistry, ["platform_owner", "platform_ops", "ops_manager", "platform_finance", "finance_manager", "platform_support"], ["platform_readonly", "readonly", "tenant_admin"]);
-  allowed(canManagePlatformPartnerRegistry, ["platform_owner", "platform_admin", "org-platform_owner", "org-platform_admin"], ["platform_ops", "platform_finance", "platform_support", "platform_readonly"]);
+  allowed(canReadPlatformPartnerRegistry, ["platform_owner", "platform_ops", "ops_manager", "platform_finance", "finance_manager", "platform_support"], ["platform_admin", "org-platform_admin", "platform_readonly", "readonly", "tenant_admin"]);
+  allowed(canManagePlatformPartnerRegistry, ["platform_owner", "org-platform_owner"], ["platform_admin", "org-platform_admin", "platform_ops", "platform_finance", "platform_support", "platform_readonly"]);
 });

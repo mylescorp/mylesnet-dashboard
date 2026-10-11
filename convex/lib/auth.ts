@@ -12,6 +12,7 @@ import {
 import { assertMfaCompliance as assertMfaCompliancePolicy } from "./mfa";
 import { canTenantOperate } from "./tenantCore";
 import { organizationIdFromWorkosIdentity } from "./workosIdentity";
+import { hasCanonicalPlatformSuperAdminRole } from "./platformRoleCore";
 
 /**
  * Platform role access is data-driven from the `roles` table via
@@ -212,9 +213,9 @@ export function isPlatformOwner(roles: ResolvedRole[]): boolean {
 }
 
 export function isPlatformAdmin(roles: ResolvedRole[]): boolean {
-  return roles.some(
-    (role) => role.slug === "platform_owner" || role.slug === "platform_admin",
-  );
+  // Canonical super-admin authority belongs to the owner role only. The
+  // legacy platform_admin role is not one of the five scoped platform roles.
+  return hasCanonicalPlatformSuperAdminRole(roles.map((role) => role.slug));
 }
 
 /** Require any authenticated platform user (owner/admin/support). */
@@ -230,7 +231,7 @@ export async function requirePlatformUser(ctx: QueryCtx | MutationCtx): Promise<
   return user;
 }
 
-/** Require platform_owner or platform_admin. */
+/** Require the canonical platform super-admin role. */
 export async function requirePlatformAdmin(ctx: QueryCtx | MutationCtx): Promise<Doc<"users">> {
   const user = await getCurrentUserRecord(ctx);
   if (user.isActive === false || user.deactivatedAt !== undefined) {
@@ -274,10 +275,10 @@ export async function requireAnyRole(
   return user;
 }
 
-/** Operations lead + above (owner / admin / ops_manager). */
+/** Operations lead + above (owner / ops_manager). */
 export function isOpsOrAbove(roles: ResolvedRole[]): boolean {
   return roles.some((role) =>
-    ["platform_owner", "platform_admin", "ops_manager"].includes(role.slug),
+    ["platform_owner", "ops_manager"].includes(role.slug),
   );
 }
 
@@ -293,10 +294,10 @@ export async function requireOpsOrAbove(ctx: QueryCtx | MutationCtx): Promise<Do
   return user;
 }
 
-/** Finance lead + above (owner / admin / finance_manager). */
+/** Finance lead + above (owner / finance_manager). */
 export function isFinanceOrAbove(roles: ResolvedRole[]): boolean {
   return roles.some((role) =>
-    ["platform_owner", "platform_admin", "finance_manager"].includes(role.slug),
+    ["platform_owner", "finance_manager"].includes(role.slug),
   );
 }
 
@@ -376,7 +377,7 @@ export async function requireMarketAccess(
   const user = await getCurrentUserRecord(ctx);
   if (!isActiveUser(user)) throw new Error("Unauthorized: account is inactive");
   const roles = await resolveRoles(ctx, user);
-  if (isPlatformAdmin(roles)) return user;
+  if (roles.some((role) => role.slug === "platform_owner" || role.slug === "ops_manager")) return user;
   const membership = await ctx.db
     .query("userMarketMemberships")
     .withIndex("by_user_and_market", (q) => q.eq("userId", user._id).eq("marketId", marketId))
@@ -449,7 +450,7 @@ function isActiveUser(user: Doc<"users">): boolean {
  * unchanged so literal slugs also work.
  *
  * The mapping is defined in lib/permissions.ts (PLATFORM_SUB_ROLE_MAP):
- *   platform_super_admin → platform_owner, platform_admin
+ *   platform_super_admin → platform_owner
  *   platform_ops         → ops_manager
  *   platform_finance     → finance_manager
  *   platform_support     → platform_support

@@ -6,6 +6,7 @@ import { requireMarketAccess, requirePermission, requirePlatformSubRole, resolve
 import { enforceTenantOnResource } from "./lib/tenant";
 import { logAudit } from "./lib/auditLog";
 import { PLATFORM_SLA_FALLBACK, ticketDeadlines, type PlatformTicketCategory } from "./lib/platformSlaCore";
+import { hasCanonicalPlatformSuperAdminRole } from "./lib/platformRoleCore";
 
 const platformTicketReadRoles = ["platform_super_admin", "platform_support", "platform_ops", "platform_finance"];
 const platformTicketManageAllRoles = ["platform_super_admin", "platform_support"];
@@ -17,7 +18,7 @@ async function platformTicketAccess(ctx: Parameters<typeof requirePlatformSubRol
   const user = await requirePlatformSubRole(ctx, platformTicketReadRoles);
   const roles = await resolveRoles(ctx, user);
   const slugs = new Set(roles.map(role => role.slug));
-  const isSuperAdmin = slugs.has("platform_owner") || slugs.has("platform_admin");
+  const isSuperAdmin = hasCanonicalPlatformSuperAdminRole([...slugs]);
   const isSupport = slugs.has("platform_support");
   const isOps = slugs.has("ops_manager");
   const isFinance = slugs.has("finance_manager");

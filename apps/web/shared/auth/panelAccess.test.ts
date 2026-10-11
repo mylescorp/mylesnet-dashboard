@@ -3,9 +3,12 @@ import assert from "node:assert/strict";
 import { hasPanelAccess, panelAccessFallback } from "./panelAccess.ts";
 
 test("panel access maps current WorkOS system and organization role slugs", () => {
-  assert.equal(hasPanelAccess(["platform_admin"], "platform"), true);
+  assert.equal(hasPanelAccess(["platform_admin"], "platform"), false);
   assert.equal(hasPanelAccess(["platform_super_admin"], "platform"), true);
-  assert.equal(hasPanelAccess(["org-platform_admin"], "platform"), true);
+  assert.equal(hasPanelAccess(["org-platform_admin"], "platform"), false);
+  for (const role of ["platform_owner", "platform_super_admin", "platform_ops", "ops_manager", "org-platform_ops", "platform_finance", "finance_manager", "org-platform_finance", "platform_support", "org-platform_support", "platform_readonly", "org-platform_readonly"]) {
+    assert.equal(hasPanelAccess([role], "platform"), true, `${role} should enter its authorized control plane`);
+  }
   assert.equal(hasPanelAccess(["org-client_admin"], "admin"), true);
   assert.equal(hasPanelAccess(["agent"], "dashboard"), true);
   assert.equal(hasPanelAccess(["member"], "dashboard"), true);
@@ -20,5 +23,7 @@ test("panel access denies roles outside the requested panel", () => {
 
 test("platform staff are returned to their control plane instead of a tenant workspace", () => {
   assert.equal(panelAccessFallback(["platform_super_admin"], "dashboard"), "/platform?reason=tenant_workspace_required");
+  assert.equal(panelAccessFallback(["ops_manager"], "dashboard"), "/platform?reason=tenant_workspace_required");
+  assert.equal(panelAccessFallback(["finance_manager"], "dashboard"), "/platform?reason=tenant_workspace_required");
   assert.equal(panelAccessFallback(["agent"], "platform"), "/no-access");
 });

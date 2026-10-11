@@ -6,7 +6,7 @@ import { hasAnyRole } from "@/shared/auth/rbac";
 import { requireUser } from "@/shared/auth/session";
 
 const COMMISSION_READ_ROLES = [
-  "platform_super_admin", "platform_finance", "platform_ops", "platform_owner", "platform_admin", "finance_manager", "ops_manager",
+  "platform_super_admin", "platform_finance", "platform_ops", "platform_owner", "finance_manager", "ops_manager",
 ];
 
 export default async function PlatformCommissionLedgerPage() {

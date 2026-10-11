@@ -1,11 +1,11 @@
 import { hasAnyRole } from "../auth/rbac.ts";
 
 const platformRoles = {
-  superAdmin: ["platform_super_admin", "platform_owner", "platform_admin"],
+  superAdmin: ["platform_super_admin", "platform_owner"],
   ops: ["platform_ops", "ops_manager"],
   finance: ["platform_finance", "finance_manager"],
   support: ["platform_support"],
-  readonly: ["platform_readonly", "readonly"],
+  readonly: ["platform_readonly"],
 };
 
 /** Explicit routes whose canonical matrix denies at least one platform sub-role. */

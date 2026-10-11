@@ -5,6 +5,7 @@ import type { Doc } from "./_generated/dataModel";
 import { requirePlatformSubRole, resolveRoles } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 import { validatePlatformRadiusInput, type PlatformRadiusInput } from "./lib/platformRadiusCore";
+import { hasCanonicalPlatformSuperAdminRole } from "./lib/platformRoleCore";
 
 const lifecycle = v.union(v.literal("planned"), v.literal("active"), v.literal("degraded"), v.literal("maintenance"), v.literal("retired"));
 const transport = v.union(v.literal("udp"), v.literal("tcp"), v.literal("tls"));
@@ -30,7 +31,7 @@ export const list = query({
   handler: async (ctx, args) => {
     const user = await requirePlatformSubRole(ctx, readRoles);
     const roles = await resolveRoles(ctx, user);
-    const includeConnectionDetails = roles.some(role => ["platform_owner", "platform_admin", "ops_manager"].includes(role.slug));
+    const includeConnectionDetails = hasCanonicalPlatformSuperAdminRole(roles.map(role => role.slug)) || roles.some(role => role.slug === "ops_manager");
     const page = await ctx.db.query("platformRadiusServers").withIndex("by_createdAt").order("desc").paginate({
       ...args.paginationOpts, numItems: Math.min(50, Math.max(1, Math.floor(args.paginationOpts.numItems))),
     });
@@ -43,7 +44,7 @@ export const get = query({
   handler: async (ctx, args) => {
     const user = await requirePlatformSubRole(ctx, readRoles);
     const roles = await resolveRoles(ctx, user);
-    const includeConnectionDetails = roles.some(role => ["platform_owner", "platform_admin", "ops_manager"].includes(role.slug));
+    const includeConnectionDetails = hasCanonicalPlatformSuperAdminRole(roles.map(role => role.slug)) || roles.some(role => role.slug === "ops_manager");
     const server = await ctx.db.get(args.serverId);
     return server ? toRow(server, includeConnectionDetails) : null;
   },

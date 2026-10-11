@@ -455,7 +455,9 @@ export const CUSTOM_ROLE_DEFAULT_RANK = 60;
  * unchanged so the caller can also pass literal slugs.
  */
 export const PLATFORM_SUB_ROLE_MAP: Record<string, string[]> = {
-  platform_super_admin: ["platform_owner", "platform_admin"],
+  // `platform_admin` is a legacy day-to-day administrator role, not the
+  // canonical super-admin role. Keep super-admin mutations owner-only.
+  platform_super_admin: ["platform_owner"],
   platform_ops: ["ops_manager"],
   platform_finance: ["finance_manager"],
   platform_support: ["platform_support"],

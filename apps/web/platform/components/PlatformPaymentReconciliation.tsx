@@ -10,7 +10,7 @@ import { userFacingMessage } from "@/shared/lib/user-facing-error";
 import { hasAnyRole } from "@/shared/auth/rbac";
 import { MAX_STATEMENT_CSV_BYTES, parseStatementCsv } from "@/convex/lib/platformReconciliationCore";
 
-const ADMIN = ["platform_super_admin", "platform_owner", "platform_admin"];
+const ADMIN = ["platform_super_admin", "platform_owner"];
 const FINANCE = ["platform_finance", "finance_manager"];
 const money = (minor?: number, currency = "") => minor === undefined ? "—" : `${currency} ${(minor / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 

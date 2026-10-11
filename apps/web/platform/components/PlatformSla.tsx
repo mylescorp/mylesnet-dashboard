@@ -9,7 +9,7 @@ import { userFacingMessage } from "@/shared/lib/user-facing-error";
 import { hasAnyRole } from "@/shared/auth/rbac";
 
 const categoryLabel: Record<SlaCategory, string> = { network: "Network", billing: "Billing", account: "Account" };
-const canManageSlas = (roles: { slug: string }[] | undefined) => hasAnyRole(roles?.map((role) => role.slug) ?? [], ["platform_super_admin", "platform_owner", "platform_admin"]);
+const canManageSlas = (roles: { slug: string }[] | undefined) => hasAnyRole(roles?.map((role) => role.slug) ?? [], ["platform_super_admin", "platform_owner"]);
 
 export function PlatformSla() {
   const { user } = useUserProfile();

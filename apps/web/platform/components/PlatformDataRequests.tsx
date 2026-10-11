@@ -10,7 +10,7 @@ import { EmptyState, StatusPill } from "@/shared/components/ui";
 import { userFacingMessage } from "@/shared/lib/user-facing-error";
 import { hasAnyRole } from "@/shared/auth/rbac";
 
-const isSuperAdmin = (roles: { slug: string }[] | undefined) => hasAnyRole(roles?.map((role) => role.slug) ?? [], ["platform_super_admin", "platform_owner", "platform_admin"]);
+const isSuperAdmin = (roles: { slug: string }[] | undefined) => hasAnyRole(roles?.map((role) => role.slug) ?? [], ["platform_super_admin", "platform_owner"]);
 const statuses: DataRequestStatus[] = ["received", "under_review", "completed", "rejected"];
 
 export function PlatformDataRequests() {

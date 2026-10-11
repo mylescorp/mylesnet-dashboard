@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { ALL_PERMISSION_SLUGS, effectivePermissionsForRoles, needsLegacyPlatformOwnerRecovery, PLATFORM_SUB_ROLE_MAP, getSystemRoleBySlug } from "./permissions.ts";
 
 test("spec sub-role -> concrete role mapping is as agreed", () => {
-  assert.deepEqual(PLATFORM_SUB_ROLE_MAP["platform_super_admin"], ["platform_owner", "platform_admin"]);
+  assert.deepEqual(PLATFORM_SUB_ROLE_MAP["platform_super_admin"], ["platform_owner"]);
   assert.deepEqual(PLATFORM_SUB_ROLE_MAP["platform_ops"], ["ops_manager"]);
   assert.deepEqual(PLATFORM_SUB_ROLE_MAP["platform_finance"], ["finance_manager"]);
   assert.deepEqual(PLATFORM_SUB_ROLE_MAP["platform_support"], ["platform_support"]);

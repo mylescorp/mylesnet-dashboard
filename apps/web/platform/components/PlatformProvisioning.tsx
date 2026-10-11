@@ -17,7 +17,7 @@ export function PlatformProvisioning() {
   const { user } = useUserProfile();
   const roles = user?.roles.map(role => role.slug);
   const canManage = canManagePlatformTenants(roles);
-  const canDelete = hasAnyRole(roles ?? [], ["platform_super_admin", "platform_owner", "platform_admin"]);
+  const canDelete = hasAnyRole(roles ?? [], ["platform_super_admin", "platform_owner"]);
   const { results: rows, status: pageStatus, loadMore } = usePaginatedQuery(provisioning.listRequests, {}, { initialNumItems: 50 });
   const { results: markets, status: marketPageStatus, loadMore: loadMoreMarkets } = usePaginatedQuery(provisioning.listMarkets, canManage ? {} : "skip", { initialNumItems: 50 });
   const decide = useMutation(provisioning.decide);
