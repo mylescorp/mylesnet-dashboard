@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { MutationCtx, action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { hasPermission, hasPlatformSubRole, isPlatformUser, requirePermission, requirePlatformSubRole, requirePlatformUser, resolveRoles } from "./lib/auth";
 import { tenantRoleHasPermission } from "./lib/permissions";
@@ -295,12 +295,53 @@ export const canReadPlatformReports = internalQuery({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.userId);
-    if (!user || user.deactivatedAt !== undefined || user.isActive === false) return false;
+    if (
+      !user ||
+      user.isActive === false ||
+      user.deactivatedAt !== undefined ||
+      user.deletedAt !== undefined
+    ) {
+      return false;
+    }
     const roles = await resolveRoles(ctx, user);
     return (
       isPlatformUser(roles) &&
       hasPermission(roles, "reports:generate") &&
       hasPlatformSubRole(roles, REPORT_PLATFORM_SUB_ROLES)
+    );
+  },
+});
+
+/**
+ * Whether the caller may read a specific tenant's report data: an active
+ * account with an active membership of that operable tenant holding
+ * `reports:generate`. Used to authorize a scheduled export before any artifact
+ * is generated, so a revoked creator leaves nothing behind.
+ */
+export const canReadTenantReports = internalQuery({
+  args: { userId: v.id("users"), tenantId: v.id("tenants") },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (
+      !user ||
+      user.isActive === false ||
+      user.deactivatedAt !== undefined ||
+      user.deletedAt !== undefined
+    ) {
+      return false;
+    }
+    const tenant = await ctx.db.get(args.tenantId);
+    if (!tenant || !canTenantOperate(tenant.status)) return false;
+    const membership = await ctx.db
+      .query("tenantMemberships")
+      .withIndex("by_user_tenant", (q) =>
+        q.eq("userId", args.userId).eq("tenantId", args.tenantId),
+      )
+      .first();
+    return Boolean(
+      membership &&
+        membership.status === "active" &&
+        tenantRoleHasPermission(membership.role, "reports:generate"),
     );
   },
 });
@@ -345,30 +386,89 @@ export const generateReport = action({
       platformWide: tenantId ? false : true,
     });
 
-    let fileId: string | undefined;
+    let fileId: Id<"_storage">;
     if (args.format === "csv") {
       const csv = toCsv(data.header, data.rows);
       const blob = new Blob([csv], { type: "text/csv" });
-      fileId = (await ctx.storage.store(blob)) as string;
+      fileId = await ctx.storage.store(blob);
     } else {
       // PDF: minimal, dependency-free HTML snapshot rendered to a stored blob.
       const html = `<html><body><h1>${args.dataset} report</h1><pre>${JSON.stringify(data, null, 2)}</pre></body></html>`;
       const blob = new Blob([html], { type: "text/html" });
-      fileId = (await ctx.storage.store(blob)) as string;
+      fileId = await ctx.storage.store(blob);
     }
 
-    const exportId: string = await ctx.runMutation(internal.scheduledReports.recordExport, {
-      scheduledReportId: args.scheduledReportId,
-      requestedBy: reporter._id,
-      format: args.format,
-      scopeFilter: args.scopeFilter,
-      dataset: args.dataset,
-      fileId: fileId as never,
-      tenantId: tenantId ?? undefined,
-    });
+    let exportId: string;
+    try {
+      exportId = await ctx.runMutation(internal.scheduledReports.recordExport, {
+        scheduledReportId: args.scheduledReportId,
+        requestedBy: reporter._id,
+        format: args.format,
+        scopeFilter: args.scopeFilter,
+        dataset: args.dataset,
+        fileId,
+        tenantId: tenantId ?? undefined,
+      });
+    } catch (error) {
+      // The writer re-checks access; drop the just-stored artifact if it
+      // rejects so the failed export leaves no orphaned file behind.
+      await ctx.storage.delete(fileId);
+      throw error;
+    }
     return { exportId };
   },
 });
+
+/**
+ * Prove, inside the writer, that the exporting operator may create a report
+ * export before any row is written. A tenant export needs an operable tenant
+ * and an active membership of it holding `reports:generate`; an unscoped export
+ * needs the reporting platform sub-role. This re-checks `generateReport`'s
+ * admission at the writer so the authorization never depends on every caller.
+ *
+ * The check verifies: active account, platform sub-role with reports:generate,
+ * or active tenant membership with reports:generate. All other paths throw.
+ */
+async function requireReportExportActor(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  tenantId: Id<"tenants"> | undefined,
+): Promise<void> {
+  const user = await ctx.db.get(userId);
+  if (
+    !user ||
+    user.isActive === false ||
+    user.deactivatedAt !== undefined ||
+    user.deletedAt !== undefined
+  ) {
+    throw new Error("Unauthorized: report export requires an active account");
+  }
+  const roles = await resolveRoles(ctx, user);
+  if (
+    isPlatformUser(roles) &&
+    hasPermission(roles, "reports:generate") &&
+    hasPlatformSubRole(roles, REPORT_PLATFORM_SUB_ROLES)
+  ) {
+    return;
+  }
+  if (tenantId) {
+    const tenant = await ctx.db.get(tenantId);
+    const membership = await ctx.db
+      .query("tenantMemberships")
+      .withIndex("by_user_tenant", (q) => q.eq("userId", userId).eq("tenantId", tenantId))
+      .first();
+    if (
+      tenant &&
+      canTenantOperate(tenant.status) &&
+      membership &&
+      membership.status === "active" &&
+      tenantRoleHasPermission(membership.role, "reports:generate")
+    ) {
+      return;
+    }
+  }
+  throw new Error("Unauthorized: report export requires tenant or platform report access");
+}
 
 export const recordExport = internalMutation({
   args: {
@@ -381,6 +481,9 @@ export const recordExport = internalMutation({
     tenantId: v.optional(v.id("tenants")),
   },
   handler: async (ctx, args) => {
+    // Authorization first: the writer never relies on its callers to have
+    // checked access before it inserts.
+    await requireReportExportActor(ctx, args.requestedBy, args.tenantId);
     const id = await ctx.db.insert("reportExports", {
       tenantId: args.tenantId,
       scheduledReportId: args.scheduledReportId,
@@ -433,15 +536,21 @@ export const triggerDueReports = internalAction({
             ? "financials"
             : "revenue";
       try {
-        // A scheduled report without a tenant is a platform-wide export: the
-        // creator must still hold the reporting sub-role at generation time.
-        // A missing owner is never permission to read every tenant.
-        if (report.tenantId === undefined) {
-          const authorized = await ctx.runQuery(internal.scheduledReports.canReadPlatformReports, {
-            userId: report.createdBy,
-          });
-          if (!authorized) continue;
-        }
+        // Verify the creator's access BEFORE reading data or storing a file: a
+        // scheduled report without a tenant is platform-wide and needs the
+        // reporting sub-role, while a tenant report needs an active membership.
+        // A missing owner is never permission to read every tenant, and a
+        // revoked creator must not leave an orphaned artifact behind.
+        const authorized =
+          report.tenantId === undefined
+            ? await ctx.runQuery(internal.scheduledReports.canReadPlatformReports, {
+                userId: report.createdBy,
+              })
+            : await ctx.runQuery(internal.scheduledReports.canReadTenantReports, {
+                userId: report.createdBy,
+                tenantId: report.tenantId,
+              });
+        if (!authorized) continue;
         const data = await ctx.runQuery(internal.scheduledReports.collectReportRows, {
           dataset,
           month: now.toISOString().slice(0, 7),
@@ -449,16 +558,24 @@ export const triggerDueReports = internalAction({
           platformWide: report.tenantId === undefined,
         });
         const blob = new Blob([toCsv(data.header, data.rows)], { type: "text/csv" });
-        const fileId = (await ctx.storage.store(blob)) as string;
-        await ctx.runMutation(internal.scheduledReports.recordExport, {
-          scheduledReportId: report._id,
-          requestedBy: report.createdBy,
-          format: "csv",
-          scopeFilter: report.scopeFilter,
-          dataset,
-          fileId: fileId as never,
-          tenantId: report.tenantId,
-        });
+        const fileId = await ctx.storage.store(blob);
+        try {
+          await ctx.runMutation(internal.scheduledReports.recordExport, {
+            scheduledReportId: report._id,
+            requestedBy: report.createdBy,
+            format: "csv",
+            scopeFilter: report.scopeFilter,
+            dataset,
+            fileId,
+            tenantId: report.tenantId,
+          });
+        } catch (error) {
+          // The writer re-checks access; if it still rejects, drop the file that
+          // will never be referenced so a repeated daily run cannot accumulate
+          // orphaned artifacts.
+          await ctx.storage.delete(fileId);
+          throw error;
+        }
         await ctx.runMutation(internal.scheduledReports.touchLastRun, { reportId: report._id });
         generated.push(report.name);
       } catch {
