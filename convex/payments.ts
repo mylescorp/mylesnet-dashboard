@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireTenantPermission } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
+import { normalizePaymentIdempotencyKey } from "./lib/paymentIdempotencyCore";
 
 export const list = query({
   args: {
@@ -83,6 +84,25 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const { user, tenantId } = await requireTenantPermission(ctx, "payments:create");
 
+    // Idempotency: a retried submission (a double click, or a client retry after
+    // a timeout) must not record the same payment twice. Operators already treat
+    // (gateway, reference) as unique inside one tenant, so a matching row is
+    // returned instead of inserting a duplicate.
+    const idempotency = normalizePaymentIdempotencyKey({
+      gateway: args.gateway,
+      reference: args.reference,
+    });
+    const existing = await ctx.db
+      .query("payments")
+      .withIndex("by_tenant_gateway_reference", (q) =>
+        q
+          .eq("tenantId", tenantId)
+          .eq("gateway", idempotency.gateway)
+          .eq("reference", idempotency.reference),
+      )
+      .first();
+    if (existing) return existing._id;
+
     const references = [args.subscriberId, args.invoiceId, args.planId];
     const [subscriber, invoice, plan] = await Promise.all(
       references.map((id) => (id ? ctx.db.get(id) : null)),
@@ -97,6 +117,8 @@ export const create = mutation({
 
     const id = await ctx.db.insert("payments", {
       ...args,
+      gateway: idempotency.gateway,
+      reference: idempotency.reference,
       tenantId,
       operatorId: user._id,
       createdAt: Date.now(),
@@ -109,7 +131,12 @@ export const create = mutation({
       entityId: id,
       changedBy: user._id,
       tenantId,
-      after: { amount: args.amount, currency: args.currency, gateway: args.gateway, reference: args.reference },
+      after: {
+        amount: args.amount,
+        currency: args.currency,
+        gateway: idempotency.gateway,
+        reference: idempotency.reference,
+      },
     });
 
     return id;

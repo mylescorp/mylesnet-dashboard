@@ -200,7 +200,7 @@ export default defineSchema({
     operatorId: v.optional(v.id("users")),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_tenant", ["tenantId"]).index("by_subscriber", ["subscriberId"]).index("by_invoice", ["invoiceId"]).index("by_status", ["status"]).index("by_date", ["paymentDate"]),
+  }).index("by_tenant", ["tenantId"]).index("by_subscriber", ["subscriberId"]).index("by_invoice", ["invoiceId"]).index("by_status", ["status"]).index("by_date", ["paymentDate"]).index("by_tenant_gateway_reference", ["tenantId", "gateway", "reference"]),
 
   invoices: defineTable({
     ...tenantScope,
