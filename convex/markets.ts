@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { Doc } from "./_generated/dataModel";
 import { requirePermission, requirePlatformSubRole, requirePlatformUser } from "./lib/auth";
-import { readTenantList, enforceTenantOnResource } from "./lib/tenant";
+import { readTenantList, readScopedTenant, enforceTenantOnResource } from "./lib/tenant";
 import { logAudit } from "./lib/auditLog";
 
 export const listMarkets = query({
@@ -37,8 +37,10 @@ export const createMarket = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "markets:manage");
+    const scope = await readScopedTenant(ctx);
     const now = Date.now();
     const marketId = await ctx.db.insert("markets", {
+      tenantId: scope.tenantId ?? undefined,
       name: args.name,
       country: args.country,
       currency: args.currency,
