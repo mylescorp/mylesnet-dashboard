@@ -241,3 +241,10 @@ Correction note, 2026-10-11: the build command value shown in the entry above wa
 - **Changes:** The shared landing and panel token system from the design-system worktree is already present on the current base. Restored the audience-pill border adjustment, moved the early theme initializer into a public script, and added the default light-theme brand color input constant. The affiliate-policy route from the older source worktree is absent on current `origin/main` and was not recreated.
 - **Verification:** `pnpm typecheck`, `pnpm test` (32 tests), `pnpm lint` (zero errors, 15 existing warnings), `node --check` for the theme initializer, and `git diff --check` passed. `pnpm build` was attempted with a non-secret placeholder for `NEXT_PUBLIC_CONVEX_URL` but could not fetch Google Fonts because outbound network access was unavailable.
 - **Status:** Branch `feat/restore-landing-updates`; pull request review pending. No production deployment.
+
+### 2026-10-12 — Tenant read isolation merged (Foundation)
+
+- **Scope:** Land tenant isolation for analytics, report definitions, export history, generated reports, and the ownership backfill.
+- **Changes:** Gated cross-tenant reads behind the active tenant and explicit platform sub-roles; added `canReadTenantReports` and `requireReportExportActor` so a scheduled export authorizes its creator before reading data or storing a file and drops the stored artifact if the writer still rejects; audited every ownership change and export write; bounded the backfill's per-batch and per-agent reads.
+- **Verification:** Web typecheck clean; repository `node --test` 206/206; lint zero errors (14 pre-existing warnings outside the diff); convex-tree `tsc` clean except 4 baseline test-file errors identical at `origin/main`; `next build` passed using a non-secret placeholder for the Convex URL variable.
+- **Status:** Merged at `81a1803`. See PR #80.
