@@ -3189,6 +3189,13 @@ a.landing-card:hover .landing-card-title,
   .landing-preview-chart-labels span { font-size: var(--font-size-50); }
 }
 
+/* Narrow phones: drop the row meta so the row title keeps its width and the
+   icon, title, and badge never spill or shrink the label away. */
+@media (max-width: 480px) {
+  .landing-preview-row { flex-wrap: wrap; }
+  .landing-preview-row small { display: none; }
+}
+
 /* ============================================================
    Landing interaction layer — full hover coverage, one language
    (token + contrast audit, 2026-10-07).
