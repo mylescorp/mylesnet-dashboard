@@ -6,7 +6,6 @@ import {
   MapPin,
   Target,
 } from "lucide-react";
-import { getCompanyContact } from "@/landing/content/contact";
 import {
   COMPANY_LEADERSHIP,
   COMPANY_VALUES,
@@ -25,8 +24,6 @@ export const metadata = pageMetadata(
 );
 
 export default function MylesCorpPage() {
-  const contact = getCompanyContact();
-
   return (
     <>
       <section className="landing-page-banner">
@@ -227,7 +224,7 @@ export default function MylesCorpPage() {
                 eyebrow={leader.role}
                 title={leader.name}
                 body={leader.scope}
-                outcomes={}
+                outcomes={[]}
               />
             ))}
           </div>
