@@ -97,6 +97,7 @@ export const logInvitationAudit = internalMutation({
       entityTable: "invitations",
       entityId: args.workosInvitationId,
       changedBy: args.actorUserId,
+      tenantId: null,
       after: { email: args.email, roleSlug: args.roleSlug },
     });
   },

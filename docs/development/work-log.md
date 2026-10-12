@@ -200,3 +200,51 @@ separate archive policy.
 ### 2026-10-10 - Greptile review
 
 - Review record: see PR #73.
+
+### 2026-10-10 — Shared landing and panel design tokens
+
+- **Scope:** Align the public landing page and shared workspace, Platform, Admin, Reseller, and Partner panels on one light/dark semantic and component-token system.
+- **Changes:** Added shared page gutter and card shape, border, padding, gap, and elevation tokens; made workspace and landing cards consume them; moved landing fonts back to the existing shared font tokens; aligned landing content width to the documented 1140px token; made native controls follow the resolved light/dark scheme; extended typed token references and token-check guards; corrected source paths and updated repository and canonical vault token documentation.
+- **Verification:** Design-token check, full web TypeScript check, and `git diff --check` passed. ESLint completed with zero errors and 15 existing warnings. Production build was blocked by the isolated worktree's dependency symlinks: Turbopack rejects links outside the worktree and the webpack fallback could not parse TypeScript's config output. Browser visual review could not run because the sandbox denied binding the local dev server port.
+- **Status:** Changes are in isolated branch `feat/unified-design-system` at `/home/myles/Work/mylesnet-design-system`. The source checkout's existing uncommitted changes remain untouched. The vault work-log entry is synchronized.
+
+### 2026-10-10 — Greptile review
+
+- Review record: see PR #77.
+
+### 2026-10-10 - Tenant panel end-to-end program kickoff
+
+- **Scope:** Start the long-horizon program to make the tenant panel satisfy the full P1/P2/P3 list in `docs/tenant-panel-feature-list.md`.
+- **Changes:** Copied the feature list into the repo at `docs/tenant-panel-feature-list.md`; ran a repo-evidence audit of every feature ID and wrote `docs/tenant-panel-audit.md`; wrote program goal records `docs/goal/goal.md`, `progress.md`, `decisions.md`, `blockers.md`, and `lessons.md`.
+- **Verification:** Baseline gates on the isolated worktree are clean: `pnpm typecheck` passes and `pnpm test` passes 171/171. The owner checkout was left untouched.
+- **Status:** Audit complete. The tenant panel is a narrow billing and operations workspace; the large majority of features are Partial or Missing. Foundation defects to fix first: `logAudit` writes no `tenantId` (tenant audit log returns empty) and `analytics`, `scheduledReports`, and `notifications` are not tenant-scoped. Production deploy and live verification are blocked on an approved production Convex target/credential and a real test tenant. Work runs in the isolated worktree `/home/myles/Projects/mylesnet-tenant-panel` on `feat/tenant-panel-program`.
+
+### 2026-10-10 — Tenant analytics isolation and activity ownership
+
+- **Scope:** Close a verified cross-workspace read risk in tenant analytics and derive revenue-ledger ownership from trusted agent/market records.
+- **Changes:** Analytics reads now authorize the caller, verify a requested market belongs to the active workspace, and scope daily snapshots, subscriber snapshots, top-agent activity, and sales mix to verified tenant markets. Tagged rows use tenant/time or tenant/date indexes; legacy untagged rows are included only through markets owned by that workspace. New activity ledger rows derive `tenantId` from a verified market, require a same-workspace agent assignment (active for voucher sales), validate all assigned markets and any linked voucher, and validate monetary/date/currency values. Subscriber snapshot writes also stamp the market-derived tenant ID. Added composite indexes and pure ownership/scope regression tests.
+- **Verification:** `pnpm typecheck` passes for web and admin; `pnpm lint` passes with one existing warning in `BandwidthCalculatorTool.tsx`; all 45 tests pass; token checks and `git diff --check` pass.
+- **Status:** Implemented in the isolated `codex/platform-production` worktree; source files in the owner checkout remain untouched and the matching work-log/plan entries were synchronized. Remaining: migrate older untagged rows through the approved bounded migration process, authenticate role and tenant-isolation behavior against a non-production Convex deployment, and continue the full module/app-boundary/release plan.
+
+### 2026-10-11 — Negative RSC performance timestamps
+
+- **Scope:** Fix the runtime error on guarded routes while retaining server-side authorization and redirects.
+- **Evidence and change:** React's Server Component performance track attempted to measure errored or aborted components with a negative or uninitialized child end timestamp. Added a reproducible patch to the four pinned Next.js development client bundles that emits the profiling entry only when the end timestamp is valid, plus a regression test for the applied patch. No runtime package or auth behavior changed.
+- **Verification:** `pnpm typecheck` passed; repository `node --test` passed 31/31; `pnpm lint` passed with 15 pre-existing warnings; `pnpm build` passed using a non-secret local placeholder for `NEXT_PUBLIC_CONVEX_URL` and generated 131 routes. `pnpm audit --prod` could not reach the npm registry (DNS `EAI_AGAIN`). A controlled local run could not bind `localhost:3000` because the existing port is occupied, so its listener was preserved. No production deploy.
+- **Status:** Branch `fix/routes-negative-rsc-timestamp`; PR and review pending. See `docs/route-fix-log.md`.
+
+Correction note, 2026-10-11: the build command value shown in the entry above was a non-secret CI placeholder. Future committed work logs record the variable name only.
+
+### 2026-10-11 — Landing theme restoration
+
+- **Scope:** Restore the remaining reviewed landing and theme changes from the owner worktrees onto current `origin/main`.
+- **Changes:** The shared landing and panel token system from the design-system worktree is already present on the current base. Restored the audience-pill border adjustment, moved the early theme initializer into a public script, and added the default light-theme brand color input constant. The affiliate-policy route from the older source worktree is absent on current `origin/main` and was not recreated.
+- **Verification:** `pnpm typecheck`, `pnpm test` (32 tests), `pnpm lint` (zero errors, 15 existing warnings), `node --check` for the theme initializer, and `git diff --check` passed. `pnpm build` was attempted with a non-secret placeholder for `NEXT_PUBLIC_CONVEX_URL` but could not fetch Google Fonts because outbound network access was unavailable.
+- **Status:** Branch `feat/restore-landing-updates`; pull request review pending. No production deployment.
+
+### 2026-10-12 — Tenant read isolation merged (Foundation)
+
+- **Scope:** Land tenant isolation for analytics, report definitions, export history, generated reports, and the ownership backfill.
+- **Changes:** Gated cross-tenant reads behind the active tenant and explicit platform sub-roles; added `canReadTenantReports` and `requireReportExportActor` so a scheduled export authorizes its creator before reading data or storing a file and drops the stored artifact if the writer still rejects; audited every ownership change and export write; bounded the backfill's per-batch and per-agent reads.
+- **Verification:** Web typecheck clean; repository `node --test` 206/206; lint zero errors (14 pre-existing warnings outside the diff); convex-tree `tsc` clean except 4 baseline test-file errors identical at `origin/main`; `next build` passed using a non-secret placeholder for the Convex URL variable.
+- **Status:** Merged at `81a1803`. See PR #80.

@@ -26,14 +26,19 @@ export type PanelSubdomain = (typeof PANEL_SUBDOMAINS)[number];
 
 export type MylesnetHost =
   | { kind: "apex" | "development"; hostname: string; port?: string }
-  | { kind: "panel"; hostname: string; panel: PanelSubdomain }
-  | { kind: "tenant"; hostname: string; tenantSlug: string }
+  | { kind: "panel"; hostname: string; panel: PanelSubdomain; port?: string }
+  | { kind: "tenant"; hostname: string; tenantSlug: string; port?: string }
   | { kind: "unknown"; hostname: string };
 
 export const PANEL_SUBDOMAIN_SET: ReadonlySet<string> = new Set<string>(PANEL_SUBDOMAINS);
 
 /** Tenant slug shape: 2-63 lowercase alphanumerics with optional single hyphens. */
 export const TENANT_SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+
+/** Prefer the request's public Host header over a framework-derived URL host. */
+export function requestHostFromHeaders(headers: Headers, fallback: string): string {
+  return headers.get("host")?.trim() || fallback;
+}
 
 export function isValidTenantSlug(slug: string | undefined | null): slug is string {
   return typeof slug === "string" && slug.length >= 2 && slug.length <= 63 && TENANT_SLUG_RE.test(slug);
@@ -92,17 +97,43 @@ export function resolveMylesnetHost(
   // WorkOS wildcard redirects and our tenancy contract intentionally support
   // exactly one label before the registered product domain.
   if (!label || label.includes(".")) return { kind: "unknown", hostname };
-  if (PANEL_SUBDOMAIN_SET.has(label)) return { kind: "panel", hostname, panel: label as PanelSubdomain };
-  if (isValidTenantSlug(label) && !/^\d+$/.test(label)) return { kind: "tenant", hostname, tenantSlug: label };
+  const localPort = base === "localhost" ? port : undefined;
+  if (PANEL_SUBDOMAIN_SET.has(label)) return { kind: "panel", hostname, panel: label as PanelSubdomain, ...(localPort ? { port: localPort } : {}) };
+  if (isValidTenantSlug(label) && !/^\d+$/.test(label)) return { kind: "tenant", hostname, tenantSlug: label, ...(localPort ? { port: localPort } : {}) };
   return { kind: "unknown", hostname };
 }
 
 /** Return the only callback URI that may be supplied to AuthKit for a host. */
 export function callbackUriForHost(host: MylesnetHost, protocol = "https:"): string | null {
   if (host.kind === "unknown") return null;
-  const safeProtocol = host.kind === "development" ? protocol : "https:";
-  const port = host.kind === "development" && host.port ? `:${host.port}` : "";
+  const localSubdomain = (host.kind === "panel" || host.kind === "tenant") && host.hostname.endsWith(".localhost");
+  const safeProtocol = host.kind === "development" || localSubdomain ? protocol : "https:";
+  const port = (host.kind === "development" || localSubdomain) && host.port ? `:${host.port}` : "";
   return `${safeProtocol}//${host.hostname}${port}/auth/callback`;
+}
+
+/** Resolve all host-scoped auth decisions from the same incoming request. */
+export function resolveMylesnetRequest(
+  headers: Headers,
+  fallbackHost: string,
+  baseDomain = MYLESNET_PUBLIC_DOMAIN,
+  protocol?: string,
+): { requestHost: string; host: MylesnetHost; redirectUri: string | null; tenantSlug: string | null } {
+  const requestHost = requestHostFromHeaders(headers, fallbackHost);
+  const host = resolveMylesnetHost(requestHost, baseDomain);
+  const forwardedProtocol = headers.get("x-forwarded-proto")?.split(",", 1)[0]?.trim().toLowerCase();
+  const localHost = host.kind === "development" ||
+    ((host.kind === "panel" || host.kind === "tenant") && host.hostname.endsWith(".localhost"));
+  const requestProtocol = protocol ??
+    (forwardedProtocol === "http" || forwardedProtocol === "https"
+      ? `${forwardedProtocol}:`
+      : localHost ? "http:" : "https:");
+  return {
+    requestHost,
+    host,
+    redirectUri: callbackUriForHost(host, requestProtocol),
+    tenantSlug: host.kind === "tenant" ? host.tenantSlug : null,
+  };
 }
 
 /** True when the host has no tenant subdomain (apex, `localhost`, bare IP). */

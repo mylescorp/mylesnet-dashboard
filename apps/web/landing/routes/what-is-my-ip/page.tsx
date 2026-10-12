@@ -4,6 +4,7 @@ import { pageMetadata } from "@/landing/content/seo";
 import LandingCard from "@/landing/components/LandingCard";
 import LandingCtaSection from "@/landing/components/LandingCtaSection";
 import IpDisplay, { type IpField } from "@/landing/components/IpDisplay";
+import { classifyAddress } from "@/shared/lib/ip-address";
 
 export const metadata = pageMetadata(
   "What is my IP",
@@ -101,12 +102,14 @@ export default async function WhatIsMyIpPage() {
     { label: "Forwarded for", value: forwarded },
   ];
 
-  // Determine connection context for the guidance section
-  const isPrivateRange = ip?.match(
-    /^(10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|192\.168\.|127\.|169\.254\.)/
-  );
+  // Determine connection context for the guidance section.
+  const addressKind = classifyAddress(ip);
+  const isLocalOnly = addressKind === "loopback" || addressKind === "link-local";
+  const isPrivateRange = addressKind === "private";
+  const isV6 = ip?.includes(":") ?? false;
   const hasMultipleForwards = forwarded && forwarded.split(",").length > 1;
-  const looksLikeCgnat = ip && !isPrivateRange && hasMultipleForwards;
+  const looksLikeCgnat =
+    ip !== null && addressKind === "public" && hasMultipleForwards;
 
   return (
     <>
@@ -148,27 +151,59 @@ export default async function WhatIsMyIpPage() {
             <div className="landing-grid" style={{ marginTop: "var(--space-4)" }}>
               <LandingCard
                 icon={<Shield size={20} aria-hidden="true" />}
-                title={isPrivateRange ? "Private / LAN address" : "Public address"}
+                title={
+                  addressKind === "loopback"
+                    ? "Loopback address"
+                    : addressKind === "link-local"
+                      ? "Link-local address"
+                      : addressKind === "private"
+                        ? "Private / LAN address"
+                        : addressKind === "public"
+                          ? "Public address"
+                          : "Address unavailable"
+                }
                 body={
-                  isPrivateRange
-                    ? "This IP is from a private range (RFC 1918). You are likely behind a NAT — the address above is what the internet sees, not your local LAN address."
-                    : "This is a publicly routable IPv4 address. It can be reached directly from the internet unless firewalled."
+                  addressKind === "loopback"
+                    ? "The request never left this machine — the server saw a loopback address (localhost), which is what happens when you run the site locally or behind a local proxy."
+                    : addressKind === "link-local"
+                      ? "An automatically assigned address (169.254.0.0/16 or fe80::/10) that only works on the local network segment. It is never routed."
+                      : addressKind === "private"
+                        ? "This IP is from a private range (RFC 1918 or an IPv6 ULA). You are likely behind a NAT — the address above is your local side, not what the internet sees."
+                        : addressKind === "public"
+                          ? "This is a publicly routable address. It can be reached directly from the internet unless firewalled."
+                          : "No address could be read from this request."
                 }
               />
               <LandingCard
                 icon={looksLikeCgnat ? <Wifi size={20} aria-hidden="true" /> : <Globe size={20} aria-hidden="true" />}
-                title={looksLikeCgnat ? "Likely carrier-grade NAT" : "Direct or ISP NAT"}
+                title={
+                  looksLikeCgnat
+                    ? "Likely carrier-grade NAT"
+                    : isLocalOnly
+                      ? "Local-only address"
+                      : isPrivateRange
+                        ? "Behind NAT"
+                        : "Direct or ISP NAT"
+                }
                 body={
                   looksLikeCgnat
-                    ? "Multiple addresses in X-Forwarded-For suggest you are behind carrier-grade NAT (common on mobile networks). Many subscribers share one public IP."
-                    : "No carrier-grade NAT detected in the forwarding chain. Your ISP likely assigns a unique public IP per connection."
+                    ? "Multiple addresses in the forwarding chain suggest you are behind carrier-grade NAT (common on mobile networks). Many subscribers share one public IP."
+                    : isLocalOnly
+                      ? "This address only exists on this machine or network segment, so no network translation is involved."
+                      : isPrivateRange
+                        ? "A private address means a router is translating between your network and the internet. Carrier-grade NAT would add a second layer upstream."
+                        : "No carrier-grade NAT detected in the forwarding chain. Your ISP likely assigns a unique public IP per connection."
                 }
               />
               <LandingCard
                 icon={<Network size={20} aria-hidden="true" />}
                 title="IPv6"
                 body={
-                  "This tool shows IPv4 only. If your network supports IPv6, the address above may not be the one used for modern destinations — check your router status for the IPv6 prefix."
+                  addressKind === "unknown"
+                    ? "No address was reported, so there is no address family to describe."
+                    : isV6
+                      ? "The address above is IPv6. Modern destinations may reach you here even when IPv4 still works — firewall and allow-list rules should cover both."
+                      : "The address above is IPv4. If your network also has IPv6, destinations may reach you over a different address — check your router status for the IPv6 prefix."
                 }
               />
             </div>

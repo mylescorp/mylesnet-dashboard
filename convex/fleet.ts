@@ -171,6 +171,7 @@ export const updateDeviceFleetRow = mutation({
       entityTable: "platformDevices",
       entityId: args.deviceId,
       changedBy: user._id,
+      tenantId: device.tenantId ?? null,
       before: { name: device.name, deviceKind: device.deviceKind, firmwareVersion: device.firmwareVersion, provisioningStatus: device.provisioningStatus },
       after: { name: name ?? device.name, deviceKind: deviceKind ?? device.deviceKind, firmwareVersion: args.firmwareVersion ?? device.firmwareVersion, provisioningStatus: args.provisioningStatus ?? device.provisioningStatus },
     });
@@ -218,7 +219,7 @@ export const registerDevice = mutation({
       createdAt: now,
       updatedAt: now,
     });
-    await logAudit(ctx, { action: "fleet.device_registered", entityTable: "platformDevices", entityId: deviceId, changedBy: user._id, after: { tenantId: market.tenantId, marketId: market._id, name, deviceKind, macAddress } });
+    await logAudit(ctx, { action: "fleet.device_registered", entityTable: "platformDevices", entityId: deviceId, changedBy: user._id, tenantId: market.tenantId ?? null, after: { tenantId: market.tenantId, marketId: market._id, name, deviceKind, macAddress } });
     return deviceId;
   },
 });
@@ -239,7 +240,7 @@ export const archiveDevice = mutation({
     if (!reason || reason.length > 500) throw new Error("Archive reason must be 1–500 characters");
     const now = Date.now();
     await ctx.db.patch(device._id, { deletedAt: now, deletedBy: user._id, deleteReason: reason, updatedAt: now });
-    await logAudit(ctx, { action: "fleet.device_archived", entityTable: "platformDevices", entityId: device._id, changedBy: user._id, before: { deletedAt: device.deletedAt }, after: { deletedAt: now, reason } });
+    await logAudit(ctx, { action: "fleet.device_archived", entityTable: "platformDevices", entityId: device._id, changedBy: user._id, tenantId: device.tenantId ?? null, before: { deletedAt: device.deletedAt }, after: { deletedAt: now, reason } });
   },
 });
 
@@ -252,6 +253,6 @@ export const restoreDevice = mutation({
     await assertMarketReady(ctx, device.marketId);
     const now = Date.now();
     await ctx.db.patch(device._id, { deletedAt: undefined, deletedBy: undefined, deleteReason: undefined, updatedAt: now });
-    await logAudit(ctx, { action: "fleet.device_restored", entityTable: "platformDevices", entityId: device._id, changedBy: user._id, before: { deletedAt: device.deletedAt }, after: { deletedAt: null } });
+    await logAudit(ctx, { action: "fleet.device_restored", entityTable: "platformDevices", entityId: device._id, changedBy: user._id, tenantId: device.tenantId ?? null, before: { deletedAt: device.deletedAt }, after: { deletedAt: null } });
   },
 });

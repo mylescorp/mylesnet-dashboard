@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { Doc } from "./_generated/dataModel";
 import { requirePermission, requirePlatformSubRole, requirePlatformUser } from "./lib/auth";
-import { readTenantList, enforceTenantOnResource } from "./lib/tenant";
+import { readTenantList, readScopedTenant, enforceTenantOnResource } from "./lib/tenant";
 import { logAudit } from "./lib/auditLog";
 
 export const listMarkets = query({
@@ -37,8 +37,10 @@ export const createMarket = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "markets:manage");
+    const scope = await readScopedTenant(ctx);
     const now = Date.now();
     const marketId = await ctx.db.insert("markets", {
+      tenantId: scope.tenantId ?? undefined,
       name: args.name,
       country: args.country,
       currency: args.currency,
@@ -70,7 +72,7 @@ export const updateMarketLifecycleStatus = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "markets:manage");
-    const market = await ctx.db.get(args.marketId);
+    const market = await enforceTenantOnResource(ctx, await ctx.db.get(args.marketId), "market");
     if (!market) throw new Error("Market not found");
 
     await ctx.db.patch(args.marketId, {
@@ -83,6 +85,7 @@ export const updateMarketLifecycleStatus = mutation({
       entityTable: "markets",
       entityId: args.marketId,
       changedBy: user._id,
+      tenantId: market.tenantId,
       before: { lifecycleStatus: market.lifecycleStatus },
       after: { lifecycleStatus: args.lifecycleStatus },
     });
@@ -104,7 +107,7 @@ export const softDeleteMarket = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "markets:manage");
-    const market = await ctx.db.get(args.marketId);
+    const market = await enforceTenantOnResource(ctx, await ctx.db.get(args.marketId), "market");
     if (!market) throw new Error("Market not found");
 
     const activeAssignments = await ctx.db
@@ -145,6 +148,7 @@ export const softDeleteMarket = mutation({
       entityTable: "markets",
       entityId: args.marketId,
       changedBy: user._id,
+      tenantId: market.tenantId,
       before: { status: market.status },
       after: { status: "deleted", cascaded: !!args.forceCascade },
     });
@@ -155,7 +159,7 @@ export const restoreMarket = mutation({
   args: { marketId: v.id("markets") },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "markets:manage");
-    const market = await ctx.db.get(args.marketId);
+    const market = await enforceTenantOnResource(ctx, await ctx.db.get(args.marketId), "market");
     if (!market) throw new Error("Market not found");
 
     // Restoring does NOT auto-reactivate whatever was reassigned away while
@@ -172,6 +176,7 @@ export const restoreMarket = mutation({
       entityTable: "markets",
       entityId: args.marketId,
       changedBy: user._id,
+      tenantId: market.tenantId,
     });
   },
 });
@@ -190,6 +195,8 @@ export const reportOperatingCost = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "markets:manage");
+    const market = await enforceTenantOnResource(ctx, await ctx.db.get(args.marketId), "market");
+    if (!market) throw new Error("Market not found");
     const existing = await ctx.db
       .query("marketOperatingCosts")
       .withIndex("by_market_month", (q) =>
@@ -210,6 +217,7 @@ export const reportOperatingCost = mutation({
         entityTable: "marketOperatingCosts",
         entityId: existing._id,
         changedBy: user._id,
+        tenantId: market?.tenantId,
         after: { yearMonth: args.yearMonth },
       });
       return existing._id;
@@ -229,6 +237,7 @@ export const reportOperatingCost = mutation({
       entityTable: "marketOperatingCosts",
       entityId: costId,
       changedBy: user._id,
+      tenantId: market?.tenantId,
       after: { yearMonth: args.yearMonth },
     });
     return costId;
@@ -391,6 +400,7 @@ export const platformCreateMarket = mutation({
       entityTable: "markets",
       entityId: marketId,
       changedBy: user._id,
+      tenantId: args.tenantId,
       after: { 
         tenantId: args.tenantId,
         name: args.name, 
@@ -445,6 +455,7 @@ export const platformUpdateMarket = mutation({
       entityTable: "markets",
       entityId: args.marketId,
       changedBy: user._id,
+      tenantId: market.tenantId ?? null,
       before,
       after: args.updates,
     });
@@ -509,6 +520,7 @@ export const platformSoftDeleteMarket = mutation({
       entityTable: "markets",
       entityId: args.marketId,
       changedBy: user._id,
+      tenantId: market.tenantId ?? null,
       before: { status: market.status },
       after: { status: "deleted", cascaded: !!args.forceCascade },
     });
@@ -541,6 +553,7 @@ export const platformRestoreMarket = mutation({
       entityTable: "markets",
       entityId: args.marketId,
       changedBy: user._id,
+      tenantId: market.tenantId ?? null,
     });
   },
 });

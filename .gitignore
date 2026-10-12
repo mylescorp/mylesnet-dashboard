@@ -41,3 +41,4 @@ mylesnet-structure.txt
 # OS/editor files
 .DS_Store
 Thumbs.db
+.vercel

@@ -60,6 +60,11 @@ export const runStartupMigrations = internalMutation({
       if (existing) continue;
 
       const rate = FALLBACK_RATE_TO_USD[row.currency] ?? FALLBACK_RATE_TO_USD.KSH;
+      // Stamp the owning tenant so tenant-scoped financial reads see these
+      // migrated rows. Startup migrations stay additive: a legacy row with no
+      // market owner is folded in unscoped and repaired by the later backfill.
+      const market = await ctx.db.get(row.marketId);
+      const tenantId = market?.tenantId;
       const expenses: {
         marketId: string;
         category: string;
@@ -71,6 +76,7 @@ export const runStartupMigrations = internalMutation({
         enteredBy: string;
         enteredAt: number;
         notes?: string;
+        tenantId?: string;
       }[] = [
         {
           marketId: row.marketId,
@@ -83,6 +89,7 @@ export const runStartupMigrations = internalMutation({
           enteredBy: row.reportedBy,
           enteredAt: row.reportedAt,
           notes: "migrated from marketOperatingCosts",
+          tenantId,
         },
       ];
       if (row.electricityCost > 0) {
@@ -97,6 +104,7 @@ export const runStartupMigrations = internalMutation({
           enteredBy: row.reportedBy,
           enteredAt: row.reportedAt,
           notes: "migrated from marketOperatingCosts",
+          tenantId,
         });
       }
       for (const entry of expenses) {
@@ -111,6 +119,7 @@ export const runStartupMigrations = internalMutation({
           enteredBy: entry.enteredBy as never,
           enteredAt: entry.enteredAt,
           notes: entry.notes,
+          tenantId: entry.tenantId as never,
         } as never);
       }
       results.operatingCosts += 1;

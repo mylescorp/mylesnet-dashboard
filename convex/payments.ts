@@ -108,6 +108,7 @@ export const create = mutation({
       entityTable: "payments",
       entityId: id,
       changedBy: user._id,
+      tenantId,
       after: { amount: args.amount, currency: args.currency, gateway: args.gateway, reference: args.reference },
     });
 
@@ -149,6 +150,7 @@ export const update = mutation({
       entityTable: "payments",
       entityId: id,
       changedBy: user._id,
+      tenantId,
       before: { status: payment.status },
       after: updates,
     });
@@ -185,6 +187,7 @@ export const refund = mutation({
       entityTable: "payments",
       entityId: args.id,
       changedBy: user._id,
+      tenantId,
       before: { status: payment.status },
       after: { status: "refunded", reason: args.reason },
     });

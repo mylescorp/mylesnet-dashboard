@@ -64,6 +64,7 @@ export const createMarketProspect = mutation({
       entityTable: "marketProspects",
       entityId: prospectId,
       changedBy: user._id,
+      tenantId: null,
       after: { name: args.name, country: args.country },
     });
     return prospectId;
@@ -106,6 +107,7 @@ export const updateMarketProspect = mutation({
       entityTable: "marketProspects",
       entityId: args.prospectId,
       changedBy: user._id,
+      tenantId: null,
       before: { pipelineStatus: existing.pipelineStatus },
       after: patch,
     });
@@ -149,6 +151,7 @@ export const convertProspectToMarket = mutation({
       entityTable: "marketProspects",
       entityId: args.prospectId,
       changedBy: user._id,
+      tenantId: null,
       after: { marketId, prospectStatus: "live" },
     });
 
@@ -176,6 +179,7 @@ export const softDeleteProspect = mutation({
       entityTable: "marketProspects",
       entityId: args.prospectId,
       changedBy: user._id,
+      tenantId: null,
       after: { reason: args.reason },
     });
   },
@@ -200,6 +204,7 @@ export const restoreProspect = mutation({
       entityTable: "marketProspects",
       entityId: args.prospectId,
       changedBy: user._id,
+      tenantId: null,
     });
   },
 });

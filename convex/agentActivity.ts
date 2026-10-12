@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { requirePlatformUser } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 
@@ -28,7 +29,11 @@ export async function insertActivityLedger(
     platformFeeLocal?: number;
   },
 ) {
+  // Ownership is derived from the market the activity belongs to, never from
+  // the caller, so tenant-scoped analytics see every row the tenant generates.
+  const market = await ctx.db.get(entry.marketId as Id<"markets">);
   await ctx.db.insert("agentActivity", {
+    tenantId: market?.tenantId,
     agentId: entry.agentId as never,
     marketId: entry.marketId as never,
     action: entry.action,
@@ -58,6 +63,7 @@ export const recordActivity = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requirePlatformUser(ctx);
+    const agent = await ctx.db.get(args.agentId);
     await insertActivityLedger(ctx, {
       agentId: args.agentId,
       marketId: args.marketId,
@@ -75,6 +81,7 @@ export const recordActivity = mutation({
       entityTable: "agentActivity",
       entityId: args.agentId,
       changedBy: user._id,
+      tenantId: agent?.tenantId ?? null,
       after: { action: args.action, amountLocal: args.amountLocal },
     });
   },
