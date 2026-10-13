@@ -2,12 +2,13 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { requirePlatformSubRole } from "./lib/auth";
+import { PLATFORM_OPERATE_SUB_ROLES, PLATFORM_READ_SUB_ROLES, PLATFORM_SUPER_ADMIN_SUB_ROLES } from "./lib/platformAccess";
 import { logAudit } from "./lib/auditLog";
 import { nextProvisioningStatus, isValidFirmwareLabel } from "./lib/provisioningCore";
 import { canTenantOperate } from "./lib/tenantCore";
 
-const readers = ["platform_super_admin", "platform_ops", "platform_finance", "platform_support", "platform_readonly"];
-const managers = ["platform_super_admin", "platform_ops"];
+const readers = PLATFORM_READ_SUB_ROLES;
+const managers = PLATFORM_OPERATE_SUB_ROLES;
 
 const provisioningStatus = v.union(
   v.literal("pending"),
@@ -310,7 +311,7 @@ export const listMarketsForQueue = query({
 export const deleteProvisioningRequest = mutation({
   args: { requestId: v.id("provisioningRequests") },
   handler: async (ctx, args) => {
-    const actor = await requirePlatformSubRole(ctx, ["platform_super_admin"]);
+    const actor = await requirePlatformSubRole(ctx, PLATFORM_SUPER_ADMIN_SUB_ROLES);
     const request = await ctx.db.get(args.requestId);
     if (!request) throw new Error("Provisioning request not found");
     if (request.status === "pending" || request.status === "approved") throw new Error("Only rejected or deployed requests may be deleted");

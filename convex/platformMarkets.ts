@@ -2,11 +2,12 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { QueryCtx } from "./_generated/server";
 import { requirePlatformSubRole } from "./lib/auth";
+import { PLATFORM_OPERATE_SUB_ROLES, PLATFORM_READ_SUB_ROLES } from "./lib/platformAccess";
 import { logAudit } from "./lib/auditLog";
 import { assertMarketBelongsToTenant, assertNoActiveMarketAssignments, normalizeMarketInput } from "./lib/platformMarketsCore";
 
-const manager = ["platform_super_admin", "platform_ops"];
-const reader = [...manager, "platform_finance", "platform_support", "platform_readonly"];
+const manager = PLATFORM_OPERATE_SUB_ROLES;
+const reader = PLATFORM_READ_SUB_ROLES;
 
 async function requireTenant(ctx: QueryCtx, tenantId: import("./_generated/dataModel").Id<"tenants">) {
   const tenant = await ctx.db.get(tenantId);

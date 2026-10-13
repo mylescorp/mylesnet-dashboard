@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { QueryCtx, query } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
 import { requirePermission, requirePlatformSubRole } from "./lib/auth";
+import { PLATFORM_ANALYTICS_READ_SUB_ROLES } from "./lib/platformAccess";
 import { ReadScope, assertTenantMatch, readScopedTenant } from "./lib/tenant";
 import { readTenantFilter } from "./lib/tenantIsolationCore";
 import { dayOf } from "./lib/finance";
@@ -24,12 +25,7 @@ import { dayOf } from "./lib/finance";
  * Platform sub-roles allowed to read unscoped (cross-tenant) analytics rows
  * (module register J1: SA/FIN/OPS/RO read).
  */
-const ANALYTICS_PLATFORM_SUB_ROLES: string[] = [
-  "platform_super_admin",
-  "platform_finance",
-  "platform_ops",
-  "platform_readonly",
-];
+const ANALYTICS_PLATFORM_SUB_ROLES: string[] = PLATFORM_ANALYTICS_READ_SUB_ROLES;
 
 /** Gate a cross-tenant analytics read on an explicit reporting sub-role. */
 async function requireCrossTenantAnalytics(ctx: QueryCtx): Promise<void> {

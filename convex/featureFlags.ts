@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { requirePlatformSubRole, requirePlatformUser } from "./lib/auth";
+import { PLATFORM_OPERATE_SUB_ROLES, PLATFORM_SUPER_ADMIN_SUB_ROLES } from "./lib/platformAccess";
 import { logAudit } from "./lib/auditLog";
 import { rolloutPercentOf, isFlagEnabledForTenant } from "./lib/featureFlagCore";
 
@@ -79,10 +80,7 @@ export const setFeatureFlag = mutation({
     tenantIds: v.optional(v.array(v.id("tenants"))),
   },
   handler: async (ctx, args) => {
-    const user = await requirePlatformSubRole(ctx, [
-      "platform_super_admin",
-      "platform_ops",
-    ]);
+    const user = await requirePlatformSubRole(ctx, PLATFORM_OPERATE_SUB_ROLES);
 
     if (!FLAG_KEY_PATTERN.test(args.key)) {
       throw new Error("Flag key must start lowercase and use [a-z0-9] with dots only");
@@ -164,7 +162,7 @@ export const setFeatureFlag = mutation({
 export const removeFeatureFlag = mutation({
   args: { key: v.string() },
   handler: async (ctx, args) => {
-    const user = await requirePlatformSubRole(ctx, ["platform_super_admin"]);
+    const user = await requirePlatformSubRole(ctx, PLATFORM_SUPER_ADMIN_SUB_ROLES);
     const existing = await ctx.db
       .query("featureFlags")
       .withIndex("by_key", (q) => q.eq("key", args.key))
