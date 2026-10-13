@@ -18,8 +18,10 @@ export type PlatformTenant = {
   scheduledDeletionAt: number | null;
   workosOrganizationId: string | null;
   membershipCount: number;
+  membershipCountCapped: boolean;
   accountOwner: { name: string | null; email: string | null } | null;
   marketCount: number;
+  marketCountCapped: boolean;
   subscriberCount: number;
   entitlement: EntitlementSummary;
   createdAt: number;
@@ -57,6 +59,7 @@ export type PlatformOverview = {
   total: number;
   active: number;
   trial: number;
+  provisioning: number;
   suspended: number;
   pendingDeletion: number;
   missingIdentity: number;
@@ -107,7 +110,6 @@ export type TenantDetail = {
  * until the Convex target is explicitly verified.
  */
 export const tenantControl = {
-  listForPlatform: makeFunctionReference<"query", Record<string, never>, PlatformTenant[]>("tenantControl:listForPlatform"),
   listForPlatformPage: makeFunctionReference<"query", { paginationOpts: { numItems: number; cursor: string | null } }, PaginationResult<PlatformTenant>>("tenantControl:listForPlatformPage"),
   listSubscriptionsPage: makeFunctionReference<"query", { paginationOpts: { numItems: number; cursor: string | null } }, PaginationResult<SubscriptionTenant>>("tenantControl:listSubscriptionsPage"),
   listPlatformTenantTargetsPage: makeFunctionReference<"query", { paginationOpts: { numItems: number; cursor: string | null } }, PaginationResult<{ _id: string; name: string }>>("tenantControl:listPlatformTenantTargetsPage"),

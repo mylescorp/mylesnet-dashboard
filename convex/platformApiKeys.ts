@@ -2,7 +2,7 @@ import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
-import { requirePlatformSubRole } from "./lib/auth";
+import { requirePlatformSubRole, requirePlatformSubRoleForUser } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 import { isPlatformApiKeyActive, publicPlatformApiKey, validatePlatformKeyInput } from "./lib/platformApiKeysCore";
 
@@ -38,6 +38,9 @@ export const listOrganizationsByApiKey = query({
   handler: async (ctx, args) => {
     const key = await ctx.db.query("platformApiKeys").withIndex("by_tokenHash", q => q.eq("tokenHash", args.tokenHash)).unique();
     if (!key || !isPlatformApiKeyActive(key, Date.now()) || !key.scopes.includes("organizations:read")) return null;
+    // A credential is only valid while its server-owned creator retains the
+    // platform role that may issue platform API keys.
+    await requirePlatformSubRoleForUser(ctx, key.createdBy, ["platform_super_admin"]);
     const result = await ctx.db.query("tenants").withIndex("by_createdAt").order("desc").paginate({
       ...args.paginationOpts, numItems: Math.min(50, Math.max(1, Math.floor(args.paginationOpts.numItems))),
     });

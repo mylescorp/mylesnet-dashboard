@@ -345,6 +345,7 @@ export default defineSchema({
     apiKeyCreatedAt: v.optional(v.number()),
   })
     .index("by_tenant", ["tenantId"])
+    .index("by_tenant_deletedAt", ["tenantId", "deletedAt"])
     .index("by_status", ["status"])
     .index("by_country", ["country"]),
 
@@ -1161,6 +1162,7 @@ export default defineSchema({
     subscriberCount: v.optional(v.number()),
     subscriberCountBackfillRunning: v.optional(v.boolean()),
     subscriberCountBackfillStartedAt: v.optional(v.number()),
+    subscriberCountBackfillRunId: v.optional(v.string()),
     subscriberCountBackfillCursor: v.optional(v.string()),
     subscriberCountBackfillProgress: v.optional(v.number()),
     subscriberCountBackfillHeartbeatAt: v.optional(v.number()),
@@ -1193,6 +1195,7 @@ export default defineSchema({
     .index("by_child", ["childTenantId"])
     .index("by_type", ["type"])
     .index("by_parent_child_type", ["parentTenantId", "childTenantId", "type"])
+    .index("by_child_deletedAt", ["childTenantId", "deletedAt"])
     .index("by_suspendedByRelationship", ["suspendedByRelationshipId"])
     .index("by_createdAt", ["createdAt"]),
 
@@ -1217,6 +1220,7 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_tenant", ["tenantId"])
+    .index("by_tenant_status", ["tenantId", "status"])
     .index("by_user_tenant", ["userId", "tenantId"]),
 
   // Durable, retry-safe record for the background identity onboarding flow.

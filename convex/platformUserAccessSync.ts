@@ -14,10 +14,11 @@ export const retryPendingMembershipSyncs = internalAction({
       try {
         const desired = await ctx.runQuery(anyApi.platformUserDirectory.getDesiredMembershipAccess, { userId: request.userId, tenantId: request.tenantId }) as { organizationId: string; workosUserId: string; status: "active" | "revoked" };
         let providerAlreadyMatched = false;
-        if (desired.status === "revoked") providerAlreadyMatched = (await deactivateOrganizationMembership(desired.organizationId, desired.workosUserId)).alreadyMatched;
-        else providerAlreadyMatched = (await reactivateOrganizationMembership(desired.organizationId, desired.workosUserId)).alreadyMatched;
+        let providerUpdatedAt: number | null = null;
+        if (desired.status === "revoked") ({ alreadyMatched: providerAlreadyMatched, providerUpdatedAt } = await deactivateOrganizationMembership(desired.organizationId, desired.workosUserId));
+        else ({ alreadyMatched: providerAlreadyMatched, providerUpdatedAt } = await reactivateOrganizationMembership(desired.organizationId, desired.workosUserId));
         const latest = await ctx.runQuery(anyApi.platformUserDirectory.getDesiredMembershipAccess, { userId: request.userId, tenantId: request.tenantId }) as { status: "active" | "revoked" };
-        await ctx.runMutation(anyApi.platformUserDirectory.recordMembershipSync, { requestId: request.requestId, appliedStatus: desired.status, succeeded: latest.status === desired.status, providerAlreadyMatched: latest.status === desired.status ? providerAlreadyMatched : false });
+        await ctx.runMutation(anyApi.platformUserDirectory.recordMembershipSync, { requestId: request.requestId, appliedStatus: desired.status, succeeded: latest.status === desired.status, providerAlreadyMatched: latest.status === desired.status ? providerAlreadyMatched : false, providerUpdatedAt: providerUpdatedAt ?? undefined });
       } catch {
         await ctx.runMutation(anyApi.platformUserDirectory.recordMembershipSync, { requestId: request.requestId, appliedStatus: request.status, succeeded: false });
       }

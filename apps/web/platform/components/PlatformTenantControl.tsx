@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { Building2, CircleAlert, Link2, PauseCircle, PlayCircle, Plus, UsersRound } from "lucide-react";
 import { useAction, useMutation, useQuery } from "@/app/lib/convex";
+import { usePaginatedQuery } from "convex/react";
 import { tenantControl, type PlatformTenant, type TenantStatus } from "@/lib/convex/tenantControl";
 import { userFacingMessage } from "@/shared/lib/user-facing-error";
 
@@ -20,17 +21,14 @@ function safeErrorMessage(error: unknown): string {
 }
 
 export function PlatformTenantControl() {
-  const tenants = useQuery(tenantControl.listForPlatform, {});
+  const { results: tenants, status: tenantStatus, loadMore } = usePaginatedQuery(tenantControl.listForPlatformPage, {}, { initialNumItems: 50 });
+  const overview = useQuery(tenantControl.getPlatformOverview, {});
   const setStatus = useMutation(tenantControl.setStatus);
   const [creating, setCreating] = useState(false);
   const [workingId, setWorkingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const counts = useMemo(() => ({
-    total: tenants?.length ?? 0,
-    active: tenants?.filter((tenant) => tenant.status === "active" || tenant.status === "trial").length ?? 0,
-    preparing: tenants?.filter((tenant) => tenant.status === "provisioning").length ?? 0,
-  }), [tenants]);
+  const counts = { total: overview?.total ?? 0, active: (overview?.active ?? 0) + (overview?.trial ?? 0), preparing: overview?.provisioning ?? 0 };
 
   const changeStatus = async (tenant: PlatformTenant, status: "active" | "suspended") => {
     setError(null); setNotice(null); setWorkingId(tenant._id);
@@ -60,11 +58,12 @@ export function PlatformTenantControl() {
 
     <section className="pf-panel">
       <div className="section-heading"><div><p className="eyebrow">Tenant estate</p><h2>Registered operators</h2></div><span className="section-count">{counts.total} total</span></div>
-      {tenants === undefined ? <p className="pf-muted">Loading tenant inventory…</p> : tenants.length === 0 ? <EmptyTenantState onCreate={() => setCreating(true)} /> : (
+      {tenantStatus === "LoadingFirstPage" ? <p className="pf-muted">Loading tenant inventory…</p> : tenants.length === 0 ? <EmptyTenantState onCreate={() => setCreating(true)} /> : (
         <div className="pf-table-wrap"><table className="pf-table"><thead><tr><th>Tenant</th><th>Workspace</th><th>Members</th><th>Plan</th><th>Status</th><th /></tr></thead><tbody>
-          {tenants.map((tenant) => <tr key={tenant._id}><td><Link href={`/platform/tenants/${tenant._id}`} className="tenant-name-link"><strong>{tenant.name}</strong></Link><small className="table-subtext">{tenant.slug} · {tenant.country}</small></td><td>{tenant.workosOrganizationId ? <span className="tenant-linked"><Link2 size={14} aria-hidden="true" />Ready</span> : <span className="tenant-unlinked"><CircleAlert size={14} aria-hidden="true" />Action needed</span>}</td><td>{tenant.membershipCount}</td><td>{tenant.entitlement ? `${tenant.entitlement.planId} · ${tenant.entitlement.status}` : "Not configured"}</td><td><Status status={tenant.status} /></td><td><div className="cell-actions">{tenant.status === "provisioning" ? <span className="pf-muted">Preparing</span> : tenant.status === "suspended" ? <button type="button" className="secondary-button" disabled={workingId === tenant._id} onClick={() => void changeStatus(tenant, "active")}><PlayCircle size={14} aria-hidden="true" />Activate</button> : <button type="button" className="secondary-button" disabled={workingId === tenant._id || tenant.status === "cancelled"} onClick={() => void changeStatus(tenant, "suspended")}><PauseCircle size={14} aria-hidden="true" />Suspend</button>}</div></td></tr>)}
+          {tenants.map((tenant) => <tr key={tenant._id}><td><Link href={`/platform/tenants/${tenant._id}`} className="tenant-name-link"><strong>{tenant.name}</strong></Link><small className="table-subtext">{tenant.slug} · {tenant.country}</small></td><td>{tenant.workosOrganizationId ? <span className="tenant-linked"><Link2 size={14} aria-hidden="true" />Ready</span> : <span className="tenant-unlinked"><CircleAlert size={14} aria-hidden="true" />Action needed</span>}</td><td>{tenant.membershipCount}{tenant.membershipCountCapped ? "+" : ""}</td><td>{tenant.entitlement ? `${tenant.entitlement.planId} · ${tenant.entitlement.status}` : "Not configured"}</td><td><Status status={tenant.status} /></td><td><div className="cell-actions">{tenant.status === "provisioning" ? <span className="pf-muted">Preparing</span> : tenant.status === "suspended" ? <button type="button" className="secondary-button" disabled={workingId === tenant._id} onClick={() => void changeStatus(tenant, "active")}><PlayCircle size={14} aria-hidden="true" />Activate</button> : <button type="button" className="secondary-button" disabled={workingId === tenant._id || tenant.status === "cancelled"} onClick={() => void changeStatus(tenant, "suspended")}><PauseCircle size={14} aria-hidden="true" />Suspend</button>}</div></td></tr>)}
         </tbody></table></div>
       )}
+      {tenantStatus === "CanLoadMore" || tenantStatus === "LoadingMore" ? <button type="button" className="secondary-button mt-4" disabled={tenantStatus === "LoadingMore"} onClick={() => loadMore(50)}>{tenantStatus === "LoadingMore" ? "Loading…" : "Load more tenants"}</button> : null}
     </section>
     {creating ? <TenantOnboardingDialog onClose={() => setCreating(false)} onCreated={(message) => { setNotice(message); setCreating(false); }} /> : null}
   </div>;

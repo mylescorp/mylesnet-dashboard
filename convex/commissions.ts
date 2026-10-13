@@ -4,8 +4,7 @@ import { Doc } from "./_generated/dataModel";
 import {
   assertNotSelfApproval,
   requirePermission,
-  requirePlatformOwner,
-  requirePlatformUser,
+  requireTenantPermission,
   requirePlatformSubRole,
   resolveUserByIdentity,
   resolveRoles,
@@ -86,7 +85,7 @@ export const requestCommissionPayout = mutation({
     payoutMethod: v.union(v.literal("mpesa"), v.literal("airtel_money"), v.literal("bank_transfer")),
   },
   handler: async (ctx, args) => {
-    const user = await requirePlatformUser(ctx);
+    const { user } = await requireTenantPermission(ctx, "commissions:manage");
     const commission = await ctx.db.get(args.commissionId);
     if (!commission) throw new Error("Commission not found");
     await enforceTenantOnResource(ctx, commission, "commission");
@@ -204,9 +203,12 @@ export const markCommissionPaid = mutation({
 export const disputeCommission = mutation({
   args: { commissionId: v.id("commissions"), reason: v.string() },
   handler: async (ctx, args) => {
-    const user = await requirePlatformOwner(ctx);
+    const { user } = await requireTenantPermission(ctx, "commissions:manage");
     const commission = await ctx.db.get(args.commissionId);
     if (!commission) throw new Error("Commission not found");
+    const reason = args.reason.trim();
+    if (reason.length < 8 || reason.length > 500) throw new Error("Provide a dispute reason between 8 and 500 characters");
+    await enforceTenantOnResource(ctx, commission, "commission");
     const market = await ctx.db.get(commission.marketId);
     await ctx.db.patch(args.commissionId, { payoutStatus: "disputed" });
     await logAudit(ctx, {
@@ -215,7 +217,7 @@ export const disputeCommission = mutation({
       entityId: args.commissionId,
       changedBy: user._id,
       tenantId: commission.tenantId ?? market?.tenantId,
-      after: { reason: args.reason },
+      after: { reason },
     });
   },
 });

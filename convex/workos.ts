@@ -139,34 +139,36 @@ export async function reactivateWorkosMembership(workosUserId: string): Promise<
 export async function deactivateOrganizationMembership(
   organizationId: string,
   workosUserId: string,
-): Promise<{ alreadyMatched: boolean }> {
+): Promise<{ alreadyMatched: boolean; providerUpdatedAt: number | null }> {
   const membership = await getWorkosOrganizationMembership(organizationId, workosUserId);
   if (!membership) throw new Error("The user is not a member of this workspace");
   if (membership.status !== "active") {
-    if (membership.status === "inactive") return { alreadyMatched: true };
+    if (membership.status === "inactive") return { alreadyMatched: true, providerUpdatedAt: parseWosTimestamp(membership.updated_at) };
     throw new Error("Only active workspace access can be disabled");
   }
   await workosFetch(
     `/user_management/organization_memberships/${encodeURIComponent(membership.id)}/deactivate`,
     { method: "PUT" },
   );
-  return { alreadyMatched: false };
+  const updated = await getWorkosOrganizationMembership(organizationId, workosUserId);
+  return { alreadyMatched: false, providerUpdatedAt: updated ? parseWosTimestamp(updated.updated_at) : null };
 }
 
 /** Reactivate one tenant organization's membership without changing other workspaces. */
 export async function reactivateOrganizationMembership(
   organizationId: string,
   workosUserId: string,
-): Promise<{ alreadyMatched: boolean }> {
+): Promise<{ alreadyMatched: boolean; providerUpdatedAt: number | null }> {
   const membership = await getWorkosOrganizationMembership(organizationId, workosUserId);
   if (!membership) throw new Error("The user is not a member of this workspace");
-  if (membership.status === "active") return { alreadyMatched: true };
+  if (membership.status === "active") return { alreadyMatched: true, providerUpdatedAt: parseWosTimestamp(membership.updated_at) };
   if (membership.status !== "inactive") throw new Error("Pending workspace invitations cannot be restored here");
   await workosFetch(
     `/user_management/organization_memberships/${encodeURIComponent(membership.id)}/reactivate`,
     { method: "PUT" },
   );
-  return { alreadyMatched: false };
+  const updated = await getWorkosOrganizationMembership(organizationId, workosUserId);
+  return { alreadyMatched: false, providerUpdatedAt: updated ? parseWosTimestamp(updated.updated_at) : null };
 }
 
 /** Ask WorkOS to deliver a password reset email; never return or store its token. */

@@ -15,7 +15,8 @@ export const getDashboard = query({
     const rows = await ctx.db.query("dailySnapshots")
       .withIndex("by_date", q => q.gte("date", from))
       .order("asc")
-      .collect();
+      .take(5001);
+    if (rows.length > 5000) throw new Error("This date range contains too much data for one dashboard request. Choose a shorter date range.");
 
     const byDate = new Map<string, {
       revenueUSD: number;

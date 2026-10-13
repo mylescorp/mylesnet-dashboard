@@ -208,11 +208,12 @@ export const updateMembership = action({
       for (let attempt = 0; attempt < 5; attempt += 1) {
         const desired = await ctx.runQuery(internal.platformUserDirectory.getDesiredMembershipAccess, { userId: args.userId, tenantId: args.tenantId });
         let providerAlreadyMatched = false;
-        if (desired.status === "revoked") providerAlreadyMatched = (await deactivateOrganizationMembership(desired.organizationId, desired.workosUserId)).alreadyMatched;
-        else providerAlreadyMatched = (await reactivateOrganizationMembership(desired.organizationId, desired.workosUserId)).alreadyMatched;
+        let providerUpdatedAt: number | null = null;
+        if (desired.status === "revoked") ({ alreadyMatched: providerAlreadyMatched, providerUpdatedAt } = await deactivateOrganizationMembership(desired.organizationId, desired.workosUserId));
+        else ({ alreadyMatched: providerAlreadyMatched, providerUpdatedAt } = await reactivateOrganizationMembership(desired.organizationId, desired.workosUserId));
         const latest = await ctx.runQuery(internal.platformUserDirectory.getDesiredMembershipAccess, { userId: args.userId, tenantId: args.tenantId });
         if (latest.status === desired.status) {
-          await ctx.runMutation(internal.platformUserDirectory.recordMembershipSync, { requestId: authorized.requestId, appliedStatus: desired.status, succeeded: true, providerAlreadyMatched });
+          await ctx.runMutation(internal.platformUserDirectory.recordMembershipSync, { requestId: authorized.requestId, appliedStatus: desired.status, succeeded: true, providerAlreadyMatched, providerUpdatedAt: providerUpdatedAt ?? undefined });
           return { updated: true };
         }
       }
@@ -237,7 +238,7 @@ export const getDesiredMembershipAccess = internalQuery({
 });
 
 export const recordMembershipSync = internalMutation({
-  args: { requestId: v.string(), appliedStatus: membershipStatusValidator, succeeded: v.boolean(), providerAlreadyMatched: v.optional(v.boolean()) },
+  args: { requestId: v.string(), appliedStatus: membershipStatusValidator, succeeded: v.boolean(), providerAlreadyMatched: v.optional(v.boolean()), providerUpdatedAt: v.optional(v.number()) },
   returns: v.null(),
   handler: async (ctx, args) => {
     const request = await ctx.db.query("platformUserAccessRequests").withIndex("by_requestId", q => q.eq("requestId", args.requestId)).first();
@@ -250,19 +251,20 @@ export const recordMembershipSync = internalMutation({
     const targetMembership = await ctx.db.query("tenantMemberships")
       .withIndex("by_user_tenant", q => q.eq("userId", request.targetUserId).eq("tenantId", request.tenantId)).first();
     const membershipDeleted = targetMembership?.providerMembershipDeletedAt !== undefined;
+    const orderedProviderConfirmation = args.providerAlreadyMatched === true && args.providerUpdatedAt !== undefined && args.providerUpdatedAt >= (targetMembership?.providerUpdatedAt ?? 0);
     const syncStatus = membershipDeleted || (args.succeeded && request.status !== args.appliedStatus)
       ? "superseded"
-      : args.succeeded ? "synced" : "pending";
+      : args.succeeded && (!args.providerAlreadyMatched || orderedProviderConfirmation) ? "synced" : "pending";
     // An already-matching provider observation is ordered confirmation: the
     // provider call that seeded this sync observed the membership in exactly
     // the requested state, so no matching event will arrive later to clear the
     // guard. Drop the override (and bump the reference timestamp to the
     // observation time) so a future provider event is never masked by it.
-    if (args.succeeded && args.providerAlreadyMatched === true && !membershipDeleted && request.status === args.appliedStatus && targetMembership) {
+    if (args.succeeded && orderedProviderConfirmation && !membershipDeleted && request.status === args.appliedStatus && targetMembership) {
       await ctx.db.patch(targetMembership._id, {
         accessOverride: undefined,
         accessOverrideUpdatedAt: undefined,
-        providerUpdatedAt: Math.max(targetMembership.providerUpdatedAt ?? 0, Date.now()),
+        providerUpdatedAt: args.providerUpdatedAt,
       });
     }
     const syncAttempts = previousAttempts + 1;

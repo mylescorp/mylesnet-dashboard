@@ -140,11 +140,10 @@ async function assertTenantRelationshipChainActive(ctx: QueryCtx | MutationCtx, 
     visited.add(String(childId));
     if (visited.size > 100) throw new Error("Unauthorized: organization relationship scope exceeds safety limits");
     const relationships = await ctx.db.query("tenantRelationships")
-      .withIndex("by_child", q => q.eq("childTenantId", childId))
+      .withIndex("by_child_deletedAt", q => q.eq("childTenantId", childId).eq("deletedAt", undefined))
       .take(101);
     if (relationships.length > 100) throw new Error("Unauthorized: organization relationship scope exceeds safety limits");
     for (const relationship of relationships) {
-      if (relationship.deletedAt !== undefined) continue;
       if (relationship.status !== "active") throw new Error("Unauthorized: agency or reseller access is suspended");
       pending.push(relationship.parentTenantId);
     }
@@ -197,7 +196,7 @@ export function hasPermission(
   roles: ResolvedRole[],
   permission: string,
 ): boolean {
-  return roles.some((role) => role.permissions.includes(permission));
+  return effectivePermissionsForRoles(roles).includes(permission);
 }
 
 export function permissionsOf(roles: ResolvedRole[]): string[] {

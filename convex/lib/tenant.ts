@@ -166,10 +166,9 @@ async function assertTenantRelationshipChainOperable(ctx: QueryCtx | MutationCtx
     if (visited.has(childId)) continue;
     visited.add(childId);
     if (visited.size > 100 || ++reads > 100) throw new Error("Unauthorized: organization relationship scope exceeds safety limits");
-    const links = await ctx.db.query("tenantRelationships").withIndex("by_child", q => q.eq("childTenantId", childId)).take(101);
+    const links = await ctx.db.query("tenantRelationships").withIndex("by_child_deletedAt", q => q.eq("childTenantId", childId).eq("deletedAt", undefined)).take(101);
     assertRelationshipScopeWithinLimit(links.length);
     for (const link of links) {
-      if (link.deletedAt !== undefined) continue;
       if (link.status !== "active") throw new Error("Unauthorized: agency or reseller access is suspended");
       pending.push(link.parentTenantId);
     }

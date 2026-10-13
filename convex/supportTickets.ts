@@ -48,6 +48,13 @@ async function legacyTicketCategoryPolicy(ctx: Parameters<typeof requirePermissi
   return ticketCategoryPolicy(new Set(roles.map(role => role.slug)));
 }
 
+function assertLegacyTicketAction(policy: ReturnType<typeof ticketCategoryPolicy>, action: "create" | "update" | "delete" | "restore") {
+  if (!policy.isPlatformActor) return;
+  if ((action === "create" || action === "delete" || action === "restore") && !policy.canManageAll) {
+    throw new Error("Unauthorized: this platform role cannot perform that ticket action");
+  }
+}
+
 async function platformTicketDeadlines(ctx: Parameters<typeof requirePermission>[0], category: PlatformTicketCategory, now: number) {
   const policy = await ctx.db.query("platformSlaPolicies").withIndex("by_category", q => q.eq("category", category)).first();
   return ticketDeadlines(now, policy ?? PLATFORM_SLA_FALLBACK[category]);
@@ -182,7 +189,7 @@ export const updatePlatformTicket = mutation({
     }
     if (Object.keys(patch).length === 1) throw new Error("Choose a ticket change before saving");
     await ctx.db.patch(ticket._id, patch);
-    await logAudit(ctx, { action: "platform.supportTicket.updated", entityTable: "supportTickets", entityId: ticket._id, changedBy: access.user._id, before: { category: currentCategory, ticketStatus: ticket.ticketStatus, priority: ticket.priority }, after: patch });
+    await logAudit(ctx, { action: "platform.supportTicket.updated", entityTable: "supportTickets", entityId: ticket._id, changedBy: access.user._id, before: { category: currentCategory, ticketStatus: ticket.ticketStatus, priority: ticket.priority }, after: { changedFields: Object.keys(patch).filter(field => field !== "updatedAt"), category: nextCategory, ticketStatus: args.ticketStatus ?? ticket.ticketStatus, priority: args.priority ?? ticket.priority } });
     return { updated: true };
   },
 });
@@ -280,6 +287,7 @@ export const createSupportTicket = mutation({
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "tickets:manage");
     const policy = await legacyTicketCategoryPolicy(ctx, user);
+    assertLegacyTicketAction(policy, "create");
     if (args.marketId) await requireMarketAccess(ctx, args.marketId, "operator");
     const now = Date.now();
     const market = args.marketId ? await enforceTenantOnResource(ctx, await ctx.db.get(args.marketId), "market") : null;
@@ -308,7 +316,7 @@ export const createSupportTicket = mutation({
       entityId: ticketId,
       changedBy: user._id,
       tenantId: market?.tenantId,
-      after: { subject: args.subject, priority: args.priority },
+      after: { category, priority: args.priority },
     });
     return ticketId;
   },
@@ -340,6 +348,7 @@ export const updateSupportTicket = mutation({
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "tickets:manage");
     const policy = await legacyTicketCategoryPolicy(ctx, user);
+    assertLegacyTicketAction(policy, "update");
     const ticket = await ctx.db.get(args.ticketId);
     if (!ticket) throw new Error("Ticket not found");
     if (policy.isPlatformActor && !policy.allowedCategories.has((ticket.category ?? "account") as PlatformTicketCategory)) {
@@ -366,7 +375,7 @@ export const updateSupportTicket = mutation({
       changedBy: user._id,
       tenantId: market?.tenantId,
       before: { ticketStatus: ticket.ticketStatus, priority: ticket.priority },
-      after: patch,
+      after: { changedFields: Object.keys(patch).filter(field => field !== "updatedAt"), ticketStatus: args.ticketStatus ?? ticket.ticketStatus, priority: args.priority ?? ticket.priority, assignedToChanged: args.assignedTo !== undefined },
     });
   },
 });
@@ -379,6 +388,7 @@ export const softDeleteTicket = mutation({
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "tickets:manage");
     const policy = await legacyTicketCategoryPolicy(ctx, user);
+    assertLegacyTicketAction(policy, "delete");
     const ticket = await ctx.db.get(args.ticketId);
     if (!ticket) throw new Error("Ticket not found");
     if (policy.isPlatformActor && !policy.allowedCategories.has((ticket.category ?? "account") as PlatformTicketCategory)) {
@@ -408,6 +418,7 @@ export const restoreTicket = mutation({
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "tickets:manage");
     const policy = await legacyTicketCategoryPolicy(ctx, user);
+    assertLegacyTicketAction(policy, "restore");
     const ticket = await ctx.db.get(args.ticketId);
     if (!ticket) throw new Error("Ticket not found");
     if (policy.isPlatformActor && !policy.allowedCategories.has((ticket.category ?? "account") as PlatformTicketCategory)) {

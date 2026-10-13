@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { useQuery } from "@/app/lib/convex";
 import { useUserProfile } from "@/shared/components/UserProfileContext";
-import { tenantControl, type PlatformTenant, type TenantStatus } from "@/lib/convex/tenantControl";
+import { tenantControl, type TenantStatus } from "@/lib/convex/tenantControl";
 import { platformPanel } from "@/lib/convex/platformPanel";
 
 const statusTone: Record<TenantStatus, "success" | "warning" | "danger" | "neutral"> = {
@@ -32,17 +32,10 @@ function Metric({ icon, label, value, detail, tone = "accent" }: { icon: React.R
 
 export function PlatformOverview() {
   const { user } = useUserProfile();
-  const tenants = useQuery(tenantControl.listForPlatform, {});
+  const overview = useQuery(tenantControl.getPlatformOverview, {});
   const security = useQuery(platformPanel.getPlatformSecurityOverview, {});
 
-  const totals = {
-    total: tenants?.length ?? 0,
-    active: tenants?.filter((t) => t.status === "active").length ?? 0,
-    trial: tenants?.filter((t) => t.status === "trial").length ?? 0,
-    suspended: tenants?.filter((t) => t.status === "suspended").length ?? 0,
-    littleIdentity: tenants?.filter((t) => !t.workosOrganizationId).length ?? 0,
-    limitedEntitlement: tenants?.filter((t) => t.entitlement && (t.entitlement.status === "expired" || t.entitlement.status === "suspended")).length ?? 0,
-  };
+  const totals = overview ?? { total: 0, active: 0, trial: 0, suspended: 0, missingIdentity: 0, entitlementRisk: 0, pendingDeletion: 0, latest: [] };
 
   return (
     <div className="workspace-page">
@@ -57,8 +50,8 @@ export function PlatformOverview() {
 
       <section className="metric-grid" aria-label="Platform summary">
         <Metric icon={<Building2 size={19} />} label="Registered tenants" value={totals.total} detail={`${totals.active} active · ${totals.trial} trial`} />
-        <Metric icon={<Link2 size={19} />} label="Workspace access" value={totals.total - totals.littleIdentity} detail={`${totals.littleIdentity} tenant(s) need secure access setup`} tone={totals.littleIdentity ? "warning" : "success"} />
-        <Metric icon={<CreditCard size={19} />} label="Entitlement risk" value={totals.limitedEntitlement} detail="Expired or suspended plans that need attention" tone={totals.limitedEntitlement ? "warning" : "success"} />
+        <Metric icon={<Link2 size={19} />} label="Workspace access" value={totals.total - totals.missingIdentity} detail={`${totals.missingIdentity} tenant(s) need secure access setup`} tone={totals.missingIdentity ? "warning" : "success"} />
+        <Metric icon={<CreditCard size={19} />} label="Entitlement risk" value={totals.entitlementRisk} detail="Expired or suspended plans that need attention" tone={totals.entitlementRisk ? "warning" : "success"} />
         <Metric icon={<ShieldCheck size={19} />} label="MFA enrolled" value={security?.staffMfaEnrolled ?? 0} detail={`Optional for ${security?.staff.length ?? 0} platform staff`} tone="accent" />
       </section>
 
@@ -78,9 +71,9 @@ export function PlatformOverview() {
 
       <section className="pf-panel">
         <div className="section-heading"><div><p className="eyebrow">Tenant estate</p><h2>Most recent tenants</h2></div><span className="section-count">{totals.total} total</span></div>
-        {tenants === undefined ? <p className="pf-muted">Loading tenant inventory…</p> : tenants.length === 0 ? <p className="pf-muted">No tenant is registered yet. Register the first verified operator from the Tenants panel.</p> : (
+        {overview === undefined ? <p className="pf-muted">Loading tenant inventory…</p> : overview.latest.length === 0 ? <p className="pf-muted">No tenant is registered yet. Register the first verified operator from the Tenants panel.</p> : (
           <div className="pf-table-wrap"><table className="pf-table"><thead><tr><th>Tenant</th><th>Identity</th><th>Plan</th><th>Status</th><th /></tr></thead><tbody>
-            {tenants.slice(0, 8).map((tenant: PlatformTenant) => (
+            {overview.latest.map((tenant) => (
               <tr key={tenant._id}>
                 <td><Link href={`/platform/organizations/${tenant._id}`} className="tenant-name-link"><strong>{tenant.name}</strong></Link><small className="table-subtext">{tenant.slug} · {tenant.country}</small></td>
                 <td>{tenant.workosOrganizationId ? <span className="tenant-linked"><Link2 size={14} aria-hidden="true" />Connected</span> : <span className="tenant-unlinked"><CircleAlert size={14} aria-hidden="true" />Missing mapping</span>}</td>

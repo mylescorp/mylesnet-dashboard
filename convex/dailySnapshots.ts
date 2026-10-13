@@ -1,6 +1,6 @@
 import { anyApi, paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
-import { Id } from "./_generated/dataModel";
+import type { Id } from "./_generated/dataModel";
 import { MutationCtx, internalAction, internalMutation, internalQuery, query } from "./_generated/server";
 import { requirePermission } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
@@ -79,7 +79,7 @@ export const buildDailySnapshot = internalMutation({
     let salesCount = 0;
     let newSubscribers = 0;
     const perAgentValue = new Map<string, number>();
-    let topAgentId: string | null = null;
+    let topAgentId: Id<"agents"> | undefined;
     let topAgentValue = -1;
 
     for (const row of activity) {
@@ -115,7 +115,7 @@ export const buildDailySnapshot = internalMutation({
       newSubscribers,
       variableCostLocal,
       netContributionLocal: Math.round((revenueLocal - variableCostLocal) * 100) / 100,
-      ...(topAgentId === null ? {} : { topAgentId: topAgentId as never }),
+      ...(topAgentId === undefined ? {} : { topAgentId }),
       currency: market.currency,
       createdAt: Date.now(),
     };

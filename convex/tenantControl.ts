@@ -65,9 +65,9 @@ type TenantWorkspaceResult =
 
 async function toPlatformTenant(ctx: QueryCtx, tenant: Doc<"tenants">) {
   const [memberships, entitlement, markets] = await Promise.all([
-    ctx.db.query("tenantMemberships").withIndex("by_tenant", q => q.eq("tenantId", tenant._id)).collect(),
+    ctx.db.query("tenantMemberships").withIndex("by_tenant_status", q => q.eq("tenantId", tenant._id).eq("status", "active")).take(501),
     ctx.db.query("entitlements").withIndex("by_tenant", q => q.eq("tenantId", tenant._id)).order("desc").first(),
-    ctx.db.query("markets").withIndex("by_tenant", q => q.eq("tenantId", tenant._id)).collect(),
+    ctx.db.query("markets").withIndex("by_tenant_deletedAt", q => q.eq("tenantId", tenant._id).eq("deletedAt", undefined)).take(501),
   ]);
   const ownerMembership = memberships.find(membership => membership.status === "active" && membership.role === "tenant_admin");
   const owner = ownerMembership ? await ctx.db.get(ownerMembership.userId) : null;
@@ -81,9 +81,11 @@ async function toPlatformTenant(ctx: QueryCtx, tenant: Doc<"tenants">) {
     status: tenant.status,
     scheduledDeletionAt: tenant.scheduledDeletionAt ?? null,
     workosOrganizationId: tenant.workosOrganizationId ?? null,
-    membershipCount: memberships.filter(membership => membership.status === "active").length,
+    membershipCount: memberships.length > 500 ? 500 : memberships.length,
+    membershipCountCapped: memberships.length > 500,
     accountOwner: owner && owner.deletedAt === undefined && owner.isActive !== false ? { name: owner.name ?? null, email: owner.email ?? null } : null,
-    marketCount: markets.filter(market => market.status !== "deleted").length,
+    marketCount: markets.length > 500 ? 500 : markets.length,
+    marketCountCapped: markets.length > 500,
     subscriberCount: tenant.subscriberCount ?? null,
     entitlement: entitlement ? {
       planId: entitlement.planId,
@@ -107,24 +109,28 @@ export const backfillTenantSubscriberCount = internalMutation({
   args: {
     tenantId: v.id("tenants"),
     actorUserId: v.id("users"),
+    runId: v.string(),
     cursor: v.optional(v.union(v.string(), v.null())),
     accumulatedCount: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const tenant = await ctx.db.get(args.tenantId);
     if (!tenant) throw new Error("Tenant not found");
-    if (!args.cursor) {
-      if (!tenant.subscriberCountBackfillRunning) throw new Error("Subscriber count backfill was not started");
+    // Ignore delayed work from a released/restarted run. Each reservation has
+    // its own id so an old scheduled page cannot steal the new run's cursor.
+    if (!tenant.subscriberCountBackfillRunning || tenant.subscriberCountBackfillRunId !== args.runId) {
+      return { complete: false, subscriberCount: null, failed: true };
     }
-    // A scheduled page that finds the lock released (manual release or a
-    // stale-lock restart already took over) ends the chain instead of
-    // rearming it from a stale cursor.
-    if (!tenant.subscriberCountBackfillRunning) return { complete: false, subscriberCount: null, failed: true };
 
     const releaseAndLogFailure = async (reason: string) => {
       const latestTenant = await ctx.db.get(args.tenantId);
-      if (latestTenant?.subscriberCountBackfillRunning) {
-        await ctx.db.patch(args.tenantId, { subscriberCountBackfillRunning: false });
+      if (latestTenant?.subscriberCountBackfillRunning && latestTenant.subscriberCountBackfillRunId === args.runId) {
+        await ctx.db.patch(args.tenantId, {
+          subscriberCountBackfillRunning: false,
+          subscriberCountBackfillRunId: undefined,
+          subscriberCountBackfillStartedAt: undefined,
+          subscriberCountBackfillHeartbeatAt: undefined,
+        });
         await logAudit(ctx, {
           action: "tenant.subscriber_count_backfill_failed",
           entityTable: "tenants",
@@ -152,6 +158,7 @@ export const backfillTenantSubscriberCount = internalMutation({
         await ctx.db.patch(args.tenantId, {
           subscriberCount: accumulatedCount,
           subscriberCountBackfillRunning: false,
+          subscriberCountBackfillRunId: undefined,
           subscriberCountBackfillStartedAt: undefined,
           subscriberCountBackfillCursor: undefined,
           subscriberCountBackfillProgress: undefined,
@@ -180,6 +187,7 @@ export const backfillTenantSubscriberCount = internalMutation({
         await ctx.scheduler.runAfter(0, internal.tenantControl.backfillTenantSubscriberCount, {
           tenantId: args.tenantId,
           actorUserId: args.actorUserId,
+          runId: args.runId,
           cursor: page.continueCursor,
           accumulatedCount,
         });
@@ -212,37 +220,45 @@ export const startSubscriberCountBackfill = mutation({
     const actor = await requirePlatformSubRole(ctx, ["platform_super_admin"]);
     const tenant = await ctx.db.get(args.tenantId);
     if (!tenant || tenant.deletedAt !== undefined) throw new Error("Tenant not found");
-    if (tenant.subscriberCountBackfillRunning) throw new Error("Subscriber count backfill is already running");
-    await ctx.db.patch(tenant._id, { subscriberCountBackfillRunning: true });
+    const now = Date.now();
+    const heartbeatAt = tenant.subscriberCountBackfillHeartbeatAt ?? tenant.subscriberCountBackfillStartedAt ?? 0;
+    const stale = tenant.subscriberCountBackfillRunning === true && now - heartbeatAt > SUBSCRIBER_COUNT_BACKFILL_STALE_MS;
+    if (tenant.subscriberCountBackfillRunning && !stale) throw new Error("Subscriber count backfill is already running");
+    const runId = crypto.randomUUID();
+    const resumeCursor = stale ? tenant.subscriberCountBackfillCursor ?? null : null;
+    const resumeCount = stale ? tenant.subscriberCountBackfillProgress ?? 0 : 0;
+    await ctx.db.patch(tenant._id, {
+      subscriberCountBackfillRunning: true,
+      subscriberCountBackfillRunId: runId,
+      subscriberCountBackfillStartedAt: now,
+      subscriberCountBackfillHeartbeatAt: now,
+    });
     await logAudit(ctx, {
-      action: "tenant.subscriber_count_backfill_started",
+      action: stale ? "tenant.subscriber_count_backfill_restarted" : "tenant.subscriber_count_backfill_started",
       entityTable: "tenants",
       entityId: tenant._id,
       changedBy: actor._id,
       tenantId: tenant._id,
-      before: { subscriberCount: tenant.subscriberCount ?? null, backfillRunning: false },
-      after: { backfillRunning: true },
+      before: { subscriberCount: tenant.subscriberCount ?? null, backfillRunning: tenant.subscriberCountBackfillRunning ?? false, heartbeatAt },
+      after: { backfillRunning: true, resumedFromSavedProgress: stale, accumulatedCount: resumeCount },
     });
-    await ctx.scheduler.runAfter(0, internal.tenantControl.backfillTenantSubscriberCount, {
-      tenantId: tenant._id,
-      actorUserId: actor._id,
-      cursor: null,
-      accumulatedCount: 0,
-    });
+    try {
+      await ctx.scheduler.runAfter(0, internal.tenantControl.backfillTenantSubscriberCount, {
+        tenantId: tenant._id,
+        actorUserId: actor._id,
+        runId,
+        cursor: resumeCursor,
+        accumulatedCount: resumeCount,
+      });
+    } catch {
+      await ctx.db.patch(tenant._id, { subscriberCountBackfillRunning: false, subscriberCountBackfillRunId: undefined, subscriberCountBackfillStartedAt: undefined, subscriberCountBackfillHeartbeatAt: undefined });
+      throw new Error("Subscriber count recalculation could not be scheduled; retry later");
+    }
     return { started: true };
   },
 });
 
 /** Platform-only tenant estate inventory. It intentionally includes no tenant-owned records. */
-export const listForPlatform = query({
-  args: {},
-  handler: async (ctx) => {
-    await requirePlatformSubRole(ctx, [...PLATFORM_SUB_ROLE_READERS]);
-    const tenants = await ctx.db.query("tenants").order("desc").collect();
-    return Promise.all(tenants.filter(tenant => tenant.deletedAt === undefined).map(tenant => toPlatformTenant(ctx, tenant)));
-  },
-});
-
 /** Cursor-paged directory query; only the requested tenant page is joined. */
 export const listForPlatformPage = query({
   args: { paginationOpts: paginationOptsValidator },
@@ -321,6 +337,7 @@ export const getPlatformOverview = query({
       total: tenants.length,
       active: tenants.filter(tenant => tenant.status === "active").length,
       trial: tenants.filter(tenant => tenant.status === "trial").length,
+      provisioning: tenants.filter(tenant => tenant.status === "provisioning").length,
       suspended: tenants.filter(tenant => tenant.status === "suspended").length,
       pendingDeletion: tenants.filter(tenant => tenant.status === "pending_deletion").length,
       missingIdentity: tenants.filter(tenant => !tenant.workosOrganizationId).length,
