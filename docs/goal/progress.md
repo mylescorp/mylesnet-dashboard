@@ -99,3 +99,41 @@ Newest entries last. Keep current after every step so a reset can resume.
 - Production URL: not deployed (see `blockers.md` B-001).
 - Next task: platform session enforcement (30-minute inactivity logout, 25-minute warning, 12-hour absolute lifetime); then continue the `apps/admin`/`apps/network` boundary extraction.
 
+## 2026-10-13 Foundation - PR #95 platform session policy enforced
+
+- Implemented the session policy fixed alongside the mandatory-MFA decision
+  (30-minute inactivity timeout, 25-minute warning, 12-hour absolute lifetime)
+  from a single source, `apps/web/shared/auth/sessionPolicy.ts`, with pure
+  evaluators and 13 `node --test` cases (values, boundaries, absolute
+  precedence, clock skew, per-session key isolation, timestamp parsing).
+- Server half: `requirePanelAccess` returns the `AuthSession`; the platform
+  layout calls `platformSession.ts`, which enforces the 12-hour cap from the
+  WorkOS `auth_time` and redirects to the new `/sign-out` route (ends the
+  WorkOS session, returns to sign-in). `Date.now()` lives in that non-component
+  module so the render path stays pure.
+- Browser half: `SessionGuard` (mounted only by the platform layout, so tenant
+  panels are unchanged) warns at 25 minutes, signs out at 30, and enforces the
+  cap in-page; activity is shared across tabs via `localStorage` keyed by the
+  `sessionId`. Review hardening: a page load counts as activity only while the
+  stored activity is still inside the window (reopening a platform tab after
+  the timeout ends the session instead of resuming it), and activity arriving
+  after the window closes ends the session instead of extending it. The expiry
+  notice is modal (ported, focus moved, Tab trapped, background inert) and its
+  action is `/sign-out`; a failed sign-out clears the in-flight flag and retries.
+- Verification: repository `node --test` 229/229 (13 new cases); web jest 25/25
+  (10 new `SessionGuard` cases); web typecheck; lint 0 errors (14 pre-existing
+  warnings outside the diff); design-token check; production build passed with a
+  non-secret Convex URL placeholder. No new runtime dependency and no Convex
+  change.
+- Greptile 5/5 on the hardened head `dcacce0` after one review round (one P0
+  idle-resume finding, two P2 sign-out/accessibility findings, all fixed).
+  Merged at `9c5c549` (squash). See PR #95.
+
+### Heartbeat
+
+- Time: 2026-10-13 platform Phase 0 session.
+- Module: Foundation - platform Phase 0 (session policy enforced).
+- Result: one policy source drives the server's 12-hour cap and the browser's 25-minute warning, 30-minute inactivity logout, and 12-hour cap; PR #95 merged.
+- Production URL: not deployed (see `blockers.md` B-001).
+- Next task: the `apps/admin`/`apps/network` boundary extraction and the remaining Phase 0 role-matrix/deployment-target work; then Phase 1 tenant lifecycle items.
+
