@@ -5,6 +5,14 @@ export type RelationshipLifecycleRow = {
   suspendedByRelationshipId?: string;
 };
 
+/** Return whether an active edge belongs in the graph for a proposed cycle check. */
+export function shouldTraverseRelationshipForCycle(
+  relationship: { id: string; deletedAt?: number },
+  excludedRelationshipId?: string,
+): boolean {
+  return relationship.deletedAt === undefined && relationship.id !== excludedRelationshipId;
+}
+
 export function planPartnerSuspend(root: RelationshipLifecycleRow, descendants: RelationshipLifecycleRow[]) {
   if (root.status !== "active") throw new Error("Only an active relationship can be suspended");
   const rootPatch = { status: "suspended" as const, statusBeforeSuspension: "active" as const, suspendedByRelationshipId: undefined };

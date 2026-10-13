@@ -22,7 +22,7 @@ export const list = query({
     const findings = [];
     for (const payment of page.page) {
       const [duplicateRows, invoice, tenant] = await Promise.all([
-        payment.reference.trim() ? ctx.db.query("payments").withIndex("by_gateway_reference", q => q.eq("gateway", payment.gateway).eq("reference", payment.reference)).take(2) : Promise.resolve([]),
+        payment.reference.trim() ? ctx.db.query("payments").withIndex("by_tenant_gateway_reference", q => q.eq("tenantId", payment.tenantId).eq("gateway", payment.gateway).eq("reference", payment.reference)).take(2) : Promise.resolve([]),
         payment.invoiceId ? ctx.db.get(payment.invoiceId) : Promise.resolve(null),
         payment.tenantId ? ctx.db.get(payment.tenantId) : Promise.resolve(null),
       ]);

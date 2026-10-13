@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { canTransitionRunStatus, matchStatementLine, parseMajorAmountToMinor, parseStatementCsv, parseStatementTimestamp } from "./platformReconciliationCore.ts";
+import { canTransitionRunStatus, matchStatementLine, matchStatementLineForTenant, parseMajorAmountToMinor, parseStatementCsv, parseStatementTimestamp } from "./platformReconciliationCore.ts";
 
 const line = { rowNumber: 2, reference: "gw-1", amountMinor: 1250, currency: "KES", settledAt: 1_800_000_000_000 };
 test("statement parser accepts exact minor-unit amounts and rejects ambiguous precision", () => {
@@ -25,6 +25,17 @@ test("statement matching classifies duplicates, missing/ambiguous payments, curr
   assert.equal(matchStatementLine(line, [{ id: "a", amount: 12.51, currency: "KES" }], false).status, "amount_mismatch");
   assert.equal(matchStatementLine(line, [{ id: "a", amount: 12.5, currency: "KES", status: "pending" }], false).status, "payment_status_mismatch");
   assert.equal(matchStatementLine(line, [{ id: "a", tenantId: "t1", amount: 12.5, currency: "KES" }], false).status, "matched");
+});
+
+test("statement matches ignore same-reference payments owned by another tenant", () => {
+  const candidates = [
+    { id: "other-tenant", tenantId: "t2", amount: 12.5, currency: "KES" },
+    { id: "statement-tenant", tenantId: "t1", amount: 12.5, currency: "KES" },
+  ];
+  assert.equal(matchStatementLineForTenant(line, candidates.slice(0, 1), "t1", false).status, "missing_payment");
+  const match = matchStatementLineForTenant(line, candidates, "t1", false);
+  assert.equal(match.status, "matched");
+  assert.equal(match.payment?.id, "statement-tenant");
 });
 
 test("reconciliation runs progress imported to reviewed to closed and can be voided with no hard delete", () => {

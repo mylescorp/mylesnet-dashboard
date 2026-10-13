@@ -30,6 +30,10 @@ export function matchStatementLine(line: StatementLine, candidates: PaymentMatch
   return { status: "matched", payment, internalAmountMinor };
 }
 
+export function matchStatementLineForTenant(line: StatementLine, candidates: PaymentMatchInput[], tenantId: string, duplicateInStatement: boolean) {
+  return matchStatementLine(line, candidates.filter(payment => payment.tenantId === tenantId), duplicateInStatement);
+}
+
 export type ReconciliationRunStatus = "imported" | "reviewed" | "closed" | "void";
 export function canTransitionRunStatus(from: ReconciliationRunStatus, to: ReconciliationRunStatus): boolean {
   if (from === "void") return false;

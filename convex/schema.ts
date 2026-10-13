@@ -218,6 +218,9 @@ export default defineSchema({
 
   /** Imported external settlement statement, retained as a reviewable run. */
   platformPaymentReconciliationRuns: defineTable({
+    // Optional only for historical imports created before statement scope was required.
+    tenantId: v.optional(v.id("tenants")),
+    tenantName: v.optional(v.string()),
     gateway: v.string(),
     statementName: v.string(),
     status: v.union(v.literal("imported"), v.literal("reviewed"), v.literal("closed"), v.literal("void")),
@@ -233,7 +236,7 @@ export default defineSchema({
     .index("by_importedAt", ["importedAt"])
     .index("by_gateway_and_importedAt", ["gateway", "importedAt"]),
 
-  /** Immutable statement rows with the cross-tenant payment match at import time. */
+  /** Immutable statement rows with a tenant-scoped payment match at import time. */
   platformPaymentReconciliationRows: defineTable({
     runId: v.id("platformPaymentReconciliationRuns"),
     rowNumber: v.number(),

@@ -3,6 +3,8 @@ import type { PaginationResult } from "convex/server";
 
 export type ReconciliationRun = {
   _id: string;
+  tenantId?: string;
+  tenantName?: string;
   gateway: string;
   statementName: string;
   status: "imported" | "reviewed" | "closed" | "void";
@@ -29,6 +31,6 @@ export type ReconciliationRow = {
 export const platformReconciliation = {
   listRuns: makeFunctionReference<"query", { paginationOpts: { numItems: number; cursor: string | null } }, PaginationResult<ReconciliationRun>>("platformReconciliation:listRuns"),
   listRows: makeFunctionReference<"query", { runId: string; paginationOpts: { numItems: number; cursor: string | null } }, PaginationResult<ReconciliationRow>>("platformReconciliation:listRows"),
-  importStatement: makeFunctionReference<"mutation", { gateway: string; statementName: string; rows: StatementImportRow[] }, { runId: string; rowCount: number; matchedCount: number; exceptionCount: number }>("platformReconciliation:importStatement"),
+  importStatement: makeFunctionReference<"mutation", { tenantId: string; gateway: string; statementName: string; rows: StatementImportRow[] }, { runId: string; rowCount: number; matchedCount: number; exceptionCount: number }>("platformReconciliation:importStatement"),
   updateRunStatus: makeFunctionReference<"mutation", { runId: string; status: ReconciliationRun["status"]; reason?: string }, { status: ReconciliationRun["status"] }>("platformReconciliation:updateRunStatus"),
 };

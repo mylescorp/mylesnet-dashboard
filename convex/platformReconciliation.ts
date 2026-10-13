@@ -4,7 +4,7 @@ import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requirePlatformSubRole } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
-import { canTransitionRunStatus, matchStatementLine, parseMajorAmountToMinor, parseStatementTimestamp } from "./lib/platformReconciliationCore";
+import { canTransitionRunStatus, matchStatementLineForTenant, parseMajorAmountToMinor, parseStatementTimestamp } from "./lib/platformReconciliationCore";
 
 const managers = ["platform_super_admin", "platform_finance"];
 const readers = [...managers, "platform_ops"];
@@ -31,9 +31,11 @@ export const listRows = query({
 });
 
 export const importStatement = mutation({
-  args: { gateway: v.string(), statementName: v.string(), rows: v.array(rowArgs) },
+  args: { tenantId: v.id("tenants"), gateway: v.string(), statementName: v.string(), rows: v.array(rowArgs) },
   handler: async (ctx, args) => {
     const actor = await requirePlatformSubRole(ctx, managers);
+    const tenant = await ctx.db.get(args.tenantId);
+    if (!tenant || tenant.deletedAt !== undefined) throw new Error("Choose an active organization for this statement");
     const gateway = args.gateway.trim();
     const statementName = args.statementName.trim();
     if (!gateway || gateway.length > 80) throw new Error("Gateway name must be between 1 and 80 characters");
@@ -52,15 +54,16 @@ export const importStatement = mutation({
     const countsByReference = new Map<string, number>();
     for (const row of parsed) countsByReference.set(row.reference, (countsByReference.get(row.reference) ?? 0) + 1);
     const now = Date.now();
-    const runId = await ctx.db.insert("platformPaymentReconciliationRuns", { gateway, statementName, status: "imported", rowCount: parsed.length, matchedCount: 0, exceptionCount: parsed.length, importedBy: actor._id, importedAt: now, updatedBy: actor._id, updatedAt: now });
+    const runId = await ctx.db.insert("platformPaymentReconciliationRuns", { tenantId: tenant._id, tenantName: tenant.name, gateway, statementName, status: "imported", rowCount: parsed.length, matchedCount: 0, exceptionCount: parsed.length, importedBy: actor._id, importedAt: now, updatedBy: actor._id, updatedAt: now });
     let matchedCount = 0;
     for (const row of parsed) {
-      const candidates = countsByReference.get(row.reference)! > 1 ? [] : await ctx.db.query("payments").withIndex("by_gateway_reference", q => q.eq("gateway", gateway).eq("reference", row.reference)).take(2);
-      const match = matchStatementLine(row, candidates.map(payment => ({ id: payment._id, tenantId: payment.tenantId, amount: payment.amount, currency: payment.currency, status: payment.status })), countsByReference.get(row.reference)! > 1);
+      const candidates = countsByReference.get(row.reference)! > 1 ? [] : await ctx.db.query("payments").withIndex("by_tenant_gateway_reference", q => q.eq("tenantId", tenant._id).eq("gateway", gateway).eq("reference", row.reference)).take(2);
+      const match = matchStatementLineForTenant(row, candidates.map(payment => ({ id: payment._id, tenantId: payment.tenantId, amount: payment.amount, currency: payment.currency, status: payment.status })), String(tenant._id), countsByReference.get(row.reference)! > 1);
       if (match.status === "matched") matchedCount++;
       const matchedPayment = match.payment ? candidates.find(payment => payment._id === match.payment?.id) : undefined;
       await ctx.db.insert("platformPaymentReconciliationRows", {
         runId,
+        tenantId: tenant._id,
         rowNumber: row.rowNumber,
         reference: row.reference,
         statementAmountMinor: row.amountMinor,

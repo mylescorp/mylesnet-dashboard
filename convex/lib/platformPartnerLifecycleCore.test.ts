@@ -1,6 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { planPartnerRestore, planPartnerSuspend } from "./platformPartnerLifecycleCore.ts";
+import { planPartnerRestore, planPartnerSuspend, shouldTraverseRelationshipForCycle } from "./platformPartnerLifecycleCore.ts";
+
+test("cycle validation excludes the relationship being replaced but keeps other active edges", () => {
+  assert.equal(shouldTraverseRelationshipForCycle({ id: "edited-edge" }, "edited-edge"), false);
+  assert.equal(shouldTraverseRelationshipForCycle({ id: "other-edge" }, "edited-edge"), true);
+  assert.equal(shouldTraverseRelationshipForCycle({ id: "archived-edge", deletedAt: 1 }, "edited-edge"), false);
+});
 
 test("partner suspension marks active descendants under the initiating root", () => {
   const result = planPartnerSuspend({ id: "root", status: "active" }, [

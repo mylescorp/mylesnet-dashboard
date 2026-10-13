@@ -4,7 +4,7 @@ import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/s
 import type { Doc, Id } from "./_generated/dataModel";
 import { requirePlatformSubRole } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
-import { planPartnerRestore, planPartnerSuspend } from "./lib/platformPartnerLifecycleCore";
+import { planPartnerRestore, planPartnerSuspend, shouldTraverseRelationshipForCycle } from "./lib/platformPartnerLifecycleCore";
 import { canTenantOperate } from "./lib/tenantCore";
 
 const partnerType = v.union(v.literal("agency"), v.literal("reseller"));
@@ -54,7 +54,7 @@ export const tenantOptions = query({
   },
 });
 
-async function validatePair(ctx: QueryCtx | MutationCtx, parentId: Id<"tenants">, childId: Id<"tenants">) {
+async function validatePair(ctx: QueryCtx | MutationCtx, parentId: Id<"tenants">, childId: Id<"tenants">, excludedRelationshipId?: Id<"tenantRelationships">) {
   if (parentId === childId) throw new Error("An organization cannot be its own agency or reseller");
   const [parent, child] = await Promise.all([ctx.db.get(parentId), ctx.db.get(childId)]);
   if (!parent || parent.deletedAt !== undefined || !canTenantOperate(parent.status) || !child || child.deletedAt !== undefined || !canTenantOperate(child.status)) throw new Error("Choose two existing, operating organization records");
@@ -69,7 +69,9 @@ async function validatePair(ctx: QueryCtx | MutationCtx, parentId: Id<"tenants">
     const links = await ctx.db.query("tenantRelationships").withIndex("by_parent", q => q.eq("parentTenantId", current)).take(101);
     examined += links.length;
     if (examined > 100) throw new Error("Relationship graph exceeds the 100-link validation safety limit");
-    for (const link of links) if (link.deletedAt === undefined) pending.push(link.childTenantId);
+    for (const link of links) {
+      if (shouldTraverseRelationshipForCycle({ id: String(link._id), deletedAt: link.deletedAt }, excludedRelationshipId ? String(excludedRelationshipId) : undefined)) pending.push(link.childTenantId);
+    }
   }
   return { parent, child };
 }
@@ -107,7 +109,7 @@ export const update = mutation({
     if (row.status === "suspended" && (parentTenantId !== row.parentTenantId || childTenantId !== row.childTenantId)) {
       throw new Error("Restore the relationship before changing its linked organizations");
     }
-    await validatePair(ctx, parentTenantId, childTenantId);
+    await validatePair(ctx, parentTenantId, childTenantId, row._id);
     if (parentTenantId !== row.parentTenantId || childTenantId !== row.childTenantId) {
       const duplicate = await ctx.db.query("tenantRelationships").withIndex("by_parent_child_type", q => q.eq("parentTenantId", parentTenantId).eq("childTenantId", childTenantId).eq("type", row.type)).first();
       if (duplicate && duplicate._id !== row._id && duplicate.deletedAt === undefined) throw new Error("This organization relationship already exists");
