@@ -292,7 +292,7 @@ export const listPlatformTenantTargetsPage = query({
       ...args.paginationOpts,
       numItems: Math.max(1, Math.min(50, Math.floor(args.paginationOpts.numItems))),
     });
-    return { ...page, page: page.page.filter(tenant => tenant.deletedAt === undefined).map(tenant => ({ _id: tenant._id, name: tenant.name })) };
+    return { ...page, page: page.page.filter(tenant => tenant.deletedAt === undefined).map(tenant => ({ _id: tenant._id, name: tenant.name, slug: tenant.slug })) };
   },
 });
 

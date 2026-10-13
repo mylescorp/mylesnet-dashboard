@@ -112,7 +112,7 @@ export type TenantDetail = {
 export const tenantControl = {
   listForPlatformPage: makeFunctionReference<"query", { paginationOpts: { numItems: number; cursor: string | null } }, PaginationResult<PlatformTenant>>("tenantControl:listForPlatformPage"),
   listSubscriptionsPage: makeFunctionReference<"query", { paginationOpts: { numItems: number; cursor: string | null } }, PaginationResult<SubscriptionTenant>>("tenantControl:listSubscriptionsPage"),
-  listPlatformTenantTargetsPage: makeFunctionReference<"query", { paginationOpts: { numItems: number; cursor: string | null } }, PaginationResult<{ _id: string; name: string }>>("tenantControl:listPlatformTenantTargetsPage"),
+  listPlatformTenantTargetsPage: makeFunctionReference<"query", { paginationOpts: { numItems: number; cursor: string | null } }, PaginationResult<{ _id: string; name: string; slug: string }>>("tenantControl:listPlatformTenantTargetsPage"),
   getPlatformOverview: makeFunctionReference<"query", Record<string, never>, PlatformOverview>("tenantControl:getPlatformOverview"),
   getCurrentWorkspace: makeFunctionReference<"query", Record<string, never>, TenantWorkspaceResult>("tenantControl:getCurrentWorkspace"),
   setStatus: makeFunctionReference<"mutation", { tenantId: string; status: "active" | "suspended" }, { changed: boolean; status: TenantStatus }>("tenantControl:setStatus"),

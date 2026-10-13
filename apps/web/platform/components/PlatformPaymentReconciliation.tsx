@@ -32,7 +32,7 @@ export function PlatformPaymentReconciliation() {
   const [tenantId, setTenantId] = useState(""); const [gateway, setGateway] = useState(""); const [statementName, setStatementName] = useState(""); const [csv, setCsv] = useState("");
   const [selected, setSelected] = useState<ReconciliationRun | null>(null); const [error, setError] = useState(""); const [notice, setNotice] = useState(""); const [busy, setBusy] = useState(false);
   const { results: runs, status: runStatus, loadMore: loadMoreRuns } = usePaginatedQuery(platformReconciliation.listRuns, {}, { initialNumItems: 20 });
-  const { results: tenants, status: tenantStatus, loadMore: loadMoreTenants } = usePaginatedQuery(tenantControl.listForPlatformPage, canImport ? {} : "skip", { initialNumItems: 50 });
+  const { results: tenants, status: tenantStatus, loadMore: loadMoreTenants } = usePaginatedQuery(tenantControl.listPlatformTenantTargetsPage, canImport ? {} : "skip", { initialNumItems: 50 });
   const { results: rows, status: rowStatus, loadMore: loadMoreRows } = usePaginatedQuery(platformReconciliation.listRows, selected ? { runId: selected._id } : "skip", { initialNumItems: 50 });
   const importStatement = useMutation(platformReconciliation.importStatement); const updateStatus = useMutation(platformReconciliation.updateRunStatus);
   const exceptionCount = useMemo(() => rows?.filter(row => row.matchStatus !== "matched").length ?? 0, [rows]);
