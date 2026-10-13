@@ -179,6 +179,15 @@ export function isPlatformUser(roles: ResolvedRole[]): boolean {
   return roles.some((role) => role.isPlatform);
 }
 
+/**
+ * Enforce the approved platform MFA policy (mandatory for every platform role,
+ * fail closed; see convex/lib/mfa.ts). A no-op when none of the user's roles
+ * are in the mandatory platform set, so tenant-facing handlers are unaffected.
+ */
+function enforcePlatformMfa(user: Doc<"users">, roles: ResolvedRole[]): void {
+  assertMfaCompliancePolicy(user, roles.map((role) => role.slug));
+}
+
 export function isPlatformOwner(roles: ResolvedRole[]): boolean {
   return roles.some((role) => role.slug === "platform_owner");
 }
@@ -199,6 +208,7 @@ export async function requirePlatformUser(ctx: QueryCtx | MutationCtx): Promise<
   if (!isPlatformUser(roles)) {
     throw new Error("Unauthorized: platform access required");
   }
+  enforcePlatformMfa(user, roles);
   return user;
 }
 
@@ -212,7 +222,7 @@ export async function requirePlatformAdmin(ctx: QueryCtx | MutationCtx): Promise
   if (!isPlatformAdmin(roles)) {
     throw new Error("Unauthorized: admin role required");
   }
-  assertMfaCompliancePolicy(user, roles.map((role) => role.slug));
+  enforcePlatformMfa(user, roles);
   return user;
 }
 
@@ -226,7 +236,7 @@ export async function requirePlatformOwner(ctx: QueryCtx | MutationCtx): Promise
   if (!isPlatformOwner(roles)) {
     throw new Error("Unauthorized: owner role required");
   }
-  assertMfaCompliancePolicy(user, roles.map((role) => role.slug));
+  enforcePlatformMfa(user, roles);
   return user;
 }
 
@@ -243,6 +253,7 @@ export async function requireAnyRole(
   if (!slugs.some((slug) => roles.some((role) => role.slug === slug))) {
     throw new Error("Unauthorized: insufficient role");
   }
+  enforcePlatformMfa(user, roles);
   return user;
 }
 
@@ -262,6 +273,7 @@ export async function requireOpsOrAbove(ctx: QueryCtx | MutationCtx): Promise<Do
   if (!isOpsOrAbove(roles)) {
     throw new Error("Unauthorized: operations role required");
   }
+  enforcePlatformMfa(user, roles);
   return user;
 }
 
@@ -281,6 +293,7 @@ export async function requireFinanceOrAbove(ctx: QueryCtx | MutationCtx): Promis
   if (!isFinanceOrAbove(roles)) {
     throw new Error("Unauthorized: finance role required");
   }
+  enforcePlatformMfa(user, roles);
   return user;
 }
 
@@ -294,6 +307,7 @@ export async function requireInvestorViewer(ctx: QueryCtx | MutationCtx): Promis
   if (!isFinanceOrAbove(roles) && !roles.some((role) => role.slug === "investor_viewer")) {
     throw new Error("Unauthorized: investor access required");
   }
+  enforcePlatformMfa(user, roles);
   return user;
 }
 
@@ -307,7 +321,10 @@ export async function requirePermission(
     throw new Error("Unauthorized: account is inactive");
   }
   const roles = await resolveRoles(ctx, user);
-  if (hasPermission(roles, permission) && isPlatformUser(roles)) return user;
+  if (hasPermission(roles, permission) && isPlatformUser(roles)) {
+    enforcePlatformMfa(user, roles);
+    return user;
+  }
 
   // Tenant permissions exist only within the active organization mapped to a
   // real tenant. They never satisfy a platform-role guard.
@@ -439,6 +456,7 @@ export async function requirePlatformSubRole(
   if (!hasPlatformSubRole(roles, allowedSubRoles)) {
     throw new Error("Unauthorized: insufficient role");
   }
+  enforcePlatformMfa(user, roles);
   return user;
 }
 
@@ -464,6 +482,7 @@ export async function requirePlatformSubRoleForUser(
   if (!hasPlatformSubRole(roles, allowedSubRoles)) {
     throw new Error("Unauthorized: insufficient role");
   }
+  enforcePlatformMfa(user, roles);
   return user;
 }
 

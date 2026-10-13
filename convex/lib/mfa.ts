@@ -1,60 +1,85 @@
 /**
- * Optional MFA policy for MylesNet.
+ * MFA policy for MylesNet platform roles.
  *
  * Enforcement model: WorkOS owns enrollment (users authenticate through
  * AuthKit and enroll factors there). This module is the app-side mirror of
- * policy: it exposes whether a user has chosen to enrol a factor and reads the
- * marker synced into the `users` row when identity is reconciled. MFA is a
- * user-controlled account-security option; it never authorizes or blocks a
- * MylesNet panel, mutation, or onboarding workflow.
+ * policy: it reads the marker synced into the `users` row when identity is
+ * reconciled and fails closed for a platform role that has not enrolled a
+ * factor. Approved policy (2026-10-12): MFA is mandatory for every platform
+ * role. The single approved sources are `docs/auth/README.md` and
+ * `docs/decisions.md`; see the session policy there too (30-minute inactivity
+ * timeout, 25-minute warning, 12-hour absolute lifetime).
  */
 
-export const MFA_ENFORCEMENT_MODE = "optional" as const;
-/** Retained as a compatibility export; no role is mandatory in optional mode. */
-export const MANDATORY_MFA_ROLES = [] as const;
+export const MFA_ENFORCEMENT_MODE = "required" as const;
+
+/** Every platform role requires MFA enrollment. */
+export const MANDATORY_MFA_ROLES = [
+  "platform_owner",
+  "platform_admin",
+  "ops_manager",
+  "finance_manager",
+  "platform_support",
+] as const;
 
 export type MandatoryMfaRole = (typeof MANDATORY_MFA_ROLES)[number];
 
 export interface MfaGuardConfiguration {
+  /** Shadow mode records nothing and returns; only for rollout transitions. */
   shadowMode?: boolean;
   enforcementLevel?: string;
 }
 
-/** MFA is optional for every role. */
+export interface MfaEnrollment {
+  mfaEnrolled?: boolean;
+  mfaEnrolledAt?: number;
+}
+
+/** Whether a role slug is a platform role that requires mandatory MFA. */
 export function requiresMandatory2FA(roleSlug: string | null | undefined): boolean {
-  void roleSlug;
-  return false;
+  return (MANDATORY_MFA_ROLES as readonly string[]).includes(roleSlug ?? "");
+}
+
+function hasEnrolledFactor(enrollment: MfaEnrollment | null | undefined): boolean {
+  return Boolean(enrollment?.mfaEnrolled) || Boolean(enrollment?.mfaEnrolledAt);
 }
 
 /**
- * There is no MFA compliance gate in optional mode. Enrollment is still
- * recorded and surfaced as a personal security preference.
+ * A user is MFA-compliant when they hold no mandatory platform role or have
+ * enrolled a factor. An empty role list never counts as compliance for a
+ * platform role.
  */
 export function isMfaCompliant(
   roleSlugs: Array<string | null | undefined> | undefined,
-  user: { mfaEnrolledAt?: number } | null | undefined,
+  enrollment: MfaEnrollment | null | undefined,
 ): boolean {
-  void roleSlugs;
-  void user;
-  return true;
+  if (!roleSlugs || roleSlugs.length === 0) return true;
+  if (!roleSlugs.some(requiresMandatory2FA)) return true;
+  return hasEnrolledFactor(enrollment);
 }
 
-/** No role requires MFA in optional mode. */
-export function unmetMfaRoles(roleSlugs: Array<string | null | undefined>): string[] {
-  void roleSlugs;
-  return [];
+/** The mandatory platform roles the user holds without MFA enrollment. */
+export function unmetMfaRoles(
+  roleSlugs: Array<string | null | undefined>,
+  enrollment: MfaEnrollment | null | undefined,
+): string[] {
+  if (hasEnrolledFactor(enrollment)) return [];
+  return roleSlugs.filter(requiresMandatory2FA) as string[];
 }
 
 /**
- * Backward-compatible no-op for existing callers. Authorization remains based
- * on identity, role, active account, and tenant scope — never MFA enrollment.
+ * Fail-closed MFA guard for a resolved roles list. Throws when the user holds
+ * a mandatory platform role without MFA enrollment. Shadow mode returns
+ * without blocking and is only for approved rollout transitions.
  */
 export function assertMfaCompliance(
-  enrollment: { mfaEnrolled?: boolean; mfaEnrolledAt?: number },
+  enrollment: MfaEnrollment | null | undefined,
   roleSlugs: ReadonlyArray<string>,
   configuration: MfaGuardConfiguration = {},
 ): void {
-  void enrollment;
-  void roleSlugs;
-  void configuration;
+  if (configuration.shadowMode) return;
+  const unmet = unmetMfaRoles(roleSlugs as Array<string | null | undefined>, enrollment);
+  if (unmet.length > 0) {
+    throw new Error("Unauthorized: MFA enrollment is required for platform access");
+  }
 }

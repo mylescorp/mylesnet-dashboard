@@ -248,3 +248,17 @@ Correction note, 2026-10-11: the build command value shown in the entry above wa
 - **Changes:** Gated cross-tenant reads behind the active tenant and explicit platform sub-roles; added `canReadTenantReports` and `requireReportExportActor` so a scheduled export authorizes its creator before reading data or storing a file and drops the stored artifact if the writer still rejects; audited every ownership change and export write; bounded the backfill's per-batch and per-agent reads.
 - **Verification:** Web typecheck clean; repository `node --test` 206/206; lint zero errors (14 pre-existing warnings outside the diff); convex-tree `tsc` clean except 4 baseline test-file errors identical at `origin/main`; `next build` passed using a non-secret placeholder for the Convex URL variable.
 - **Status:** Merged at `81a1803`. See PR #80.
+
+### 2026-10-12 — Payment recording idempotency (Foundation)
+
+- **Scope:** Make recording the same tenant payment twice a no-op.
+- **Changes:** `payments.create` returns the existing payment when `(tenantId, gateway, reference)` already exists; `payments.update` normalizes the stored pair and rejects a key collision with another payment in the tenant; the create lookup falls back to the raw key so a row written before normalization still matches its retry; added the `by_tenant_gateway_reference` index and a pure `paymentIdempotencyCore` with duplicate-detection/tenant-scope tests.
+- **Verification:** Web typecheck clean; repository `node --test` 214/214; lint zero errors (14 pre-existing warnings outside the diff); convex-tree `tsc` clean except 4 baseline test-file errors identical at `origin/main`; `next build` passed using a non-secret placeholder for the Convex URL variable.
+- **Status:** Merged at `2d00cca`. See PR #92.
+
+### 2026-10-13 — Platform MFA policy enforced (Phase 0)
+
+- **Scope:** Reconcile the platform MFA policy to the owner-fixed decision (mandatory for every platform role) and make it the single approved source.
+- **Changes:** `convex/lib/mfa.ts` now requires MFA for `platform_owner`, `platform_admin`, `ops_manager`, `finance_manager`, and `platform_support`, and fails closed; `convex/lib/auth.ts` enforces it in every platform authorization gate; `docs/auth/README.md` records the MFA and session policy (30-minute inactivity, 25-minute warning, 12-hour absolute); `docs/decisions.md` records the approval. Tenant-facing handlers are unchanged.
+- **Verification:** repository `node --test` (mfa core expanded), web typecheck, lint, convex-tree `tsc`, and the production build run before merge.
+- **Status:** Branch `feat/platform-mfa-policy`; PR review pending. Session enforcement code is the next Phase 0 task.

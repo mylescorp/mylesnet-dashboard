@@ -817,6 +817,14 @@ Routes: `/platform/feature-flags` (list + create/edit/delete),
 - **L2 audit hash chain deferred** by authorization: starts as its own deploy
   only after Batch 1 lands green. Option A only.
 
+## Platform MFA and session policy — 2026-10-12
+
+- **Decision (owner-approved; supersedes the 2026-09-14 module note and the 2026-10-08 "optional for every role" state):** MFA is mandatory for every platform role (`platform_owner`, `platform_admin`, `ops_manager`, `finance_manager`, `platform_support`) and is enforced fail-closed in every platform authorization gate. Session policy is fixed: 30-minute inactivity timeout, warning at 25 minutes, 12-hour absolute session lifetime.
+- **Reason:** The owner-priority platform-to-production objective fixes these as release decisions. `convex/lib/mfa.ts` had been changed to optional-for-all-roles, contradicting `docs/auth/README.md`; the production plan flags this conflict as a Phase 0 exit criterion ("MFA policy has one approved source").
+- **Single source:** `convex/lib/mfa.ts` (policy core) and `docs/auth/README.md` (documentation); this entry records the approval. Shadow mode remains available only as an approved rollout transition.
+- **Scope:** MFA policy core, `convex/lib/auth.ts` enforcement across the platform gates, and updated tests. Session enforcement code (client inactivity guard + server checks + warning banner) is the next Phase 0 task; its policy values are fixed here and in `docs/auth/README.md`.
+- **Verification:** `convex/lib/mfa.test.ts` covers mandatory roles, fail-closed denial for unenrolled platform roles, non-blocking for tenant-only roles, and shadow mode. Repository `node --test`, typecheck, lint, convex-tree `tsc`, and the production build are run before merge.
+
 ## Platform Canonical Module Inventory - 2026-10-01
 
 - The owner-provided platform list A1–O2 is authoritative and tracked in `docs/development/platform-module-register-2026-10-01.md`. It contains 45 IDs, with C2 tenant SaaS invoices explicitly excluded (44 build modules). This supersedes the earlier 36-ID rollup. The supplied historical verification snapshot must be rechecked against current `main` before completion claims.
