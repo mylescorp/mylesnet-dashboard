@@ -1,4 +1,4 @@
-export type TenantLifecycleStatus = "provisioning" | "trial" | "active" | "suspended" | "cancelled";
+export type TenantLifecycleStatus = "provisioning" | "trial" | "active" | "suspended" | "pending_deletion" | "cancelled";
 export type RestorableTenantStatus = "trial" | "active";
 
 export function decideTenantLifecycleTransition(
@@ -14,7 +14,7 @@ export function decideTenantLifecycleTransition(
     return { changed: true, status: "suspended", statusBeforeSuspension: current };
   }
 
-  if (current === "cancelled" || current === "provisioning") {
+  if (current === "cancelled" || current === "provisioning" || current === "pending_deletion") {
     throw new Error("This tenant lifecycle state cannot be restored or activated here");
   }
   if (current === "suspended") {

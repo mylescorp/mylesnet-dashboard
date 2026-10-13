@@ -1,8 +1,9 @@
 import { v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
 import { action, internalMutation, internalQuery, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { getSystemRoleBySlug, PERMISSIONS, SYSTEM_ROLES, workosSlugForRole, ALL_PERMISSION_SLUGS, permissionInCatalog, CUSTOM_ROLE_DEFAULT_RANK } from "./lib/permissions";
-import { requirePermission } from "./lib/auth";
+import { requirePermission, requirePlatformSubRole } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -168,6 +169,30 @@ export const listRoles = query({
   },
 });
 
+/** Platform-only role catalog for the cross-tenant read-only access summary. */
+export const listPlatformRoles = query({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_ops", "platform_finance", "platform_support", "platform_readonly"]);
+    const page = await ctx.db.query("roles").order("desc").paginate(args.paginationOpts);
+    return {
+      ...page,
+      page: page.page
+        .filter((role) => role.isPlatform && role.deletedAt === undefined)
+        .map((role) => ({
+          _id: role._id,
+          name: role.name,
+          slug: role.slug,
+          description: role.description,
+          isSystem: role.isSystem,
+          isPlatform: role.isPlatform,
+          rank: role.rank,
+          permissions: role.permissions,
+        })),
+    };
+  },
+});
+
 export const getPermissionsCatalog = query({
   args: {},
   handler: async (ctx) => {
@@ -299,7 +324,8 @@ export const updateRole = action({
     const name = args.name !== undefined ? args.name.trim() : role.name;
     if (!name) throw new Error("A role name is required.");
     const description = args.description !== undefined ? args.description.trim() || undefined : role.description;
-    const permissions = args.permissions !== undefined ? Array.from(new Set(args.permissions)) : role.permissions;
+    const requestedPermissions = args.permissions !== undefined ? Array.from(new Set(args.permissions)) : role.permissions;
+    const permissions = role.slug === "platform_owner" ? [...ALL_PERMISSION_SLUGS] : requestedPermissions;
     for (const permission of permissions) {
       if (!permissionInCatalog(permission)) throw new Error(`Unknown permission: ${permission}`);
     }
@@ -467,4 +493,3 @@ export const upsertWebhookUser = internalMutation({
     });
   },
 });
-

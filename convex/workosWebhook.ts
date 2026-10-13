@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { shouldApplyMembershipDeletion, shouldApplyMembershipProviderEvent } from "./lib/platformMembershipSyncCore";
 
 type EventPayload = Record<string, unknown>;
 
@@ -185,6 +186,7 @@ export const processWorkosEvent = internalMutation({
         organizationId,
         roleSlug: roleSlug ?? undefined,
         status,
+        providerUpdatedAt: parseWosTimestamp(pickString(payload, ["updated_at", "updatedAt", "created_at", "createdAt"]) ?? undefined) ?? undefined,
         email: email ?? undefined,
         name: name ?? undefined,
       });
@@ -219,8 +221,27 @@ export const processWorkosEvent = internalMutation({
             .query("tenantMemberships")
             .withIndex("by_user_tenant", (q) => q.eq("userId", user._id).eq("tenantId", tenant._id))
             .first();
-          if (tenantMembership) {
-            await ctx.db.patch(tenantMembership._id, { status: "revoked", revokedAt: Date.now() });
+          const providerDeletedAt = parseWosTimestamp(pickString(payload, ["updated_at", "updatedAt", "created_at", "createdAt"]) ?? undefined) ?? undefined;
+          if (tenantMembership && shouldApplyMembershipDeletion(
+            tenantMembership.workosMembershipId, membershipId,
+            tenantMembership.providerUpdatedAt, providerDeletedAt,
+            tenantMembership.providerMembershipDeletedAt !== undefined,
+          )) {
+            const deletedAt = providerDeletedAt ?? Date.now();
+            await ctx.db.patch(tenantMembership._id, {
+              status: "revoked",
+              accessOverride: undefined,
+              accessOverrideUpdatedAt: undefined,
+              providerMembershipDeletedAt: deletedAt,
+              providerUpdatedAt: deletedAt,
+              revokedAt: deletedAt,
+            });
+            const pendingRequests = await ctx.db.query("platformUserAccessRequests")
+              .withIndex("by_target_tenant_created", q => q.eq("targetUserId", user._id).eq("tenantId", tenant._id))
+              .order("desc").take(50);
+            for (const request of pendingRequests) {
+              if (request.syncStatus === "pending") await ctx.db.patch(request._id, { syncStatus: "superseded" });
+            }
           }
         }
       }

@@ -7,14 +7,27 @@ import {
   hasPermission,
   hasRole,
   isPlatformStaff,
+  isPlatformSuperAdmin,
   panelForRole,
   roleMatchesPanel,
   toClaimArray,
   normalizeRoleClaims,
 } from "./rbac.ts";
+import {
+  canDeletePlatformTenant,
+  canManagePlatformInfrastructure,
+  canManagePlatformPlans,
+  canManagePlatformTenants,
+  canManagePlatformWhiteLabel,
+  canManagePlatformPartnerRegistry,
+  canReadPlatformPartnerRegistry,
+} from "../../platform/permissions.ts";
 
 test("panelForRole maps role slugs to canonical panels", () => {
   assert.equal(panelForRole("platform_owner"), "platform");
+  assert.equal(panelForRole("ops_manager"), "platform");
+  assert.equal(panelForRole("finance_manager"), "platform");
+  assert.equal(panelForRole("org-platform_owner"), "platform");
   assert.equal(panelForRole("platform_admin"), "platform");
   assert.equal(panelForRole("network_operator"), "network");
   assert.equal(panelForRole("agent"), "dashboard");
@@ -36,6 +49,12 @@ test("hasRole / hasAnyRole implement all-vs-any semantics", () => {
   assert.equal(hasRole(["platform_owner"], []), true);
   assert.equal(hasAnyRole(["agent"], ["platform_owner", "agent"]), true);
   assert.equal(hasAnyRole(["agent"], ["platform_owner"]), false);
+  assert.equal(hasAnyRole(["org-platform_owner"], ["platform_super_admin", "platform_owner"]), true);
+  assert.equal(hasRole(["org-platform_owner"], ["platform_owner"]), true);
+  assert.equal(hasAnyRole(["org-platform_ops"], ["ops_manager"]), true);
+  assert.equal(hasAnyRole(["org-platform_finance"], ["finance_manager"]), true);
+  assert.equal(hasAnyRole(["org-platform_support"], ["platform_support"]), true);
+  assert.equal(hasAnyRole(["org-platform_readonly"], ["platform_readonly"]), true);
   assert.equal(hasAnyRole(["agent"], []), true);
 });
 
@@ -60,6 +79,7 @@ test("normalizeRoleClaims supports singular and plural AuthKit role claims", () 
   assert.deepEqual(normalizeRoleClaims("platform_owner", undefined), ["platform_owner"]);
   assert.deepEqual(normalizeRoleClaims(undefined, ["tenant_admin"]), ["tenant_admin"]);
   assert.deepEqual(normalizeRoleClaims("platform_owner", ["platform_owner", "platform_admin"]), ["platform_owner", "platform_admin"]);
+  assert.deepEqual(normalizeRoleClaims(undefined, { org_1: ["org-platform_owner"] }), ["org-platform_owner"]);
 });
 
 test("flattenOrgScopedRoles handles org-scoped role claims", () => {
@@ -71,7 +91,41 @@ test("flattenOrgScopedRoles handles org-scoped role claims", () => {
 
 test("isPlatformStaff flags platform staff roles", () => {
   assert.equal(isPlatformStaff(["platform_owner"]), true);
+  assert.equal(isPlatformStaff(["ops_manager"]), true);
+  assert.equal(isPlatformStaff(["finance_manager"]), true);
+  assert.equal(isPlatformStaff(["org-platform_owner"]), true);
   assert.equal(isPlatformStaff(["platform_admin", "agent"]), true);
   assert.equal(isPlatformStaff(["agent"]), false);
   assert.equal(isPlatformStaff([]), false);
+});
+
+test("platform access management follows super-admin sub-role, including org alias", () => {
+  assert.equal(isPlatformSuperAdmin(["platform_owner"]), true);
+  assert.equal(isPlatformSuperAdmin(["platform_admin"]), false);
+  assert.equal(isPlatformSuperAdmin(["org-platform_owner"]), true);
+  assert.equal(isPlatformSuperAdmin(["platform_finance"]), false);
+  assert.equal(isPlatformSuperAdmin(["ops_manager"]), false);
+  assert.equal(isPlatformSuperAdmin(["platform_support"]), false);
+  assert.equal(isPlatformSuperAdmin(["platform_readonly"]), false);
+});
+
+test("platform UI write controls match the tenant, finance, infrastructure, and white-label role matrices", () => {
+  const allowed = (check: (roles: string[]) => boolean, yes: string[], no: string[]) => {
+    for (const role of yes) assert.equal(check([role]), true, `${role} should be allowed`);
+    for (const role of no) assert.equal(check([role]), false, `${role} should be denied`);
+  };
+  allowed(canManagePlatformTenants, ["platform_owner", "ops_manager", "org-platform_owner"], ["platform_admin", "org-platform_admin", "finance_manager", "platform_support", "platform_readonly"]);
+  allowed(canDeletePlatformTenant, ["platform_owner", "org-platform_owner"], ["platform_admin", "org-platform_admin", "ops_manager", "finance_manager", "platform_support", "platform_readonly"]);
+  allowed(canManagePlatformPlans, ["platform_owner", "finance_manager", "org-platform_owner"], ["platform_admin", "org-platform_admin", "ops_manager", "platform_support", "platform_readonly"]);
+  allowed(canManagePlatformInfrastructure, ["platform_owner", "ops_manager", "org-platform_owner"], ["platform_admin", "org-platform_admin", "finance_manager", "platform_support", "platform_readonly"]);
+  allowed(canManagePlatformWhiteLabel, ["platform_owner", "org-platform_owner"], ["platform_admin", "org-platform_admin", "ops_manager", "finance_manager", "platform_support", "platform_readonly"]);
+});
+
+test("agency and reseller registry UI matches the D1 read and write matrix", () => {
+  const allowed = (check: (roles: readonly string[] | undefined) => boolean, yes: string[], no: string[]) => {
+    for (const role of yes) assert.equal(check([role]), true, `${role} should be allowed`);
+    for (const role of no) assert.equal(check([role]), false, `${role} should be denied`);
+  };
+  allowed(canReadPlatformPartnerRegistry, ["platform_owner", "platform_ops", "ops_manager", "platform_finance", "finance_manager", "platform_support"], ["platform_admin", "org-platform_admin", "platform_readonly", "readonly", "tenant_admin"]);
+  allowed(canManagePlatformPartnerRegistry, ["platform_owner", "org-platform_owner"], ["platform_admin", "org-platform_admin", "platform_ops", "platform_finance", "platform_support", "platform_readonly"]);
 });

@@ -9,6 +9,7 @@ type MockQuery = {
   order: (direction: string) => MockQuery;
   first: () => Promise<Row | null>;
   collect: () => Promise<Row[]>;
+  take: (count: number) => Promise<Row[]>;
 };
 type MockCtx = {
   db: {
@@ -73,10 +74,12 @@ function makeCtx({
   orgId = "org_alpha",
   tenantStatus = "active",
   membershipStatus = "active",
+  relationshipStatus,
 }: {
   orgId?: string;
   tenantStatus?: string;
   membershipStatus?: string;
+  relationshipStatus?: string;
 } = {}): MockCtx & { patched: string[] } {
   const tenants = [
     { ...tenantA, status: tenantStatus },
@@ -98,6 +101,9 @@ function makeCtx({
     subscribers,
     markets,
     entitlements: [],
+    tenantRelationships: relationshipStatus === undefined ? [] : [
+      { _id: "relationship_parent_a", childTenantId: tenantA._id, parentTenantId: "tenant_parent", status: relationshipStatus },
+    ],
   };
   const patched: string[] = [];
 
@@ -122,6 +128,7 @@ function makeCtx({
         order: (direction: string) => { void direction; return query; },
         first: async () => result[0] ?? null,
         collect: async () => result,
+        take: async (count: number) => result.slice(0, count),
       };
       return query;
     },
@@ -164,4 +171,11 @@ test("subscriber update rejects a foreign tenant record without mutating it", as
     /Subscriber not found/,
   );
   assert.deepEqual(ctx.patched, []);
+});
+
+test("subscriber access is denied when an ancestor agency relationship is suspended", async () => {
+  await assert.rejects(
+    asHandler<Row[]>(list)(makeCtx({ relationshipStatus: "suspended" }), {}),
+    /agency or reseller access is suspended/,
+  );
 });

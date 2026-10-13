@@ -12,6 +12,7 @@ export type TenantStatus =
   | "trial"
   | "active"
   | "suspended"
+  | "pending_deletion"
   | "cancelled";
 
 /**
@@ -21,6 +22,15 @@ export type TenantStatus =
  */
 export function resolvedTenantOrNull<T>(organizationTenant: T | null | undefined): T | null {
   return organizationTenant ?? null;
+}
+
+/** Resolve only an explicitly mapped organization; never select a fallback tenant. */
+export function resolveTenantForIdentity<T>(
+  hasOrganizationClaim: boolean,
+  organizationTenant: T | null | undefined,
+): T | null {
+  if (!hasOrganizationClaim) return null;
+  return resolvedTenantOrNull(organizationTenant);
 }
 
 /** Translate a WorkOS organization-membership state into local tenant scope. */
@@ -72,6 +82,13 @@ export function isTenantActive(status: TenantStatus | undefined): boolean {
  */
 export function canTenantOperate(status: TenantStatus | undefined): boolean {
   return status === undefined || status === "trial" || status === "active";
+}
+
+/** Fail closed if a relationship traversal reaches its bounded read limit. */
+export function assertRelationshipScopeWithinLimit(linkCount: number, limit = 100): void {
+  if (!Number.isInteger(linkCount) || linkCount < 0 || !Number.isInteger(limit) || limit < 1 || linkCount > limit) {
+    throw new Error("Unauthorized: organization relationship scope exceeds safety limits");
+  }
 }
 
 /**

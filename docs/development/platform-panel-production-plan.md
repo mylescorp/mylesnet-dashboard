@@ -3,6 +3,15 @@
 **Status:** implementation roadmap, based on the repository state reviewed 2026-10-01.
 **Scope:** `/platform`, the MylesCorp control plane. Shared network operations stay in `/admin`; tenant ISP operations stay in `/dashboard`.
 
+
+## Owner-approved implementation progress — 2026-10-08
+
+The production objective and fixed owner decisions are recorded in root `AGENTS.md`. Implementation is ongoing in isolated branch `codex/platform-production` at `/home/myles/Work/mylesnet-production`; the dirty owner checkout is preserved. C2 remains excluded. The approved boundary split, 46 in-scope module completion, approved live integrations, production configuration/deployment, and release acceptance are not complete.
+
+Implemented and locally verified in the isolated worktree: mandatory MFA on mapped platform roles; 12-hour absolute lifetime and Convex-backed 30-minute idle session enforcement with a minute-25 warning, server revocation, role-fingerprint invalidation, and bounded expiry pruning; exact mapped-role gates for platform reads; corrections for J3 SA/RO, payout/report SA/FIN, broadcasts SA/SUP, and J1 SA/OPS/FIN/RO access; tenant snapshot checks for workspace, market ownership, and membership; and the platform-admin alias correction in user-directory controls. Build does not establish live provider readiness.
+
+Checks on 2026-10-08: `pnpm typecheck` passed; `pnpm test` passed 36 test files; UI Jest passed 1 suite / 12 tests; `pnpm tokens:check` passed; lint has zero errors and one existing warning; webpack production build exited 0 and generated 167 routes using a non-secret placeholder Convex URL. `pnpm audit --prod --audit-level=high` could not reach npm due registry DNS `EAI_AGAIN`. The full production audit, app split, remaining modules/integrations, production provider targets, deployment, monitoring, recovery drill, and release approval remain outstanding. See the isolated worktree copy of this plan and its current module register for detailed progress.
+
 ## Current baseline
 
 The panel already has tenant provisioning and lifecycle controls, tenant detail and membership visibility, plan entitlements, platform access management, paginated audit history with hash-chain health, security and webhook summaries, feature flags, a voucher anomaly monitor, and initial device fleet/provisioning surfaces. These are implemented in the existing single Next.js app with Convex functions. They are not all deployment-ready: several functions and schema additions still require an explicit Convex deployment-boundary sync, and the checkout is 11 commits behind `origin/main` with local changes present.
@@ -77,6 +86,128 @@ The subscription screen manages entitlements only. It does not issue SaaS invoic
 - Verified WorkOS and Convex production deployment targets and credentials managed through their approved secret stores.
 - Production alert destinations, incident owners, and support staffing.
 - Owner approval and auditable guardrails for impersonation, API keys, deletion, and tenant offboarding.
+
+
+## 2026-10-09 continuation — React RSC timing patch
+
+The isolated production branch includes a package-managed patch for negative `childrenEndTime` values in Next 16.3.8's errored/aborted RSC browser performance measures, plus a regression test. Both production builds and the 230-test suite pass there. Browser verification remains incomplete because the browser connector and local authenticated configuration are unavailable. This checkout's source and dependency tree were not edited; the runtime fix will not appear here until the isolated worktree change is brought in.
+
+
+## 2026-10-09 continuation — High severity audit findings cleared
+
+`pnpm audit --prod --audit-level=high` identified two admin transitive advisories. Workspace overrides now pin `source-map-js@1.2.2` and `sharp@0.35.5`; the lockfile refresh and frozen install pass, and the audit now reports no known vulnerabilities. Both builds, both typechecks, all 230 tests, token checks, and lint pass (one existing warning). Browser and authenticated runtime verification remain open; this is not production acceptance.
+
+## 2026-10-09 continuation — Legacy no-deletion audit
+
+Completed the source/history status audit in `docs/audits/legacy-route-no-deletion-audit-2026-10-09.md` and mirrored it from the isolated worktree. No route or source was modified, moved, deleted, or retired. The current `/admin` path is a tenant-administration handoff; `/agency`, `/reseller`, and `/partner` are role-gated placeholder pages. Tenant business-reporting routes call distinct tenant analytics, investor, scheduled-report, commission, invoice, and payment handlers; they are separate from similarly named platform modules. `apps/admin` exists but remains source-coupled (49 route entries); `apps/network` is absent. Browser access was denied, so live route rendering was not verified. Before any retirement, require approved route ownership, external inbound-link inventory, redirects, and authenticated permission/data parity checks. Production objective remains active; next: resume app separation and remaining module/security work without deleting these legacy surfaces.
+
+## 2026-10-09 continuation — First platform page/UI extraction
+
+`apps/admin` now contains local source for all 48 existing `/platform` page routes and a local copy of `apps/web/platform/` UI. The old web route files remain intact. Admin alias resolution is local by default with explicit aliases for shared web auth, navigation, Convex and landing helpers. A source-contract test checks route parity and rejects web-route re-exports. Verification: admin lint/typecheck/build passed, the production app-path manifest includes all 48 platform pages, `apps/web` typecheck passed, and the repository suite passed 232/232 tests. Extraction remains partial: admin root layout and proxy import `apps/web`; shared auth/navigation/Convex/UI helpers are still resolved from web. Next: extract these shared contracts into workspace packages and configure deployment only after route/auth verification. Browser verification is blocked by the saved permission preference; external providers and production deployments are still unverified.
+
+## 2026-10-09 continuation — Shared panel access policy package
+
+Extracted the pure role-to-panel policy into `packages/panel-access` (`@mylesnet/panel-access`); both web and admin depend on it, while the existing web auth module remains a compatibility re-export so `requirePanelAccess` behavior is unchanged. Frozen offline install, 232/232 tests, both app typechecks, admin lint/build and all 48 admin platform build-manifest routes pass. App separation remains incomplete: session/auth runtime, proxy, root layout, navigation, and shared Convex/UI adapters are still web-owned or web-aliased. Continue extracting these and preserve legacy routes. Browser access remains blocked by the saved browser permission; production auth/provider/deployment verification remains outstanding.
+
+## 2026-10-09 continuation — Admin-owned root visual shell
+
+`apps/admin` now owns its root layout, global stylesheet, theme initializer, and required logo asset; the web root files remain present. Its 48 `/platform` routes and UI source are local, and `@mylesnet/panel-access` is the shared pure role-policy package. Source-contract tests verify route parity/local shell assets/no web route re-exports. Admin build/typecheck passed; workspace lint passed with one existing web warning; `pnpm test` passed 233/233; token and diff checks passed. Remaining source coupling: proxy, session/auth runtime, navigation, Convex adapters, and UI helpers resolve through `apps/web`. Continue the shared boundary extraction, preserve legacy routes, and defer deployment until authentication and route behavior are verified in an approved environment. Browser access remains blocked by a saved user preference.
+
+
+## 2026-10-09 continuation — Admin-owned workforce auth entry
+
+The standalone `apps/admin` app now owns its WorkOS/AuthKit proxy, `/signin` page, `/login`, `/auth/callback`, `/invite`, and `/password-reset` route handlers. Callback URLs return to `/platform`, user-visible sign-in errors use fixed product copy, and the standalone entry UI uses semantic design tokens for light and dark themes. The proxy no longer imports the web app's proxy, while host resolution and broader auth/session/Convex/UI modules remain aliased from `apps/web`; this is an incremental extraction, not a completed app split. Verification: admin typecheck and lint passed; admin production build passed; its manifest contains 56 App Router entries, including all 48 platform routes and the local auth entry points; full `pnpm test` passed 236/236, including the new admin auth-boundary source check; `pnpm tokens:check` passed. Browser-level/authenticated redirect behavior is still unverified because Chrome's saved localhost permission blocks inspection. Continue extracting shared platform runtime and complete authenticated route verification before configuring a separate deployment.
+
+
+## 2026-10-09 continuation — C4 tenant-owned payment gateway foundation
+
+Added `/platform/settings/payments` in both apps with source parity. Super-admins can page through gateway metadata, create a tenant-owned Daraja configuration, archive/restore it, and start credential rotation. Finance can select a tenant and submit only the non-secret environment/short-code update; finance never runs a gateway read query and the main nav keeps C4 hidden from finance because its grant is update-only. A server mutation audits each super-admin settings view; every configuration/rotation mutation audits metadata only. Credential bytes go through an origin- and CSRF-checked Node route to AWS Secrets Manager using a customer-managed KMS key and Vercel OIDC credentials in hosted Vercel. Convex stores only a secret version identifier and returns a configured boolean; credentials are not echoed to the browser. Rotation uses a retained idempotency key on retry.
+
+Verification: 238/238 repository tests pass; 14/14 focused navigation/app-parity audits pass; both app typechecks pass; admin lint is clean; web lint has one existing unrelated `BandwidthCalculatorTool.tsx` warning; token check and `git diff --check` pass. Both production builds complete using the nonfunctional `https://example.convex.cloud` Convex placeholder; a build without `NEXT_PUBLIC_CONVEX_URL` fails during prerender. Placeholder builds prove compilation only, not production runtime. No AWS credentials, production IAM role trust, KMS key, or Safaricom sandbox/live values were provisioned or inspected. C4 is implemented locally in the approved tenant-owned direction, not production-ready: live route/auth behavior, real secret-store permissions, provider handshake and deployment remain unverified. The browser permission setting still blocks `localhost:3000`; that running server is the original checkout, not this worktree.
+
+
+C4 final gate refresh (2026-10-09): admin and web typechecks pass; admin lint is clean; web lint has one pre-existing `BandwidthCalculatorTool.tsx` warning; 238/238 repository tests and 14/14 focused nav/route-parity checks pass; token check and `git diff --check` pass; `pnpm audit --prod --audit-level=high` reports no known vulnerabilities. `pnpm build` initially failed because `NEXT_PUBLIC_CONVEX_URL` is unset. Re-running with a nonfunctional `https://example.convex.cloud` placeholder completed both web and admin optimized builds and proved that `/platform/settings/payments` and the credential API route are compiled. This is compile evidence only; the placeholder must never be deployed, and authenticated runtime, AWS/Safaricom setup and provider validation remain outstanding.
+
+## 2026-10-10 continuation: restore reviewed platform feature bundle
+
+A restoration branch based on cached `origin/main` brings forward the platform analytics and tenant leaderboard, API keys, payment reconciliation and anomaly review, commission ledger/rates/payout workflows, agency and reseller oversight, RADIUS fleet, and platform organization API from the reviewed feature history. Current-main schema and security-sensitive changes were reconciled with the feature schema. The C5 nullable reason, status-pill props, icon import, and payment-status typing issues were fixed in the restoration diff. The worktree remains local because GitHub authentication is currently invalid; no PR was opened.
+
+Validation on the isolated branch: web TypeScript passed, backend TypeScript passed excluding tests, repository tests passed 37/37, and focused frontend ESLint passed. Production build is blocked by the isolated clone's borrowed dependency symlink: Turbopack rejects it as outside the filesystem root, and the webpack fallback cannot parse TypeScript's `--showConfig`. No production deployment was attempted. Next: use a valid authenticated checkout with a local dependency install, rerun build, push the restoration branch, and open a PR.
+
+## 2026-10-10 RBAC/sidebar and tenant onboarding continuation
+
+On isolated branch `fix/platform-owner-access-rbac`, corrected platform navigation so explicit canonical role scopes override stale link-level role arrays and unscoped platform routes are hidden by default. Added the missing `/platform/billing` revenue link. Tenant creation is now limited to super-admin and ops in both the CTA and server route; its form calls the existing provisioning action and collects administrator email. This removes a dead form that previously logged input and redirected without provisioning.
+
+Verification: `pnpm test` 41/41, `pnpm typecheck`, focused ESLint, full `pnpm lint` (0 errors, 15 existing warnings), and `git diff --check` passed. Production build could not be proved: Turbopack failed on sandbox internal port binding; webpack failed parsing TypeScript `--showConfig`. No authenticated runtime test or deployment was performed. Push and Greptile review are pending because GitHub DNS is unavailable and the saved CLI credential is invalid. Port 3000 and the owner checkout were left untouched.
+
+Next action: continue the canonical module-by-module implementation and verification. D3 needs a defined client-provisioning request origin before it can safely gate tenant creation; do not repurpose agent invitations or device provisioning. Reconcile the 45-ID owner list with the repo objective's additional E4/I3 scope before final acceptance.
+
+## 2026-10-10 continuation — B4 templates and RBAC review
+
+Hardened the versioned policy-template form: no unapproved prefilled network limits, access type is required, and empty optional fields are omitted from Convex serialization. Extracted validation to a pure module with tests. Added platform UI role helper coverage for tenant, plan, infrastructure, deletion and white-label scopes, including organization-scoped owner aliases. Validation: web and direct Convex typechecks pass, full lint has 0 errors and 11 warnings, and `pnpm test` passes 42/42. B4 remains partial pending authenticated role integration and runtime proof; saving a template does not apply it to tenant devices. Sidebar/RBAC commits remain local and unpushed because GitHub authentication/DNS are unavailable. Owner port 3000 was not touched.
+
+## 2026-10-10 continuation — server-side role matrix enforcement
+
+Several platform pages previously used only the broad panel gate and deferred access rejection to their Convex query. Added a server route guard backed by the same role matrix as the sidebar and applied it across platform access, audit, billing plans, feature flags, policy templates, organizations and lifecycle actions, security, white-label, subscriptions, support/SLA, tenant aliases, directory, voucher packages, and provisioning. Matrix tests now assert owner visibility for every registered route and retain representative denied-role cells. Web typecheck and root Node test suite pass 42/42; lint has 0 errors and 11 warnings; focused lint passes. Authenticated browser/backend authorization and production deployment remain unverified. Owner checkout and port 3000 were not touched.
+
+## 2026-10-10 continuation — M1 system health initial implementation
+
+Added `/platform/health` and its all-role read gate. The page refreshes periodically, confirms Convex query reachability, and displays bounded aggregate WorkOS webhook-delivery/queue samples without event payloads or failure details. Vercel and uptime are explicitly marked unmonitored because integrations are absent. Checks: web and direct Convex TypeScript pass, root tests 42/42, full lint 0 errors with 11 existing warnings, focused ESLint and `git diff --check` pass. M1 remains partial pending real Vercel/uptime integrations, live authenticated role tests, and deployment verification.
+
+## 2026-10-10 continuation — I2 effective support SLAs
+
+Changed the SLA read model to show all three effective category targets, including built-in defaults and override source. Support remains read-only; super-admin can add, edit, or remove overrides. Removing an override returns the category to the existing fallback; network remains the fastest category under pure tested rules. Web/backend typechecks, 42/42 root tests, focused ESLint and diff check pass; full lint has no errors and 11 existing warnings. Authenticated role behavior and production Convex deployment remain unverified.
+
+## 2026-10-10 continuation — C5 reconciliation import validation
+
+Moved CSV parsing into a tested shared core and added pre-mutation validation for byte size, row count, BOMs, quoted fields, malformed quoting, required columns/values, and overflow fields. Removed fabricated row data from placeholders. The workflow remains manual statement matching, without gateway access or money movement. Tests/typechecks/lint/diff checks pass; authenticated role/runtime and production data validation remain open.
+
+
+## 2026-10-10 B3 RADIUS fleet re-audit
+
+The isolated branch includes a RADIUS server registry at `/platform/infrastructure/radius`, with SA/OPS audited management and read-only fleet metrics for other canonical roles. Metrics are rendered as unreported because the repo does not contain an established trusted RADIUS telemetry source. Keep B3 partial until a provider/agent contract is approved, metrics ingestion is implemented, and all-role access is exercised against a deployed backend.
+
+
+## 2026-10-10 D1/D2 agency and reseller oversight re-audit
+
+The current branch includes separate paginated registries for agencies and resellers, SA-only relationship CRUD, role-gated suspension/restoration, audit events, and descendant relationship propagation. Tenant auth checks reject any suspended relationship in the chain. The auth traversal now reads at most 101 incoming links per node and fails closed above the 100-link limit. Keep these modules partial until authenticated all-role tests and deployed cascade behavior are verified.
+
+
+## 2026-10-10 D1 partner registry role alignment
+
+Aligned the agency/reseller UI read helper with Convex and the canonical matrix. Spec-silent readonly users no longer render the registry query; SA/OPS/FIN/SUP retain read access and only SA sees management controls. Pure role tests cover allow/deny cases. Authenticated live-role verification remains a production gate.
+
+
+## 2026-10-10 G4 API-key disclosure review
+
+The platform API-key list projection now has a regression test proving it omits token digests and creator/revocation identities. SA write and OPS read gates remain; newly issued raw tokens are returned once while only the digest is persisted. The public API currently implements only `organizations:read`; keep G4 partial until the approved API resource contract is complete and roles are verified against a deployed backend.
+
+## 2026-10-11 continuation — owner access and sidebar
+
+Added top-level sidebar navigation for all implemented platform routes, backed by explicit centralized role scopes and regression tests for owner visibility and Finance/Ops denial cells. `/platform/access` remains full CRUD for super-admin and read-only for other roles. Hardened owner recovery against stale role IDs or incomplete permission rows: the `platform_owner` mirror restores its role, it receives the complete permission catalog, permission-based Convex guards recognize it as full access, and its system-role permission grants cannot be reduced. Port 3000 is occupied by the owner checkout and remains untouched, so it still does not display the isolated branch. Remaining: finish checks, authenticate and verify all five roles, integrate through a Greptile-reviewed PR, and recheck on the integrated port-3000 app.
+
+## 2026-10-11 continuation — strict super-admin role boundary
+
+The canonical role matrix specifies full super-admin authority only for `platform_super_admin`/`platform_owner`; the legacy `platform_admin` role is a separate day-to-day account and is not one of the five canonical sub-roles. Removed `platform_admin` from the backend super-admin expansion, platform sidebar route scopes, owner-only and ops/finance UI write helpers, and the access-management super-admin check. Organization-scoped claims now normalize all canonical platform aliases (`owner`, `super_admin`, `ops`, `finance`, `support`, `readonly`) to the corresponding stored role for route checks. Tests assert that `platform_owner` retains access, `platform_admin` does not inherit super-admin grants, and organization-scoped canonical role claims resolve correctly. Full repository tests pass 45/45; web and targeted Convex typechecks pass; focused ESLint reports zero errors (two ignored test-file warnings); `git diff --check` passes. Live authenticated role verification, GitHub push/Greptile review, and port-3000 integration remain blocked or pending. Do not claim the local port-3000 UI is updated until the reviewed branch is integrated.
+
+## 2026-10-11 RBAC/sidebar continuation
+
+- Added `ops_manager` and `finance_manager` to server panel-entry checks and panel selection; added tests for all five canonical roles and organization-scoped ops/finance access.
+- Removed the final `platform_admin` super-admin bypasses found in platform ticket management and RADIUS connection-detail projections.
+- Verification: 262 tests across 45 files, web typecheck, targeted Convex typecheck, `git diff --check`, and lint with zero errors. Lint reports 11 unrelated unused-variable warnings. Build blocked by Turbopack worker bind `EPERM`; webpack fallback failed parsing TypeScript `--showConfig`.
+- Status: PR #81 cannot be updated or reviewed while `gh` token is invalid and api.github.com cannot resolve. Port 3000 was left untouched. Next: restore GitHub auth/network, push the RBAC fix commit to PR #81, obtain Greptile review on that exact head, then verify the merged app at port 3000 without restarting its listener.
+
+- 2026-10-11: Added a regression test comparing every sidebar route grant across canonical roles, stored concrete roles, and organization-scoped aliases. All 45 repository test-file jobs pass. Clarification: test runner job count is 45 files; the earlier 262 leaf-test count was not reproducible and should not be used in reporting.
+
+## 2026-10-11 continuation — access review remediation
+
+A separate follow-up branch addresses the P0/P1/P2 authorization and data-integrity findings from the platform-access review. Cross-tenant user-directory, tenant-estate, and policy-template reads now use a single five-role allowlist, so legacy `platform_admin`, generic `member`, and unmapped platform roles are denied. A1 tenant summaries and details remain readable to each canonical role. Membership access overrides now remain in force until a matching, sufficiently recent provider event confirms the requested state, and each retry outcome is audit logged. Subscriber-count backfill start, progress, completion, and failure are audited; page or scheduler failures release the write-blocking flag and allow a restart. The commissions screen now uses a permission plus server-derived tenant scope for tenant users, explicit sub-role checks for platform users, and cursor pagination. User-facing commission and health copy no longer describes internal implementation gaps. The D1 regression test denies readonly because that role is not granted in the canonical D1 cell.
+
+Validation: all 45 test-file jobs pass; web and targeted Convex TypeScript checks pass; lint reports zero errors and 11 existing warnings. A clean `origin/main` baseline at `afcdcb0` passes typecheck/tests and lint (zero errors, 15 warnings). The webpack build fails on both baseline and follow-up after compile/typecheck while prerendering because application configuration is unavailable; the follow-up's default Turbopack build is additionally blocked by worker-port `EPERM`. Authenticated checks for each role, production backend verification, and integration into the owner's port-3000 checkout remain open. See PR #81 for source-review context; the follow-up is carried on its own branch under the Greptile stop rule.
+
+## 2026-10-11 platform review-fix continuation
+
+Corrected commission role separation and status-before-pagination, and made subscriber-count backfill start claim its lock atomically. See PR #84. TypeScript, tests, lint, and diff checks pass. The production build remains blocked by the isolated worktree's Turbopack worker socket `EPERM`; the webpack fallback fails parsing TypeScript `--showConfig`. Authenticated role verification and owner-checkout integration remain outstanding. Do not touch the port-3000 listener.
 
 ## 2026-10-10 continuation — Tenant analytics isolation and activity ownership
 

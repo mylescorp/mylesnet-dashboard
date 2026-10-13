@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { use, useMemo, useState } from "react";
 import { useQuery } from "@/app/lib/convex";
 import { PageHeader, Tabs, TabPanel } from "@mylesnet/ui";
 import { ArrowLeft, MapPin, Calendar, Wifi, Activity, Layers } from "lucide-react";
@@ -14,8 +14,9 @@ const siteTone = (status: string) =>
 
 const kindTone = (kind: PlanKind) => (kind === "data" ? "success" : kind === "tv" ? "neutral" : "warning");
 
-export default function SiteDetailPage({ params }: { params: { siteId: string } }) {
-  const detail = useQuery(networkOps.getSiteDetail, { siteId: params.siteId as Id<"markets"> });
+export default function SiteDetailPage({ params }: { params: Promise<{ siteId: string }> }) {
+  const { siteId } = use(params);
+  const detail = useQuery(networkOps.getSiteDetail, { siteId: siteId as Id<"markets"> });
   const [tab, setTab] = useState("overview");
 
   const tabs = useMemo(() => {

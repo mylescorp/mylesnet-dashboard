@@ -40,8 +40,8 @@ export default function PayoutsPage() {
     return id;
   };
 
-  const pendingCount = summary.pendingTotal.length;
-  const agentPending = summary.pendingAgent.length;
+  const pendingCount = summary.pendingTotal;
+  const agentPending = summary.pendingAgent;
 
   return (
     <div className="workspace-page">

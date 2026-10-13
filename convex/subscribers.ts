@@ -1,6 +1,37 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { requireTenantPermission } from "./lib/auth";
+import { logAudit } from "./lib/auditLog";
+import { canWriteSubscriberCount, subscriberCountAfterChange } from "./lib/tenantSubscriberCountCore";
+
+async function assertSubscriberCountWritable(ctx: MutationCtx, tenantId: Id<"tenants">) {
+  const tenant = await ctx.db.get(tenantId);
+  if (!tenant) throw new Error("Tenant not found");
+  if (!canWriteSubscriberCount(tenant.subscriberCountBackfillRunning)) {
+    throw new Error("Subscriber records are temporarily paused while the organization total is recalculated");
+  }
+  return tenant;
+}
+
+async function adjustSubscriberCount(ctx: MutationCtx, tenantId: Id<"tenants">, delta: -1 | 1, actor: Id<"users">) {
+  const tenant = await assertSubscriberCountWritable(ctx, tenantId);
+  const before = tenant.subscriberCount;
+  const subscriberCount = subscriberCountAfterChange(before, delta);
+  if (subscriberCount !== undefined) {
+    await ctx.db.patch(tenant._id, { subscriberCount });
+    await logAudit(ctx, {
+      action: "tenant.subscriber_count_adjusted",
+      entityTable: "tenants",
+      entityId: tenant._id,
+      changedBy: actor,
+      tenantId,
+      before: { subscriberCount: before ?? null, delta },
+      after: { subscriberCount, delta },
+    });
+  }
+}
 
 // ==========================================================================
 // QUERIES
@@ -135,6 +166,7 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const { user, tenantId } = await requireTenantPermission(ctx, "subscribers:create");
+    await assertSubscriberCountWritable(ctx, tenantId);
 
     // Check if account number already exists
     const existing = await ctx.db
@@ -156,6 +188,15 @@ export const create = mutation({
       createdBy: user._id,
       createdAt: Date.now(),
       updatedAt: Date.now(),
+    });
+    await adjustSubscriberCount(ctx, tenantId, 1, user._id);
+    await logAudit(ctx, {
+      action: "subscriber.create",
+      entityTable: "subscribers",
+      entityId: id,
+      changedBy: user._id,
+      tenantId,
+      after: { accountNumber: args.accountNumber, name: args.name, status: "active" },
     });
 
     return id;
@@ -215,10 +256,21 @@ export const softDelete = mutation({
     if (!subscriber || subscriber.tenantId !== tenantId || subscriber.deletedAt !== undefined) {
       throw new Error("Subscriber not found");
     }
+    await assertSubscriberCountWritable(ctx, tenantId);
 
+    const deletedAt = Date.now();
     await ctx.db.patch(args.id, {
-      deletedAt: Date.now(),
+      deletedAt,
       deletedBy: user._id,
+    });
+    await adjustSubscriberCount(ctx, tenantId, -1, user._id);
+    await logAudit(ctx, {
+      action: "subscriber.softDelete",
+      entityTable: "subscribers",
+      entityId: args.id,
+      changedBy: user._id,
+      tenantId,
+      after: { deletedAt, deletedBy: user._id },
     });
 
     return args.id;
@@ -228,17 +280,27 @@ export const softDelete = mutation({
 export const restore = mutation({
   args: { id: v.id("subscribers") },
   handler: async (ctx, args) => {
-    const { tenantId } = await requireTenantPermission(ctx, "subscribers:delete");
+    const { user, tenantId } = await requireTenantPermission(ctx, "subscribers:delete");
 
     const subscriber = await ctx.db.get(args.id);
     if (!subscriber || subscriber.tenantId !== tenantId || subscriber.deletedAt === undefined) {
       throw new Error("Subscriber not found or not deleted");
     }
+    await assertSubscriberCountWritable(ctx, tenantId);
 
     await ctx.db.patch(args.id, {
       deletedAt: undefined,
       deletedBy: undefined,
       updatedAt: Date.now(),
+    });
+    await adjustSubscriberCount(ctx, tenantId, 1, user._id);
+    await logAudit(ctx, {
+      action: "subscriber.restore",
+      entityTable: "subscribers",
+      entityId: args.id,
+      changedBy: user._id,
+      tenantId,
+      after: { restoredAt: Date.now() },
     });
 
     return args.id;

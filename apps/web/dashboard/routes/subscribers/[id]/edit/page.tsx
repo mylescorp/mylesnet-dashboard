@@ -2,7 +2,7 @@
 
 import { userFacingMessage } from "@/shared/lib/user-facing-error";
 
-import { useState } from "react";
+import { use, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
@@ -229,11 +229,12 @@ function SubscriberEditForm({
 export default function EditSubscriberPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  const { id } = use(params);
   const { user } = useUserProfile();
   const subscriber = useQuery(api.subscribers.get, {
-    id: params.id as Id<"subscribers">,
+    id: id as Id<"subscribers">,
   });
 
   if (user === undefined || subscriber === undefined) {

@@ -174,6 +174,102 @@ separate archive policy.
   found the pre-existing Next.js pin was below the security-patched release.
   Next.js and `eslint-config-next` are now pinned at 16.3.8 with a regenerated
   lockfile; CI and preview need to pass on the updated commit before merge.
+
+## 2026-10-10: restore newer platform features
+
+Prepared the reviewed platform feature bundle on `feat/restore-platform-features`, preserving the existing dirty production worktree. Restored platform analytics and leaderboard, API key management, payment reconciliation and anomaly review, commissions and payouts, agency/reseller lifecycle, RADIUS fleet, and the platform organization API. Reconciled schemas with current-main security and tenant lifecycle fields and corrected C5 reconciliation type errors. Web typecheck, backend typecheck excluding tests, 37 repository tests, and focused frontend lint passed. Build remains blocked by dependencies linked from outside this isolated clone. GitHub authentication is invalid, so no PR has been pushed or opened. The PR note will be linked after the PR is opened.
+
+### 2026-10-10 — Platform RBAC, navigation, and organization provisioning
+
+- **Scope:** Continue production work on platform roles and missing sidebar features.
+- **Changes:** Central platform route scopes now override stale link-level role lists and deny new unscoped routes by default. Added the `/platform/billing` revenue link. Limited organization creation to super-admin and ops in navigation UI and the server route. Replaced the organization form's no-op logging/redirect with the existing audited provisioning action and required administrator email.
+- **Verification:** 41/41 repository tests, web typecheck, focused ESLint, full lint with 0 errors and 15 warnings, and scoped whitespace checks passed. Production build was attempted in the isolated worktree: Turbopack failed to bind an internal port; webpack fallback could not parse TypeScript `--showConfig`. No authenticated runtime check or deployment was performed.
+- **Status:** Local commits are on `fix/platform-owner-access-rbac`; GitHub push and Greptile review remain blocked by invalid stored GitHub credentials and unavailable DNS. The owner checkout/server was untouched. Repo/vault work-log, production-plan, and module-register copies are currently divergent; per the no-overwrite rule, the vault copies were not modified. Remaining module scope and release gates are still open.
+
+### 2026-10-10 — B4 policy-template and platform role hardening
+
+- **Changes:** Removed invented initial network-policy values from the policy-template form, required an explicit access type, omitted empty optional fields from Convex payloads, and extracted validation into a tested pure module. Added UI role-helper coverage for tenant, plans, infrastructure, delete, and white-label operations, including owner aliases.
+- **Verification:** Web and direct Convex TypeScript checks passed; full lint completed with 0 errors and 11 warnings; `pnpm test` passed 42/42; `git diff --check` passed. No browser-authenticated role test or deployment was performed.
+- **Status:** The B4 work is local on `fix/platform-owner-access-rbac`. Earlier sidebar/RBAC commits are already committed on the branch but remain unpushed. GitHub auth/network still block Greptile review. The owner checkout and port 3000 were left untouched.
+
+### 2026-10-10 — Server-side platform route RBAC
+
+- **Changes:** Added a shared server route gate driven by the same explicit role matrix as sidebar visibility. Applied it to platform routes that previously relied only on broad platform membership. Added route matrix entries for tenant suspend/restore and the audit-log alias. Added a test that every registered route remains visible to both platform owner slugs.
+- **Verification:** Web typecheck passed; root Node tests passed 42/42; full lint had 0 errors and 11 warnings; focused ESLint passed with an ignored test-file warning; `git diff --check` passed. The app-local Jest script cannot parse Next's TypeScript `--showConfig`; the repo root Node test script is the working suite.
+- **Status:** Changes are isolated on `fix/platform-owner-access-rbac`; no authenticated session/browser test, deploy, push, or Greptile review has occurred. Port 3000 and the owner checkout were untouched.
+
+### 2026-10-10 — M1 system health initial surface
+
+- **Changes:** Added `/platform/health`, an all-sub-role read-only route, sidebar link, and reactive Convex query. It reports Convex reachability plus bounded, payload-free WorkOS webhook samples; missing Vercel and uptime integrations are labeled unmonitored.
+- **Verification:** Web and direct Convex TypeScript checks passed; root Node suite passed 42/42; focused ESLint passed with one ignored-test-file warning; full lint had 0 errors and 11 existing warnings; `git diff --check` passed.
+- **Status:** M1 is partial until external monitoring, authenticated runtime, and deployment verification are available. No provider credentials or payloads are read or returned.
+
+### 2026-10-10 — I2 effective SLA configuration
+
+- **Changes:** SLA read now returns effective targets for all three ticket categories with explicit fallback/override source. Super-admin can configure fallback rows, update overrides, and restore built-in fallback. Support sees targets read-only. Extracted target validation and network-priority rules for tests.
+- **Verification:** Web and direct Convex typechecks passed; root Node suite passed 42/42; focused ESLint passed; full lint had 0 errors and 11 warnings; `git diff --check` passed.
+- **Status:** I2 remains partial pending authenticated role/runtime and production database verification.
+
+### 2026-10-10 — C5 CSV import hardening
+
+- **Changes:** Reconciliation CSV parsing now has a 1 MB byte cap and 500-row cap, supports BOM/CRLF/quoted values, and rejects malformed quotes, bad headers, missing values, and extra fields before backend mutation. Removed sample payment data from the UI placeholder.
+- **Verification:** Parser tests passed; web and Convex TypeScript passed; root suite 42/42; focused ESLint passed; full lint had 0 errors and 11 existing warnings; `git diff --check` passed.
+- **Status:** C5 remains partial until authenticated roles and deployed-data behavior are verified.
+
+
+### 2026-10-10 — E3 commission-rate RBAC correction
+
+- **Changes:** Removed the Ops read overgrant from global commission rate, override, and agency-option queries. The backend now uses the same super-admin/finance role tuple as the page and sidebar. Added a regression test proving spec-silent Ops, support, and readonly roles are excluded.
+- **Verification:** Focused commission policy test passed; web and direct Convex typechecks passed; `git diff --check` passed.
+- **Status:** E3 configuration CRUD exists but accrual/payout integration and authenticated live-role verification remain open. Changes are committed on the isolated RBAC branch for review; no push or deployment was performed. Owner checkout and port 3000 were untouched.
+
+### 2026-10-10 — B3 RADIUS fleet status re-audit
+
+- **Changes:** Reclassified B3 from absent to partial based on the checked-out platform route, CRUD backend, audit writes, role gates, and read-only UI. The register and production plan now identify telemetry ingestion as the remaining blocker.
+- **Verification:** File-grounded route/backend/UI review and `git diff --check` passed. No telemetry integration or authenticated role test was performed.
+- **Status:** Awaiting an approved trusted telemetry source; no sample metrics were introduced.
+
+
+### 2026-10-10 — D1/D2 partner relationship access boundary
+
+- **Changes:** Re-audited agency/reseller registries and lifecycle flows. Replaced an unbounded tenant relationship `.collect()` with `.take(101)` and a fail-closed 100-link limit; added boundary coverage. Updated module status and production-plan evidence.
+- **Verification:** Tenant and partner lifecycle tests passed; direct Convex and web typechecks passed; `git diff --check` passed.
+- **Status:** Relationship suspension propagates across linked descendants and tenant auth rejects suspended chains. Live authenticated role and deployed cascade verification remain outstanding.
+
+
+### 2026-10-10 — D1 partner registry RBAC alignment
+
+- **Changes:** Removed readonly from the agency/reseller registry UI readers, matching the canonical spec-silent denial and Convex query. Centralized read and SA-only management helpers and added allow/deny tests for canonical roles and legacy aliases.
+- **Verification:** Focused tests passed; web typecheck passed; focused ESLint passed with the expected ignored-test-file warning; `git diff --check` passed.
+- **Status:** Authenticated browser/backend role verification remains open. GitHub remains unreachable in this environment; no PR or Greptile review was started.
+
+
+### 2026-10-10 — G4 platform API-key disclosure review
+
+- **Changes:** Extracted the public API-key row projection and added a test proving list responses omit token digests and creator/revocation identities. Reclassified G4 as partial because the public resource scope is currently only `organizations:read`.
+- **Verification:** API-key/role tests passed; direct Convex and web typechecks passed; `git diff --check` passed.
+- **Status:** One-time token issuance and digest-only storage exist. Broader endpoint scope, authenticated role verification, and deployed verification remain open.
+
+### 2026-10-11 — Platform owner access and sidebar visibility
+
+- **Scope:** Investigate why restored platform features do not appear for the owner and why role management can be unavailable.
+- **Changes:** Added sidebar entries for implemented platform routes and required every menu route to have an explicit central role scope. Added owner visibility and Finance/Ops filtering tests. Made `platform_owner` a recoverable full-access role even when the stored role list or permission array is stale, and made its role grants immutable at the backend and UI.
+- **Verification:** Full repository suite passed 239/239; web and targeted Convex TypeScript checks passed; focused frontend ESLint and `git diff --check` passed. The isolated production build stops before compilation because Next.js cannot parse TypeScript `--showConfig` output. Authenticated role behavior and Greptile review remain pending. Port 3000 is already served by the owner checkout, confirmed at `/home/myles/Projects/mylesnet-dashboard/apps/web`; it was not disturbed, so it cannot show this isolated branch before it is integrated.
+- **Status:** No authenticated account or browser verification was available. GitHub/Greptile status still needs checking after local gates. Some canonical modules have no implementation page and therefore are not linked as if they existed.
+
+### 2026-10-11 — Canonical super-admin and platform role claims
+
+- **Scope:** Continue RBAC and sidebar corrections for the five canonical platform sub-roles.
+- **Changes:** Removed the legacy `platform_admin` role from the super-admin backend mapping, `/platform/access` admin branch, super-admin navigation grants, and management helpers. Added normalization for organization-scoped canonical platform role claims so owner, ops, finance, support, and readonly claims resolve to their stored role equivalents. Added allow/deny regression coverage for owner versus legacy admin and all scoped-role aliases.
+- **Verification:** Repository tests passed 45/45; web typecheck and targeted Convex typecheck passed; focused ESLint completed with zero errors and two ignored-test warnings; `git diff --check` passed.
+- **Status:** Changes are in the isolated PR worktree; see PR #81. `gh auth status` still reports the saved GitHub token is invalid, so no push or Greptile review can be started from this session. The owner's port 3000 server remains undisturbed and still serves its separate checkout.
+
+### 2026-10-11 — Platform RBAC backend parity
+
+- **Scope:** Apply the canonical five-role matrix to direct platform route and Convex access, not only sidebar/action visibility.
+- **Changes:** Removed `platform_admin` and generic `readonly` from platform panel entry and route allowlists. Made owner-only backend helpers owner-only, kept ops and finance checks within their canonical roles, and retained ops fleet market access. Restricted platform staff create/update/delete/restore and invitation writes to the canonical super-admin. Restricted leaderboard reads to super-admin/readonly. Removed legacy admin write/read escalation from feature flags, data requests, the user directory, and corresponding UI gates. Extended organization-scoped role claim normalization for all five role types.
+- **Verification:** All 45 repository test files passed; web and targeted Convex TypeScript checks passed; focused ESLint had zero errors with two ignored-test warnings; `git diff --check` passed.
+- **Status:** Uncommitted changes are in the isolated PR worktree pending push and Greptile review. GitHub auth remains invalid. Local port 3000 cannot be reached from this execution environment, and no listener was started or stopped. The owner's local UI has not been updated until the reviewed branch is integrated.
 ### 2026-10-08 — Platform session enforcement
 
 - **Scope:** Continue the owner-approved production implementation in the isolated worktree.
@@ -219,28 +315,27 @@ separate archive policy.
 - **Verification:** Baseline gates on the isolated worktree are clean: `pnpm typecheck` passes and `pnpm test` passes 171/171. The owner checkout was left untouched.
 - **Status:** Audit complete. The tenant panel is a narrow billing and operations workspace; the large majority of features are Partial or Missing. Foundation defects to fix first: `logAudit` writes no `tenantId` (tenant audit log returns empty) and `analytics`, `scheduledReports`, and `notifications` are not tenant-scoped. Production deploy and live verification are blocked on an approved production Convex target/credential and a real test tenant. Work runs in the isolated worktree `/home/myles/Projects/mylesnet-tenant-panel` on `feat/tenant-panel-program`.
 
-### 2026-10-10 — Tenant analytics isolation and activity ownership
+## 2026-10-11 continuation — complete panel role-entry parity
 
-- **Scope:** Close a verified cross-workspace read risk in tenant analytics and derive revenue-ledger ownership from trusted agent/market records.
-- **Changes:** Analytics reads now authorize the caller, verify a requested market belongs to the active workspace, and scope daily snapshots, subscriber snapshots, top-agent activity, and sales mix to verified tenant markets. Tagged rows use tenant/time or tenant/date indexes; legacy untagged rows are included only through markets owned by that workspace. New activity ledger rows derive `tenantId` from a verified market, require a same-workspace agent assignment (active for voucher sales), validate all assigned markets and any linked voucher, and validate monetary/date/currency values. Subscriber snapshot writes also stamp the market-derived tenant ID. Added composite indexes and pure ownership/scope regression tests.
-- **Verification:** `pnpm typecheck` passes for web and admin; `pnpm lint` passes with one existing warning in `BandwidthCalculatorTool.tsx`; all 45 tests pass; token checks and `git diff --check` pass.
-- **Status:** Implemented in the isolated `codex/platform-production` worktree; source files in the owner checkout remain untouched and the matching work-log/plan entries were synchronized. Remaining: migrate older untagged rows through the approved bounded migration process, authenticate role and tenant-isolation behavior against a non-production Convex deployment, and continue the full module/app-boundary/release plan.
+Added concrete `ops_manager` and `finance_manager` system roles to server panel-entry checks and panel selection so the backend identities produced by organization-scoped claims can enter Platform. Tightened the legacy `platform_admin` boundary in global ticket management and RADIUS connection-detail projections. Regression suite passes 262 tests across 45 files; `pnpm typecheck` and targeted Convex typecheck pass; `pnpm lint` has zero errors and 11 unrelated unused-variable warnings. Production build remains blocked by Turbopack worker socket `EPERM`; webpack fallback cannot parse TypeScript `--showConfig`. `gh auth status` reports an invalid token and GitHub API DNS resolution fails, so PR #81 has not received these fixes and no new Greptile review was possible. Port 3000 was not started or disturbed. See PR #81.
 
-### 2026-10-11 — Negative RSC performance timestamps
+## 2026-10-11 continuation - sidebar alias matrix regression
 
-- **Scope:** Fix the runtime error on guarded routes while retaining server-side authorization and redirects.
-- **Evidence and change:** React's Server Component performance track attempted to measure errored or aborted components with a negative or uninitialized child end timestamp. Added a reproducible patch to the four pinned Next.js development client bundles that emits the profiling entry only when the end timestamp is valid, plus a regression test for the applied patch. No runtime package or auth behavior changed.
-- **Verification:** `pnpm typecheck` passed; repository `node --test` passed 31/31; `pnpm lint` passed with 15 pre-existing warnings; `pnpm build` passed using a non-secret local placeholder for `NEXT_PUBLIC_CONVEX_URL` and generated 131 routes. `pnpm audit --prod` could not reach the npm registry (DNS `EAI_AGAIN`). A controlled local run could not bind `localhost:3000` because the existing port is occupied, so its listener was preserved. No production deploy.
-- **Status:** Branch `fix/routes-negative-rsc-timestamp`; PR and review pending. See `docs/route-fix-log.md`.
+Added exhaustive parity coverage requiring every registered sidebar route to produce the same allow or deny result for each canonical platform sub-role and its stored or WorkOS organization-scoped role aliases. The focused RBAC tests and full 45-file repository suite pass. Clarification: the runner reports 45 top-level test-file jobs, not a stable count of leaf assertions; use the file-level result rather than the earlier 262 figure. Greptile review remains unavailable until the local commit can be pushed to PR #81.
 
-Correction note, 2026-10-11: the build command value shown in the entry above was a non-secret CI placeholder. Future committed work logs record the variable name only.
+### 2026-10-11 - Platform access review follow-up
 
-### 2026-10-11 — Landing theme restoration
+- **Scope:** Remediate security and authorization gaps found on the platform access/sidebar review; follow-up work is isolated from PR #81 after its review-round stop condition.
+- **Changes:** Replaced broad platform-membership reads with canonical sub-role gates for cross-tenant user, tenant, and policy-template queries; kept membership access overrides until a timestamped provider event confirms the requested state; audited sync/backfill mutations and made failed subscriber-count scans release their write-blocking flag; restored tenant-scoped commissions access and cursor pagination; removed internal implementation details from screen copy; corrected the D1 role test to deny spec-silent readonly access. See PR #81 for review context.
+- **Verification:** `pnpm test` passes 45/45 test-file jobs; web typecheck and targeted Convex typecheck pass; lint has zero errors and 11 existing warnings. On clean `origin/main` (`afcdcb0`), typecheck and tests pass and lint has zero errors with 15 warnings. The webpack build reaches the same environment-configuration failure on baseline and follow-up; the default Turbopack build is blocked in this worktree by worker-port `EPERM`.
+- **Status:** Follow-up branch is not yet integrated. Authenticated role-by-role runtime verification and the integrated port-3000 app remain outstanding. The owner's port-3000 listener was not accessed or disturbed.
 
-- **Scope:** Restore the remaining reviewed landing and theme changes from the owner worktrees onto current `origin/main`.
-- **Changes:** The shared landing and panel token system from the design-system worktree is already present on the current base. Restored the audience-pill border adjustment, moved the early theme initializer into a public script, and added the default light-theme brand color input constant. The affiliate-policy route from the older source worktree is absent on current `origin/main` and was not recreated.
-- **Verification:** `pnpm typecheck`, `pnpm test` (32 tests), `pnpm lint` (zero errors, 15 existing warnings), `node --check` for the theme initializer, and `git diff --check` passed. `pnpm build` was attempted with a non-secret placeholder for `NEXT_PUBLIC_CONVEX_URL` but could not fetch Google Fonts because outbound network access was unavailable.
-- **Status:** Branch `feat/restore-landing-updates`; pull request review pending. No production deployment.
+### 2026-10-11 — Platform access review findings follow-up
+
+- **Scope:** Fix the valid commission-pagination and subscriber-count backfill concurrency findings raised during review of the platform RBAC follow-up.
+- **Changes:** Commission status filtering now uses tenant/status indexes before pagination and permits only the specified platform super-admin, finance, and ops roles for cross-tenant views. Backfill start atomically claims the running flag before scheduling, preventing duplicate starts.
+- **Verification:** Web typecheck, targeted Convex typecheck, all 45 test-file jobs, and lint with zero errors passed. Lint reports 11 unrelated warnings. Production build remains blocked by worker-port `EPERM`; the webpack fallback cannot parse TypeScript `--showConfig` in this isolated worktree.
+- **Status:** Changes are on the separate review-fix branch. See PR #84. The owner checkout and port 3000 listener remain untouched.
 
 ### 2026-10-12 — Tenant read isolation merged (Foundation)
 

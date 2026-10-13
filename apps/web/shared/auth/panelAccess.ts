@@ -1,3 +1,5 @@
+import { expandPlatformRoleAliases } from "./rbac.ts";
+
 /**
  * Server-route panel access policy.
  *
@@ -13,10 +15,12 @@ export const PANEL_ROLE_REQUIREMENTS = {
     "platform_finance",
     "platform_readonly",
     "platform_owner",
-    "platform_admin",
     "platform_support",
+    "ops_manager",
+    "finance_manager",
     "org-platform_owner",
-    "org-platform_admin",
+    "org-platform_ops",
+    "org-platform_finance",
     "org-platform_support",
   ],
   admin: ["client_admin", "tenant_admin", "org-client_admin", "org-tenant_admin"],
@@ -25,12 +29,10 @@ export const PANEL_ROLE_REQUIREMENTS = {
     "network_admin",
     "network_operator",
     "platform_owner",
-    "platform_admin",
     "org-network_owner",
     "org-network_admin",
     "org-network_operator",
     "org-platform_owner",
-    "org-platform_admin",
   ],
   dashboard: [
     "client_admin",
@@ -58,7 +60,8 @@ export const PANEL_ROLE_REQUIREMENTS = {
 export type ProtectedPanel = keyof typeof PANEL_ROLE_REQUIREMENTS;
 
 export function hasPanelAccess(roleSlugs: readonly string[], panel: ProtectedPanel): boolean {
-  return PANEL_ROLE_REQUIREMENTS[panel].some((role) => roleSlugs.includes(role));
+  const effectiveRoles = expandPlatformRoleAliases(roleSlugs);
+  return PANEL_ROLE_REQUIREMENTS[panel].some((role) => effectiveRoles.has(role));
 }
 
 /**

@@ -1,10 +1,12 @@
 import { v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
 import { z } from "zod";
 import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
-import { requirePermission, resolveRoles, resolveUserByIdentity } from "./lib/auth";
+import { requirePermission, requirePlatformSubRole, resolveRoles, resolveUserByIdentity } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
+import { resolveMembershipSync, shouldApplyMembershipProviderEvent } from "./lib/platformMembershipSyncCore";
 import { PLATFORM_SUB_ROLE_MAP, workosSlugForRole } from "./lib/permissions";
 import { tenantMembershipStatusFromWorkos } from "./lib/tenantCore";
 import {
@@ -27,6 +29,28 @@ const profileSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
   phone: z.string().trim().regex(/^\+[1-9]\d{7,14}$/).optional(),
   jobTitle: z.string().trim().max(100).optional(),
+});
+
+/** Read-only platform staff directory, deliberately excluding tenant users. */
+export const listPlatformStaffPage = query({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_ops", "platform_finance", "platform_support", "platform_readonly"]);
+    const page = await ctx.db.query("users").order("desc").paginate(args.paginationOpts);
+    const rows = [];
+    for (const user of page.page) {
+      const roles = (await resolveRoles(ctx, user)).filter((role) => role.isPlatform);
+      if (roles.length === 0) continue;
+      rows.push({
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        active: user.isActive !== false && user.deactivatedAt === undefined && user.deletedAt === undefined,
+        roles: roles.map((role) => ({ slug: role.slug, name: role.name })),
+      });
+    }
+    return { ...page, page: rows };
+  },
 });
 
 /**
@@ -200,6 +224,15 @@ export const getRolesByIds = internalQuery({
   },
 });
 
+/** G1 access mutations are reserved for the canonical super-admin role. */
+export const authorizePlatformAccessMutation = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const actor = await requirePlatformSubRole(ctx, ["platform_super_admin"]);
+    return { userId: actor._id, workosUserId: actor.workosUserId ?? null };
+  },
+});
+
 const PLATFORM_MIRROR_SLUGS = new Set(["platform_owner", "platform_admin", "platform_support", "agent"]);
 
 export const applyUserAccess = internalMutation({
@@ -217,8 +250,8 @@ export const applyUserAccess = internalMutation({
       throw new Error("Unauthorized");
     }
     const actorRoles = await resolveRoles(ctx, actor);
-    if (!actorRoles.some((role) => role.slug === "platform_owner" || role.slug === "platform_admin")) {
-      throw new Error("Unauthorized: admin role required");
+    if (!actorRoles.some((role) => role.slug === "platform_owner")) {
+      throw new Error("Unauthorized: platform super-admin role required");
     }
     const target = await ctx.db.get(args.userId);
     if (!target) throw new Error("User not found");
@@ -422,6 +455,7 @@ export const recordOrganizationMembership = internalMutation({
     organizationId: v.string(),
     roleSlug: v.optional(v.string()),
     status: v.union(v.literal("active"), v.literal("inactive"), v.literal("pending")),
+    providerUpdatedAt: v.optional(v.number()),
     email: v.optional(v.string()),
     name: v.optional(v.string()),
   },
@@ -495,9 +529,12 @@ export const recordOrganizationMembership = internalMutation({
     } else if (args.status === "active") {
       if (args.organizationId === platformOrgId) {
         const patch: Record<string, unknown> = { isActive: true, deactivatedAt: undefined };
-        if (roleIds.length > 0) patch.roles = roleIds;
         const platformRole = roleSlugs.find((roleSlug) => PLATFORM_MIRROR_SLUGS.has(roleSlug));
-        if (platformRole) {
+        // A fresh platform-organization role claim is authoritative. Clear a
+        // stale legacy owner mirror when the new role is non-platform so a
+        // downgraded owner cannot regain access through migration recovery.
+        if (args.roleSlug !== undefined) {
+          patch.roles = roleIds;
           patch.platformRole = platformRole;
         }
         if (args.email !== undefined) patch.email = args.email.toLowerCase();
@@ -530,17 +567,35 @@ export const recordOrganizationMembership = internalMutation({
     if (!tenant || !user || user.deletedAt !== undefined) return;
 
     const tenantStatus = tenantMembershipStatusFromWorkos(args.status);
+    let tenantMembershipEventAccepted = true;
     const existingTenantMembership = await ctx.db
       .query("tenantMemberships")
       .withIndex("by_user_tenant", (q) => q.eq("userId", user!._id).eq("tenantId", tenant._id))
       .first();
     if (existingTenantMembership) {
+      tenantMembershipEventAccepted = shouldApplyMembershipProviderEvent(
+        existingTenantMembership.workosMembershipId, args.workosMembershipId,
+        existingTenantMembership.providerUpdatedAt, args.providerUpdatedAt,
+        existingTenantMembership.providerMembershipDeletedAt !== undefined,
+      );
+      if (!tenantMembershipEventAccepted) return;
+      const providerStatus = tenantMembershipStatusFromWorkos(args.status);
+      const { status: effectiveStatus, clearOverride: overrideConfirmed } = resolveMembershipSync(
+        existingTenantMembership.accessOverride, providerStatus,
+        existingTenantMembership.accessOverrideUpdatedAt, args.providerUpdatedAt,
+      );
       await ctx.db.patch(existingTenantMembership._id, {
         workosMembershipId: args.workosMembershipId,
         role: args.roleSlug ?? existingTenantMembership.role,
-        status: tenantStatus,
-        joinedAt: tenantStatus === "active" ? existingTenantMembership.joinedAt ?? Date.now() : existingTenantMembership.joinedAt,
-        revokedAt: tenantStatus === "revoked" ? Date.now() : undefined,
+        status: effectiveStatus,
+        providerUpdatedAt: args.providerUpdatedAt ?? existingTenantMembership.providerUpdatedAt,
+        providerMembershipDeletedAt: existingTenantMembership.providerMembershipDeletedAt === undefined || args.workosMembershipId !== existingTenantMembership.workosMembershipId || (args.providerUpdatedAt !== undefined && args.providerUpdatedAt >= existingTenantMembership.providerMembershipDeletedAt)
+          ? undefined
+          : existingTenantMembership.providerMembershipDeletedAt,
+        accessOverride: overrideConfirmed ? undefined : existingTenantMembership.accessOverride,
+        accessOverrideUpdatedAt: overrideConfirmed ? undefined : existingTenantMembership.accessOverrideUpdatedAt,
+        joinedAt: effectiveStatus === "active" ? existingTenantMembership.joinedAt ?? Date.now() : existingTenantMembership.joinedAt,
+        revokedAt: effectiveStatus === "revoked" ? Date.now() : undefined,
       });
     } else {
       await ctx.db.insert("tenantMemberships", {
@@ -557,7 +612,7 @@ export const recordOrganizationMembership = internalMutation({
     // A provisioning tenant becomes usable only after WorkOS has confirmed an
     // active tenant-admin membership. This is deliberately webhook/sync driven
     // rather than a browser-side success assumption.
-    if (tenantStatus === "active" && args.roleSlug === "tenant_admin") {
+    if (tenantMembershipEventAccepted && tenantStatus === "active" && args.roleSlug === "tenant_admin") {
       await ctx.runMutation(internal.tenantControl.activateProvisionedTenant, {
         tenantId: tenant._id,
         ownerUserId: user._id,
@@ -596,7 +651,7 @@ export const createUser = action({
     roleIds: v.optional(v.array(v.id("roles"))),
   },
   handler: async (ctx, args) => {
-    const actor = (await ctx.runQuery(internal.rolesInternal.authorize, { permission: "users:manage" })) as {
+    const actor = (await ctx.runQuery(internal.platformUsers.authorizePlatformAccessMutation, {})) as {
       userId: Id<"users">;
       workosUserId: string | null;
     };
@@ -712,7 +767,7 @@ export const createUserLocal = internalMutation({
 export const deleteUser = action({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
-    const actor = (await ctx.runQuery(internal.rolesInternal.authorize, { permission: "users:manage" })) as {
+    const actor = (await ctx.runQuery(internal.platformUsers.authorizePlatformAccessMutation, {})) as {
       userId: Id<"users">;
       workosUserId: string | null;
     };
@@ -776,7 +831,7 @@ export const softDeleteUserLocal = internalMutation({
 export const restoreUser = action({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
-    const actor = (await ctx.runQuery(internal.rolesInternal.authorize, { permission: "trash:manage" })) as {
+    const actor = (await ctx.runQuery(internal.platformUsers.authorizePlatformAccessMutation, {})) as {
       userId: Id<"users">;
       workosUserId: string | null;
     };

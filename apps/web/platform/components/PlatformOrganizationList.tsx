@@ -3,7 +3,10 @@
 import Link from "next/link";
 import { Building2, Plus, Search, Users, Calendar, ExternalLink, ArrowRight } from "lucide-react";
 import { useQuery } from "@/app/lib/convex";
-import { tenantControl, type PlatformTenant } from "@/lib/convex/tenantControl";
+import { usePaginatedQuery } from "convex/react";
+import { tenantControl } from "@/lib/convex/tenantControl";
+import { canManagePlatformTenants } from "@/platform/permissions";
+import { useUserProfile } from "@/shared/components/UserProfileContext";
 
 const statusConfig = {
   active: { label: "Active", color: "bg-muted text-foreground border-border" },
@@ -14,7 +17,10 @@ const statusConfig = {
 } as const;
 
 export function PlatformOrganizationList() {
-  const tenants = useQuery(tenantControl.listForPlatform, {});
+  const { results: tenants, status: tenantStatus, loadMore } = usePaginatedQuery(tenantControl.listForPlatformPage, {}, { initialNumItems: 50 });
+  const overview = useQuery(tenantControl.getPlatformOverview, {});
+  const { user } = useUserProfile();
+  const canCreate = canManagePlatformTenants(user?.roles.map((role) => role.slug));
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "var(--canvas)" }}>
@@ -35,7 +41,7 @@ export function PlatformOrganizationList() {
                 Manage all tenant organizations across the platform. Monitor status, membership, and access organization settings.
               </p>
             </div>
-            <Link 
+            {canCreate ? <Link
               href="/platform/organizations/new"
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium transition-all duration-200 shadow-lg hover:-translate-y-0.5"
               style={{
@@ -47,19 +53,19 @@ export function PlatformOrganizationList() {
             >
               <Plus size={18} aria-hidden="true" />
               New Organization
-            </Link>
+            </Link> : null}
           </div>
         </div>
 
         {/* Stats Cards */}
-        {tenants && tenants.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        {overview && overview.total > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
             <div className="rounded-lg border p-5 shadow-sm" style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}>
               <div className="flex items-center justify-between mb-3">
                 <span className="text-sm font-medium" style={{ color: "var(--muted-text)" }}>Total</span>
                 <Building2 size={18} style={{ color: "var(--muted-text)" }} />
               </div>
-              <div className="text-2xl font-semibold" style={{ color: "var(--text-strong)" }}>{tenants.length}</div>
+              <div className="text-2xl font-semibold" style={{ color: "var(--text-strong)" }}>{overview.total}</div>
             </div>
             <div className="rounded-lg border p-5 shadow-sm" style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}>
               <div className="flex items-center justify-between mb-3">
@@ -67,7 +73,7 @@ export function PlatformOrganizationList() {
                 <div className="w-2 h-2 rounded-full" style={{ backgroundColor: "var(--success)" }} />
               </div>
               <div className="text-2xl font-semibold" style={{ color: "var(--text-strong)" }}>
-                {tenants.filter(t => t.status === "active").length}
+                {overview.active}
               </div>
             </div>
             <div className="rounded-lg border p-5 shadow-sm" style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}>
@@ -76,16 +82,7 @@ export function PlatformOrganizationList() {
                 <div className="w-2 h-2 rounded-full" style={{ backgroundColor: "var(--info)" }} />
               </div>
               <div className="text-2xl font-semibold" style={{ color: "var(--text-strong)" }}>
-                {tenants.filter(t => t.status === "trial").length}
-              </div>
-            </div>
-            <div className="rounded-lg border p-5 shadow-sm" style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}>
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-medium" style={{ color: "var(--muted-text)" }}>Total Members</span>
-                <Users size={18} style={{ color: "var(--muted-text)" }} />
-              </div>
-              <div className="text-2xl font-semibold" style={{ color: "var(--text-strong)" }}>
-                {tenants.reduce((sum, t) => sum + (t.membershipCount || 0), 0)}
+                {overview.trial}
               </div>
             </div>
           </div>
@@ -118,7 +115,7 @@ export function PlatformOrganizationList() {
 
         {/* Table */}
         <div className="rounded-lg border shadow-sm overflow-hidden" style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}>
-          {tenants && tenants.length > 0 ? (
+          {tenantStatus === "LoadingFirstPage" ? <p className="p-6">Loading organizations…</p> : tenants.length > 0 ? (
             <table className="w-full">
               <thead>
                 <tr className="border-b" style={{ backgroundColor: "var(--muted-surface)", borderColor: "var(--border)" }}>
@@ -169,7 +166,7 @@ export function PlatformOrganizationList() {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2" style={{ color: "var(--text)" }}>
                           <Users size={16} style={{ color: "var(--muted-text)" }} />
-                          <span className="font-medium">{tenant.membershipCount || 0}</span>
+                          <span className="font-medium">{tenant.membershipCount || 0}{tenant.membershipCountCapped ? "+" : ""}</span>
                         </div>
                       </td>
                       <td className="px-6 py-4">
@@ -234,7 +231,7 @@ export function PlatformOrganizationList() {
               <p className="text-center max-w-sm mb-6" style={{ color: "var(--text)" }}>
                 Get started by creating your first organization to begin managing tenants across the platform.
               </p>
-              <Link 
+              {canCreate ? <Link
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium transition-all duration-200 shadow-lg"
                 href="/platform/organizations/new"
                 style={{
@@ -246,9 +243,10 @@ export function PlatformOrganizationList() {
               >
                 <Plus size={18} aria-hidden="true" />
                 Create Organization
-              </Link>
+              </Link> : null}
             </div>
           )}
+          {tenantStatus === "CanLoadMore" || tenantStatus === "LoadingMore" ? <button className="secondary-button m-4" type="button" disabled={tenantStatus === "LoadingMore"} onClick={() => loadMore(50)}>{tenantStatus === "LoadingMore" ? "Loading…" : "Load more organizations"}</button> : null}
         </div>
       </div>
     </div>

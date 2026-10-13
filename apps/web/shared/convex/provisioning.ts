@@ -1,4 +1,5 @@
 import { makeFunctionReference } from "convex/server";
+import type { PaginationResult } from "convex/server";
 
 export type ProvisioningStatus = "pending" | "approved" | "rejected" | "deployed";
 
@@ -31,8 +32,8 @@ export type ProvisioningMarket = { _id: string; name: string; tenantId: string |
 export const provisioning = {
   listRequests: makeFunctionReference<
     "query",
-    { status?: ProvisioningStatus; marketId?: string },
-    ProvisioningRequest[]
+    { paginationOpts: { numItems: number; cursor: string | null }; status?: ProvisioningStatus; marketId?: string },
+    PaginationResult<ProvisioningRequest>
   >("provisioning:listProvisioningRequests"),
   getRequest: makeFunctionReference<
     "query",
@@ -58,6 +59,10 @@ export const provisioning = {
     { requestId: string },
     void
   >("provisioning:markProvisioningDeployed"),
-  listMarkets: makeFunctionReference<"query", Record<string, never>, ProvisioningMarket[]>("provisioning:listMarketsForQueue"),
+  listMarkets: makeFunctionReference<
+    "query",
+    { paginationOpts: { numItems: number; cursor: string | null } },
+    PaginationResult<ProvisioningMarket>
+  >("provisioning:listMarketsForQueue"),
   deleteRequest: makeFunctionReference<"mutation", { requestId: string }, void>("provisioning:deleteProvisioningRequest"),
 };

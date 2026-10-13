@@ -10,3 +10,8 @@ export function resolveAllowedRoleSlugs(
 export function hasAllowedRole(userRoleSlugs: string[], allowedRoleSlugs: string[]): boolean {
   return allowedRoleSlugs.some((allowed) => userRoleSlugs.includes(allowed));
 }
+
+/** The legacy day-to-day platform administrator is not a super-admin alias. */
+export function hasCanonicalPlatformSuperAdminRole(roleSlugs: readonly string[]): boolean {
+  return roleSlugs.includes("platform_owner");
+}

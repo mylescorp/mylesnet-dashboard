@@ -74,7 +74,7 @@ export function PlatformPlanCatalog() {
   }
 
   async function remove(plan: NonNullable<typeof plans>[number]) {
-    if (!window.confirm(`Permanently delete the ${plan.name} plan? This is available only when no active tenant entitlement uses it.`)) return;
+    if (!window.confirm(`Permanently delete the ${plan.name} plan? Deletion is allowed only when no tenant subscription record refers to it.`)) return;
     setMessage("");
     try {
       await removePlan({ code: plan.code });

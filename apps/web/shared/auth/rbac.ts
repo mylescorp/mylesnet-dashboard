@@ -15,7 +15,7 @@ export type PanelName = "platform" | "network" | "dashboard" | "reseller" | "age
  * single-dashboard estate; multi-panel roles land with Phase 2/5-6.
  */
 export const PANEL_ROLE_PREFIXES: Record<PanelName, string[]> = {
-  platform: ["platform"],
+  platform: ["platform", "org-platform"],
   network: ["network", "super_admin", "admin_ops"],
   dashboard: ["agent", "dashboard", "tenant", "sales"],
   reseller: ["reseller"],
@@ -31,6 +31,7 @@ const PANEL_PREFIX_LOOKUP: ReadonlyMap<string, PanelName> = new Map(
 
 /** Panel name whose role prefixes include the given role slug, if any. */
 export function panelForRole(roleSlug: string): PanelName | null {
+  if (roleSlug === "ops_manager" || roleSlug === "finance_manager") return "platform";
   for (const prefix of PANEL_PREFIX_LOOKUP.keys()) {
     if (roleSlug === prefix || roleSlug.startsWith(`${prefix}_`) || roleSlug.startsWith(`${prefix}:`)) {
       return PANEL_PREFIX_LOOKUP.get(prefix) ?? null;
@@ -47,13 +48,34 @@ export function roleMatchesPanel(roleSlugs: string[], panel: PanelName): boolean
 /** True when the user holds every required role. */
 export function hasRole(roleSlugs: string[], requiredRoles: string[]): boolean {
   if (requiredRoles.length === 0) return true;
-  return requiredRoles.every((role) => roleSlugs.includes(role));
+  const effectiveRoles = expandPlatformRoleAliases(roleSlugs);
+  return requiredRoles.every((role) => effectiveRoles.has(role));
 }
 
 /** True when the user holds at least one of the required roles. */
 export function hasAnyRole(roleSlugs: string[], requiredRoles: string[]): boolean {
   if (requiredRoles.length === 0) return true;
-  return requiredRoles.some((role) => roleSlugs.includes(role));
+  const effectiveRoles = expandPlatformRoleAliases(roleSlugs);
+  return requiredRoles.some((role) => effectiveRoles.has(role));
+}
+
+/** WorkOS organization-scoped platform roles are equivalent to their legacy system-role slugs. */
+export function expandPlatformRoleAliases(roleSlugs: readonly string[]): Set<string> {
+  const effectiveRoles = new Set(roleSlugs);
+  const organizationRoleAliases: Readonly<Record<string, string>> = {
+    "org-platform_super_admin": "platform_super_admin",
+    "org-platform_owner": "platform_owner",
+    "org-platform_admin": "platform_admin",
+    "org-platform_ops": "ops_manager",
+    "org-platform_finance": "finance_manager",
+    "org-platform_support": "platform_support",
+    "org-platform_readonly": "platform_readonly",
+  };
+  for (const slug of roleSlugs) {
+    const alias = organizationRoleAliases[slug];
+    if (alias) effectiveRoles.add(alias);
+  }
+  return effectiveRoles;
 }
 
 /** True when every required permission is present in the token claims. */
@@ -84,7 +106,7 @@ export function toClaimArray(value: unknown): string[] {
  * authoritative tenant/data checks.
  */
 export function normalizeRoleClaims(role: unknown, roles: unknown): string[] {
-  return [...new Set([...toClaimArray(role), ...toClaimArray(roles)])];
+  return [...new Set([...flattenOrgScopedRoles(role), ...flattenOrgScopedRoles(roles)])];
 }
 
 /** Flatten org-scoped role claims shaped `{ [orgId]: string[] }` into one list. */
@@ -97,5 +119,10 @@ export function flattenOrgScopedRoles(value: unknown): string[] {
 
 /** True when any held role is a platform staff role (platform_*). */
 export function isPlatformStaff(roleSlugs: string[]): boolean {
-  return roleSlugs.some((slug) => slug === "platform" || slug.startsWith("platform_") || slug.startsWith("platform:"));
+  return roleSlugs.some((slug) => slug === "ops_manager" || slug === "finance_manager" || slug === "platform" || slug.startsWith("platform_") || slug.startsWith("platform:") || slug.startsWith("org-platform_"));
+}
+
+/** Canonical super-admin policy, including the organization-scoped WorkOS alias. */
+export function isPlatformSuperAdmin(roleSlugs: string[]): boolean {
+  return hasAnyRole(roleSlugs, ["platform_super_admin", "platform_owner"]);
 }

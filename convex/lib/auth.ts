@@ -6,10 +6,13 @@ import {
   PLATFORM_SUB_ROLE_MAP,
   TENANT_ROLE_PERMISSIONS,
   tenantRoleHasPermission,
+  effectivePermissionsForRoles,
+  needsLegacyPlatformOwnerRecovery,
 } from "./permissions";
 import { assertMfaCompliance as assertMfaCompliancePolicy } from "./mfa";
 import { canTenantOperate } from "./tenantCore";
 import { organizationIdFromWorkosIdentity } from "./workosIdentity";
+import { hasCanonicalPlatformSuperAdminRole } from "./platformRoleCore";
 
 /**
  * Platform role access is data-driven from the `roles` table via
@@ -87,9 +90,16 @@ export async function resolveRoles(
   const roleIds = user.roles;
   if (roleIds && roleIds.length > 0) {
     const rows = await Promise.all(roleIds.map((roleId) => ctx.db.get(roleId)));
-    return rows
+    const resolved = rows
       .filter((row): row is Doc<"roles"> => row !== null && row.deletedAt === undefined)
       .map(resolveRoleRow);
+    // The owner mirror is protected from ordinary role changes and deletion.
+    // Preserve its recovery path if a stale role id or partial backfill leaves
+    // the authoritative role array without the owner row.
+    if (needsLegacyPlatformOwnerRecovery(resolved.map((role) => role.slug), user.platformRole)) {
+      return [...resolved, virtualRole("platform_owner")];
+    }
+    return resolved;
   }
   if (user.platformRole !== undefined && user.platformRole !== null) {
     return [virtualRole(user.platformRole)];
@@ -115,7 +125,29 @@ async function getActiveTenantMembership(ctx: QueryCtx | MutationCtx, user: Doc<
     .query("tenantMemberships")
     .withIndex("by_user_tenant", (q) => q.eq("userId", user._id).eq("tenantId", tenant._id))
     .first();
-  return membership?.status === "active" ? membership : null;
+  if (membership?.status !== "active") return null;
+  await assertTenantRelationshipChainActive(ctx, tenant._id);
+  return membership;
+}
+
+/** A suspended parent agency or reseller revokes access for all descendants. */
+async function assertTenantRelationshipChainActive(ctx: QueryCtx | MutationCtx, tenantId: Id<"tenants">) {
+  const pending = [tenantId];
+  const visited = new Set<string>();
+  while (pending.length > 0) {
+    const childId = pending.shift()!;
+    if (visited.has(String(childId))) continue;
+    visited.add(String(childId));
+    if (visited.size > 100) throw new Error("Unauthorized: organization relationship scope exceeds safety limits");
+    const relationships = await ctx.db.query("tenantRelationships")
+      .withIndex("by_child_deletedAt", q => q.eq("childTenantId", childId).eq("deletedAt", undefined))
+      .take(101);
+    if (relationships.length > 100) throw new Error("Unauthorized: organization relationship scope exceeds safety limits");
+    for (const relationship of relationships) {
+      if (relationship.status !== "active") throw new Error("Unauthorized: agency or reseller access is suspended");
+      pending.push(relationship.parentTenantId);
+    }
+  }
 }
 
 export async function resolveTenantAccess(ctx: QueryCtx | MutationCtx, user: Doc<"users">) {
@@ -164,15 +196,11 @@ export function hasPermission(
   roles: ResolvedRole[],
   permission: string,
 ): boolean {
-  return roles.some((role) => role.permissions.includes(permission));
+  return effectivePermissionsForRoles(roles).includes(permission);
 }
 
 export function permissionsOf(roles: ResolvedRole[]): string[] {
-  const seen = new Set<string>();
-  for (const role of roles) {
-    for (const permission of role.permissions) seen.add(permission);
-  }
-  return Array.from(seen);
+  return effectivePermissionsForRoles(roles);
 }
 
 export function isPlatformUser(roles: ResolvedRole[]): boolean {
@@ -193,9 +221,9 @@ export function isPlatformOwner(roles: ResolvedRole[]): boolean {
 }
 
 export function isPlatformAdmin(roles: ResolvedRole[]): boolean {
-  return roles.some(
-    (role) => role.slug === "platform_owner" || role.slug === "platform_admin",
-  );
+  // Canonical super-admin authority belongs to the owner role only. The
+  // legacy platform_admin role is not one of the five scoped platform roles.
+  return hasCanonicalPlatformSuperAdminRole(roles.map((role) => role.slug));
 }
 
 /** Require any authenticated platform user (owner/admin/support). */
@@ -212,7 +240,7 @@ export async function requirePlatformUser(ctx: QueryCtx | MutationCtx): Promise<
   return user;
 }
 
-/** Require platform_owner or platform_admin. */
+/** Require the canonical platform super-admin role. */
 export async function requirePlatformAdmin(ctx: QueryCtx | MutationCtx): Promise<Doc<"users">> {
   const user = await getCurrentUserRecord(ctx);
   if (user.isActive === false || user.deactivatedAt !== undefined) {
@@ -257,10 +285,10 @@ export async function requireAnyRole(
   return user;
 }
 
-/** Operations lead + above (owner / admin / ops_manager). */
+/** Operations lead + above (owner / ops_manager). */
 export function isOpsOrAbove(roles: ResolvedRole[]): boolean {
   return roles.some((role) =>
-    ["platform_owner", "platform_admin", "ops_manager"].includes(role.slug),
+    ["platform_owner", "ops_manager"].includes(role.slug),
   );
 }
 
@@ -277,10 +305,10 @@ export async function requireOpsOrAbove(ctx: QueryCtx | MutationCtx): Promise<Do
   return user;
 }
 
-/** Finance lead + above (owner / admin / finance_manager). */
+/** Finance lead + above (owner / finance_manager). */
 export function isFinanceOrAbove(roles: ResolvedRole[]): boolean {
   return roles.some((role) =>
-    ["platform_owner", "platform_admin", "finance_manager"].includes(role.slug),
+    ["platform_owner", "finance_manager"].includes(role.slug),
   );
 }
 
@@ -321,7 +349,7 @@ export async function requirePermission(
     throw new Error("Unauthorized: account is inactive");
   }
   const roles = await resolveRoles(ctx, user);
-  if (hasPermission(roles, permission) && isPlatformUser(roles)) {
+  if ((isPlatformOwner(roles) || hasPermission(roles, permission)) && isPlatformUser(roles)) {
     enforcePlatformMfa(user, roles);
     return user;
   }
@@ -365,7 +393,7 @@ export async function requireMarketAccess(
   const user = await getCurrentUserRecord(ctx);
   if (!isActiveUser(user)) throw new Error("Unauthorized: account is inactive");
   const roles = await resolveRoles(ctx, user);
-  if (isPlatformAdmin(roles)) return user;
+  if (roles.some((role) => role.slug === "platform_owner" || role.slug === "ops_manager")) return user;
   const membership = await ctx.db
     .query("userMarketMemberships")
     .withIndex("by_user_and_market", (q) => q.eq("userId", user._id).eq("marketId", marketId))
@@ -438,7 +466,7 @@ function isActiveUser(user: Doc<"users">): boolean {
  * unchanged so literal slugs also work.
  *
  * The mapping is defined in lib/permissions.ts (PLATFORM_SUB_ROLE_MAP):
- *   platform_super_admin → platform_owner, platform_admin
+ *   platform_super_admin → platform_owner
  *   platform_ops         → ops_manager
  *   platform_finance     → finance_manager
  *   platform_support     → platform_support

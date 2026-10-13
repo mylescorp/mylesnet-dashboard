@@ -52,7 +52,11 @@ export const fleet = {
     },
     void
   >("fleet:updateDeviceFleetRow"),
-  listMarkets: makeFunctionReference<"query", Record<string, never>, Array<{ _id: string; name: string; tenantId: string | null }>>("fleet:listMarketsForFleetManagement"),
+  listMarkets: makeFunctionReference<
+    "query",
+    { paginationOpts: { numItems: number; cursor: string | null } },
+    PaginationResult<{ _id: string; name: string; tenantId: string | null }>
+  >("fleet:listMarketsForFleetManagement"),
   register: makeFunctionReference<"mutation", { marketId: string; name: string; deviceKind: string; macAddress?: string; firmwareVersion?: string }, string>("fleet:registerDevice"),
   archive: makeFunctionReference<"mutation", { deviceId: string; reason: string }, void>("fleet:archiveDevice"),
   restore: makeFunctionReference<"mutation", { deviceId: string }, void>("fleet:restoreDevice"),

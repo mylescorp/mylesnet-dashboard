@@ -1,10 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PLATFORM_SUB_ROLE_MAP } from "./permissions.ts";
-import { getSystemRoleBySlug } from "./permissions.ts";
+import { ALL_PERMISSION_SLUGS, effectivePermissionsForRoles, needsLegacyPlatformOwnerRecovery, PLATFORM_SUB_ROLE_MAP, getSystemRoleBySlug } from "./permissions.ts";
 
 test("spec sub-role -> concrete role mapping is as agreed", () => {
-  assert.deepEqual(PLATFORM_SUB_ROLE_MAP["platform_super_admin"], ["platform_owner", "platform_admin"]);
+  assert.deepEqual(PLATFORM_SUB_ROLE_MAP["platform_super_admin"], ["platform_owner"]);
   assert.deepEqual(PLATFORM_SUB_ROLE_MAP["platform_ops"], ["ops_manager"]);
   assert.deepEqual(PLATFORM_SUB_ROLE_MAP["platform_finance"], ["finance_manager"]);
   assert.deepEqual(PLATFORM_SUB_ROLE_MAP["platform_support"], ["platform_support"]);
@@ -41,4 +40,15 @@ test("platform_readonly system role exists and holds no write permissions", () =
       permission.endsWith(":request_payout"),
   );
   assert.deepEqual(writePermissions, []);
+});
+
+test("platform owner retains all catalog permissions if its stored permission list is stale", () => {
+  assert.deepEqual(effectivePermissionsForRoles([{ slug: "platform_owner", permissions: ["dashboard:access"] }]), ALL_PERMISSION_SLUGS);
+  assert.deepEqual(effectivePermissionsForRoles([{ slug: "platform_admin", permissions: ["dashboard:access"] }]), ["dashboard:access"]);
+});
+
+test("a protected legacy owner mirror recovers a missing owner role-array entry", () => {
+  assert.equal(needsLegacyPlatformOwnerRecovery(["ops_manager"], "platform_owner"), true);
+  assert.equal(needsLegacyPlatformOwnerRecovery(["platform_owner"], "platform_owner"), false);
+  assert.equal(needsLegacyPlatformOwnerRecovery(["ops_manager"], "platform_admin"), false);
 });
