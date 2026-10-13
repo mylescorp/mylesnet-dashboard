@@ -98,3 +98,17 @@ Implemented the session policy fixed alongside the MFA decision (30-minute inact
 Verification: repository `node --test` 229/229 (13 new `sessionPolicy` cases); web jest 25/25 (10 new `SessionGuard` cases); web typecheck; lint 0 errors (14 pre-existing warnings outside the diff); design-token check; production build passed with a non-secret Convex URL placeholder. Greptile 5/5 on the hardened head `dcacce0` after one review round (one P0 idle-resume finding and two P2 sign-out/accessibility findings, all fixed); merged at `9c5c549` (PR #95). No new runtime dependency and no Convex schema/function change.
 
 **Exit criteria update:** Phase 0's "MFA policy has one approved source" and the session policy it pairs with are now both enforced from one place. Remaining Phase 0 work: the documented role matrix/UI parity check and the verified deployment target (blocked by B-001). Next: the `apps/admin`/`apps/network` boundary extraction and the remaining Phase 1 lifecycle items.
+
+## 2026-10-13 — Phase 1 no-deletion audit re-baselined
+
+Re-baselined the separate no-deletion audit that gates the platform app-boundary work onto current `main`. The earlier audit (`docs/audits/legacy-route-no-deletion-audit-2026-10-09.md`) exists only on unmerged production branches whose `apps/admin` tree is absent from `main`, so the disposition was not grounded in the shipping code. This audit re-inventories the surfaces against `main` at `4dbf09f`.
+
+- **Reviewed surfaces:** the `/admin`, `/agency`, `/reseller`, and `/partner` panel roots and the tenant business-reporting/finance routes (`/analytics` alias, `/insights/analytics`, `/sales`, `/revenue`, `/profit-loss`, `/profitability`, `/investor-reports`, `/scheduled-reports`, `/commissions`, `/finance/invoices`, `/finance/payments`) with their façade, implementation module, evidenced backend dependencies, references, and verification limits.
+- **Current boundary:** `apps/` on `main` contains only `web` and `mobile`; `apps/admin` and `apps/network` are absent. The platform panel ships inside `apps/web` (23 platform `page.tsx` entries under `apps/web/app/(panels)/platform/`).
+- **Enforcement:** `scripts/audit/legacy-route-no-deletion.test.mjs` fails when an audited façade or implementation disappears or a façade stops actively loading its audited module; it inspects active source only, so commented-out wiring does not pass. Removing a surface requires an owner-approved audit and matrix update first. The repository test job now runs `scripts/audit/*.test.mjs`.
+
+**Disposition:** the audit authorizes no deletion, redirect, move, or rewrite. It requires an owner-approved destination, an inbound-link inventory beyond the source tree, redirect/page/data/permission parity, and authenticated role tests before any retirement.
+
+Verification: repository `node --test` 234/234 (+5 guard cases); the guard was negative-tested (removing a façade, or commenting out its re-export, fails); lint 0 errors (14 pre-existing warnings outside the diff); web typecheck; design-token check. Merged at `b7123db` (PR #97).
+
+**Next:** begin the `apps/admin` platform-panel boundary extraction as additive work (no legacy surface removed), keeping tenant `/admin` distinct from the planned `apps/network` surface; continue the Phase 0 role-matrix/UI parity check. Production deploy remains blocked by B-001.

@@ -137,3 +137,30 @@ Newest entries last. Keep current after every step so a reset can resume.
 - Production URL: not deployed (see `blockers.md` B-001).
 - Next task: the `apps/admin`/`apps/network` boundary extraction and the remaining Phase 0 role-matrix/deployment-target work; then Phase 1 tenant lifecycle items.
 
+## 2026-10-13 Foundation - PR #97 legacy route no-deletion audit
+
+- Re-baselined the separate no-deletion audit that gates the platform
+  app-boundary work onto current `main`, because the earlier audit exists only
+  on unmerged production branches whose `apps/admin` tree is absent from `main`.
+  Recorded the `/admin`, `/agency`, `/reseller`, `/partner` panel roots and the
+  tenant business-reporting/finance routes with their façade, implementation
+  module, evidenced backend dependencies, references, and verification limits.
+  The disposition authorizes no deletion, redirect, move, or rewrite.
+- Added `scripts/audit/legacy-route-no-deletion.test.mjs` and included
+  `scripts/audit/*.test.mjs` in the repository test job. The guard strips
+  comments and inspects active source only, so a commented-out re-export or
+  redirect cannot pass; removing a surface requires an owner-approved audit and
+  matrix update first. The guard was negative-tested.
+- Verification: repository `node --test` 234/234 (+5 guard cases); lint zero
+  errors (14 pre-existing warnings outside the diff); web typecheck;
+  design-token check. No runtime, schema, or UI change.
+- Merged at `b7123db` (squash). See PR #97.
+
+### Heartbeat
+
+- Time: 2026-10-13 platform Phase 0/1 session.
+- Module: Phase 1 - legacy route no-deletion audit re-baselined.
+- Result: the no-deletion audit is grounded in current `main` and enforced by a test; PR #95, #96, and #97 merged.
+- Production URL: not deployed (see `blockers.md` B-001).
+- Next task: begin the additive `apps/admin` platform-panel boundary extraction (keep tenant `/admin` distinct from the planned `apps/network` surface, remove no legacy surface); continue the Phase 0 role-matrix/UI parity check.
+
