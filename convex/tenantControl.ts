@@ -5,6 +5,7 @@ import { Id } from "./_generated/dataModel";
 import { logAudit } from "./lib/auditLog";
 import { requirePlatformAdmin, requirePlatformSubRole, requirePlatformUser, resolveRoles, resolveUserByIdentity } from "./lib/auth";
 import { PLATFORM_SUB_ROLE_MAP } from "./lib/permissions";
+import { PLATFORM_OPERATE_SUB_ROLES, PLATFORM_SUPER_ADMIN_SUB_ROLES } from "./lib/platformAccess";
 import { canTenantOperate, resolveTenantFromAuth } from "./lib/tenant";
 import { decideTenantLifecycleTransition } from "./lib/tenantLifecycleCore";
 import {
@@ -157,7 +158,7 @@ export const getCurrentWorkspace = query({
 export const setStatus = mutation({
   args: { tenantId: v.id("tenants"), status: v.union(v.literal("active"), v.literal("suspended")) },
   handler: async (ctx, args) => {
-    const actor = await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_ops"]);
+    const actor = await requirePlatformSubRole(ctx, PLATFORM_OPERATE_SUB_ROLES);
     const tenant = await ctx.db.get(args.tenantId);
     if (!tenant || tenant.deletedAt !== undefined) throw new Error("Tenant not found");
     const transition = decideTenantLifecycleTransition(tenant.status, args.status, tenant.statusBeforeSuspension);
@@ -190,7 +191,7 @@ export const updateTenant = mutation({
     currency: v.string(),
   },
   handler: async (ctx, args) => {
-    const actor = await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_ops"]);
+    const actor = await requirePlatformSubRole(ctx, PLATFORM_OPERATE_SUB_ROLES);
     const tenant = await ctx.db.get(args.tenantId);
     if (!tenant || tenant.deletedAt !== undefined) throw new Error("Tenant not found");
     const name = args.name.trim();
@@ -289,7 +290,7 @@ export const setEntitlement = mutation({
     trialEndsAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const actor = await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_ops"]);
+    const actor = await requirePlatformSubRole(ctx, PLATFORM_OPERATE_SUB_ROLES);
     const tenant = await ctx.db.get(args.tenantId);
     if (!tenant || tenant.deletedAt !== undefined) throw new Error("Tenant not found");
     const planId = args.planId.trim().toLowerCase();
@@ -363,7 +364,7 @@ export const setEntitlement = mutation({
 export const removeEntitlement = mutation({
   args: { tenantId: v.id("tenants"), reason: v.string() },
   handler: async (ctx, args) => {
-    const actor = await requirePlatformSubRole(ctx, ["platform_super_admin"]);
+    const actor = await requirePlatformSubRole(ctx, PLATFORM_SUPER_ADMIN_SUB_ROLES);
     const tenant = await ctx.db.get(args.tenantId);
     if (!tenant || tenant.deletedAt !== undefined) throw new Error("Tenant not found");
     const reason = args.reason.trim();
@@ -391,7 +392,7 @@ export const assertProvisioner = internalQuery({
     const actor = await ctx.db.query("users").withIndex("by_workosUserId", (q) => q.eq("workosUserId", args.workosUserId)).first();
     if (!actor || actor.deletedAt !== undefined || actor.isActive === false) throw new Error("Unauthorized: platform administrator required");
     const roles = await resolveRoles(ctx, actor);
-    const allowed = ["platform_super_admin", "platform_ops"].flatMap((sub) => PLATFORM_SUB_ROLE_MAP[sub] ?? [sub]);
+    const allowed = PLATFORM_OPERATE_SUB_ROLES.flatMap((sub) => PLATFORM_SUB_ROLE_MAP[sub] ?? [sub]);
     if (!roles.some((role) => allowed.includes(role.slug))) {
       throw new Error("Unauthorized: platform administrator required");
     }

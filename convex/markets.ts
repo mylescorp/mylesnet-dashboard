@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { Doc } from "./_generated/dataModel";
 import { requirePermission, requirePlatformSubRole, requirePlatformUser } from "./lib/auth";
+import { PLATFORM_OPERATE_SUB_ROLES, PLATFORM_READ_SUB_ROLES } from "./lib/platformAccess";
 import { readTenantList, readScopedTenant, enforceTenantOnResource } from "./lib/tenant";
 import { logAudit } from "./lib/auditLog";
 
@@ -335,7 +336,7 @@ export const platformListMarkets = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_ops", "platform_finance", "platform_support", "platform_readonly"]);
+    await requirePlatformSubRole(ctx, PLATFORM_READ_SUB_ROLES);
     
     let markets;
     
@@ -364,7 +365,7 @@ export const platformListMarkets = query({
 export const platformGetMarket = query({
   args: { marketId: v.id("markets") },
   handler: async (ctx, args) => {
-    await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_ops", "platform_finance", "platform_support", "platform_readonly"]);
+    await requirePlatformSubRole(ctx, PLATFORM_READ_SUB_ROLES);
     return await ctx.db.get(args.marketId);
   },
 });
@@ -381,7 +382,7 @@ export const platformCreateMarket = mutation({
     currency: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_ops"]);
+    const user = await requirePlatformSubRole(ctx, PLATFORM_OPERATE_SUB_ROLES);
     const now = Date.now();
     
     const marketId = await ctx.db.insert("markets", {
@@ -432,7 +433,7 @@ export const platformUpdateMarket = mutation({
     }),
   },
   handler: async (ctx, args) => {
-    const user = await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_ops"]);
+    const user = await requirePlatformSubRole(ctx, PLATFORM_OPERATE_SUB_ROLES);
     const market = await ctx.db.get(args.marketId);
     
     if (!market) {
@@ -475,7 +476,7 @@ export const platformSoftDeleteMarket = mutation({
     forceCascade: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const user = await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_ops"]);
+    const user = await requirePlatformSubRole(ctx, PLATFORM_OPERATE_SUB_ROLES);
     const market = await ctx.db.get(args.marketId);
     
     if (!market) {
@@ -534,7 +535,7 @@ export const platformSoftDeleteMarket = mutation({
 export const platformRestoreMarket = mutation({
   args: { marketId: v.id("markets") },
   handler: async (ctx, args) => {
-    const user = await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_ops"]);
+    const user = await requirePlatformSubRole(ctx, PLATFORM_OPERATE_SUB_ROLES);
     const market = await ctx.db.get(args.marketId);
     
     if (!market) {

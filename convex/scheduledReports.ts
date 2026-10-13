@@ -4,6 +4,7 @@ import { internal } from "./_generated/api";
 import { hasPermission, hasPlatformSubRole, isPlatformUser, requirePermission, requirePlatformSubRole, requirePlatformUser, resolveRoles } from "./lib/auth";
 import { assertMfaCompliance, isMfaCompliant } from "./lib/mfa";
 import { tenantRoleHasPermission } from "./lib/permissions";
+import { PLATFORM_FINANCE_SUB_ROLES } from "./lib/platformAccess";
 import { logAudit } from "./lib/auditLog";
 import { dayOf, monthOf } from "./lib/finance";
 import { canTenantOperate, enforceTenantOnResource, readScopedTenant } from "./lib/tenant";
@@ -31,7 +32,7 @@ export type ReportDataset = "revenue" | "subscribers" | "financials";
  * billing reports. A missing tenant owner is never permission to read across
  * tenants; the caller must prove one of these roles first.
  */
-const REPORT_PLATFORM_SUB_ROLES: string[] = ["platform_super_admin", "platform_finance"];
+const REPORT_PLATFORM_SUB_ROLES: string[] = PLATFORM_FINANCE_SUB_ROLES;
 
 export const listScheduledReports = query({
   args: {},
