@@ -411,6 +411,7 @@ export const updatePaymentGatewayPublicFields = mutation({
   },
   handler: async (ctx, args) => {
     const actor = await requirePlatformSubRole(ctx, PAYMENT_GATEWAY_PUBLIC_EDITORS);
+    if (args.enabled !== undefined) await requirePlatformSubRole(ctx, PAYMENT_GATEWAY_MANAGERS);
     const row = await ctx.db.query("platformPaymentGatewayConfigs")
       .withIndex("by_tenant_provider", (q) => q.eq("tenantId", args.tenantId).eq("provider", "daraja"))
       .first();

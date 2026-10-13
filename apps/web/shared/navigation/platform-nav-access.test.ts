@@ -226,6 +226,9 @@ test("C4 Convex handlers enforce role guards before work and never persist crede
   const editorStart = platform.indexOf("export const updatePaymentGatewayPublicFields =");
   const editorHeader = platform.slice(editorStart, platform.indexOf("handler:", editorStart));
   assert.doesNotMatch(editorHeader, /consumerKey|consumerSecret|passkey|secretVersionId/);
+  const editorEnd = platform.indexOf("export const archivePaymentGatewayConfig =", editorStart);
+  const editorBody = platform.slice(editorStart, editorEnd);
+  assert.match(editorBody, /const actor = await requirePlatformSubRole\(ctx, PAYMENT_GATEWAY_PUBLIC_EDITORS\);\s*if \(args\.enabled !== undefined\) await requirePlatformSubRole\(ctx, PAYMENT_GATEWAY_MANAGERS\);/);
   const projectionStart = platform.indexOf("function projectPaymentGateway(");
   const projectionEnd = platform.indexOf("function validateDarajaShortCode", projectionStart);
   assert.doesNotMatch(platform.slice(projectionStart, projectionEnd), /secretVersionId:|rotationOperationId:/);
@@ -240,4 +243,13 @@ test("C4 Convex handlers enforce role guards before work and never persist crede
   assert.match(route, /PAYMENT_GATEWAY_MANAGERS = \["platform_super_admin", "platform_owner"\]/);
   assert.match(route, /KmsKeyId: input\.kmsKeyId/);
   assert.doesNotMatch(route, /GetSecretValueCommand|console\.(?:log|error|warn)/);
+});
+
+test("C4 credential dialog uses shared modal and motion tokens above the overlay", () => {
+  const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
+  assert.match(css, /\.profile-modal-overlay\s*\{[^}]*z-index:\s*var\(--mn-z-modal\)/);
+  assert.match(css, /\.credential-dialog-position\s*\{[^}]*z-index:\s*var\(--mn-z-modal\)/);
+  assert.match(css, /credentialDialogEnter\s+var\(--mn-dur-slow\)\s+var\(--mn-ease-enter\)/);
+  assert.match(css, /translateY\(var\(--mn-space-3\)\)/);
+  assert.doesNotMatch(css, /\.credential-dialog-position\s*\{[^}]*z-index:\s*\d+/);
 });
