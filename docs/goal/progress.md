@@ -154,9 +154,7 @@ Newest entries last. Keep current after every step so a reset can resume.
 - Verification: repository `node --test` 234/234 (+5 guard cases); lint zero
   errors (14 pre-existing warnings outside the diff); web typecheck;
   design-token check. No runtime, schema, or UI change.
-- Greptile 5/5 on the hardened head `d60fdb4` after one review round (inactive
-  wiring in the guard, plus an incorrect analytics nav reference, both fixed).
-  Merged at `b7123db` (squash). See PR #97.
+- Merged at `b7123db` (squash). See PR #97.
 
 ### Heartbeat
 
