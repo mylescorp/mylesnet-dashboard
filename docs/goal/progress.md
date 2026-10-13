@@ -133,7 +133,7 @@ Newest entries last. Keep current after every step so a reset can resume.
 
 - Time: 2026-10-13 platform Phase 0 session.
 - Module: Foundation - platform Phase 0 (session policy enforced).
-- Result: the 30/25/720-minute session policy is enforced server-side and in-page from one source; PR #95 merged.
+- Result: one policy source drives the server's 12-hour cap and the browser's 25-minute warning, 30-minute inactivity logout, and 12-hour cap; PR #95 merged.
 - Production URL: not deployed (see `blockers.md` B-001).
 - Next task: the `apps/admin`/`apps/network` boundary extraction and the remaining Phase 0 role-matrix/deployment-target work; then Phase 1 tenant lifecycle items.
 
