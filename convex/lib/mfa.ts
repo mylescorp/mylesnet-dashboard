@@ -11,16 +11,18 @@
  * timeout, 25-minute warning, 12-hour absolute lifetime).
  */
 
+import { SYSTEM_ROLES } from "./permissions.ts";
+
 export const MFA_ENFORCEMENT_MODE = "required" as const;
 
-/** Every platform role requires MFA enrollment. */
-export const MANDATORY_MFA_ROLES = [
-  "platform_owner",
-  "platform_admin",
-  "ops_manager",
-  "finance_manager",
-  "platform_support",
-] as const;
+/**
+ * Every platform role declared in the role registry requires MFA enrollment.
+ * Derived from `SYSTEM_ROLES` so a new platform role inherits the requirement
+ * instead of silently escaping the gate.
+ */
+export const MANDATORY_MFA_ROLES: readonly string[] = SYSTEM_ROLES.filter(
+  (role) => role.isPlatform,
+).map((role) => role.slug);
 
 export type MandatoryMfaRole = (typeof MANDATORY_MFA_ROLES)[number];
 
@@ -41,7 +43,11 @@ export function requiresMandatory2FA(roleSlug: string | null | undefined): boole
 }
 
 function hasEnrolledFactor(enrollment: MfaEnrollment | null | undefined): boolean {
-  return Boolean(enrollment?.mfaEnrolled) || Boolean(enrollment?.mfaEnrolledAt);
+  if (!enrollment) return false;
+  // An explicit `false` is an authoritative "no factor enrolled", even when a
+  // stale `mfaEnrolledAt` remains; the timestamp must never override it.
+  if (enrollment.mfaEnrolled === false) return false;
+  return enrollment.mfaEnrolled === true || enrollment.mfaEnrolledAt !== undefined;
 }
 
 /**

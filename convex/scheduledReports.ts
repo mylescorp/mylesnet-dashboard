@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { MutationCtx, action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { hasPermission, hasPlatformSubRole, isPlatformUser, requirePermission, requirePlatformSubRole, requirePlatformUser, resolveRoles } from "./lib/auth";
+import { assertMfaCompliance, isMfaCompliant } from "./lib/mfa";
 import { tenantRoleHasPermission } from "./lib/permissions";
 import { logAudit } from "./lib/auditLog";
 import { dayOf, monthOf } from "./lib/finance";
@@ -307,7 +308,8 @@ export const canReadPlatformReports = internalQuery({
     return (
       isPlatformUser(roles) &&
       hasPermission(roles, "reports:generate") &&
-      hasPlatformSubRole(roles, REPORT_PLATFORM_SUB_ROLES)
+      hasPlatformSubRole(roles, REPORT_PLATFORM_SUB_ROLES) &&
+      isMfaCompliant(roles.map((role) => role.slug), user)
     );
   },
 });
@@ -449,6 +451,7 @@ async function requireReportExportActor(
     hasPermission(roles, "reports:generate") &&
     hasPlatformSubRole(roles, REPORT_PLATFORM_SUB_ROLES)
   ) {
+    assertMfaCompliance(user, roles.map((role) => role.slug));
     return;
   }
   if (tenantId) {
