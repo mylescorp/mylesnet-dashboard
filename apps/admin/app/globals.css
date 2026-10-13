@@ -1,0 +1,18 @@
+/*
+ * apps/admin stylesheet.
+ *
+ * The design tokens and shell styles are owned by `apps/web/app/globals.css`
+ * today and reused here while both apps ship the one platform panel source tree
+ * (`apps/web/platform`). Tailwind only auto-detects sources inside this app
+ * directory, so the reused source trees are declared explicitly with `@source`;
+ * without them utility classes used only by the panel are not generated.
+ *
+ * When the platform panel source moves into this app
+ * (docs/architecture/repository-map.md), those `@source` lines are removed
+ * because the panel becomes local.
+ */
+@import "../../web/app/globals.css";
+
+@source "../../web/platform";
+@source "../../web/shared";
+@source "../../packages/ui/src";
