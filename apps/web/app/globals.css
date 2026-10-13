@@ -1198,7 +1198,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .error-banner { margin-top: 16px; border: 1px solid var(--danger); border-radius: 8px; background: var(--danger-bg); padding: 12px; color: var(--danger); font-size: 13px; font-weight: 700; }
 .modal-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 20px; }
 .action-spacer { flex: 1; }
-.danger-button { border-color: var(--danger); color: var(--danger); }
+.danger-button { border-color: var(--mn-danger-fg); color: var(--mn-danger-fg); }
 .danger-button:hover { border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); background: var(--danger-bg); }
 
 .card-actions { display: flex; align-items: center; gap: 8px; }

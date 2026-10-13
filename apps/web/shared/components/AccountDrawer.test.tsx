@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { readStoredThemeMode } from "../theme";
+import { readStoredThemeMode, setThemeMode } from "../theme";
 import { AccountDrawer } from "./AccountDrawer";
 
 const mockSignOut = jest.fn();
@@ -170,6 +170,22 @@ describe("AccountDrawer", () => {
 
     expect(readStoredThemeMode()).toBe("dark");
     expect(window.localStorage.getItem("mylesnet-dashboard-theme")).toBe("dark");
+
+    Reflect.deleteProperty(document, "cookie");
+  });
+
+  it("persists theme changes in local storage when the browser rejects cookies", () => {
+    Object.defineProperty(document, "cookie", {
+      configurable: true,
+      get: () => "",
+      set: () => {},
+    });
+
+    setThemeMode("dark");
+
+    expect(window.localStorage.getItem("mylesnet-dashboard-theme")).toBe("dark");
+    expect(readStoredThemeMode()).toBe("dark");
+    expect(document.documentElement.dataset.theme).toBe("dark");
 
     Reflect.deleteProperty(document, "cookie");
   });

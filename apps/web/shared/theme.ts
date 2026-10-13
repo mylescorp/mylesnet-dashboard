@@ -11,8 +11,22 @@ const LEGACY_STORAGE_KEY = "mylesnet-dashboard-theme";
 
 function persistMode(mode: ThemeMode): boolean {
   // The theme cookie is intentionally readable by client code for pre-paint theme selection.
-  document.cookie = `${COOKIE_NAME}=${mode}; Path=/; Max-Age=31536000; Secure; SameSite=Lax`;
-  return document.cookie.split("; ").some((cookie) => cookie === `${COOKIE_NAME}=${mode}`);
+  try {
+    document.cookie = `${COOKIE_NAME}=${mode}; Path=/; Max-Age=31536000; Secure; SameSite=Lax`;
+    const cookieSaved = document.cookie.split("; ").some((cookie) => cookie === `${COOKIE_NAME}=${mode}`);
+    if (cookieSaved) {
+      window.localStorage.removeItem(LEGACY_STORAGE_KEY);
+      return true;
+    }
+  } catch {
+    // Fall back to local storage when cookies are unavailable or blocked.
+  }
+  try {
+    window.localStorage.setItem(LEGACY_STORAGE_KEY, mode);
+  } catch {
+    // The theme still applies for this session when all browser storage is blocked.
+  }
+  return false;
 }
 
 function getStoredMode(): ThemeMode {
