@@ -37,12 +37,19 @@ function WorkspaceShellContent({ children }: { children: ReactNode }) {
   
   // Find active navigation item
   const activeNav = groups.flatMap(g => g.items).find(item => isRouteActive(pathname, item));
+  const navItems = groups.flatMap((group) => group.items);
+  const mobileTabs = ["/dashboard", "/subscribers", "/revenue", "/network"]
+    .map((href) => navItems.find((item) => item.href === href))
+    .filter((item) => item !== undefined)
+    .map((item) => ({ ...item, active: isRouteActive(pathname, item) }));
   const pageLabel =
     activeNav?.label ??
     (pathname === "/" ? "Dashboard" : pathname.slice(1).split("/")[0].replace(/^./, (c) => c.toUpperCase()));
 
   return (
     <AppShell
+      mobileTabs={mobileTabs}
+      mobileCreateAction={user.permissions.includes("subscribers:create") && navItems.some((item) => item.href === "/subscribers") ? { href: "/subscribers/new", label: "Add subscriber" } : undefined}
       renderSidebar={(state) => (
         <SidebarRail
           groups={groups}

@@ -65,7 +65,7 @@ Part A reproduces `techspec-v2.md` (2026-07-13) verbatim except for the canonica
 
 **Annotation 2 resolution (2026-09-10).** [[Jonathan Myles]] approved the public pricing contract for the pricing figures in Part A: monthly plans **Starter KES 500 · Growth KES 1,400 · Pro KES 3,500** (KES is the base, authoritative currency), a **14-day free trial** for new operators, and a **referral commission of 20% for 12 months** on the referred operator's subscription payments. Currency is auto-displayed by visitor country (server geo header; KE→KES, UG→UGX, else USD) with a manual switcher, converted from a **repo-managed cached reference-rate snapshot** (no runtime FX call, no new dependency). These figures are now current commitments for the **public pricing surface** (landing `/pricing`) and any future commercial surface under this approval; the Master itself remains draft-pending-approval. Recorded in the C3 ledger and the 2026-09-10 decisions log. Providers remain approval-gated as stated above.
 
-**Annotation 3 — Design tokens.** The approved token contract is `design/tokens.md` v3.0 (approved for execution 2026-09-14): Centipid parity — primary `#FA8200`, graphite neutrals `#0E1116`, no navy. The legacy `--net-*` namespace and the retired v2 palette (`#F57C00` / `#1A395B` / `#FFF3E0`) are retired and must not be referenced in new code or documentation. See Part C §C4.
+**Annotation 3 — Design tokens (superseded 2026-10-13).** The active token contract is `packages/ui/tokens.json`, copied to `products/mylesnet/design/tokens.json`. This supplied unified set replaces every earlier active palette and typography contract. See the 2026-10-13 entry in `design/tokens.md`.
 
 **Annotation 4 — Identity precedence inside Part A.** The v2 Document Control below is corrected to the canonical identity set. Host, repository, and Convex deployment values preserved verbatim elsewhere in the v2 sections (Gap Analysis, deployment tables, open questions) are historical to v2 and are resolved by the Document Control block at the top of this Master and Part C §C5: production host `https://mylesnetisp.mylescorptech.com`; Convex prod `precious-chipmunk-720` (team `mylesoft`, project `mylesnet-dashboard`); panel hostnames follow `admin.<product-domain>` / `network.<product-domain>` / `agency.<product-domain>` / `reseller.<product-domain>` / `partner.<product-domain>` / `<tenant>.<product-domain>` (v3 §7). Any `mylesnet.mylescorptech.com` reference not restated in the Document Control block is historical or belongs to a separate property (the marketing website).
 
@@ -169,7 +169,7 @@ This gap analysis was produced from the complete Phase 0 read of all vault sourc
 
 | Area | Vault Says | Codebase Has | Gap / Drift | Recommendation |
 |---|---|---|---|---|
-| `products/mylesnet/design/tokens.md` | v3.0 (2026-09-14): Primary `#FA8200`, graphite neutrals `#0E1116`, no navy, prefix `--` | Implemented (v3.0) in `apps/web/app/globals.css`; enforced by `tokens:check` | None | Keep |
+| `products/mylesnet/design/tokens.json` | Unified MylesCorp tokens (2026-10-13) | Runtime CSS and Tailwind mappings are being synchronized | Implementation and visual checks remain | Use the JSON as sole authority |
 | `doc/mylesnet-tokens-MERGE.md` | Superseded by v3.0 | N/A | Historical record of retired v2 palette | tokens.md is authoritative |
 | `doc/brand-FINAL.md` | Superseded by v3.0 | N/A | Historical record of retired v2 palette | No action |
 | `doc/registry-FINAL.md` | Confirms same values | N/A | Aligned | No action |
@@ -2546,7 +2546,7 @@ Price and commission figures from v2 (trial duration and price, referral commiss
 
 ### C4. Design token migration
 
-The approved token contract is `design/tokens.md` v3.0 (approved for execution 2026-09-14). The legacy `--net-*` token namespace and the retired v2 palette (orange `#F57C00` primary family, navy `#1A395B` accent family, warm surface/border tokens) are retired and must not be referenced in new code, documentation, or audits. The active token set (Centipid parity: primary `#FA8200`, graphite neutrals `#0E1116`, no navy; Inter/JetBrains Mono/Bricolage Grotesque/Hanken Grotesk type stack) is maintained in `design/tokens.md` unless [[Jonathan Myles]] explicitly approves a revision.
+The previous v2 and v3 token values in this specification are historical and superseded as of 2026-10-13. The sole active token authority is `products/mylesnet/design/tokens.json` in the vault and `packages/ui/tokens.json` in the repository. Both contain the supplied unified token set for all panels and landing pages. Do not use prior color, typography, layout, or motion tables for new implementation work. Keep CSS variables, typed exports, and shared Tailwind mappings synchronized from the JSON. Brand orange and brand navy are reserved for logo, documents, and marketing artwork.
 
 ### C5. Repository and vault references
 

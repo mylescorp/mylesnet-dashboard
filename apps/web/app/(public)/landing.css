@@ -2570,7 +2570,7 @@ a.landing-card:hover .landing-card-title,
   gap: var(--space-2);
   border: 1px solid color-mix(in srgb, var(--success) 78%, var(--line));
   border-radius: var(--radius-full);
-  background: color-mix(in srgb, var(--success) 78%, var(--mn-white));
+  background: color-mix(in srgb, var(--success) 78%, var(--mn-card));
   color: var(--text-on-brand);
   padding: var(--space-3) var(--space-5);
   box-shadow: var(--shadow-lg);

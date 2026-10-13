@@ -10,8 +10,8 @@ import {
 import { shellStorageKeys } from "../utils";
 import { SidebarRail } from "./sidebar-rail";
 import { Topbar } from "./topbar";
-import type { BreadcrumbItem, NavGroup, RouteIndexItem } from "../types";
-import { X } from "lucide-react";
+import type { BreadcrumbItem, NavItem } from "../types";
+import { Plus, X } from "lucide-react";
 
 type SidebarVariant = "desktop" | "mobile";
 
@@ -31,13 +31,17 @@ interface TopbarState {
 export function AppShell({
   renderSidebar,
   topbar,
+  mobileTabs = [],
+  mobileCreateAction,
   children,
 }: {
   renderSidebar: (state: ShellState) => ReactNode;
   topbar: (ctx: TopbarState) => ReactNode;
+  mobileTabs?: Array<Pick<NavItem, "href" | "label" | "icon"> & { active: boolean }>;
+  mobileCreateAction?: { href: string; label: string };
   children: ReactNode;
 }) {
-  const [viewport, setViewport] = useState<"desktop" | "tablet" | "mobile">("desktop");
+  const [viewport, setViewport] = useState<"desktop" | "mobile">("desktop");
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window === "undefined") return false;
     try {
@@ -49,14 +53,10 @@ export function AppShell({
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
-    const desktop = window.matchMedia("(min-width: 980px)");
-    const tablet = window.matchMedia("(min-width: 768px) and (max-width: 979px)");
+    const desktop = window.matchMedia("(min-width: 1024px)");
 
     const update = () => {
-      if (tablet.matches) {
-        setViewport("tablet");
-        setCollapsed(true);
-      } else if (desktop.matches) {
+      if (desktop.matches) {
         setViewport("desktop");
         try {
           setCollapsed(localStorage.getItem(shellStorageKeys.sidebar) === "1");
@@ -70,10 +70,8 @@ export function AppShell({
 
     update();
     desktop.addEventListener("change", update);
-    tablet.addEventListener("change", update);
     return () => {
       desktop.removeEventListener("change", update);
-      tablet.removeEventListener("change", update);
     };
   }, []);
 
@@ -129,8 +127,25 @@ export function AppShell({
       <div className="app-content">
         {topbar({ onOpenDrawer, collapsed, onToggleCollapsed })}
         <main className="app-main">{children}</main>
+        {viewport === "mobile" && mobileCreateAction ? (
+          <a className="mobile-create-button" href={mobileCreateAction.href} aria-label={mobileCreateAction.label} title={mobileCreateAction.label}>
+            <Plus size={22} aria-hidden="true" />
+          </a>
+        ) : null}
+        {mobileTabs.length > 0 ? (
+          <nav className="mobile-tabbar" aria-label="Primary destinations">
+            {mobileTabs.map((item) => {
+              const Icon = item.icon;
+              return (
+                <a key={item.href} href={item.href} aria-current={item.active ? "page" : undefined} className={item.active ? "mobile-tab-active" : undefined}>
+                  {Icon ? <Icon size={18} aria-hidden="true" /> : null}
+                  <span>{item.label}</span>
+                </a>
+              );
+            })}
+          </nav>
+        ) : null}
       </div>
     </div>
   );
 }
-

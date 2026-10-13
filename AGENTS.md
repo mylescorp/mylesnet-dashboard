@@ -100,6 +100,15 @@ Before starting any coding task, check available skills in `.agents/skills/` and
 - One thread = one pair: `YYYY-MM-DD-<slug>.md` (verbatim transcript with a summary/decision block up top) + `YYYY-MM-DD-<slug>.json` (structured twin for querying).
 - Archive only notable sessions (decisions, approvals, audits, investigations). Whenever one materially changes the product, record it here **and** copy both files identical into the vault `products/mylesnet/agent-threads/` (vault canonical); a divergence is drift.
 
+
+## Unified Design Token Authority (Required)
+
+- For every MylesCorp UI, use the canonical tokens in `packages/ui/tokens.json`, including MylesNet panels and landing pages. Never revive previous palettes or competing token systems.
+- Components must use token variables or shared Tailwind mappings for color, spacing, radius, typography, elevation, layout, z-index, and motion. No raw colors or arbitrary dimensions.
+- Keep CSS variables, typed exports, Tailwind mappings, and the vault design-token record synchronized from that JSON. Update JSON first.
+- Use the brand orange and navy only for logos, documents, and marketing artwork. UI interactions use the accent tokens.
+- White-labeling is restricted to `whiteLabelOverridable` in the JSON and requires both theme values plus contrast validation.
+
 ## Local route verification host
 
 Use only `http://localhost:3000` for local web startup and route verification. Do not use another port. If port 3000 is occupied or inaccessible, preserve the existing listener and report local verification as blocked until port 3000 is available.

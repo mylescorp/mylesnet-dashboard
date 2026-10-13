@@ -133,8 +133,9 @@ function SearchButton({
         aria-label="Search pages"
       >
         <Search size={17} aria-hidden="true" />
+        <span className="topbar-search-label">Search</span>
         <kbd className="search-kbd" aria-hidden="true">
-          ⌘K
+          Ctrl+K
         </kbd>
       </button>
 

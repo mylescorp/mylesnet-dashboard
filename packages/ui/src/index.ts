@@ -4,6 +4,7 @@ export { SidebarRail } from "./components/sidebar-rail";
 export { Topbar } from "./components/topbar";
 export { PageHeader } from "./components/page-header";
 export { Button } from "./components/button";
+export { DetailPageTemplate, FormPageTemplate, ListPageTemplate } from "./components/page-templates";
 export { Field, TextArea } from "./components/field";
 export { TextInput } from "./components/text-input";
 export { Select } from "./components/select";
@@ -18,11 +19,13 @@ export { Tabs, TabPanel } from "./components/tabs";
 export { ToastProvider, useToast } from "./components/toast";
 export { SettingsShell } from "./components/settings-shell";
 export { Card, MetricCard } from "./components/card";
+export { ActionCard, ActivityList, InsetPanel, LiveStrip, Sparkline, StatCard } from "./components/dashboard";
+export type { ActivityItem } from "./components/dashboard";
 
 export { buildNavGroups, buildRouteIndex, findActiveNavItem, isRouteActive } from "./navigation/nav";
 
 export { shellStorageKeys, readStoredSidebarCollapsed, writeStoredSidebarCollapsed, cx, cn } from "./utils";
-export { layout as layoutTokens, tokens } from "./tokens";
+export { layout as layoutTokens, palette as paletteTokens, tokens } from "./tokens";
 
 export type {
   NavItem,
