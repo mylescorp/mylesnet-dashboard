@@ -13,7 +13,7 @@
     "tokens:check": "node ../../scripts/check-design-tokens.mjs"
   },
   "dependencies": {
-    "@convex-dev/auth": "^0.0.95",
+    "@convex-dev/auth": "^0.0.96",
     "@mylesnet/ui": "workspace:*",
     "@workos-inc/authkit-nextjs": "^4.4.0",
     "class-variance-authority": "^0.7.1",
