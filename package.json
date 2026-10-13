@@ -15,7 +15,7 @@
     "typecheck": "pnpm --filter @mylesnet/web run typecheck",
     "tokens:check": "pnpm --filter @mylesnet/web run tokens:check",
     "landing:check": "node scripts/check-landing-routes.mjs",
-    "test": "node --test convex/lib/*.test.ts apps/web/shared/**/*.test.ts scripts/verify-greptile-five-of-five.test.mjs",
+    "test": "node --test convex/lib/*.test.ts apps/web/shared/**/*.test.ts scripts/verify-greptile-five-of-five.test.mjs scripts/audit/*.test.mjs",
     "test:ui": "pnpm --filter @mylesnet/web run test"
   },
   "dependencies": {
