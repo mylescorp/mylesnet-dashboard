@@ -32,11 +32,16 @@ export function getGreptileCheckResult(checkRuns, headSha) {
 }
 
 export function getGreptileAddedCommentCount(checkRun) {
-  const summary = checkRun?.output?.summary ?? checkRun?.output?.text ?? "";
-  if (typeof summary !== "string") return null;
+  // Greptile exposes the same summary through `summary` and `text`; read both so
+  // a count present in only one of them is still found.
+  for (const candidate of [checkRun?.output?.summary, checkRun?.output?.text]) {
+    if (typeof candidate !== "string") continue;
 
-  const match = summary.match(ADDED_COMMENT_PATTERN);
-  return match ? Number.parseInt(match[1], 10) : null;
+    const match = candidate.match(ADDED_COMMENT_PATTERN);
+    if (match) return Number.parseInt(match[1], 10);
+  }
+
+  return null;
 }
 
 /**

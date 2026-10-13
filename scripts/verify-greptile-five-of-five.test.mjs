@@ -15,14 +15,16 @@ function checkRun({
   slug = "greptile-apps",
   status = "completed",
   summary = "3 files reviewed, 0 comments added.",
+  text = null,
 } = {}) {
+  const hasOutput = summary !== null || text !== null;
   return {
     app: { slug },
     conclusion,
     created_at: "2026-10-11T10:00:00Z",
     head_sha: head,
     name,
-    output: summary === null ? undefined : { summary, title: "Base review" },
+    output: hasOutput ? { summary, text, title: "Base review" } : undefined,
     started_at: "2026-10-11T10:00:00Z",
     status,
   };
@@ -68,6 +70,17 @@ test("parses the comment count from the review summary", () => {
 test("reports an unknown comment count when the summary omits it", () => {
   assert.equal(getGreptileAddedCommentCount(checkRun({ summary: "Greptile has reviewed the Pull Request." })), null);
   assert.equal(getGreptileAddedCommentCount(checkRun({ summary: null })), null);
+});
+
+test("falls back to the review text when the summary has no count", () => {
+  const run = checkRun({ summary: "Greptile has reviewed the Pull Request.", text: "2 files reviewed, 1 comment added." });
+  assert.equal(getGreptileAddedCommentCount(run), 1);
+  assert.equal(getGreptileGateResult([run], headSha), "failure");
+});
+
+test("prefers the summary count when both fields report one", () => {
+  const run = checkRun({ summary: "2 files reviewed, 0 comments added.", text: "2 files reviewed, 3 comments added." });
+  assert.equal(getGreptileAddedCommentCount(run), 0);
 });
 
 test("gate passes a clean 5/5 review", () => {
