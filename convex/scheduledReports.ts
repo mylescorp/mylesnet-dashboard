@@ -289,8 +289,10 @@ export const resolveCallerTenant = internalQuery({
 /**
  * Whether the caller may read platform-wide (unscoped) report data. Only an
  * explicit reporting platform sub-role holding the `reports:generate`
- * permission qualifies, so an unresolved or denied tenant caller fails closed
- * and a generic platform permission never substitutes for the sub-role gate.
+ * permission and an MFA-enrolled platform identity qualifies, so an unresolved
+ * or denied tenant caller fails closed and a generic platform permission never
+ * substitutes for the sub-role gate. This is only consulted for the
+ * platform-wide path; tenant-scoped reads use `canReadTenantReports`.
  */
 export const canReadPlatformReports = internalQuery({
   args: { userId: v.id("users") },
@@ -425,11 +427,13 @@ export const generateReport = action({
  * Prove, inside the writer, that the exporting operator may create a report
  * export before any row is written. A tenant export needs an operable tenant
  * and an active membership of it holding `reports:generate`; an unscoped export
- * needs the reporting platform sub-role. This re-checks `generateReport`'s
- * admission at the writer so the authorization never depends on every caller.
+ * needs the reporting platform sub-role plus MFA. This re-checks
+ * `generateReport`'s admission at the writer so the authorization never depends
+ * on every caller.
  *
- * The check verifies: active account, platform sub-role with reports:generate,
- * or active tenant membership with reports:generate. All other paths throw.
+ * The check verifies: active account, then active tenant membership with
+ * `reports:generate` when a tenant is in scope, then platform sub-role with
+ * `reports:generate` and MFA for the platform-wide path. All other paths throw.
  */
 async function requireReportExportActor(
   ctx: MutationCtx,
@@ -444,15 +448,6 @@ async function requireReportExportActor(
     user.deletedAt !== undefined
   ) {
     throw new Error("Unauthorized: report export requires an active account");
-  }
-  const roles = await resolveRoles(ctx, user);
-  if (
-    isPlatformUser(roles) &&
-    hasPermission(roles, "reports:generate") &&
-    hasPlatformSubRole(roles, REPORT_PLATFORM_SUB_ROLES)
-  ) {
-    assertMfaCompliance(user, roles.map((role) => role.slug));
-    return;
   }
   if (tenantId) {
     const tenant = await ctx.db.get(tenantId);
@@ -469,6 +464,16 @@ async function requireReportExportActor(
     ) {
       return;
     }
+  }
+  const roles = await resolveRoles(ctx, user);
+  if (
+    isPlatformUser(roles) &&
+    hasPermission(roles, "reports:generate") &&
+    hasPlatformSubRole(roles, REPORT_PLATFORM_SUB_ROLES)
+  ) {
+    // Platform-wide (cross-tenant) export: mandatory MFA applies.
+    assertMfaCompliance(user, roles.map((role) => role.slug));
+    return;
   }
   throw new Error("Unauthorized: report export requires tenant or platform report access");
 }
