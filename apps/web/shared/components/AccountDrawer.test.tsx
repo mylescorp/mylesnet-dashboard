@@ -125,13 +125,16 @@ describe("AccountDrawer", () => {
   });
 
   it("wires the theme segmented control to the shared theme mechanism", async () => {
+    const cookieSetter = jest.spyOn(Document.prototype, "cookie", "set");
     render(<AccountDrawer />);
     fireEvent.click(screen.getByRole("button", { name: /ada lovelace/i }));
     await waitFor(() => expect(screen.getByTestId("acw-theme")).toBeInTheDocument());
     const dark = screen.getByTestId("acw-theme-dark");
     fireEvent.click(dark);
-    expect(document.cookie).toContain("__mylesnet_theme=dark");
+    expect(cookieSetter).toHaveBeenCalledWith(expect.stringContaining("__mylesnet_theme=dark"));
+    expect(cookieSetter).toHaveBeenCalledWith(expect.stringContaining("Secure"));
     expect(document.documentElement.dataset.theme).toBe("dark");
+    cookieSetter.mockRestore();
   });
 
   it("signs out through the WorkOS signOut action after confirming", async () => {
