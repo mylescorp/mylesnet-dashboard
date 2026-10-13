@@ -59,6 +59,7 @@ platform: [{
       { href: "/platform/security/data-requests", label: "Data requests", icon: Database },
       { href: "/platform/settings", label: "Platform settings", icon: Settings },
       { href: "/platform/settings/white-label", label: "White-label defaults", icon: Settings },
+      { href: "/platform/settings/payments", label: "Payment gateways", icon: CreditCard },
       { href: "/platform/api-keys", label: "Platform API keys", icon: KeyRound },
       { href: "/platform/feature-flags", label: "Feature flags", icon: Flag },
     ],

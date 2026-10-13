@@ -195,3 +195,49 @@ test("concrete and organization-scoped roles preserve each canonical sidebar gra
     }
   }
 });
+
+test("C4 payment settings expose metadata editing to finance and secret controls only to super-admin", () => {
+  const route = "/platform/settings/payments";
+  assert.equal(canSeePlatformNavRoute(route, ["platform_super_admin"]), true);
+  assert.equal(canSeePlatformNavRoute(route, ["platform_owner"]), true);
+  assert.equal(canSeePlatformNavRoute(route, ["platform_finance"]), true);
+  assert.equal(canSeePlatformNavRoute(route, ["finance_manager"]), true);
+  for (const role of ["platform_ops", "ops_manager", "platform_support", "platform_readonly", "platform_admin"]) {
+    assert.equal(canSeePlatformNavRoute(route, [role]), false, `${role} must not see C4`);
+  }
+});
+
+test("C4 Convex handlers enforce role guards before work and never persist credential values", () => {
+  const platform = readFileSync(new URL("../../../../convex/platform.ts", import.meta.url), "utf8");
+  const route = readFileSync(new URL("../../app/api/platform/payment-gateways/[configId]/credentials/route.ts", import.meta.url), "utf8");
+  const guarded = [
+    "recordPaymentGatewaySettingsView", "listPaymentGatewayConfigs", "getPaymentGatewayConfig",
+    "createPaymentGatewayConfig", "updatePaymentGatewayPublicFields", "archivePaymentGatewayConfig",
+    "restorePaymentGatewayConfig", "beginPaymentGatewayCredentialRotation",
+    "completePaymentGatewayCredentialRotation", "failPaymentGatewayCredentialRotation",
+  ];
+  for (const name of guarded) {
+    const start = platform.indexOf(`export const ${name} =`);
+    assert.notEqual(start, -1, `${name} exists`);
+    const next = platform.indexOf("export const ", start + 14);
+    const body = platform.slice(start, next < 0 ? undefined : next);
+    assert.match(body, /handler: async \(ctx(?:, args)?\) => \{\s*(?:const actor = )?await requirePlatformSubRole\(/, `${name} guards first`);
+  }
+  const editorStart = platform.indexOf("export const updatePaymentGatewayPublicFields =");
+  const editorHeader = platform.slice(editorStart, platform.indexOf("handler:", editorStart));
+  assert.doesNotMatch(editorHeader, /consumerKey|consumerSecret|passkey|secretVersionId/);
+  const projectionStart = platform.indexOf("function projectPaymentGateway(");
+  const projectionEnd = platform.indexOf("function validateDarajaShortCode", projectionStart);
+  assert.doesNotMatch(platform.slice(projectionStart, projectionEnd), /secretVersionId:|rotationOperationId:/);
+  assert.doesNotMatch(platform, /ctx\.db\.delete\(/);
+
+  const originGate = route.indexOf("if (!origin || origin !== request.nextUrl.origin)");
+  const csrfGate = route.indexOf("if (!verifyCsrfToken(csrfCookie, csrfHeader))");
+  const roleGate = route.indexOf("const session = await requireRole(PAYMENT_GATEWAY_MANAGERS)");
+  const bodyRead = route.indexOf("readLimitedBody(request, 16_384)");
+  const secretWrite = route.indexOf("await writeCredentialVersion({");
+  assert.ok(originGate >= 0 && csrfGate > originGate && roleGate > csrfGate && bodyRead > roleGate && secretWrite > bodyRead);
+  assert.match(route, /PAYMENT_GATEWAY_MANAGERS = \["platform_super_admin", "platform_owner"\]/);
+  assert.match(route, /KmsKeyId: input\.kmsKeyId/);
+  assert.doesNotMatch(route, /GetSecretValueCommand|console\.(?:log|error|warn)/);
+});

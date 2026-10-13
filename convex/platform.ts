@@ -1,17 +1,43 @@
 import { v } from "convex/values";
-import { query } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
+import { paginationOptsValidator } from "convex/server";
+import type { Doc } from "./_generated/dataModel";
 import { Id } from "./_generated/dataModel";
-import { listAuditLog as readAuditLog } from "./lib/auditLog";
+import { listAuditLog as readAuditLog, logAudit } from "./lib/auditLog";
 import { AUDIT_CHAIN_VERIFY_RUN_ID } from "./auditChainVerify";
 import {
   isPlatformUser,
   permissionsOf,
   requirePlatformUser,
+  requirePlatformSubRole,
   resolveRoles,
   resolveTenantAccess,
   resolveUserByIdentity,
   tenantRoleAsResolvedRole,
 } from "./lib/auth";
+
+
+const PAYMENT_GATEWAY_MANAGERS = ["platform_super_admin"];
+const PAYMENT_GATEWAY_PUBLIC_EDITORS = ["platform_super_admin", "platform_finance"];
+const PAYMENT_GATEWAY_PAGE_SIZE = 50;
+const PAYMENT_GATEWAY_ROTATION_LEASE_MS = 5 * 60 * 1000;
+
+function projectPaymentGateway(row: Doc<"platformPaymentGatewayConfigs">, tenantName: string | null = null) {
+  return { _id: row._id, tenantId: row.tenantId, tenantName, provider: row.provider, environment: row.environment, shortCode: row.shortCode, enabled: row.enabled, credentialsConfigured: row.secretVersionId !== undefined, rotationPending: row.rotationOperationId !== undefined, createdAt: row.createdAt, updatedAt: row.updatedAt, deletedAt: row.deletedAt ?? null };
+}
+function validateDarajaShortCode(value: string): string {
+  const shortCode = value.trim();
+  if (!/^\d{5,6}$/.test(shortCode)) throw new Error("Enter a valid 5- or 6-digit business short code.");
+  return shortCode;
+}
+function validatePaymentGatewayVersion(value: string): string {
+  if (!/^[A-Za-z0-9-]{32,64}$/.test(value)) throw new Error("The credential update could not be confirmed.");
+  return value;
+}
+function validateRotationOperationId(value: string): string {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) throw new Error("The credential update request is invalid.");
+  return value;
+}
 
 /**
  * Returns the current authenticated platform user's role, permissions and
@@ -281,3 +307,253 @@ export const listAuditEntityTables = query({
   },
 });
 
+
+
+/** Super-admin directory for tenant-owned payment gateway metadata. Never returns secret references or values. */
+export const recordPaymentGatewaySettingsView = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const actor = await requirePlatformSubRole(ctx, PAYMENT_GATEWAY_PUBLIC_EDITORS);
+    await logAudit(ctx, {
+      action: "platform.paymentGateway.settingsViewed",
+      entityTable: "platformPaymentGatewayConfigs",
+      entityId: "directory",
+      changedBy: actor._id,
+      after: { scope: "gateway_directory" },
+    });
+    return { recorded: true };
+  },
+});
+
+export const listPaymentGatewayConfigs = query({
+  args: { paginationOpts: paginationOptsValidator, includeArchived: v.optional(v.boolean()) },
+  handler: async (ctx, args) => {
+    await requirePlatformSubRole(ctx, PAYMENT_GATEWAY_MANAGERS);
+    const rows = args.includeArchived
+      ? await ctx.db.query("platformPaymentGatewayConfigs").withIndex("by_updatedAt").order("desc").paginate({
+        ...args.paginationOpts,
+        numItems: Math.min(PAYMENT_GATEWAY_PAGE_SIZE, Math.max(1, Math.floor(args.paginationOpts.numItems))),
+      })
+      : await ctx.db.query("platformPaymentGatewayConfigs").withIndex("by_deletedAt_updatedAt", (q) => q.eq("deletedAt", undefined)).order("desc").paginate({
+        ...args.paginationOpts,
+        numItems: Math.min(PAYMENT_GATEWAY_PAGE_SIZE, Math.max(1, Math.floor(args.paginationOpts.numItems))),
+      });
+    return {
+      ...rows,
+      page: await Promise.all(rows.page.map(async (row) => {
+        const tenant = await ctx.db.get(row.tenantId);
+        return projectPaymentGateway(row, tenant?.deletedAt === undefined ? tenant?.name ?? null : null);
+      })),
+    };
+  },
+});
+
+/** Super-admin detail view. Secret values, references, and version identifiers are withheld. */
+export const getPaymentGatewayConfig = query({
+  args: { configId: v.id("platformPaymentGatewayConfigs") },
+  handler: async (ctx, args) => {
+    await requirePlatformSubRole(ctx, PAYMENT_GATEWAY_MANAGERS);
+    const row = await ctx.db.get(args.configId);
+    const tenant = row ? await ctx.db.get(row.tenantId) : null;
+    return row ? projectPaymentGateway(row, tenant?.deletedAt === undefined ? tenant?.name ?? null : null) : null;
+  },
+});
+
+export const createPaymentGatewayConfig = mutation({
+  args: {
+    tenantId: v.id("tenants"),
+    environment: v.union(v.literal("sandbox"), v.literal("production")),
+    shortCode: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const actor = await requirePlatformSubRole(ctx, PAYMENT_GATEWAY_MANAGERS);
+    const tenant = await ctx.db.get(args.tenantId);
+    if (!tenant || tenant.deletedAt !== undefined) throw new Error("The selected workspace is unavailable.");
+    const shortCode = validateDarajaShortCode(args.shortCode);
+    const existing = await ctx.db.query("platformPaymentGatewayConfigs")
+      .withIndex("by_tenant_provider", (q) => q.eq("tenantId", args.tenantId).eq("provider", "daraja"))
+      .first();
+    if (existing) throw new Error("Payment gateway settings already exist for this workspace.");
+    const now = Date.now();
+    const configId = await ctx.db.insert("platformPaymentGatewayConfigs", {
+      tenantId: args.tenantId,
+      provider: "daraja",
+      environment: args.environment,
+      shortCode,
+      enabled: false,
+      createdBy: actor._id,
+      createdAt: now,
+      updatedBy: actor._id,
+      updatedAt: now,
+    });
+    await logAudit(ctx, {
+      action: "platform.paymentGateway.created",
+      entityTable: "platformPaymentGatewayConfigs",
+      entityId: configId,
+      changedBy: actor._id,
+      after: { tenantId: args.tenantId, provider: "daraja", environment: args.environment, shortCode, enabled: false },
+    });
+    return configId;
+  },
+});
+
+/** Narrow public configuration edit. Secret fields cannot be passed to this function's validator. */
+export const updatePaymentGatewayPublicFields = mutation({
+  args: {
+    tenantId: v.id("tenants"),
+    environment: v.optional(v.union(v.literal("sandbox"), v.literal("production"))),
+    shortCode: v.optional(v.string()),
+    enabled: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const actor = await requirePlatformSubRole(ctx, PAYMENT_GATEWAY_PUBLIC_EDITORS);
+    const row = await ctx.db.query("platformPaymentGatewayConfigs")
+      .withIndex("by_tenant_provider", (q) => q.eq("tenantId", args.tenantId).eq("provider", "daraja"))
+      .first();
+    if (!row || row.deletedAt !== undefined) throw new Error("Payment gateway settings are unavailable.");
+    const shortCode = args.shortCode === undefined ? row.shortCode : validateDarajaShortCode(args.shortCode);
+    const enabled = args.enabled ?? row.enabled;
+    if (enabled && row.secretVersionId === undefined) throw new Error("Add credentials before enabling this gateway.");
+    const next = {
+      environment: args.environment ?? row.environment,
+      shortCode,
+      enabled,
+    };
+    const now = Date.now();
+    await ctx.db.patch(row._id, { ...next, updatedBy: actor._id, updatedAt: now });
+    await logAudit(ctx, {
+      action: "platform.paymentGateway.updated",
+      entityTable: "platformPaymentGatewayConfigs",
+      entityId: row._id,
+      changedBy: actor._id,
+      before: { environment: row.environment, shortCode: row.shortCode, enabled: row.enabled },
+      after: next,
+    });
+    return { updated: true };
+  },
+});
+
+export const archivePaymentGatewayConfig = mutation({
+  args: { configId: v.id("platformPaymentGatewayConfigs") },
+  handler: async (ctx, args) => {
+    const actor = await requirePlatformSubRole(ctx, PAYMENT_GATEWAY_MANAGERS);
+    const row = await ctx.db.get(args.configId);
+    if (!row || row.deletedAt !== undefined) throw new Error("Payment gateway settings are unavailable.");
+    const now = Date.now();
+    await ctx.db.patch(row._id, { enabled: false, deletedAt: now, deletedBy: actor._id, updatedBy: actor._id, updatedAt: now });
+    await logAudit(ctx, {
+      action: "platform.paymentGateway.archived",
+      entityTable: "platformPaymentGatewayConfigs",
+      entityId: row._id,
+      changedBy: actor._id,
+      before: { enabled: row.enabled, archived: false },
+      after: { enabled: false, archived: true },
+    });
+    return { archived: true };
+  },
+});
+
+export const restorePaymentGatewayConfig = mutation({
+  args: { configId: v.id("platformPaymentGatewayConfigs") },
+  handler: async (ctx, args) => {
+    const actor = await requirePlatformSubRole(ctx, PAYMENT_GATEWAY_MANAGERS);
+    const row = await ctx.db.get(args.configId);
+    if (!row || row.deletedAt === undefined) throw new Error("Archived payment gateway settings were not found.");
+    const now = Date.now();
+    await ctx.db.patch(row._id, { enabled: false, deletedAt: undefined, deletedBy: undefined, updatedBy: actor._id, updatedAt: now });
+    await logAudit(ctx, {
+      action: "platform.paymentGateway.restored",
+      entityTable: "platformPaymentGatewayConfigs",
+      entityId: row._id,
+      changedBy: actor._id,
+      before: { archived: true },
+      after: { archived: false, enabled: false },
+    });
+    return { restored: true };
+  },
+});
+
+/** Starts an idempotent, bounded credential rotation lease without receiving credential bytes. */
+export const beginPaymentGatewayCredentialRotation = mutation({
+  args: { configId: v.id("platformPaymentGatewayConfigs"), operationId: v.string() },
+  handler: async (ctx, args) => {
+    const actor = await requirePlatformSubRole(ctx, PAYMENT_GATEWAY_MANAGERS);
+    const operationId = validateRotationOperationId(args.operationId);
+    const row = await ctx.db.get(args.configId);
+    if (!row || row.deletedAt !== undefined) throw new Error("Payment gateway settings are unavailable.");
+    const now = Date.now();
+    const leaseIsActive = row.rotationOperationId !== undefined
+      && row.rotationStartedAt !== undefined
+      && now - row.rotationStartedAt < PAYMENT_GATEWAY_ROTATION_LEASE_MS;
+    if (leaseIsActive && row.rotationOperationId !== operationId) throw new Error("A credential update is already in progress.");
+    if (row.rotationOperationId === operationId) return { started: true, alreadyStarted: true };
+    await ctx.db.patch(row._id, { rotationOperationId: operationId, rotationStartedAt: now, updatedBy: actor._id, updatedAt: now });
+    await logAudit(ctx, {
+      action: "platform.paymentGateway.rotationStarted",
+      entityTable: "platformPaymentGatewayConfigs",
+      entityId: row._id,
+      changedBy: actor._id,
+      after: { credentialsConfigured: row.secretVersionId !== undefined, rotationPending: true },
+    });
+    return { started: true, alreadyStarted: false };
+  },
+});
+
+export const completePaymentGatewayCredentialRotation = mutation({
+  args: {
+    configId: v.id("platformPaymentGatewayConfigs"),
+    operationId: v.string(),
+    versionId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const actor = await requirePlatformSubRole(ctx, PAYMENT_GATEWAY_MANAGERS);
+    const operationId = validateRotationOperationId(args.operationId);
+    const versionId = validatePaymentGatewayVersion(args.versionId);
+    const row = await ctx.db.get(args.configId);
+    if (!row || row.deletedAt !== undefined || row.rotationOperationId !== operationId) {
+      throw new Error("The credential update could not be confirmed.");
+    }
+    const now = Date.now();
+    await ctx.db.patch(row._id, {
+      secretVersionId: versionId,
+      rotationOperationId: undefined,
+      rotationStartedAt: undefined,
+      updatedBy: actor._id,
+      updatedAt: now,
+    });
+    await logAudit(ctx, {
+      action: "platform.paymentGateway.credentialsRotated",
+      entityTable: "platformPaymentGatewayConfigs",
+      entityId: row._id,
+      changedBy: actor._id,
+      before: { credentialsConfigured: row.secretVersionId !== undefined },
+      after: { credentialsConfigured: true },
+    });
+    return { credentialsConfigured: true };
+  },
+});
+
+export const failPaymentGatewayCredentialRotation = mutation({
+  args: { configId: v.id("platformPaymentGatewayConfigs"), operationId: v.string() },
+  handler: async (ctx, args) => {
+    const actor = await requirePlatformSubRole(ctx, PAYMENT_GATEWAY_MANAGERS);
+    const operationId = validateRotationOperationId(args.operationId);
+    const row = await ctx.db.get(args.configId);
+    if (!row || row.deletedAt !== undefined || row.rotationOperationId !== operationId) return { cleared: false };
+    const now = Date.now();
+    await ctx.db.patch(row._id, {
+      rotationOperationId: undefined,
+      rotationStartedAt: undefined,
+      updatedBy: actor._id,
+      updatedAt: now,
+    });
+    await logAudit(ctx, {
+      action: "platform.paymentGateway.rotationFailed",
+      entityTable: "platformPaymentGatewayConfigs",
+      entityId: row._id,
+      changedBy: actor._id,
+      after: { credentialsConfigured: row.secretVersionId !== undefined, rotationPending: false },
+    });
+    return { cleared: true };
+  },
+});
