@@ -1,7 +1,9 @@
 import { anyApi, paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
-import { internalAction, internalMutation, internalQuery, query } from "./_generated/server";
+import { Id } from "./_generated/dataModel";
+import { MutationCtx, internalAction, internalMutation, internalQuery, query } from "./_generated/server";
 import { requirePermission } from "./lib/auth";
+import { logAudit } from "./lib/auditLog";
 import { dayOf, localToUsd } from "./lib/finance";
 
 /** Page active markets and enqueue one bounded daily snapshot mutation per market. */
@@ -53,7 +55,7 @@ function daysInMonth(date: string): number {
 }
 
 export const buildDailySnapshot = internalMutation({
-  args: { marketId: v.id("markets"), date: v.optional(v.string()) },
+  args: { marketId: v.id("markets"), date: v.optional(v.string()), actorUserId: v.optional(v.id("users")) },
   handler: async (ctx, args) => {
     const market = await ctx.db.get(args.marketId);
     if (!market) throw new Error("Market not found");
@@ -124,12 +126,38 @@ export const buildDailySnapshot = internalMutation({
       .first();
     if (existing) {
       await ctx.db.replace(existing._id, row);
+      await auditSnapshot(ctx, args.actorUserId, "dailySnapshots", existing._id, row);
       return { updated: true, id: existing._id, ...row };
     }
     const id = await ctx.db.insert("dailySnapshots", row);
+    await auditSnapshot(ctx, args.actorUserId, "dailySnapshots", id, row);
     return { updated: false, id, ...row };
   },
 });
+
+/**
+ * Audit a snapshot upsert when an actor is supplied. Cron-driven projections
+ * have no session actor and follow the repo precedent of system writes (for
+ * example platform revenue snapshots) without an audit entry; a user-driven
+ * run passes the acting user and is recorded on the sealed chain.
+ */
+async function auditSnapshot(
+  ctx: MutationCtx,
+  actorUserId: Id<"users"> | undefined,
+  table: string,
+  rowId: Id<"dailySnapshots">,
+  row: { tenantId?: Id<"tenants"> | null; marketId: Id<"markets">; date: string },
+): Promise<void> {
+  if (!actorUserId) return;
+  await logAudit(ctx, {
+    action: "snapshot.upsert",
+    entityTable: table,
+    entityId: rowId,
+    changedBy: actorUserId,
+    tenantId: row.tenantId ?? null,
+    after: { marketId: row.marketId, date: row.date },
+  });
+}
 
 export const getDailySnapshot = query({
   args: { marketId: v.id("markets"), date: v.optional(v.string()) },

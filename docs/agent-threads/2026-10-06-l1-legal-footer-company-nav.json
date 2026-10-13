@@ -1,0 +1,39 @@
+{
+  "type": "agent-thread",
+  "date": "2026-10-06",
+  "agent": "opencode",
+  "model": "nemotron-3.5-lightning-free",
+  "product": "mylesnet",
+  "status": "recorded",
+  "tags": [
+    "mylesnet",
+    "agent-thread",
+    "transcript",
+    "legal",
+    "footer",
+    "navigation",
+    "company"
+  ],
+  "summary": "This session rewrote /legal/terms and /legal/privacy (merged PR #60), rebuilt the footer to premium spec, and added /company to the header nav with a dropdown of attached routes. Key resolution: nav was at capacity (itemSum 620 vs clientWidth 619, headroom -1px), so Contact was moved from the top-level nav slot into the Company dropdown. Nav padding-inline var(--space-2) 8->6px (only CSS change); nav fits with 23-37px gap to logo and 24px to CTA at 1141-1440px. /company index page created (banner + 2x2 LandingCard grid + closing LandingCtaSection) using shared companyChildren source. All checks pass: tsc 0, eslint 0, design-token check, browser verification.",
+  "verified_outcomes": [
+    "Legal pages /legal/terms and /legal/privacy rewritten live (PR #60)",
+    "Footer fully rebuilt per spec",
+    "/company added to header nav with dropdown",
+    "Contact moved from top-level nav slot into dropdown",
+    "Nav padding-inline 8->6px (only CSS change)",
+    "/company index page created with shared companyChildren source",
+    "No new runtime packages; token-pure CSS only",
+    "Desktop nav fit: 1141-1440px, no overlap, gaps 23-37/24px",
+    "Hover+focus both open dropdown; Escape closes",
+    "Mobile Sheet Company group with 4 subnav links; Escape closes cleanly",
+    "Sitemap /company and /company/about present; proxy allows anonymous"
+  ],
+  "files_changed": [
+    "apps/web/landing/content/navigation.ts",
+    "apps/web/landing/routes/company/page.tsx",
+    "apps/web/app/(public)/company/page.tsx",
+    "apps/web/shared/public-routes.ts",
+    "apps/web/app/(public)/landing.css"
+  ],
+  " Links": "- PR #60: 'Deploy latest MylesNet changes' (contains actual feature work)\n- PR #73: Greptile gate install, 5/5 on head 80a902c\n- Vault thread: docs/agent-threads/2026-10-06-l1-legal-footer-company-nav.md + .json"
+}

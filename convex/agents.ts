@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { mutation, query, internalQuery } from "./_generated/server";
 import { Doc } from "./_generated/dataModel";
 import { requirePermission } from "./lib/auth";
-import { readTenantList, enforceTenantOnResource } from "./lib/tenant";
+import { readTenantList, readScopedTenant, enforceTenantOnResource } from "./lib/tenant";
 import { logAudit } from "./lib/auditLog";
 
 export const getAgentInternal = internalQuery({
@@ -53,8 +53,10 @@ export const createAgent = mutation({
   args: { name: v.string(), phone: v.string(), email: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "agents:manage");
+    const scope = await readScopedTenant(ctx);
     const now = Date.now();
     const agentId = await ctx.db.insert("agents", {
+      tenantId: scope.tenantId ?? undefined,
       name: args.name,
       phone: args.phone,
       email: args.email,

@@ -621,9 +621,11 @@ counts/data did not.
   `isValidTenantIdFormat`.
 - `convex/lib/tenantIsolationCore.ts` — denial catalogue
   (`DENIAL_CATALOGUE`, `denialReasonForTenantPair`, `expectationForScenario`).
-- `convex/tenantMigrations.ts` — `runTenantIdBackfill` **gated no-op stub**
-  (reports plan surface; NOT wired into crons; real backfill needs the review
-  queue signed off + `tenant.backfill` flag + confirmed prod deploy).
+- `convex/tenantMigrations.ts` — `runTenantIdBackfill` **gated bounded backfill**
+  (idempotent run `tenantid-backfill-001`; walks markets → market-derived tables
+  → agents, deriving ownership from the market and leaving ambiguous rows
+  unassigned per §B2; NOT wired into crons; runs only after the review queue is
+  signed off, the `tenant.backfill` flag is on, and the prod deploy is confirmed).
 
 ## Tests + gates
 
