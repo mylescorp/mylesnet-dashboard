@@ -40,7 +40,7 @@ These are tenant-side routes in the `(panels)` route group. Their route files re
 | Shipped path | Implementation | Backend dependencies evidenced in source | Notes |
 |---|---|---|---|
 | `/analytics` | `apps/web/app/(panels)/analytics/page.tsx` | None (compatibility `redirect("/insights/analytics")`) | Keep the redirect; it is a shipped alias. |
-| `/insights/analytics` | `apps/web/dashboard/routes/insights/analytics/page.tsx` | `markets.listMarkets`; `analytics.getRevenueTrend`, `getSubscriberTrend`, `getTopAgents`, `getSalesMix` | Tenant analytics implementation; in `product-nav.ts` and `content-nav.ts`. |
+| `/insights/analytics` | `apps/web/dashboard/routes/insights/analytics/page.tsx` | `markets.listMarkets`; `analytics.getRevenueTrend`, `getSubscriberTrend`, `getTopAgents`, `getSalesMix` | Tenant analytics implementation. `product-nav.ts` links to the `/analytics` compatibility alias, not this path directly; `content-nav.ts` has no analytics entry. |
 | `/sales` | `apps/web/dashboard/routes/sales/page.tsx` | `analytics.getSalesMix`, `getTopAgents` | Tenant sales implementation. |
 | `/revenue` | `apps/web/dashboard/routes/revenue/page.tsx` | `markets.listMarkets`, `analytics.getRevenueTrend` | Labeled "Payments" in the tenant billing group of `product-nav.ts` and `content-nav.ts`. |
 | `/profit-loss` | `apps/web/dashboard/routes/profit-loss/page.tsx` | `markets.listMarkets`, `expenses.listAllFinancials`, `costAllocation.getCostAllocation` | Tenant financial reporting. |

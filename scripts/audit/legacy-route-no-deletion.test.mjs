@@ -12,8 +12,9 @@ import path from "node:path";
  * shipped route facade and the implementation it loads. The guard fails when a
  * facade or its implementation disappears, or when the facade stops wiring to
  * the audited module, so a panel app-boundary change cannot silently drop a
- * legacy surface. Removing a surface requires an owner-approved update to the
- * audit and this matrix first.
+ * legacy surface. It inspects active source only (comments are stripped), so a
+ * commented-out re-export or redirect cannot satisfy it. Removing a surface
+ * requires an owner-approved update to the audit and this matrix first.
  */
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -116,12 +117,35 @@ const ANALYTICS_ALIAS = {
   target: "/insights/analytics",
 };
 
-function readRepoFile(relativePath) {
-  return readFileSync(path.join(repoRoot, relativePath), "utf8");
+/** Remove block and line comments so inactive wiring cannot satisfy a check. */
+export function stripComments(source) {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(^|[^:"'\\{])\/\/[^\n]*/g, "$1");
 }
 
-function escapeForRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/**
+ * True when active source is exactly the canonical one-line default re-export
+ * of `specifier` (comments and whitespace removed before comparison).
+ */
+export function isCanonicalReExport(source, specifier) {
+  const active = stripComments(source).replace(/\s+/g, "");
+  return active === `export{default}from"${specifier}";`;
+}
+
+/**
+ * True when active source declares the default alias page whose body redirects
+ * to `target` (comments removed, so a commented-out redirect does not count).
+ */
+export function hasActiveRedirect(source, target) {
+  const active = stripComments(source).replace(/\s+/g, "");
+  return new RegExp(
+    `exportdefaultfunction\\w*\\(\\)\\{\\s*redirect\\("${target.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"\\);?\\}`,
+  ).test(active);
+}
+
+function readRepoFile(relativePath) {
+  return readFileSync(path.join(repoRoot, relativePath), "utf8");
 }
 
 test("every audited legacy facade still exists", () => {
@@ -139,20 +163,32 @@ test("every audited legacy implementation module still exists", () => {
   }
 });
 
-test("every audited legacy facade still loads its audited implementation", () => {
+test("every audited legacy facade actively re-exports its audited implementation", () => {
   for (const { route, facade, specifier } of PROTECTED_ROUTES) {
-    const source = readRepoFile(facade);
-    assert.match(
-      source,
-      new RegExp(
-        `export\\s*\\{\\s*default\\s*\\}\\s*from\\s*["']${escapeForRegExp(specifier)}["']`,
-      ),
-      `${route} no longer re-exports ${specifier}`,
+    assert.ok(
+      isCanonicalReExport(readRepoFile(facade), specifier),
+      `${route} no longer actively re-exports ${specifier}`,
     );
   }
 });
 
-test("the /analytics compatibility alias still redirects to /insights/analytics", () => {
-  const source = readRepoFile(ANALYTICS_ALIAS.facade);
-  assert.match(source, /redirect\(\s*["']\/insights\/analytics["']\s*\)/);
+test("the /analytics compatibility alias actively redirects to /insights/analytics", () => {
+  assert.ok(
+    hasActiveRedirect(readRepoFile(ANALYTICS_ALIAS.facade), ANALYTICS_ALIAS.target),
+    `${ANALYTICS_ALIAS.route} no longer actively redirects to ${ANALYTICS_ALIAS.target}`,
+  );
+});
+
+test("commented-out wiring does not satisfy the guard", () => {
+  assert.equal(isCanonicalReExport('// export { default } from "@/admin/AdminEntryPage";', "@/admin/AdminEntryPage"), false);
+  assert.equal(
+    isCanonicalReExport('/* export { default } from "@/admin/AdminEntryPage"; */', "@/admin/AdminEntryPage"),
+    false,
+  );
+  assert.equal(isCanonicalReExport('export { default } from "@/other/Page";', "@/admin/AdminEntryPage"), false);
+  assert.equal(hasActiveRedirect('// redirect("/insights/analytics");', "/insights/analytics"), false);
+  assert.equal(
+    hasActiveRedirect('export default function P() { /* redirect("/insights/analytics"); */ }', "/insights/analytics"),
+    false,
+  );
 });
