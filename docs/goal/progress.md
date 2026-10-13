@@ -39,6 +39,9 @@ Newest entries last. Keep current after every step so a reset can resume.
   target/credentials unavailable).
 - Next module: Foundation (tenant isolation + tenant audit log), then i18n.
 
+- Next module: Foundation - i18n scaffolding, design tokens, tenant audit log,
+  loading/error/empty patterns.
+
 ## 2026-10-12 Foundation work - PR #80 tenant read isolation merged
 
 - Resumed PR #80 (feat/tenant-read-isolation) in an isolated worktree and
@@ -51,11 +54,48 @@ Newest entries last. Keep current after every step so a reset can resume.
 - Greptile review passed and all CI checks passed; PR merged at `81a1803`
   (squash). Review record: vault `greptile-review/pr-80-tenant-read-isolation.md`.
 
+## 2026-10-12 Foundation - PR #92 payment recording idempotency merged
+
+- Made recording the same tenant payment twice a no-op using the natural
+  `(tenantId, gateway, reference)` key (no new column): `payments.create`
+  returns the existing row, `payments.update` normalizes the stored pair and
+  rejects a key collision, and the create lookup falls back to the raw key for
+  rows written before normalization. Added the `by_tenant_gateway_reference`
+  index and a tested pure `paymentIdempotencyCore`.
+- Verification: web typecheck clean; repository `node --test` 214/214; lint zero
+  errors (14 pre-existing warnings outside the diff); convex-tree `tsc` clean
+  except 4 baseline test-file errors identical at `origin/main`; `next build`
+  passed using a non-secret placeholder for the Convex URL variable.
+- Greptile 5/5 on head `1431477`; merged at `2d00cca` (squash). See PR #92.
+
+## 2026-10-13 Phase 0 - Platform MFA policy enforced
+
+- Reconciled the platform MFA policy to the owner-fixed decision and made it
+  the single approved source. `convex/lib/mfa.ts` now requires MFA for every
+  platform role (derived from `SYSTEM_ROLES` entries with `isPlatform: true`)
+  and fails closed for an unenrolled platform role; an explicit
+  `mfaEnrolled: false` denies even with a stale timestamp and
+  `syncWorkosIdentity` clears the timestamp on removal. `convex/lib/auth.ts`
+  enforces it in every platform authorization gate, and the platform-wide
+  (cross-tenant) report path enforces it in `scheduledReports`.
+  `docs/auth/README.md`, `docs/decisions.md`, and `docs/development/work-log.md`
+  record the MFA position and the fixed session policy (30-minute inactivity,
+  25-minute warning, 12-hour absolute). Tenant-facing handlers are unchanged.
+- Verification: web typecheck clean; repository `node --test` 216/216; lint zero
+  errors (14 pre-existing warnings outside the diff); convex-tree `tsc` clean
+  except 4 baseline test-file errors identical at `origin/main`; `next build`
+  passed using a non-secret placeholder for the Convex URL variable.
+- Greptile 5/5 on head `abca864` after three review rounds (four P1 security
+  findings total: incomplete platform-role coverage, removed-factor persistence,
+  the report-export bypass, and tenant exports broken by the new check
+  ordering - all fixed). Merged at `d5ea9be` (squash). See PR #93. Review
+  record: vault `greptile-review/pr-93-platform-mandatory-mfa.md`.
+
 ### Heartbeat
 
-- Time: 2026-10-12 foundation work session.
-- Module: Foundation - tenant isolation (PR #80 merged).
-- Result: tenant read isolation landed; PR #80 merged.
+- Time: 2026-10-13 platform Phase 0 session.
+- Module: Foundation - platform Phase 0 (MFA policy enforced).
+- Result: MFA is mandatory for every platform role and enforced in every platform gate; PR #92 and PR #93 merged.
 - Production URL: not deployed (see `blockers.md` B-001).
-- Next module: Foundation - i18n scaffolding, design tokens, tenant audit log,
-  loading/error/empty patterns.
+- Next task: platform session enforcement (30-minute inactivity logout, 25-minute warning, 12-hour absolute lifetime); then continue the `apps/admin`/`apps/network` boundary extraction.
+
