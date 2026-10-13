@@ -9,6 +9,7 @@ import { requirePlatformSubRole, requirePlatformUser, resolveRoles, resolveUserB
 import { PLATFORM_SUB_ROLE_MAP, PLATFORM_SUB_ROLE_READERS } from "./lib/permissions";
 import { canTenantOperate, resolveTenantFromAuth } from "./lib/tenant";
 import { decideTenantLifecycleTransition } from "./lib/tenantLifecycleCore";
+import { subscriberBackfillStartState } from "./lib/subscriberBackfillCore";
 import {
   normalizeAutomatedTenantOnboarding,
   normalizeTenantRegistration,
@@ -225,13 +226,20 @@ export const startSubscriberCountBackfill = mutation({
     const stale = tenant.subscriberCountBackfillRunning === true && now - heartbeatAt > SUBSCRIBER_COUNT_BACKFILL_STALE_MS;
     if (tenant.subscriberCountBackfillRunning && !stale) throw new Error("Subscriber count backfill is already running");
     const runId = crypto.randomUUID();
-    const resumeCursor = stale ? tenant.subscriberCountBackfillCursor ?? null : null;
-    const resumeCount = stale ? tenant.subscriberCountBackfillProgress ?? 0 : 0;
+    const { cursor: resumeCursor, progress: resumeCount } = subscriberBackfillStartState(
+      stale,
+      tenant.subscriberCountBackfillCursor,
+      tenant.subscriberCountBackfillProgress,
+    );
     await ctx.db.patch(tenant._id, {
       subscriberCountBackfillRunning: true,
       subscriberCountBackfillRunId: runId,
       subscriberCountBackfillStartedAt: now,
       subscriberCountBackfillHeartbeatAt: now,
+      // A stale run resumes its last committed page; a fresh run must never
+      // inherit progress left behind by an earlier failed attempt.
+      subscriberCountBackfillCursor: resumeCursor ?? undefined,
+      subscriberCountBackfillProgress: resumeCount,
     });
     await logAudit(ctx, {
       action: stale ? "tenant.subscriber_count_backfill_restarted" : "tenant.subscriber_count_backfill_started",

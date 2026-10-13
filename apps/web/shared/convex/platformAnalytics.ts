@@ -14,6 +14,8 @@ export type PlatformAnalyticsDay = {
 
 export type PlatformAnalyticsDashboard = {
   days: number;
+  tooManyRows: boolean;
+  suggestedDays: number;
   series: PlatformAnalyticsDay[];
   totals: Omit<PlatformAnalyticsDay, "date" | "uptimeMarketSamples" | "alertMarketSamples"> & { latestSnapshotDate: string | null };
 };

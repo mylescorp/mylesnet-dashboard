@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "@/app/lib/convex";
 import { platformAnalytics } from "@/shared/convex/platformAnalytics";
 import { EmptyState } from "@/shared/components/ui";
@@ -7,8 +8,13 @@ import { EmptyState } from "@/shared/components/ui";
 const money = (value: number) => `USD ${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export function PlatformAnalytics() {
-  const dashboard = useQuery(platformAnalytics.getDashboard, { days: 30 });
+  const [days, setDays] = useState(30);
+  const dashboard = useQuery(platformAnalytics.getDashboard, { days });
   if (dashboard === undefined) return <main className="workspace-page"><p className="pf-muted">Loading platform analytics…</p></main>;
+  if (dashboard.tooManyRows) return <main className="workspace-page">
+    <header className="page-heading"><div><p className="eyebrow">Platform insights</p><h1 className="page-title">Platform analytics</h1><p className="page-subtitle">This date range contains more market snapshots than one request can safely summarize.</p></div></header>
+    <section className="pf-panel"><p className="pf-hint">Choose a shorter period to view complete totals. The period ending today will stay the same.</p><button type="button" className="primary-button" onClick={() => setDays(dashboard.suggestedDays)}>Use the last {dashboard.suggestedDays} days</button></section>
+  </main>;
   const series = dashboard.series;
   const width = 640;
   const height = 180;

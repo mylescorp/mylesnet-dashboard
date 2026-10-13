@@ -16,7 +16,23 @@ export const getDashboard = query({
       .withIndex("by_date", q => q.gte("date", from))
       .order("asc")
       .take(5001);
-    if (rows.length > 5000) throw new Error("This date range contains too much data for one dashboard request. Choose a shorter date range.");
+    if (rows.length > 5000) {
+      return {
+        days,
+        tooManyRows: true,
+        suggestedDays: Math.max(1, Math.floor(days / 2)),
+        series: [],
+        totals: {
+          revenueUSD: 0,
+          salesCount: 0,
+          newSubscribers: 0,
+          marketsReporting: 0,
+          averageReportedUptime: null,
+          activeAlerts: null,
+          latestSnapshotDate: null,
+        },
+      };
+    }
 
     const byDate = new Map<string, {
       revenueUSD: number;
@@ -68,6 +84,8 @@ export const getDashboard = query({
     const latest = series.at(-1) ?? null;
     return {
       days,
+      tooManyRows: false,
+      suggestedDays: days,
       series,
       totals: {
         revenueUSD: Math.round(series.reduce((sum, day) => sum + day.revenueUSD, 0) * 100) / 100,

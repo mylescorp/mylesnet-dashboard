@@ -13,6 +13,7 @@ import { enforceTenantOnResource, readScopedTenant, readTenantList } from "./lib
 import { logAudit } from "./lib/auditLog";
 import { paginationOptsValidator } from "convex/server";
 import { commissionTenantId } from "./lib/commissionScopeCore";
+import { assertCommissionCanBeDisputed } from "./lib/commissionDisputeCore";
 
 const DISPUTE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000; // 30 days, matches payout timeline
 
@@ -209,6 +210,7 @@ export const disputeCommission = mutation({
     const reason = args.reason.trim();
     if (reason.length < 8 || reason.length > 500) throw new Error("Provide a dispute reason between 8 and 500 characters");
     await enforceTenantOnResource(ctx, commission, "commission");
+    assertCommissionCanBeDisputed(commission.payoutStatus);
     const market = await ctx.db.get(commission.marketId);
     await ctx.db.patch(args.commissionId, { payoutStatus: "disputed" });
     await logAudit(ctx, {

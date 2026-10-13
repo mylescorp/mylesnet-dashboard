@@ -166,7 +166,7 @@ export function PlatformOrganizationList() {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2" style={{ color: "var(--text)" }}>
                           <Users size={16} style={{ color: "var(--muted-text)" }} />
-                          <span className="font-medium">{tenant.membershipCount || 0}</span>
+                          <span className="font-medium">{tenant.membershipCount || 0}{tenant.membershipCountCapped ? "+" : ""}</span>
                         </div>
                       </td>
                       <td className="px-6 py-4">
