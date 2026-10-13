@@ -130,7 +130,7 @@ describe("AccountDrawer", () => {
     await waitFor(() => expect(screen.getByTestId("acw-theme")).toBeInTheDocument());
     const dark = screen.getByTestId("acw-theme-dark");
     fireEvent.click(dark);
-    expect(window.localStorage.getItem("mylesnet-dashboard-theme")).toBe("dark");
+    expect(document.cookie).toContain("__mylesnet_theme=dark");
     expect(document.documentElement.dataset.theme).toBe("dark");
   });
 
@@ -199,4 +199,3 @@ describe("AccountDrawer", () => {
     );
   });
 });
-

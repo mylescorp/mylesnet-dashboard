@@ -1,5 +1,10 @@
 # MylesNet Landing UI/UX Overhaul — Agent Playbook
 
+> [!important] Historical playbook. Its palette and token references are retired.
+> For all current implementation work, use `packages/ui/tokens.json` and
+> `docs/design/tokens.md`. Do not copy any color or dimension values from the
+> prompts below.
+
 Phased, copy-paste prompts for driving an agent (one session per phase) through a
 top-1%-quality, fully consistent redesign of the public marketing site, including a
 migration from the hand-written `landing.css` component system to the shadcn/ui + Radix

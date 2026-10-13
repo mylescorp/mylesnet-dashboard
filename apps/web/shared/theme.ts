@@ -6,12 +6,17 @@ export type ThemeMode = "light" | "dark" | "system";
 export type ResolvedTheme = "light" | "dark";
 const getServerMode = (): ThemeMode => "system";
 
-const STORAGE_KEY = "mylesnet-dashboard-theme";
+const COOKIE_NAME = "__mylesnet_theme";
 
 function getStoredMode(): ThemeMode {
   if (typeof window === "undefined") return "system";
-  const stored = localStorage.getItem(STORAGE_KEY);
+  const stored = document.cookie.split("; ").find((cookie) => cookie.startsWith(`${COOKIE_NAME}=`))?.split("=")[1];
   return stored === "light" || stored === "dark" || stored === "system" ? stored : "system";
+}
+
+function persistMode(mode: ThemeMode) {
+  // The theme cookie is intentionally readable by client code for pre-paint theme selection.
+  document.cookie = `${COOKIE_NAME}=${mode}; Path=/; Max-Age=31536000; Secure; SameSite=Lax`;
 }
 
 function resolveMode(mode: ThemeMode): ResolvedTheme {
@@ -44,7 +49,7 @@ export function useTheme() {
   const resolved = mode === "system" && typeof window === "undefined" ? "light" : resolveMode(mode);
 
   const setMode = useCallback((newMode: ThemeMode) => {
-    localStorage.setItem(STORAGE_KEY, newMode);
+    persistMode(newMode);
     applyMode(newMode);
     window.dispatchEvent(new CustomEvent("mylesnet-theme-changed", { detail: newMode }));
   }, []);
@@ -64,7 +69,7 @@ export const readStoredThemeMode = getStoredMode;
 export const resolveThemeMode = resolveMode;
 export const applyThemeMode = applyMode;
 export const setThemeMode = (mode: ThemeMode) => {
-  localStorage.setItem(STORAGE_KEY, mode);
+  persistMode(mode);
   applyMode(mode);
   window.dispatchEvent(new CustomEvent("mylesnet-theme-changed", { detail: mode }));
 };

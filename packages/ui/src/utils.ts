@@ -11,7 +11,7 @@ export { clsx, twMerge };
 /** Storage key helpers for the shared shell's persisted preferences. */
 export const shellStorageKeys = {
   sidebar: "mylesnet-shell-sidebar-collapsed",
-  theme: "mylesnet-dashboard-theme",
+  theme: "__mylesnet_theme",
 } as const;
 
 export function readStoredSidebarCollapsed(): boolean {

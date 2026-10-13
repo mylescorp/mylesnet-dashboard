@@ -211,3 +211,10 @@ separate archive policy.
 ### 2026-10-10 — Greptile review
 
 - Review record: see PR #77.
+
+### 2026-10-13 - Unified token rollout and shared templates
+
+- **Scope:** Continue the MylesNet app-shell and design-token implementation; Linear is excluded per owner instruction.
+- **Changes:** Installed the supplied token JSON as the canonical source in the repo and vault, synchronized token CSS and Tailwind mappings, documented the permanent token rule in root `AGENTS.md`, removed active docs that described the retired palette, and added reusable list, form, and detail page frames.
+- **Verification:** Web typecheck passed. `pnpm test` passed 28/28. Lint passed with 15 warnings and no errors. Token check and `git diff --check` passed. Web Jest still fails before test discovery because Next cannot parse TypeScript `--showConfig`. Production build stalled at compilation without output and was stopped.
+- **Status:** Work continues. Payment-backed Overview metrics await explicit approval. Additional panel content, visual checks, release checks, and production deployment remain outstanding.

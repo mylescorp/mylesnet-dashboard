@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { ChevronDown, ChevronRight, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import type { NavGroup, NavItem } from "../types";
 
 export function SidebarRail({
@@ -183,8 +183,9 @@ function SidebarLink({
       {item.icon ? <item.icon size={18} aria-hidden="true" /> : null}
       <span className="sidebar-link-text">
         <span>{item.label}</span>
+        {item.badge !== undefined && !collapsed ? <span className={`sidebar-count${item.badgeTone === "live" ? " sidebar-count-live" : ""}`}>{item.badge}</span> : null}
+        {item.expandable && !collapsed ? <ChevronRight size={14} aria-hidden="true" /> : null}
       </span>
     </a>
   );
 }
-

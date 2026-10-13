@@ -1,4 +1,5 @@
-import { Bricolage_Grotesque, Hanken_Grotesk, Inter, JetBrains_Mono } from "next/font/google";
+import { Bricolage_Grotesque, Geist, Hanken_Grotesk, Instrument_Serif, Inter, JetBrains_Mono } from "next/font/google";
+import { cookies } from "next/headers";
 import Script from "next/script";
 import "@mylesnet/ui/styles.css";
 import "./globals.css";
@@ -27,30 +28,34 @@ const hanken = Hanken_Grotesk({
   display: "swap",
 });
 
+const geist = Geist({ variable: "--font-geist-sans", subsets: ["latin"], display: "swap" });
+const instrumentSerif = Instrument_Serif({ variable: "--font-instrument-serif", subsets: ["latin"], weight: "400", style: ["normal", "italic"], display: "swap" });
+
 /**
- * Applies the stored (light/dark/system) theme before first paint on every
- * surface — landing and app panels alike — so dark mode never flashes light.
- * "system" resolves against the live OS preference at render time.
+ * Resolves the client-readable theme cookie before first paint. The server also
+ * renders the selected mode on html so the page begins with the correct theme.
  */
 const themeScript = `(function() {
-  const storageKey = 'mylesnet-dashboard-theme';
-  const stored = localStorage.getItem(storageKey);
+  const stored = document.cookie.split('; ').find((cookie) => cookie.startsWith('__mylesnet_theme='))?.split('=')[1];
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
   const theme = stored === 'light' || stored === 'dark' ? stored : (prefersDark ? 'dark' : 'light');
   document.documentElement.dataset.theme = theme;
   document.documentElement.style.colorScheme = theme;
 })();`;
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const storedTheme = (await cookies()).get("__mylesnet_theme")?.value;
+  const theme = storedTheme === "light" || storedTheme === "dark" || storedTheme === "system" ? storedTheme : "system";
   return (
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${inter.variable} ${jetbrainsMono.variable} ${bricolage.variable} ${hanken.variable}`}
+      data-theme={theme}
+      className={`${inter.variable} ${jetbrainsMono.variable} ${bricolage.variable} ${hanken.variable} ${geist.variable} ${instrumentSerif.variable}`}
     >
       <body className="antialiased">
         {children}
