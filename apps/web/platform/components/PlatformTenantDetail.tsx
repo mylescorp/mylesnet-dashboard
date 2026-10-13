@@ -2,7 +2,7 @@
 
 import { userFacingMessage } from "@/shared/lib/user-facing-error";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -46,6 +46,7 @@ export function PlatformTenantDetail({ tenantId }: { tenantId: string }) {
   const scheduleDeletion = useMutation(tenantControl.scheduleDeletion);
   const restoreScheduledDeletion = useMutation(tenantControl.restoreScheduledDeletion);
   const [working, setWorking] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
   const [deletionReason, setDeletionReason] = useState("");
   const [requestingDeletion, setRequestingDeletion] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -53,6 +54,11 @@ export function PlatformTenantDetail({ tenantId }: { tenantId: string }) {
 
   const canManage = canManagePlatformTenants(user?.roles.map((role) => role.slug));
   const canScheduleDeletion = canDeletePlatformTenant(user?.roles.map((role) => role.slug));
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const tenant = detail;
   if (tenant === undefined) return <p className="pf-muted">Loading tenant detail…</p>;
@@ -111,17 +117,17 @@ export function PlatformTenantDetail({ tenantId }: { tenantId: string }) {
       {notice ? <p className="platform-claim-message ok" role="status">{notice}</p> : null}
       {error ? <p className="platform-claim-message" role="alert">{error}</p> : null}
 
-      {tenant.scheduledDeletionAt !== null ? (
+      {tenant.scheduledDeletionAt !== null && tenant.status === "pending_deletion" ? (
         <section className="pf-panel" aria-labelledby="tenant-retention-heading">
           <div className="section-heading">
-            <div><p className="eyebrow">30-day recovery window</p><h2 id="tenant-retention-heading">{tenant.status === "pending_deletion" ? "Deletion requested" : "Retention record"}</h2></div>
-            <StatusPill tone={tenant.status === "pending_deletion" ? "warning" : "neutral"}>{tenant.status === "pending_deletion" ? "Access suspended" : "Window elapsed"}</StatusPill>
+            <div><p className="eyebrow">30-day recovery window</p><h2 id="tenant-retention-heading">Deletion requested</h2></div>
+            <StatusPill tone={tenant.scheduledDeletionAt > now ? "warning" : "neutral"}>{tenant.scheduledDeletionAt > now ? "Access suspended" : "Window elapsed"}</StatusPill>
           </div>
-          <p>{tenant.status === "pending_deletion"
+          <p>{tenant.scheduledDeletionAt > now
             ? `Tenant access is suspended. Restore before ${formatTs(tenant.scheduledDeletionAt)} to return the workspace to service.`
-            : `The recovery window ended ${formatTs(tenant.scheduledDeletionAt)}. Tenant records remain retained for the approved data-retention workflow.`}</p>
+            : `The recovery window ended ${formatTs(tenant.scheduledDeletionAt)}. Restoration is no longer available.`}</p>
           {tenant.deletionReason ? <p className="pf-muted">Reason: {tenant.deletionReason}</p> : null}
-          {canManage && tenant.status === "pending_deletion" ? <button type="button" className="secondary-button" disabled={working} onClick={() => void restoreDeletion()}><RotateCcw size={15} aria-hidden="true" />Restore tenant</button> : null}
+          {canManage && tenant.scheduledDeletionAt > now ? <button type="button" className="secondary-button" disabled={working} onClick={() => void restoreDeletion()}><RotateCcw size={15} aria-hidden="true" />Restore tenant</button> : null}
         </section>
       ) : null}
 
