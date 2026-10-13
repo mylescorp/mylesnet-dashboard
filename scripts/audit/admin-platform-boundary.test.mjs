@@ -140,8 +140,9 @@ test("apps/admin payment credential routes delegate to same-origin handlers", as
   assert.match(csrf, /export\s*\{\s*GET\s*\}\s*from\s*["']@\/app\/api\/auth\/csrf\/route["']/);
   assert.match(
     credentials,
-    /export\s*\{\s*POST\s*,\s*runtime\s*\}\s*from\s*["']@\/app\/api\/platform\/payment-gateways\/\[configId\]\/credentials\/route["']/,
+    /export\s*\{\s*POST\s*\}\s*from\s*["']@\/app\/api\/platform\/payment-gateways\/\[configId\]\/credentials\/route["']/,
   );
+  assert.match(credentials, /export\s+const\s+runtime\s*=\s*["']nodejs["']/);
 });
 
 test("apps/admin reuses shared sources instead of copying them", async () => {
