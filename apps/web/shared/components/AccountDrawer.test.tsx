@@ -142,22 +142,30 @@ describe("AccountDrawer", () => {
 
   it("migrates the previous explicit theme preference into the new cookie", () => {
     window.localStorage.setItem("mylesnet-dashboard-theme", "dark");
-    const cookieSetter = jest.spyOn(Document.prototype, "cookie", "set");
+    let cookieValue = "";
+    const cookieGetter = jest.spyOn(Document.prototype, "cookie", "get").mockImplementation(() => cookieValue);
+    const cookieSetter = jest.spyOn(Document.prototype, "cookie", "set").mockImplementation((value: string) => {
+      cookieValue = value.split(";")[0];
+    });
 
     expect(readStoredThemeMode()).toBe("dark");
+    expect(cookieValue).toBe("__mylesnet_theme=dark");
     expect(cookieSetter).toHaveBeenCalledWith(expect.stringContaining("__mylesnet_theme=dark"));
     expect(window.localStorage.getItem("mylesnet-dashboard-theme")).toBeNull();
 
+    cookieGetter.mockRestore();
     cookieSetter.mockRestore();
   });
 
   it("keeps the previous explicit theme preference when the browser rejects cookies", () => {
     window.localStorage.setItem("mylesnet-dashboard-theme", "dark");
+    const cookieGetter = jest.spyOn(Document.prototype, "cookie", "get").mockReturnValue("");
     const cookieSetter = jest.spyOn(Document.prototype, "cookie", "set").mockImplementation(() => {});
 
     expect(readStoredThemeMode()).toBe("dark");
     expect(window.localStorage.getItem("mylesnet-dashboard-theme")).toBe("dark");
 
+    cookieGetter.mockRestore();
     cookieSetter.mockRestore();
   });
 
