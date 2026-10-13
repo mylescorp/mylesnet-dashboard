@@ -63,7 +63,7 @@ export function TenantWorkspace() {
     <div className="workspace-page tenant-workspace-page mn-overview">
       <section className="mn-overview-hero workspace-card">
         <div>
-          <p className="mn-eyebrow">{live === undefined ? "Tenant overview" : `${live.stats.totalLive} active subscriptions`}</p>
+          <p className="mn-eyebrow">{metrics === undefined ? "Tenant overview" : `${metrics.activeSubscriptions} active subscriptions`}</p>
           <h1><span>{greeting}</span>{greeting !== "Welcome" ? "," : ""} <strong>{tenantWorkspace.tenant.name}</strong></h1>
           <p className="mn-overview-summary">
             {metrics ? <><b>{money(metrics.currency, metrics.revenueToday)}</b> collected today across <b>{metrics.revenueTodayCount}</b> completed payments.</> : "Workspace activity and service health at a glance."}
@@ -78,30 +78,30 @@ export function TenantWorkspace() {
 
       <LiveStrip
         liveLabel="LIVE"
-        event={live === undefined ? "Checking subscriber activity" : `${live.stats.totalLive} active subscriber services`}
+        event={live === undefined ? "Checking subscriber service periods" : `${live.stats.totalLive} subscribers within their service period`}
         health={`Workspace ${tenantWorkspace.tenant.status}`}
       />
 
       <section className="mn-overview-stats" aria-label="Today's key metrics">
         <StatCard label="Revenue today" value={metrics ? money(metrics.currency, metrics.revenueToday) : <Skeleton variant="title" />} caption={metrics ? `${metrics.revenueTodayCount} completed payments` : "Loading current revenue"} />
-        <StatCard label="Active subscriptions" value={metrics?.activeSubscriptions ?? <Skeleton variant="title" />} caption={live ? `${live.stats.totalLive} active sessions` : "Current subscriber services"} />
+        <StatCard label="Active subscriptions" value={metrics?.activeSubscriptions ?? <Skeleton variant="title" />} caption="Subscriptions valid today" />
         <StatCard label="New signups" value={metrics?.newSignupsToday ?? <Skeleton variant="title" />} caption="Subscribers added today" />
       </section>
 
       <div className="mn-overview-lower">
-        <InsetPanel title="Active subscribers" actions={<span className="sidebar-count">{liveSessions.length}</span>}>
+        <InsetPanel title="Subscribers in service period" actions={<span className="sidebar-count">{liveSessions.length}</span>}>
           {live === undefined ? <Skeleton variant="card" /> : liveSessions.length > 0 ? (
-            <ActivityList label="Active subscribers" items={liveSessions.slice(0, 5).map((session) => ({
+            <ActivityList label="Subscribers within their service period" items={liveSessions.slice(0, 5).map((session) => ({
               id: session.id,
               icon: <Network size={17} aria-hidden="true" />,
               title: session.name,
               detail: session.plan?.name ?? session.connectionType,
-              timestamp: "Active",
+              timestamp: "In service",
               href: "/network",
             }))} />
           ) : (
             <div className="mn-overview-empty">
-              <p>No active subscriber sessions right now.</p>
+              <p>No subscribers are within their service period right now.</p>
               <Link href="/subscribers">Manage subscribers</Link>
             </div>
           )}

@@ -207,7 +207,9 @@ export const tokens = {
     "avatar": 36,
     "avatar-lg": 38,
     "icon-tile": 34,
-    "fab": 52
+    "fab": 52,
+    "sparkline-w": 250,
+    "sparkline-h": 44
   },
   "landing": {
     "container": 1200,

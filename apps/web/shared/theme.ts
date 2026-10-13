@@ -7,16 +7,28 @@ export type ResolvedTheme = "light" | "dark";
 const getServerMode = (): ThemeMode => "system";
 
 const COOKIE_NAME = "__mylesnet_theme";
-
-function getStoredMode(): ThemeMode {
-  if (typeof window === "undefined") return "system";
-  const stored = document.cookie.split("; ").find((cookie) => cookie.startsWith(`${COOKIE_NAME}=`))?.split("=")[1];
-  return stored === "light" || stored === "dark" || stored === "system" ? stored : "system";
-}
+const LEGACY_STORAGE_KEY = "mylesnet-dashboard-theme";
 
 function persistMode(mode: ThemeMode) {
   // The theme cookie is intentionally readable by client code for pre-paint theme selection.
   document.cookie = `${COOKIE_NAME}=${mode}; Path=/; Max-Age=31536000; Secure; SameSite=Lax`;
+}
+
+function getStoredMode(): ThemeMode {
+  if (typeof window === "undefined") return "system";
+  const stored = document.cookie.split("; ").find((cookie) => cookie.startsWith(`${COOKIE_NAME}=`))?.split("=")[1];
+  if (stored === "light" || stored === "dark" || stored === "system") return stored;
+  try {
+    const legacy = window.localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (legacy === "light" || legacy === "dark" || legacy === "system") {
+      persistMode(legacy);
+      window.localStorage.removeItem(LEGACY_STORAGE_KEY);
+      return legacy;
+    }
+  } catch {
+    // Storage may be unavailable in privacy-restricted browser contexts.
+  }
+  return "system";
 }
 
 function resolveMode(mode: ThemeMode): ResolvedTheme {

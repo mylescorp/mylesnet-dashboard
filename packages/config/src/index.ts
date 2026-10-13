@@ -1,2 +1,2 @@
 export {};
-export { mylesNetTailwindBase } from "./tailwind.config.base";
+export { default as mylesNetTailwindBase } from "./tailwind.config.base";

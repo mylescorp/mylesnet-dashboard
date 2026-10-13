@@ -26,7 +26,7 @@ export function ListPageTemplate({
   footer,
 }: ListPageTemplateProps) {
   return (
-    <div className="mn-page-template mn-list-page">
+    <div className={`mn-page-template mn-list-page${mobileCards != null ? " mn-list-page-has-mobile-cards" : ""}`}>
       <PageHeader title={title} description={description} actions={actions} />
       <div className="mn-list-toolbar">
         {selectedCount > 0 ? bulkActions : filters}

@@ -1,4 +1,5 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { readStoredThemeMode } from "../theme";
 import { AccountDrawer } from "./AccountDrawer";
 
 const mockSignOut = jest.fn();
@@ -62,6 +63,7 @@ jest.mock("@mylesnet/ui", () => ({
 beforeEach(() => {
   currentUser = makeUser();
   mockSignOut.mockReset();
+  window.localStorage.clear();
   Object.defineProperty(window, "matchMedia", {
     writable: true,
     value: jest.fn().mockImplementation((query: string) => ({
@@ -134,6 +136,17 @@ describe("AccountDrawer", () => {
     expect(cookieSetter).toHaveBeenCalledWith(expect.stringContaining("__mylesnet_theme=dark"));
     expect(cookieSetter).toHaveBeenCalledWith(expect.stringContaining("Secure"));
     expect(document.documentElement.dataset.theme).toBe("dark");
+    cookieSetter.mockRestore();
+  });
+
+  it("migrates the previous explicit theme preference into the new cookie", () => {
+    window.localStorage.setItem("mylesnet-dashboard-theme", "dark");
+    const cookieSetter = jest.spyOn(Document.prototype, "cookie", "set");
+
+    expect(readStoredThemeMode()).toBe("dark");
+    expect(cookieSetter).toHaveBeenCalledWith(expect.stringContaining("__mylesnet_theme=dark"));
+    expect(window.localStorage.getItem("mylesnet-dashboard-theme")).toBeNull();
+
     cookieSetter.mockRestore();
   });
 
