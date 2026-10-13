@@ -1,4 +1,5 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { readStoredThemeMode, setThemeMode } from "../theme";
 import { AccountDrawer } from "./AccountDrawer";
 
 const mockSignOut = jest.fn();
@@ -62,6 +63,8 @@ jest.mock("@mylesnet/ui", () => ({
 beforeEach(() => {
   currentUser = makeUser();
   mockSignOut.mockReset();
+  window.localStorage.clear();
+  document.cookie = "__mylesnet_theme=; Path=/; Max-Age=0; Secure; SameSite=Lax";
   Object.defineProperty(window, "matchMedia", {
     writable: true,
     value: jest.fn().mockImplementation((query: string) => ({
@@ -75,6 +78,10 @@ beforeEach(() => {
       dispatchEvent: jest.fn(),
     })),
   });
+});
+
+afterEach(() => {
+  Reflect.deleteProperty(document, "cookie");
 });
 
 describe("AccountDrawer", () => {
@@ -125,13 +132,62 @@ describe("AccountDrawer", () => {
   });
 
   it("wires the theme segmented control to the shared theme mechanism", async () => {
+    const cookieSetter = jest.spyOn(Document.prototype, "cookie", "set");
     render(<AccountDrawer />);
     fireEvent.click(screen.getByRole("button", { name: /ada lovelace/i }));
     await waitFor(() => expect(screen.getByTestId("acw-theme")).toBeInTheDocument());
     const dark = screen.getByTestId("acw-theme-dark");
     fireEvent.click(dark);
-    expect(window.localStorage.getItem("mylesnet-dashboard-theme")).toBe("dark");
+    expect(cookieSetter).toHaveBeenCalledWith(expect.stringContaining("__mylesnet_theme=dark"));
+    expect(cookieSetter).toHaveBeenCalledWith(expect.stringContaining("Secure"));
     expect(document.documentElement.dataset.theme).toBe("dark");
+    cookieSetter.mockRestore();
+  });
+
+  it("migrates the previous explicit theme preference into the new cookie", () => {
+    window.localStorage.setItem("mylesnet-dashboard-theme", "dark");
+    let cookieValue = "";
+    Object.defineProperty(document, "cookie", {
+      configurable: true,
+      get: () => cookieValue,
+      set: (value: string) => { cookieValue = value.split(";")[0]; },
+    });
+
+    expect(readStoredThemeMode()).toBe("dark");
+    expect(cookieValue).toBe("__mylesnet_theme=dark");
+    expect(window.localStorage.getItem("mylesnet-dashboard-theme")).toBeNull();
+
+    Reflect.deleteProperty(document, "cookie");
+  });
+
+  it("keeps the previous explicit theme preference when the browser rejects cookies", () => {
+    window.localStorage.setItem("mylesnet-dashboard-theme", "dark");
+    Object.defineProperty(document, "cookie", {
+      configurable: true,
+      get: () => "",
+      set: () => {},
+    });
+
+    expect(readStoredThemeMode()).toBe("dark");
+    expect(window.localStorage.getItem("mylesnet-dashboard-theme")).toBe("dark");
+
+    Reflect.deleteProperty(document, "cookie");
+  });
+
+  it("persists theme changes in local storage when the browser rejects cookies", () => {
+    Object.defineProperty(document, "cookie", {
+      configurable: true,
+      get: () => "",
+      set: () => {},
+    });
+
+    setThemeMode("dark");
+
+    expect(window.localStorage.getItem("mylesnet-dashboard-theme")).toBe("dark");
+    expect(readStoredThemeMode()).toBe("dark");
+    expect(document.documentElement.dataset.theme).toBe("dark");
+
+    Reflect.deleteProperty(document, "cookie");
   });
 
   it("signs out through the WorkOS signOut action after confirming", async () => {
@@ -199,4 +255,3 @@ describe("AccountDrawer", () => {
     );
   });
 });
-

@@ -2,20 +2,20 @@
 
 import Link from "next/link";
 import {
-  Building2,
   CheckCircle2,
-  ChevronRight,
-  DollarSign,
+  Network,
   Ticket,
   UsersRound,
 } from "lucide-react";
+import { ActionCard, ActivityList, InsetPanel, LiveStrip, Skeleton, StatCard } from "@mylesnet/ui";
 import { useQuery } from "@/app/lib/convex";
 import { tenantControl } from "@/lib/convex/tenantControl";
-import { dashboard, type SetupStatus } from "@/shared/convex/dashboard";
-import MetricCard from "@/shared/components/MetricCard";
+import { dashboard } from "@/shared/convex/dashboard";
+import { networkOps } from "@/shared/convex/networkOps";
 import { openControlCentre } from "@/shared/auth/workspace-actions";
 
 const n = (v: number) => v.toLocaleString("en", { maximumFractionDigits: 2 });
+const money = (currency: string, value: number) => `${currency === "UGX" ? "USh" : currency} ${n(value)}`;
 
 function partOfDay(timezone: string): string {
   try {
@@ -37,13 +37,14 @@ export function TenantWorkspace() {
   const workspace = useQuery(tenantControl.getCurrentWorkspace, {});
   const metrics = useQuery(dashboard.getMetrics, workspace?.status === "ready" ? {} : "skip");
   const setup = useQuery(dashboard.getSetupStatus, workspace?.status === "ready" ? {} : "skip");
+  const live = useQuery(networkOps.listLiveSessions, workspace?.status === "ready" ? {} : "skip");
 
   if (workspace === undefined)
     return (
-      <div className="workspace-page">
-        <div className="loading-panel workspace-card">
-          Loading tenant workspace…
-        </div>
+      <div className="workspace-page mn-overview-loading" aria-label="Loading tenant overview">
+        <Skeleton variant="card" />
+        <Skeleton variant="card" />
+        <Skeleton variant="card" />
       </div>
     );
 
@@ -52,160 +53,81 @@ export function TenantWorkspace() {
   }
 
   const tenantWorkspace = workspace.workspace;
-  const revenueDisplay =
-    metrics === undefined
-      ? "Loading…"
-      : `${metrics.currency} ${n(metrics.revenueToday)}`;
-  const revenueDetail =
-    metrics === undefined
-      ? "Today's completed payments"
-      : `${metrics.revenueTodayCount} completed payment${metrics.revenueTodayCount === 1 ? "" : "s"} today`;
-  const newSignups = metrics === undefined ? 0 : metrics.newSignupsToday;
-  const openTickets = metrics === undefined ? "—" : metrics.openTickets;
+  const greeting = setup
+    ? `${partOfDay(tenantWorkspace.tenant.timezone)}${setup.firstName ? `, ${setup.firstName}` : ""}`
+    : "Welcome";
+  const pendingActions = setup?.items.filter((item) => !item.done) ?? [];
+  const liveSessions = live?.sessions ?? [];
 
   return (
-    <div className="workspace-page tenant-workspace-page">
-      <header className="page-heading">
+    <div className="workspace-page tenant-workspace-page mn-overview">
+      <section className="mn-overview-hero workspace-card">
         <div>
-          <p className="eyebrow">Tenant workspace</p>
-          <h1 className="page-title">{tenantWorkspace.tenant.name}</h1>
-          <p className="page-subtitle">
-            {setup
-              ? setup.totalSteps > setup.completedSteps
-                ? `${partOfDay(tenantWorkspace.tenant.timezone)}${setup.firstName ? `, ${setup.firstName}` : ""}. A fresh start — make it a good one.`
-                : `You are all set${setup.firstName ? `, ${setup.firstName}` : ""}. Your network is ready when you are.`
-              : "Your operational workspace."}
+          <p className="mn-eyebrow">{metrics === undefined ? "Tenant overview" : `${metrics.activeSubscriptions} active subscriptions`}</p>
+          <h1><span>{greeting}</span>{greeting !== "Welcome" ? "," : ""} <strong>{tenantWorkspace.tenant.name}</strong></h1>
+          <p className="mn-overview-summary">
+            {metrics ? <><b>{money(metrics.currency, metrics.revenueToday)}</b> collected today across <b>{metrics.revenueTodayCount}</b> completed payments.</> : "Workspace activity and service health at a glance."}
           </p>
+          <p className="mn-overview-helper">{setup && setup.completedSteps === setup.totalSteps ? "Your workspace is ready for the day." : "Your network activity, in one calm view."}</p>
         </div>
-        <span
-          className={`status-pill status-pill-${tenantWorkspace.tenant.status === "active" ? "success" : tenantWorkspace.tenant.status === "suspended" ? "danger" : "warning"}`}
-        >
-          {tenantWorkspace.tenant.status}
-        </span>
-      </header>
-
-      <section className="metric-grid">
-        <MetricCard
-          icon={DollarSign}
-          label="Revenue today"
-          value={revenueDisplay}
-          detail={revenueDetail}
-          tone="primary"
-        />
-        <MetricCard
-          icon={UsersRound}
-          label="Active subscriptions"
-          value={metrics === undefined ? "Loading…" : metrics.activeSubscriptions}
-          detail="Current active subscribers"
-          tone="success"
-        />
-        <MetricCard
-          icon={UsersRound}
-          label="New signups"
-          value={newSignups}
-          detail="Today's new subscribers"
-          tone="accent"
-        />
-        <MetricCard
-          icon={Ticket}
-          label="Open tickets"
-          value={openTickets}
-          detail="Support queue is available from Tickets"
-          tone="neutral"
-        />
-        <MetricCard
-          icon={Building2}
-          label="Active sites"
-          value={metrics === undefined ? "Loading…" : metrics.activeMarkets}
-          detail="Tenant operating locations"
-          tone="success"
-        />
-      </section>
-
-      <section className="tenant-workspace-summary workspace-card">
-        <div>
-          <p className="eyebrow">Workspace details</p>
-          <h2>Operations at a glance</h2>
-          <dl>
-            <div>
-              <dt>Subscription</dt>
-              <dd>
-                {tenantWorkspace.entitlement
-                  ? `${tenantWorkspace.entitlement.planId} · ${tenantWorkspace.entitlement.status}`
-                  : "Not configured"}
-              </dd>
-            </div>
-            <div>
-              <dt>Region</dt>
-              <dd>
-                {tenantWorkspace.tenant.country} · {tenantWorkspace.tenant.timezone}
-              </dd>
-            </div>
-            <div>
-              <dt>Currency</dt>
-              <dd>{tenantWorkspace.tenant.currency}</dd>
-            </div>
-            <div>
-              <dt>Access</dt>
-              <dd>
-                Active team member
-              </dd>
-            </div>
-          </dl>
-        </div>
-        <div className="tenant-workspace-actions">
-          <Link href="/subscribers" className="primary-button">
-            Manage subscribers
-          </Link>
-          <Link href="/plans" className="secondary-button">
-            Manage plans
-          </Link>
+        <div className="mn-overview-hero-actions">
+          <Link href="/subscribers" className="secondary-button">View subscribers</Link>
+          <Link href="/network" className="secondary-button">Network activity</Link>
         </div>
       </section>
 
-      <LaunchChecklist setup={setup} />
-    </div>
-  );
-}
+      <LiveStrip
+        liveLabel="LIVE"
+        event={live === undefined ? "Checking subscriber service periods" : `${live.stats.totalLive} subscribers within their service period`}
+        health={`Workspace ${tenantWorkspace.tenant.status}`}
+      />
 
-function LaunchChecklist({ setup }: { setup: SetupStatus | undefined }) {
-  if (!setup || setup.totalSteps === 0) return null;
-  if (setup.completedSteps === setup.totalSteps) {
-    return (
-      <section className="tenant-workspace-summary workspace-card">
-        <div className="launch-checklist-done">
-          <p className="eyebrow">Launch checklist</p>
-          <h2>Everything is set up</h2>
-          <p className="page-subtitle">Your workspace is fully configured. Invite more teammates, add sites, and keep building.</p>
-          <span className="status-pill status-pill-success">All done</span>
-        </div>
+      <section className="mn-overview-stats" aria-label="Today's key metrics">
+        <StatCard label="Revenue today" value={metrics ? money(metrics.currency, metrics.revenueToday) : <Skeleton variant="title" />} caption={metrics ? `${metrics.revenueTodayCount} completed payments` : "Loading current revenue"} />
+        <StatCard label="Active subscriptions" value={metrics?.activeSubscriptions ?? <Skeleton variant="title" />} caption="Subscriptions valid today" />
+        <StatCard label="New signups" value={metrics?.newSignupsToday ?? <Skeleton variant="title" />} caption="Subscribers added today" />
       </section>
-    );
-  }
-  return (
-    <section className="tenant-workspace-summary workspace-card">
-      <div>
-        <p className="eyebrow">Launch checklist</p>
-        <h2>A fresh start — make it a good one.</h2>
-        <p className="page-subtitle">
-          {setup.completedSteps} of {setup.totalSteps} set-up steps complete.
-        </p>
-      </div>
-      <ul className="checklist launch-checklist">
-        {setup.items.map((item) => (
-          <li key={item.key} className={item.done ? "checked" : ""} data-setup-key={item.key}>
-            {item.done ? <CheckCircle2 size={17} aria-hidden="true" /> : <span className="launch-checklist-dot" aria-hidden="true" />}
-            <span className={item.done ? "" : "launch-checklist-pending"}>{item.label}</span>
-            {item.done ? null : (
-              <Link className="launch-checklist-link" href={item.href}>
-                Do this
-                <ChevronRight size={14} aria-hidden="true" />
-              </Link>
+
+      <div className="mn-overview-lower">
+        <InsetPanel title="Subscribers in service period" actions={<span className="sidebar-count">{liveSessions.length}</span>}>
+          {live === undefined ? <Skeleton variant="card" /> : liveSessions.length > 0 ? (
+            <ActivityList label="Subscribers within their service period" items={liveSessions.slice(0, 5).map((session) => ({
+              id: session.id,
+              icon: <Network size={17} aria-hidden="true" />,
+              title: session.name,
+              detail: session.plan?.name ?? session.connectionType,
+              timestamp: "In service",
+              href: "/network",
+            }))} />
+          ) : (
+            <div className="mn-overview-empty">
+              <p>No subscribers are within their service period right now.</p>
+              <Link href="/subscribers">Manage subscribers</Link>
+            </div>
+          )}
+        </InsetPanel>
+        <InsetPanel title="What's next" actions={pendingActions.length > 0 ? <span className="sidebar-count">{pendingActions.length}</span> : null}>
+          <div className="mn-overview-actions">
+            {pendingActions.length > 0 ? pendingActions.slice(0, 4).map((item) => (
+              <ActionCard key={item.key} icon={<CheckCircle2 size={17} aria-hidden="true" />} title={item.label} description="Continue setting up your workspace" href={item.href} />
+            )) : (
+              <ActionCard icon={<UsersRound size={17} aria-hidden="true" />} title="Manage subscribers" description="Review your subscriber directory" href="/subscribers" />
             )}
-          </li>
-        ))}
-      </ul>
-    </section>
+            {metrics && metrics.openTickets > 0 ? <ActionCard icon={<Ticket size={17} aria-hidden="true" />} title={`${metrics.openTickets} open support tickets`} description="Review the support queue" href="/tickets" /> : null}
+          </div>
+        </InsetPanel>
+      </div>
+
+      <section className="mn-overview-details workspace-card">
+        <div><p className="mn-eyebrow">Workspace details</p><h2>{tenantWorkspace.tenant.name}</h2></div>
+        <dl>
+          <div><dt>Region</dt><dd>{tenantWorkspace.tenant.country} · {tenantWorkspace.tenant.timezone}</dd></div>
+          <div><dt>Currency</dt><dd>{tenantWorkspace.tenant.currency}</dd></div>
+          <div><dt>Sites</dt><dd>{metrics?.activeMarkets ?? "Loading"}</dd></div>
+          <div><dt>Subscription</dt><dd>{tenantWorkspace.entitlement ? tenantWorkspace.entitlement.status : "Not configured"}</dd></div>
+        </dl>
+      </section>
+    </div>
   );
 }
 

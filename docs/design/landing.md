@@ -7,45 +7,37 @@ tags: [mylesnet, landing, design, implementation]
 
 # MylesNet Public Website Design
 
-The public site is the MylesNet marketing surface, implemented inside the active dashboard checkout in the dedicated folder `app/(landing)/` and served unauthenticated at `/` (2026-09-10 directive; see [[../decisions|decisions]]). This design record governs the marketing surface and feeds [[../landing-page-implementation-plan|Landing Page Implementation Plan]]. It must describe only verified capabilities and use the shared [[tokens]] system (v2.2). The earlier separate static site at [mylescorp/mylesnet-website](https://github.com/mylescorp/mylesnet-website) is a historical consumer-facing site and is not the in-repo landing source.
+The public site is the MylesNet marketing surface, implemented inside the active dashboard checkout in the dedicated folder `app/(landing)/` and served unauthenticated at `/` (2026-09-10 directive; see [[../decisions|decisions]]). This design record governs the marketing surface and feeds [[../landing-page-implementation-plan|Landing Page Implementation Plan]]. It must describe only verified capabilities and use `packages/ui/tokens.json` as the unified token source. The earlier separate static site at [mylescorp/mylesnet-website](https://github.com/mylescorp/mylesnet-website) is a historical consumer-facing site and is not the in-repo landing source.
 
 Required content groups are product overview, operator use cases, capability explanation, security and reliability posture, contact or sales path, privacy, and terms. It must not expose network topology, provider secrets, tenant records, internal operations, or unverified coverage, pricing, integrations, or performance claims.
 
 Public pages are separate from authenticated panel routes and use the required [[Footer Standards]] and [[Contact Page Standards]].
 
-## Visual Direction: Network Pulse (v2.2)
+## Visual Direction: Calm and Data-First
 
-**Concept:** Warm orange connectivity glow with data-driven precision — the current orange/navy elevated to top-tier polish.
+**Concept:** Neutral surfaces with data-driven precision and a restrained accent. The canonical values are in `packages/ui/tokens.json`.
 
 **Emotional register:** "This platform handles my complexity with confidence" — ISP operators feel they're looking at a serious operational tool, not marketing fluff.
 
 **Typography:**
-- Display: Space Grotesk — bold, tight letter-spacing (-0.028em), gradient accents on key phrases
-- Body: Geist Sans — 16px base, 1.78 line-height, AA-optimized contrast
-- Mono: Geist Mono — for data labels, status chips, currency switcher
-- Scale: `--landing-display-*` tokens with `clamp()`-driven responsive sizing
+- Use Geist Sans, Geist Mono, and Instrument Serif through the shared font tokens.
+- Use the supplied type scale and landing display sizes from `packages/ui/tokens.json`.
 
-**Colour + elevation:**
-- Light mode: Canvas `#FFF3E0` (warm cream), Surface `#FFFFFF`, Primary orange `#F57C00` (hero only), Primary text `#B74400` (AA-safe)
-- Dark mode: Canvas `#08111F` (deep navy), Surface `#101D30`, Primary `#FF9D2E` (lighter for dark), Primary text `#FF9D2E`
-- Elevation: Token-driven shadows (`--shadow-sm/md/lg`), glass surfaces with `backdrop-filter: blur(14px)`
-- Orange rule: Hero decorative only, text/actions use `--primary-text`/`--primary-action`
-
-**Motion personality:**
-- Subtle: Hero orbs float (9s ease-in-out), cards lift on hover (200ms ease), nav underline slides (220ms)
-- Purposeful: Nothing moves without user interaction or state change
-- Respectful: `prefers-reduced-motion` disables all animations
+**Color, shape, and motion:**
+- Colors, radii, spacing, shadows, and motion come from `packages/ui/tokens.json`.
+- Keep surfaces neutral and reserve accent for interactive emphasis. Do not add palette values, gradients, or glass effects outside the token contract.
+- Respect reduced motion and the shared focus treatment.
 
 **Signature elements:**
-1. **Connectivity line motif:** Thin orange/navy gradient lines connecting related cards (features → solutions → pricing)
-2. **Data strip:** Horizontal telemetry-style bar across key sections (showing abstract metrics)
-3. **Glass device frame:** Product preview uses consistent rounded rect with glass effect, reusable across feature pages
+1. **Connectivity line motif:** Use token-backed chart and accent colors for any connecting visual lines.
+2. **Data strip:** Use real, verified product data with semantic colors.
+3. **Product preview:** Use a truthful product screenshot or a CSS composition that does not imply unavailable functionality.
 
 ## Page Archetypes
 
 ### Hero page (`/`)
-- Hero section with orbs, gridlines, tagline, title, subtitle, CTAs, attributes
-- Product preview mock (CSS-only dashboard)
+  - Neutral hero section with tagline, title, subtitle, real actions, and attributes
+  - Product preview using a real screenshot or a neutral illustration without invented interface data
 - Audiences strip
 - Industry stats band
 - Problem/pains grid
@@ -83,8 +75,8 @@ Public pages are separate from authenticated panel routes and use the required [
 
 | Landing CSS Family | shadcn Primitive | Migration Notes |
 |-------------------|-----------------|----------------|
-| `.landing-cta-button` | Button (primary variant) | Map to `--primary-action` token, add loading state |
-| `.landing-secondary-button` | Button (secondary variant) | Map to `--accent` token, add loading state |
+| `.landing-cta-button` | Button (primary variant) | Map to the primary button token, add loading state |
+| `.landing-secondary-button` | Button (secondary variant) | Use the secondary button token, add loading state |
 | `.landing-card` | Card | Add hover lift, map to `--surface` + `--line` |
 | `.landing-bento-card` | Card (glass variant) | Use `--landing-glass` backdrop, add glow on hover |
 | `.landing-plan-card` | Card (pricing variant) | Add popular badge, map to `--primary-action` border |
@@ -105,7 +97,7 @@ Landing surface honors the existing `data-theme` + `prefers-color-scheme` system
 
 ## Motion Rules
 
-- **Token-driven:** All durations use `--duration-*`, all easing uses `--ease-*`
+- **Token-driven:** All durations use `--mn-dur-*`, all easing uses `--mn-ease-*`
 - **State-change only:** Animations describe interactions (hover, focus, open), not ambient movement
 - **Reduced motion:** Global `prefers-reduced-motion` override disables all animations
 - **No layout shift:** No animation causes content reflow; transforms only on elements with reserved space

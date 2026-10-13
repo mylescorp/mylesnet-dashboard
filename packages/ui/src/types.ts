@@ -24,6 +24,8 @@ export interface NavItem {
   icon?: ComponentType<{ size?: number; "aria-hidden"?: "true" | boolean; className?: string }>;
   exact?: boolean;
   badge?: number;
+  badgeTone?: "neutral" | "live";
+  expandable?: boolean;
   planned?: boolean;
   permission?: string;
   description?: string;

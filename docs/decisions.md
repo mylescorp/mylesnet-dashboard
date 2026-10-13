@@ -845,6 +845,14 @@ Routes: `/platform/feature-flags` (list + create/edit/delete),
 
 - Added Greptile review configuration and repository guidance as review tooling only. No runtime dependency or production technology was added; the technology stack contract remains unchanged.
 
+## 2026-10-13 - Unified design token authority
+
+- Decision: Use `packages/ui/tokens.json` as the sole active token source for all MylesCorp panels and landing pages. Light and dark values, brand use, layout, typography, motion, chart colors, and white-label limits follow that JSON.
+- Supersedes the previous MylesNet palette and token contracts in active implementation guidance. Brand orange and brand navy remain reserved for logo, documents, and marketing artwork.
+- Small accent text uses accent-hover in light mode because accent measures 4.47:1 on card and 3.92:1 on accent-bg. Accent-hover measures 5.77:1 and 5.07:1 on those surfaces. Dark accent measures 6.51:1 on card and 5.48:1 on accent-bg.
+- Keep CSS variables, typed exports, Tailwind mappings, and the vault design record synchronized from the JSON source.
+- Linear is not used for this project.
+
 ## 2026-10-11 Canonical platform super-admin boundary
 
 - **Decision:** Only `platform_super_admin` and its concrete `platform_owner` role carry super-admin access. The legacy `platform_admin` role is not one of the five canonical sub-roles and must not inherit super-admin routes or writes. Organization-scoped WorkOS claims map to the corresponding canonical role before route evaluation; spec-silent roles are denied.
