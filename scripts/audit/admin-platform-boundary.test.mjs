@@ -130,6 +130,20 @@ test("apps/admin app shell and runtime assets exist", async () => {
   }
 });
 
+test("apps/admin payment credential routes delegate to same-origin handlers", async () => {
+  const csrf = await readFile(join(adminRoot, "app/api/auth/csrf/route.ts"), "utf8");
+  const credentials = await readFile(
+    join(adminRoot, "app/api/platform/payment-gateways/[configId]/credentials/route.ts"),
+    "utf8",
+  );
+
+  assert.match(csrf, /export\s*\{\s*GET\s*\}\s*from\s*["']@\/app\/api\/auth\/csrf\/route["']/);
+  assert.match(
+    credentials,
+    /export\s*\{\s*POST\s*,\s*runtime\s*\}\s*from\s*["']@\/app\/api\/platform\/payment-gateways\/\[configId\]\/credentials\/route["']/,
+  );
+});
+
 test("apps/admin reuses shared sources instead of copying them", async () => {
   const tsconfig = JSON.parse(await readFile(join(adminRoot, "tsconfig.json"), "utf8"));
   const aliases = tsconfig.compilerOptions.paths;
