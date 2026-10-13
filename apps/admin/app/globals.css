@@ -15,4 +15,4 @@
 
 @source "../../web/platform";
 @source "../../web/shared";
-@source "../../packages/ui/src";
+@source "../../../packages/ui/src";

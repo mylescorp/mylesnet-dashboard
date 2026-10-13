@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readdir, readFile, stat } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -19,6 +20,13 @@ const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 const webRoot = join(repoRoot, "apps/web");
 const adminRoot = join(repoRoot, "apps/admin");
 const panelRoutes = "app/(panels)/platform";
+
+/** Tailwind `@source` directives in globals.css, relative to that file. */
+const tailwindSources = [
+  "../../web/platform",
+  "../../web/shared",
+  "../../../packages/ui/src",
+];
 
 const mirroredFiles = [
   "app/(panels)/auth/callback/route.ts",
@@ -39,22 +47,47 @@ const mirroredFiles = [
 
 const toPosix = (path) => path.split(sep).join("/");
 
-async function walkFiles(directory) {
+/**
+ * File paths under `directory`, relative to `directory`, sorted. Recursion
+ * carries the original `base` so nested files keep their parent directories
+ * (two nested `page.tsx` files must not collapse into one entry).
+ */
+export async function walkFiles(directory, base = directory) {
   const files = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const full = join(directory, entry.name);
-    if (entry.isDirectory()) files.push(...(await walkFiles(full)));
-    else files.push(relative(directory, full));
+    if (entry.isDirectory()) files.push(...(await walkFiles(full, base)));
+    else files.push(toPosix(relative(base, full)));
   }
-  return files.map(toPosix).sort();
+  return files.sort();
 }
+
+test("walkFiles preserves nested route paths", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "admin-boundary-"));
+  try {
+    await mkdir(join(directory, "organizations/[id]/markets"), { recursive: true });
+    await writeFile(join(directory, "page.tsx"), "");
+    await writeFile(join(directory, "organizations/[id]/markets/page.tsx"), "");
+
+    assert.deepEqual(await walkFiles(directory), [
+      "organizations/[id]/markets/page.tsx",
+      "page.tsx",
+    ]);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 test("apps/admin mirrors the shipped platform route tree", async () => {
   const web = await walkFiles(join(webRoot, panelRoutes));
   const admin = await walkFiles(join(adminRoot, panelRoutes));
 
   assert.ok(web.length >= 24, `expected the full platform route tree, found ${web.length} files`);
-  assert.ok(web.includes("page.tsx"), "platform route tree must include the panel root page");
+  assert.equal(new Set(web).size, web.length, "route paths must stay unique");
+  assert.ok(
+    web.includes("organizations/[id]/markets/page.tsx"),
+    "nested platform routes must keep their full path",
+  );
   assert.deepEqual(admin, web, "apps/admin must serve exactly the platform routes apps/web serves");
 });
 
@@ -68,13 +101,13 @@ test("apps/admin platform routes cannot silently diverge from apps/web", async (
   }
 });
 
-test("apps/admin auth routes, layouts and proxy mirror apps/web", async () => {
+test("apps/admin auth routes, layouts, proxy and assets mirror apps/web", async () => {
   for (const file of mirroredFiles) {
     const [web, admin] = await Promise.all([
-      readFile(join(webRoot, file), "utf8"),
-      readFile(join(adminRoot, file), "utf8"),
+      readFile(join(webRoot, file)),
+      readFile(join(adminRoot, file)),
     ]);
-    assert.equal(admin, web, `${file} differs between apps/web and apps/admin`);
+    assert.ok(admin.equals(web), `${file} differs between apps/web and apps/admin`);
   }
 });
 
@@ -110,14 +143,21 @@ test("apps/admin reuses shared sources instead of copying them", async () => {
 });
 
 test("apps/admin declares the Tailwind sources it reuses", async () => {
-  const css = await readFile(join(adminRoot, "app/globals.css"), "utf8");
+  const globalsCss = join(adminRoot, "app/globals.css");
+  const css = await readFile(globalsCss, "utf8");
 
   assert.match(
     css,
     /@import\s+"\.\.\/\.\.\/web\/app\/globals\.css"/,
     "globals.css must reuse the web token and shell stylesheet",
   );
-  for (const source of ["../../web/platform", "../../web/shared", "../../packages/ui/src"]) {
+  for (const source of tailwindSources) {
     assert.ok(css.includes(`@source "${source}"`), `globals.css must declare @source "${source}"`);
+    // The directive is resolved relative to globals.css, so a wrong relative
+    // depth silently scans nothing instead of failing the build.
+    await assert.doesNotReject(
+      stat(join(adminRoot, "app", source)),
+      `@source "${source}" must resolve to a real directory`,
+    );
   }
 });
