@@ -16,6 +16,7 @@ export function PlatformAnalytics() {
     <section className="pf-panel"><p className="pf-hint">Choose a shorter period to view complete totals. The period ending today will stay the same.</p><button type="button" className="primary-button" onClick={() => setDays(dashboard.suggestedDays)}>Use the last {dashboard.suggestedDays} days</button></section>
   </main>;
   const series = dashboard.series;
+  const periodLabel = `${dashboard.days}-day`;
   const width = 640;
   const height = 180;
   const minimum = Math.min(...series.map(row => row.revenueUSD), 0);
@@ -27,10 +28,10 @@ export function PlatformAnalytics() {
   }).join(" ");
 
   return <main className="workspace-page">
-    <header className="page-heading"><div><p className="eyebrow">Platform insights</p><h1 className="page-title">Platform analytics</h1><p className="page-subtitle">Cross-tenant rollup of recorded market snapshots for the last 30 days.</p></div></header>
+    <header className="page-heading"><div><p className="eyebrow">Platform insights</p><h1 className="page-title">Platform analytics</h1><p className="page-subtitle">Cross-tenant rollup of recorded market snapshots for the last {dashboard.days} days.</p></div></header>
     <p className="pf-hint">Revenue is converted to USD by each market’s daily snapshot. Uptime is an unweighted average of markets that reported a value. Missing uptime and alert fields are shown as unavailable rather than zero. This view contains aggregates only; it does not rank individual tenants or markets.</p>
     <section className="metric-grid" aria-label="Platform analytics summary">
-      <Metric label="30-day revenue" value={money(dashboard.totals.revenueUSD)} detail="Recorded market snapshots, USD" />
+      <Metric label={`${periodLabel} revenue`} value={money(dashboard.totals.revenueUSD)} detail="Recorded market snapshots, USD" />
       <Metric label="Sales" value={dashboard.totals.salesCount.toLocaleString("en-US")} detail="Recorded across the shown period" />
       <Metric label="New subscribers" value={dashboard.totals.newSubscribers.toLocaleString("en-US")} detail="Recorded across the shown period" />
       <Metric label="Latest reported uptime" value={dashboard.totals.averageReportedUptime === null ? "—" : `${dashboard.totals.averageReportedUptime}%`} detail={`${dashboard.totals.marketsReporting} markets reporting on ${dashboard.totals.latestSnapshotDate ?? "no date"}`} />
