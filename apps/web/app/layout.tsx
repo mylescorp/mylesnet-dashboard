@@ -21,7 +21,9 @@ const themeScript = `(function() {
       if (legacy === 'light' || legacy === 'dark' || legacy === 'system') {
         stored = legacy;
         document.cookie = '__mylesnet_theme=' + legacy + '; Path=/; Max-Age=31536000; Secure; SameSite=Lax';
-        localStorage.removeItem('mylesnet-dashboard-theme');
+        if (document.cookie.split('; ').some((cookie) => cookie === '__mylesnet_theme=' + legacy)) {
+          localStorage.removeItem('mylesnet-dashboard-theme');
+        }
       }
     } catch {}
   }

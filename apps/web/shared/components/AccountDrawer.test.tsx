@@ -64,6 +64,7 @@ beforeEach(() => {
   currentUser = makeUser();
   mockSignOut.mockReset();
   window.localStorage.clear();
+  document.cookie = "__mylesnet_theme=; Path=/; Max-Age=0; Secure; SameSite=Lax";
   Object.defineProperty(window, "matchMedia", {
     writable: true,
     value: jest.fn().mockImplementation((query: string) => ({
@@ -146,6 +147,16 @@ describe("AccountDrawer", () => {
     expect(readStoredThemeMode()).toBe("dark");
     expect(cookieSetter).toHaveBeenCalledWith(expect.stringContaining("__mylesnet_theme=dark"));
     expect(window.localStorage.getItem("mylesnet-dashboard-theme")).toBeNull();
+
+    cookieSetter.mockRestore();
+  });
+
+  it("keeps the previous explicit theme preference when the browser rejects cookies", () => {
+    window.localStorage.setItem("mylesnet-dashboard-theme", "dark");
+    const cookieSetter = jest.spyOn(Document.prototype, "cookie", "set").mockImplementation(() => {});
+
+    expect(readStoredThemeMode()).toBe("dark");
+    expect(window.localStorage.getItem("mylesnet-dashboard-theme")).toBe("dark");
 
     cookieSetter.mockRestore();
   });

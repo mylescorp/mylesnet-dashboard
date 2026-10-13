@@ -304,6 +304,7 @@
   --sb-w-collapsed: var(--mn-sidebar-w-collapsed);
   --tb-h: var(--mn-topbar-h);
   --page-gutter: var(--mn-shell-padding);
+  --page-padding-block: var(--mn-space-7);
   --landing-container: var(--mn-landing-container);
   --focus-ring: var(--mn-focus);
   --font-ui: var(--mn-font-sans);

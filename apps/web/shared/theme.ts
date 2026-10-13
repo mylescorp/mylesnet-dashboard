@@ -9,9 +9,10 @@ const getServerMode = (): ThemeMode => "system";
 const COOKIE_NAME = "__mylesnet_theme";
 const LEGACY_STORAGE_KEY = "mylesnet-dashboard-theme";
 
-function persistMode(mode: ThemeMode) {
+function persistMode(mode: ThemeMode): boolean {
   // The theme cookie is intentionally readable by client code for pre-paint theme selection.
   document.cookie = `${COOKIE_NAME}=${mode}; Path=/; Max-Age=31536000; Secure; SameSite=Lax`;
+  return document.cookie.split("; ").some((cookie) => cookie === `${COOKIE_NAME}=${mode}`);
 }
 
 function getStoredMode(): ThemeMode {
@@ -21,8 +22,7 @@ function getStoredMode(): ThemeMode {
   try {
     const legacy = window.localStorage.getItem(LEGACY_STORAGE_KEY);
     if (legacy === "light" || legacy === "dark" || legacy === "system") {
-      persistMode(legacy);
-      window.localStorage.removeItem(LEGACY_STORAGE_KEY);
+      if (persistMode(legacy)) window.localStorage.removeItem(LEGACY_STORAGE_KEY);
       return legacy;
     }
   } catch {
