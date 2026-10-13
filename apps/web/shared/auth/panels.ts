@@ -4,8 +4,13 @@ import { requireUser, type AuthSession } from "./session";
 
 export type PanelName = ProtectedPanel;
 
-/** Server-only entry gate. Convex remains the authority for every data call. */
-export async function requirePanelAccess(panel: PanelName): Promise<void> {
+/**
+ * Server-only entry gate. Convex remains the authority for every data call.
+ *
+ * Returns the validated session so panels that carry a session policy can use
+ * the same identity without decoding the token again.
+ */
+export async function requirePanelAccess(panel: PanelName): Promise<AuthSession> {
   let session: AuthSession;
   try {
     session = await requireUser();
@@ -23,4 +28,6 @@ export async function requirePanelAccess(panel: PanelName): Promise<void> {
       (panel === "partner" && process.env.NEXT_PUBLIC_ENABLE_PARTNER_PANEL !== "true")) {
     redirect("/no-access?reason=panel_not_enabled");
   }
+
+  return session;
 }

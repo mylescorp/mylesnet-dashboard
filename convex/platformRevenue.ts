@@ -2,9 +2,10 @@ import { v } from "convex/values";
 import { internalMutation, query } from "./_generated/server";
 import type { QueryCtx } from "./_generated/server";
 import { requirePlatformSubRole } from "./lib/auth";
+import { PLATFORM_REVENUE_READ_SUB_ROLES } from "./lib/platformAccess";
 import { calculatePlatformRevenue, DEFAULT_PLATFORM_PLANS } from "./lib/platformRevenueCore";
 
-const readers = ["platform_super_admin", "platform_finance", "platform_readonly"];
+const readers = PLATFORM_REVENUE_READ_SUB_ROLES;
 
 async function currentRollup(ctx: QueryCtx) {
   const [tenants, entitlements, catalog] = await Promise.all([

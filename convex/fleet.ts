@@ -4,6 +4,7 @@ import { query, mutation } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requirePlatformSubRole } from "./lib/auth";
+import { PLATFORM_FLEET_READ_SUB_ROLES, PLATFORM_OPERATE_SUB_ROLES } from "./lib/platformAccess";
 import { logAudit } from "./lib/auditLog";
 import {
   buildFleetRow,
@@ -13,8 +14,8 @@ import {
 import { isValidFirmwareLabel } from "./lib/provisioningCore";
 import { canTenantOperate } from "./lib/tenantCore";
 
-const readers = ["platform_super_admin", "platform_ops", "platform_support", "platform_readonly"];
-const managers = ["platform_super_admin", "platform_ops"];
+const readers = PLATFORM_FLEET_READ_SUB_ROLES;
+const managers = PLATFORM_OPERATE_SUB_ROLES;
 
 async function assertMarketReady(ctx: MutationCtx, marketId: Id<"markets">) {
   const market = await ctx.db.get(marketId);

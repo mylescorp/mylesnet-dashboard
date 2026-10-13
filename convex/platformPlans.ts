@@ -3,11 +3,12 @@ import { mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requirePlatformSubRole } from "./lib/auth";
+import { PLATFORM_FINANCE_SUB_ROLES, PLATFORM_READ_SUB_ROLES } from "./lib/platformAccess";
 import { logAudit } from "./lib/auditLog";
 import { DEFAULT_PLATFORM_PLANS } from "./lib/platformRevenueCore";
 
-const readers = ["platform_super_admin", "platform_ops", "platform_finance", "platform_support", "platform_readonly"];
-const managers = ["platform_super_admin", "platform_finance"];
+const readers = PLATFORM_READ_SUB_ROLES;
+const managers = PLATFORM_FINANCE_SUB_ROLES;
 const codePattern = /^[a-z][a-z0-9_-]{1,39}$/;
 
 async function ensureDefaultPlans(ctx: MutationCtx, userId: Id<"users">) {

@@ -4,6 +4,7 @@ import { MutationCtx, internalMutation, internalQuery } from "./_generated/serve
 import { BOOTSTRAP_TENANT_SLUG } from "./lib/tenant.ts";
 import { selectBootstrapOwner } from "./lib/tenantCore.ts";
 import { requirePlatformSubRoleForUser } from "./lib/auth.ts";
+import { PLATFORM_SUPER_ADMIN_SUB_ROLES } from "./lib/platformAccess.ts";
 import { logAudit } from "./lib/auditLog.ts";
 import {
   MAX_BACKFILL_AGENT_PAGE,
@@ -48,9 +49,7 @@ export const runTenantIdBackfill = internalMutation({
     // Explicit platform sub-role gate before reading the run or changing any
     // ownership. Internal mutations are server-only, so the actor is supplied by
     // the trusted caller and proven here.
-    const actor = await requirePlatformSubRoleForUser(ctx, args.actorUserId, [
-      "platform_super_admin",
-    ]);
+    const actor = await requirePlatformSubRoleForUser(ctx, args.actorUserId, PLATFORM_SUPER_ADMIN_SUB_ROLES);
     const runId = TENANT_BACKFILL_RUN_ID;
     const tables: readonly TenantBackfillTable[] = TENANT_BACKFILL_TABLE_ORDER;
     const batchSize = clampBatchSize(args.batchSize);
