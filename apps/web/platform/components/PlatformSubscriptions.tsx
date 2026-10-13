@@ -4,10 +4,12 @@ import { userFacingMessage } from "@/shared/lib/user-facing-error";
 
 import { useState } from "react";
 import { CreditCard } from "lucide-react";
-import { useMutation, useQuery } from "@/app/lib/convex";
-import { tenantControl, type PlatformTenant, type EntitlementStatus } from "@/lib/convex/tenantControl";
+import { useMutation } from "@/app/lib/convex";
+import { usePaginatedQuery } from "convex/react";
+import { tenantControl, type SubscriptionTenant, type EntitlementStatus } from "@/lib/convex/tenantControl";
 import { useUserProfile } from "@/shared/components/UserProfileContext";
 import { StatusPill, Field, TextInput } from "@/shared/components/ui";
+import { canManagePlatformTenants } from "@/platform/permissions";
 
 const entitlementTone: Record<EntitlementStatus, "success" | "warning" | "danger" | "neutral"> = {
   active: "success",
@@ -18,14 +20,14 @@ const entitlementTone: Record<EntitlementStatus, "success" | "warning" | "danger
 
 export function PlatformSubscriptions() {
   const { user } = useUserProfile();
-  const tenants = useQuery(tenantControl.listForPlatform, {});
+  const { results: tenants, status: tenantStatus, loadMore } = usePaginatedQuery(tenantControl.listSubscriptionsPage, {}, { initialNumItems: 50 });
   const setEntitlement = useMutation(tenantControl.setEntitlement);
-  const [editingTenant, setEditingTenant] = useState<PlatformTenant | null>(null);
+  const [editingTenant, setEditingTenant] = useState<SubscriptionTenant | null>(null);
   const [working, setWorking] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const canManage = user?.roles.some((role) => ["platform_owner", "platform_admin"].includes(role.slug));
+  const canManage = canManagePlatformTenants(user?.roles.map((role) => role.slug));
 
   return (
     <div className="workspace-page tenant-control-page">
@@ -41,10 +43,10 @@ export function PlatformSubscriptions() {
       {error ? <p className="platform-claim-message" role="alert">{error}</p> : null}
 
       <section className="pf-panel">
-        <div className="section-heading"><div><p className="eyebrow">Entitlements</p><h2>Tenant plans</h2></div><span className="section-count">{tenants?.length ?? 0} tenants</span></div>
-        {tenants === undefined ? <p className="pf-muted">Loading subscriptions…</p> : tenants.length === 0 ? <p className="pf-muted">No tenants have been registered yet.</p> : (
+        <div className="section-heading"><div><p className="eyebrow">Entitlements</p><h2>Tenant plans</h2></div><span className="section-count">{tenants.length} loaded</span></div>
+        {tenantStatus === "LoadingFirstPage" ? <p className="pf-muted">Loading subscriptions…</p> : tenants.length === 0 ? <p className="pf-muted">No tenants have been registered yet.</p> : (
           <div className="pf-table-wrap"><table className="pf-table"><thead><tr><th>Tenant</th><th>Slug</th><th>Plan</th><th>Entitlement status</th><th /></tr></thead><tbody>
-            {tenants.map((tenant: PlatformTenant) => (
+            {tenants.map((tenant: SubscriptionTenant) => (
               <tr key={tenant._id}>
                 <td><strong>{tenant.name}</strong><small className="table-subtext">{tenant.country}</small></td>
                 <td><code>{tenant.slug}</code></td>
@@ -56,13 +58,14 @@ export function PlatformSubscriptions() {
           </tbody></table></div>
         )}
       </section>
+      {tenantStatus === "CanLoadMore" || tenantStatus === "LoadingMore" ? <button type="button" className="secondary-button" disabled={tenantStatus === "LoadingMore"} onClick={() => loadMore(50)}>{tenantStatus === "LoadingMore" ? "Loading…" : "Load more tenants"}</button> : null}
 
       {editingTenant ? <EntitlementDialog tenant={editingTenant} onClose={() => setEditingTenant(null)} onSave={async (planId, status, dates) => { setError(null); setNotice(null); setWorking(true); try { await setEntitlement({ tenantId: editingTenant._id, planId, status, ...dates }); setNotice(`${editingTenant.name} entitlement was set to ${planId} · ${status}.`); setEditingTenant(null); } catch (caught) { setError(userFacingMessage(caught, "Entitlement could not be updated.")); } finally { setWorking(false); }} } working={working} /> : null}
     </div>
   );
 }
 
-type EntitlementDates = { startsAt?: number; expiresAt?: number; trialEndsAt?: number };
+type EntitlementDates = { startsAt?: number | null; expiresAt?: number | null; trialEndsAt?: number | null };
 
 function toLocalInput(ms: number): string {
   const d = new Date(ms);
@@ -70,11 +73,13 @@ function toLocalInput(ms: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function parseLocalInput(value: string): number | undefined {
-  return value ? new Date(value).getTime() : undefined;
+function parseLocalInput(value: string): number | null {
+  if (!value) return null;
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
 }
 
-function EntitlementDialog({ tenant, onClose, onSave, working }: { tenant: PlatformTenant; onClose: () => void; onSave: (planId: string, status: EntitlementStatus, dates: EntitlementDates) => Promise<void>; working: boolean }) {
+function EntitlementDialog({ tenant, onClose, onSave, working }: { tenant: SubscriptionTenant; onClose: () => void; onSave: (planId: string, status: EntitlementStatus, dates: EntitlementDates) => Promise<void>; working: boolean }) {
   const [planId, setPlanId] = useState(tenant.entitlement?.planId ?? "");
   const [status, setStatus] = useState<EntitlementStatus>(tenant.entitlement?.status ?? "trial");
   const [startsAt, setStartsAt] = useState(tenant.entitlement?.startsAt ? toLocalInput(tenant.entitlement.startsAt) : "");

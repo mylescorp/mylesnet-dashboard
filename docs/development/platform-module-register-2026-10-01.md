@@ -28,7 +28,7 @@ The status column records the supplied audit snapshot. Revalidate route, backend
 | A3 | Suspension/restoration `/platform/organizations/[id]/suspend`, `/restore` | SA CRUD; OPS CRU; FIN/SUP/RO R | Partial; canonical confirmation routes, audited lifecycle transitions, prior-state restoration; org-claim tenant resolution now denies unmapped/malformed scopes, and a server-side dashboard gate now calls the authenticated workspace query and invokes Next `forbidden()` for suspended tenants; authenticated HTTP 403 behavior, full API coverage, and RADIUS/billing/device cascade are not yet proven |
 | B1 | Device fleet `/platform/infrastructure/devices`, `/[id]` | SA/OPS CRUD; SUP/RO R; FIN — | Partial; route, registry, UI, exact role gates and cursor pagination added; telemetry ingestion is absent |
 | B2 | Provisioning `/platform/infrastructure/provisioning-queue` | SA CRUD; OPS CRU; others R | Partial; canonical route and review UI added, latest 200 rows only; no device-side provisioning integration |
-| B3 | RADIUS fleet `/platform/infrastructure/radius` | SA/OPS CRUD; others R | Not present |
+| B3 | RADIUS fleet `/platform/infrastructure/radius` | SA/OPS CRUD; others R | Partial; paginated registry, audited create/update/archive/restore, and role-gated metrics display exist; metrics ingestion and authenticated role coverage remain absent |
 | B4 | Policy templates `/platform/infrastructure/policy-templates` | SA/OPS CRUD; others R | Not present |
 | B5 | Health rollup `/platform/infrastructure/health` | SA/OPS RU; SUP/RO R; FIN — | Not present |
 | B6 | Firmware/config `/platform/infrastructure/firmware` | SA CRUD; OPS CRU; others R | Not present |
@@ -38,18 +38,18 @@ The status column records the supplied audit snapshot. Revalidate route, backend
 | C4 | Payment gateway `/platform/settings/payments` | SA CRUD; FIN U non-secret only; OPS — | Not present |
 | C5 | Reconciliation `/platform/billing/reconciliation` | SA/FIN CRUD; OPS R | Not present |
 | C6 | Session/billing anomalies `/platform/billing/anomalies` | SA RU; FIN R; OPS RU | Not present |
-| D1 | Agencies/resellers `/platform/agencies`, `/platform/resellers` | SA CRUD; OPS/FIN/SUP R | Not present |
-| D2 | Agency suspension `/platform/agencies/[id]/suspend` | SA CRUD; others R | Not present |
+| D1 | Agencies/resellers `/platform/agencies`, `/platform/resellers` | SA CRUD; OPS/FIN/SUP R | Partial; both paged registry routes and audited SA relationship CRUD exist; UI now denies spec-silent readonly roles to match Convex; authenticated access verification remains open |
+| D2 | Agency suspension `/platform/agencies/[id]/suspend` | SA CRUD; others R | Partial; audited suspend/restore flows propagate through descendant relationship links and tenant auth checks reject suspended chains; production authenticated cascade verification remains open |
 | D3 | Provisioning approvals `/platform/onboarding/approvals` | SA CRU; SUP R | Partial |
 | E1 | Commission ledger `/platform/commissions` | SA/FIN CRUD; OPS R | Partial |
 | E2 | Payouts `/platform/commissions/payouts`, `/[id]` | SA/FIN CRUD; OPS — | Partial |
-| E3 | Commission rates `/platform/commissions/rates` | SA/FIN CRUD | Not present |
+| E3 | Commission rates `/platform/commissions/rates` | SA/FIN CRUD | Partial; configuration CRUD and route/sidebar gates exist, and direct Convex reads now deny ops/support/readonly; referral accrual and payout integration remain absent |
 | F1 | Voucher monitor `/platform/vouchers/monitor` | SA/OPS RU; FIN R | Confirmed in snapshot |
 | F2 | Voucher packages `/platform/vouchers/packages` | SA/OPS CRUD | Partial |
 | G1 | Platform users and roles `/platform/access` | SA CRUD; others R, no self-elevation | Partial; full management and read-only summary unified on `/platform/access`; `/access` redirects there |
 | G2 | User directory `/platform/users/directory` | SA RU; SUP RU limited disable/reset; others R | Not present |
 | G3 | Roles `/platform/roles` | SA CRUD; others R | Partial |
-| G4 | Platform API keys `/platform/api-keys` | SA CRUD; OPS R; FIN — | Not present |
+| G4 | Platform API keys `/platform/api-keys` | SA CRUD; OPS R; FIN — | Partial; SA can issue/edit/revoke one-time tokens, OPS can list, only token digests are stored, and public projection omits credential/identity fields; currently only `organizations:read` is implemented |
 | H1 | Broadcast `/platform/communications` | SA CRUD; SUP CR with co-sign for all tenants | Partial |
 | H2 | SMS `/platform/communications/sms` | SA CRUD; SUP CR | Partial |
 | H3 | Email `/platform/communications/email` | SA CRUD; SUP CR | Not present |
@@ -109,3 +109,56 @@ Updated rollup: **2 Confirmed** (F1, K), **21 Partial**, **21 Not present**, **1
 4. Add telemetry ingestion to B1; add device-side provisioning execution for B2 only after the worker/device contract is established.
 5. Re-audit each remaining module ID on the checked-out branch with route, gate, UI, and test evidence.
 6. Keep all pre-existing local edits intact; reconcile the upstream-behind checkout before release.
+
+## 2026-10-10 RBAC and navigation recheck
+
+On branch `fix/platform-owner-access-rbac`, role/sidebar work now includes: a central route matrix taking precedence over stale per-link role arrays; fail-closed visibility for platform routes without an explicit matrix or fallback; Platform revenue linked at `/platform/billing`; and organization creation controls and route restricted to super-admin/ops. `platform_owner`, `platform_admin`, and the supported organization-scoped owner alias resolve to the super-admin scope. The organization creation form now invokes the existing provisioning action and collects the required administrator email instead of logging input and returning to the list.
+
+Verification on the isolated worktree: 41/41 repository tests pass, web typecheck passes, focused ESLint passes, and the full lint command exits successfully with 15 warnings (no errors). A production build remains unverified: Turbopack failed to bind an internal port in the sandbox; the webpack retry failed to parse TypeScript `--showConfig`. No authenticated browser test or deployment was performed. The `gh` credential is invalid and GitHub DNS failed, so these commits have not been pushed or reviewed by Greptile. The 2026-10-01 supplied status column above is a historical snapshot, not a current complete module audit.
+
+Next: continue per-module backend/UI/RBAC and integration audit; resolve the D3 client-provisioning request source from an approved workflow before changing signup semantics. The repo objective currently names additional E4 and I3 modules while the owner-provided canonical list contains 45 IDs; track this scope discrepancy explicitly and do not silently omit either requirement.
+
+## 2026-10-10 B4 policy-template integrity
+
+The policy-template create/edit form now starts without invented speed, session, device, access-type, or enabled-state defaults. Required speed and access type must be explicitly supplied. Empty optional values are omitted from Convex payloads instead of serialized as `undefined`; removed DNS example values that appeared as prefilled sample data. Extracted policy validation into a pure module and added coverage for its existing bounds and pairing rules. Added role-helper tests for tenant, plan, infrastructure, deletion, and white-label write scopes, including organization-scoped owner aliases. Backend/web typecheck passed, full lint completed with 0 errors and 11 existing warnings, and all 42 repository tests passed. B4 remains partial: authenticated route/role behavior, live template integration and downstream policy application are not verified.
+
+## 2026-10-10 server-side route RBAC pass
+
+Added `requirePlatformRouteAccess` backed by the same explicit route-to-sub-role matrix used by the sidebar. Applied it to platform access, audit, plan catalogue, feature flags, policy templates, organization list/detail/markets/lifecycle, security, white-label, subscriptions, support queue/detail/SLA, tenant aliases, user directory, voucher packages, and provisioning queue. Added explicit matrix entries for organization suspend/restore and `/platform/audit-log`. The matrix is now exported for tests that assert every registered route is visible to `platform_owner` and `platform_super_admin`; prior role-cell tests continue checking least-privilege visibility. Web typecheck and all 42 repo tests pass. Full lint reports 0 errors and 11 warnings; focused ESLint passes with one ignored-test-file warning. The web package's Jest wrapper fails to parse TypeScript `--showConfig`, so use the root `pnpm test` Node runner. This is route-level policy coverage, not authenticated browser or Convex integration evidence.
+
+## 2026-10-10 M1 system health initial implementation
+
+Added `/platform/health` with an explicit read-only role scope for all five platform sub-roles and linked it in the platform sidebar. Its reactive query confirms Convex reachability and summarizes bounded, payload-free WorkOS webhook delivery and queue samples; the page refreshes every 30 seconds. Vercel and external uptime are marked unmonitored because no provider integration exists. No environment/provider values or webhook bodies are returned. M1 remains **Partial** until Vercel and uptime monitoring are configured, authenticated roles are tested against a live backend, and deployment is verified. Web typecheck, direct Convex typecheck, 42/42 root tests, focused ESLint, full lint (0 errors, 11 existing warnings), and diff checks pass.
+
+## 2026-10-10 I2 effective SLA coverage
+
+The SLA query now returns effective Network, Billing, and Account targets, distinguishing built-in fallback values from configured overrides. The support role can inspect all three effective targets; only super-admin can add/update/delete overrides. The UI can configure from a fallback row and restore a category to its fallback. Validation and network-priority rules are now tested pure functions. Web and direct Convex typechecks passed, root suite passed 42/42, focused ESLint passed, full lint completed with 0 errors and 11 existing warnings, and diff checks passed. I2 remains partial until authenticated role behavior and deployed Convex persistence are verified.
+
+## 2026-10-10 C5 import input hardening
+
+Moved CSV parsing into the tested reconciliation core. Imports now enforce a 1 MB byte limit and 500-row limit, handle CRLF, quoted commas, escaped quotes, and UTF-8 BOMs, and reject malformed quotes, duplicate/missing headers, missing required values, and extra non-empty fields before mutation. Removed the fabricated payment-row placeholder from the UI. This is still manual evidence import and does not call payment providers or move funds. Parser tests, web and Convex typechecks, focused ESLint, root suite 42/42, full lint (0 errors, 11 existing warnings), and `git diff --check` pass. C5 remains partial pending authenticated role integration and deployed-data validation.
+
+
+## 2026-10-10 E3 commission-rate RBAC correction
+
+The page and sidebar already limited `/platform/commissions/rates` to super-admin and finance, but three Convex read queries also admitted `platform_ops`. Centralized the allowed role tuple and use it for all reads and writes, so direct calls now match the canonical matrix and fail closed for ops, support, and readonly. Added a regression test against the role tuple used by the Convex module. Targeted test, web typecheck, direct Convex typecheck, and `git diff --check` pass. E3 remains partial because accrual and payout integration is not implemented, and authenticated live-role verification is still outstanding.
+
+
+## 2026-10-10 B3 RADIUS fleet re-audit
+
+The checked-out branch contains `/platform/infrastructure/radius`, a paginated platform fleet registry with SA/OPS create, update, archive, and restore actions, audit records, and read-only views for finance/support/readonly roles. The screen explicitly marks uptime, latency, sessions, and authentication rates as unreported until trusted telemetry is integrated. B3 is therefore Partial, not absent or confirmed. This repository has no verified RADIUS telemetry source; do not populate these metrics with samples.
+
+
+## 2026-10-10 D1/D2 relationship oversight re-audit
+
+The branch has separate agency and reseller registry routes, paginated relationship reads, super-admin relationship create/update/archive, audit records, and role-gated lifecycle pages. Suspension/restoration updates descendant relationship links; tenant authentication denies access when any ancestor link is suspended. Bounded the tenant relationship-chain read to 101 rows and fail closed above the 100-link safety limit instead of collecting an unbounded index result. Added pure boundary tests for the limit. D1/D2 remain Partial pending authenticated cross-role and deployed cascade verification.
+
+
+## 2026-10-10 D1 partner registry UI authorization
+
+The agency/reseller component previously considered `platform_readonly` and `readonly` eligible readers even though D1 has no readonly grant and the Convex list query denies them. Moved its read/write checks to shared tested helpers: SA/OPS/FIN/SUP can read; only SA can manage. Route/sidebar matrix and backend gates already matched the canonical D1 rule. Focused RBAC and sidebar tests, web typecheck, focused ESLint, and diff checks pass. Authenticated browser/backend verification remains outstanding.
+
+
+## 2026-10-10 G4 API-key disclosure review
+
+The existing `/platform/api-keys` surface uses SA-only key mutations, SA/OPS list access, one-time token return, and digest-only storage. Extracted the public row projection and added a regression test proving token digest, creator identity, and revoker identity are not exposed by the list query. Scope is currently limited to `organizations:read`, so G4 remains Partial pending the approved API resource contract, authenticated role checks, and deployed verification.

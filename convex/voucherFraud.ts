@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { requirePlatformSubRole } from "./lib/auth";
+import { PLATFORM_OPERATE_SUB_ROLES, PLATFORM_VOUCHER_MONITOR_SUB_ROLES } from "./lib/platformAccess";
 import { logAudit } from "./lib/auditLog";
 import {
   assessRedemptions,
@@ -22,11 +23,7 @@ import {
 export const listRedemptionMonitor = query({
   args: { marketId: v.optional(v.id("markets")), limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    await requirePlatformSubRole(ctx, [
-      "platform_super_admin",
-      "platform_ops",
-      "platform_finance",
-    ]);
+    await requirePlatformSubRole(ctx, PLATFORM_VOUCHER_MONITOR_SUB_ROLES);
 
     const cap = Math.min(Math.max(args.limit ?? 50, 1), 100);
     let redeemed = await ctx.db
@@ -105,10 +102,7 @@ export const flagVoucher = mutation({
     reason: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const user = await requirePlatformSubRole(ctx, [
-      "platform_super_admin",
-      "platform_ops",
-    ]);
+    const user = await requirePlatformSubRole(ctx, PLATFORM_OPERATE_SUB_ROLES);
 
     const voucher = await ctx.db.get(args.voucherId);
     if (!voucher) throw new Error("Voucher not found");
@@ -132,6 +126,7 @@ export const flagVoucher = mutation({
       entityTable: "vouchers",
       entityId: args.voucherId,
       changedBy: user._id,
+      tenantId: voucher.tenantId ?? null,
       after: {
         fraudFlagStatus: args.fraudFlagStatus,
         reason: args.reason ?? undefined,

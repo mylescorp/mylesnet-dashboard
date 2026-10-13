@@ -9,6 +9,8 @@ import {
   isPanelHost,
   isValidTenantSlug,
   normalizeHost,
+  requestHostFromHeaders,
+  resolveMylesnetRequest,
   resolveMylesnetHost,
   tenantSlugFromHost,
 } from "./tenant.ts";
@@ -85,6 +87,48 @@ test("development hosts keep their port so the callback matches WorkOS redirects
   assert.equal(callbackUriForHost(resolveMylesnetHost("localhost"), "http:"), "http://localhost/auth/callback");
   // Non-development hosts never carry a port into the callback URI.
   assert.equal(callbackUriForHost(resolveMylesnetHost(`safaricom.${MYLESNET_PUBLIC_DOMAIN}:8443`)), `https://safaricom.${MYLESNET_PUBLIC_DOMAIN}/auth/callback`);
+});
+
+test("localhost tenant and reserved panel hosts keep the local port and protocol", () => {
+  const tenant = resolveMylesnetHost("alpha.localhost:3000", "localhost");
+  const panel = resolveMylesnetHost("admin.localhost:3000", "localhost");
+  assert.deepEqual(tenant, { kind: "tenant", hostname: "alpha.localhost", tenantSlug: "alpha", port: "3000" });
+  assert.deepEqual(panel, { kind: "panel", hostname: "admin.localhost", panel: "admin", port: "3000" });
+  assert.equal(callbackUriForHost(tenant, "http:"), "http://alpha.localhost:3000/auth/callback");
+  assert.equal(callbackUriForHost(panel, "http:"), "http://admin.localhost:3000/auth/callback");
+});
+
+test("request host prefers the incoming Host header over a framework fallback", () => {
+  assert.equal(requestHostFromHeaders(new Headers({ host: "alpha.localhost:3000" }), "localhost:3000"), "alpha.localhost:3000");
+  assert.equal(requestHostFromHeaders(new Headers(), "localhost:3000"), "localhost:3000");
+});
+
+test("request routing binds local callback and tenant cookie to the incoming host", () => {
+  const routing = resolveMylesnetRequest(
+    new Headers({ host: "alpha.localhost:3000", "x-forwarded-proto": "http" }),
+    "internal-proxy.local:3000",
+    "localhost",
+  );
+
+  assert.equal(routing.requestHost, "alpha.localhost:3000");
+  assert.equal(routing.redirectUri, "http://alpha.localhost:3000/auth/callback");
+  assert.equal(routing.tenantSlug, "alpha");
+});
+
+test("request protocol follows forwarded protocol locally while product hosts stay HTTPS", () => {
+  const local = resolveMylesnetRequest(
+    new Headers({ host: "alpha.localhost:3000", "x-forwarded-proto": "https" }),
+    "internal-proxy.local:3000",
+    "localhost",
+  );
+  const production = resolveMylesnetRequest(
+    new Headers({ host: `alpha.${MYLESNET_PUBLIC_DOMAIN}`, "x-forwarded-proto": "http" }),
+    "internal-proxy.local",
+  );
+
+  assert.equal(local.redirectUri, "https://alpha.localhost:3000/auth/callback");
+  assert.equal(production.redirectUri, `https://alpha.${MYLESNET_PUBLIC_DOMAIN}/auth/callback`);
+  assert.equal(production.tenantSlug, "alpha");
 });
 
 test("BOOTSTRAP_TENANT_SLUG matches the convex bootstrap fallback", () => {

@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { requirePlatformAdmin, requirePlatformUser } from "./lib/auth";
+import { requirePlatformAdmin, requirePlatformSubRole } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
 import type { Id } from "./_generated/dataModel";
 
@@ -99,6 +99,7 @@ export const computeLeaderboard = mutation({
       entityTable: "leaderboardSnapshots",
       entityId: args.snapshotDate,
       changedBy: user._id,
+      tenantId: null,
       after: { agentCount: rankings.length, snapshotDate: args.snapshotDate },
     });
 
@@ -112,7 +113,7 @@ export const getLeaderboard = query({
     marketId: v.optional(v.id("markets")),
   },
   handler: async (ctx, args) => {
-    await requirePlatformUser(ctx);
+    await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_readonly"]);
 
     if (args.snapshotDate) {
       let snapshots = await ctx.db
@@ -141,7 +142,7 @@ export const getLeaderboard = query({
 export const getLatestSnapshotDate = query({
   args: {},
   handler: async (ctx) => {
-    await requirePlatformUser(ctx);
+    await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_readonly"]);
     const latest = await ctx.db
       .query("leaderboardSnapshots")
       .order("desc")

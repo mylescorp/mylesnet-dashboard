@@ -28,6 +28,20 @@ crons.daily(
   {},
 );
 
+crons.daily(
+  "market analytics snapshot queue",
+  { hourUTC: 3, minuteUTC: 20 },
+  anyApi.dailySnapshots.enqueueMarketSnapshotPage,
+  { cursor: null },
+);
+
+crons.interval(
+  "retry platform membership access sync",
+  { minutes: 5 },
+  internal.platformUserAccessSync.retryPendingMembershipSyncs,
+  {},
+);
+
 // Scheduled report generation (daily digests + weekly/monthly exports).
 crons.daily(
   "scheduled report generation",
@@ -44,11 +58,11 @@ crons.hourly(
   {},
 );
 
-// Payout settlement sweep: approved -> processing after the confirmation window.
+// Finalize expired tenant deletion grace periods while preserving records for retention work.
 crons.hourly(
-  "payout settlement sweep",
-  { minuteUTC: 30 },
-  internal.payouts.autoAdvancePayouts,
+  "tenant deletion grace period sweep",
+  { minuteUTC: 40 },
+  internal.tenantControl.finalizeExpiredDeletions,
   {},
 );
 

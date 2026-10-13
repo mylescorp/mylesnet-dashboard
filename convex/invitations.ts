@@ -21,7 +21,7 @@ export const sendInvitation = action({
     expiresInDays: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const author = await ctx.runQuery(internal.invitationsInternal.getInvitationAuthor, { permission: "invitations:manage" });
+    const author = await ctx.runQuery(internal.invitationsInternal.getInvitationAuthor, {});
     const email = args.email.trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Enter a valid email address.");
     if (author.workosUserId === null) throw new Error("Your identity has not been synchronized.");
@@ -92,7 +92,7 @@ export const listInvitations = query({
 export const revokeInvitation = action({
   args: { invitationId: v.id("invitations") },
   handler: async (ctx, args) => {
-    const author = (await ctx.runQuery(internal.invitationsInternal.getInvitationAuthor, { permission: "invitations:manage" })) as {
+    const author = (await ctx.runQuery(internal.invitationsInternal.getInvitationAuthor, {})) as {
       userId: Id<"users">;
       workosUserId: string | null;
       primaryRoleName: string | null;

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { platformRevenue } from "@/shared/convex/platformRevenue";
 import { EmptyState, StatusPill } from "@/shared/components/ui";
 
-const money = (minor: number) => `KES ${(minor / 100).toLocaleString("en-KE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+const money = (minor: number) => `KES ${(minor / 100).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export function PlatformRevenue() {
   const dashboard = useQuery(platformRevenue.getDashboard, { days: 30 });

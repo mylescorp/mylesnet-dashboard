@@ -1,7 +1,13 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, type MutationCtx } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
 import { requireTenantPermission } from "./lib/auth";
 import { logAudit } from "./lib/auditLog";
+import {
+  findSamePayment,
+  normalizePaymentIdempotencyKey,
+  type PaymentIdempotencyKey,
+} from "./lib/paymentIdempotencyCore";
 
 export const list = query({
   args: {
@@ -63,6 +69,36 @@ export const get = query({
   },
 });
 
+/**
+ * Resolve the payment a submission should reuse, if one already exists. The
+ * index lookup is the fast path; a second lookup with the raw (untrimmed) key
+ * catches a row written before normalization, and `findSamePayment` confirms
+ * the match with a trimmed comparison inside the tenant.
+ */
+async function findExistingPayment(
+  ctx: MutationCtx,
+  tenantId: Id<"tenants">,
+  key: PaymentIdempotencyKey,
+): Promise<Id<"payments"> | null> {
+  const normalized = normalizePaymentIdempotencyKey(key);
+  const byKey = (gateway: string, reference: string) =>
+    ctx.db
+      .query("payments")
+      .withIndex("by_tenant_gateway_reference", (q) =>
+        q.eq("tenantId", tenantId).eq("gateway", gateway).eq("reference", reference),
+      )
+      .first();
+  const candidates: Doc<"payments">[] = [];
+  const canonical = await byKey(normalized.gateway, normalized.reference);
+  if (canonical) candidates.push(canonical);
+  if (normalized.gateway !== key.gateway || normalized.reference !== key.reference) {
+    const raw = await byKey(key.gateway, key.reference);
+    if (raw) candidates.push(raw);
+  }
+  const match = findSamePayment(candidates, { tenantId, ...key });
+  return match ? match._id : null;
+}
+
 export const create = mutation({
   args: {
     subscriberId: v.optional(v.id("subscribers")),
@@ -83,6 +119,20 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const { user, tenantId } = await requireTenantPermission(ctx, "payments:create");
 
+    // Idempotency: a retried submission (a double click, or a client retry after
+    // a timeout) must not record the same payment twice. Operators already treat
+    // (gateway, reference) as unique inside one tenant, so a matching row is
+    // returned instead of inserting a duplicate.
+    const idempotency = normalizePaymentIdempotencyKey({
+      gateway: args.gateway,
+      reference: args.reference,
+    });
+    const existingId = await findExistingPayment(ctx, tenantId, {
+      gateway: args.gateway,
+      reference: args.reference,
+    });
+    if (existingId) return existingId;
+
     const references = [args.subscriberId, args.invoiceId, args.planId];
     const [subscriber, invoice, plan] = await Promise.all(
       references.map((id) => (id ? ctx.db.get(id) : null)),
@@ -97,6 +147,8 @@ export const create = mutation({
 
     const id = await ctx.db.insert("payments", {
       ...args,
+      gateway: idempotency.gateway,
+      reference: idempotency.reference,
       tenantId,
       operatorId: user._id,
       createdAt: Date.now(),
@@ -108,7 +160,13 @@ export const create = mutation({
       entityTable: "payments",
       entityId: id,
       changedBy: user._id,
-      after: { amount: args.amount, currency: args.currency, gateway: args.gateway, reference: args.reference },
+      tenantId,
+      after: {
+        amount: args.amount,
+        currency: args.currency,
+        gateway: idempotency.gateway,
+        reference: idempotency.reference,
+      },
     });
 
     return id;
@@ -139,6 +197,21 @@ export const update = mutation({
       throw new Error("Payment not found");
     }
 
+    // Keep the idempotency key canonical. Normalize the stored pair, and refuse
+    // a change that would collide with another payment's key in this tenant.
+    if (updates.gateway !== undefined || updates.reference !== undefined) {
+      const normalized = normalizePaymentIdempotencyKey({
+        gateway: updates.gateway ?? payment.gateway,
+        reference: updates.reference ?? payment.reference,
+      });
+      const clash = await findExistingPayment(ctx, tenantId, normalized);
+      if (clash && clash !== id) {
+        throw new Error("Another payment already uses this gateway reference");
+      }
+      updates.gateway = normalized.gateway;
+      updates.reference = normalized.reference;
+    }
+
     await ctx.db.patch(id, {
       ...updates,
       updatedAt: Date.now(),
@@ -149,6 +222,7 @@ export const update = mutation({
       entityTable: "payments",
       entityId: id,
       changedBy: user._id,
+      tenantId,
       before: { status: payment.status },
       after: updates,
     });
@@ -185,6 +259,7 @@ export const refund = mutation({
       entityTable: "payments",
       entityId: args.id,
       changedBy: user._id,
+      tenantId,
       before: { status: payment.status },
       after: { status: "refunded", reason: args.reason },
     });

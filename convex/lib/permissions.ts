@@ -85,17 +85,34 @@ export type PermissionSlug = (typeof PERMISSIONS)[number]["slug"];
 
 export const ALL_PERMISSION_SLUGS: string[] = PERMISSIONS.map((permission) => permission.slug);
 
+/** The platform owner is the immutable full-access principal, even if a stale
+ * or incorrectly edited role row has lost one of its permission entries. */
+export function effectivePermissionsForRoles(
+  roles: Array<{ slug: string; permissions: string[] }>,
+): string[] {
+  if (roles.some((role) => role.slug === "platform_owner")) return [...ALL_PERMISSION_SLUGS];
+  return Array.from(new Set(roles.flatMap((role) => role.permissions)));
+}
+
+export function needsLegacyPlatformOwnerRecovery(roleSlugs: readonly string[], legacyRole: string | null | undefined): boolean {
+  return legacyRole === "platform_owner" && !roleSlugs.includes("platform_owner");
+}
+
 /**
  * Tenant workspace roles are evaluated only with an active, organization-bound
  * tenant membership. They are deliberately separate from platform roles: a
  * tenant administrator can run their own ISP workspace but can never obtain
  * MylesNet platform control-plane access through this mapping.
+ *
+ * `audit_log:read` is intentionally NOT excluded: the tenant-scoped audit
+ * query filters every row by the caller's resolved tenant, so a tenant admin
+ * sees only their own tenant's trail. The platform audit surfaces are gated
+ * separately by `requirePlatformUser`, not by this permission.
  */
 const TENANT_ADMIN_EXCLUDED_PERMISSIONS = new Set<string>([
   "roles:manage",
   "users:manage",
   "organizations:read",
-  "audit_log:read",
   "investors:read",
   "investors:manage",
 ]);
@@ -438,10 +455,20 @@ export const CUSTOM_ROLE_DEFAULT_RANK = 60;
  * unchanged so the caller can also pass literal slugs.
  */
 export const PLATFORM_SUB_ROLE_MAP: Record<string, string[]> = {
-  platform_super_admin: ["platform_owner", "platform_admin"],
+  // `platform_admin` is a legacy day-to-day administrator role, not the
+  // canonical super-admin role. Keep super-admin mutations owner-only.
+  platform_super_admin: ["platform_owner"],
   platform_ops: ["ops_manager"],
   platform_finance: ["finance_manager"],
   platform_support: ["platform_support"],
   platform_readonly: ["platform_readonly"],
 };
 
+/** Canonical roles allowed to read cross-tenant platform summaries. */
+export const PLATFORM_SUB_ROLE_READERS = [
+  "platform_super_admin",
+  "platform_ops",
+  "platform_finance",
+  "platform_support",
+  "platform_readonly",
+] as const;

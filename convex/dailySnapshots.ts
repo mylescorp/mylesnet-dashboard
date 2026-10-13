@@ -1,7 +1,47 @@
+import { anyApi, paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
-import { internalMutation, query } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { MutationCtx, internalAction, internalMutation, internalQuery, query } from "./_generated/server";
 import { requirePermission } from "./lib/auth";
+import { logAudit } from "./lib/auditLog";
 import { dayOf, localToUsd } from "./lib/finance";
+
+/** Page active markets and enqueue one bounded daily snapshot mutation per market. */
+export const listActiveMarketIdsPage = internalQuery({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    const page = await ctx.db.query("markets").withIndex("by_tenant").order("desc").paginate({
+      ...args.paginationOpts,
+      numItems: Math.max(1, Math.min(50, Math.floor(args.paginationOpts.numItems))),
+    });
+    return {
+      ...page,
+      page: page.page.filter(market => market.deletedAt === undefined && market.lifecycleStatus === "active").map(market => market._id),
+    };
+  },
+});
+
+/** Cursor-driven scheduler keeps nightly snapshot generation bounded by market page. */
+export const enqueueMarketSnapshotPage = internalAction({
+  args: { cursor: v.union(v.string(), v.null()), date: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const date = args.date ?? dayOf(Date.now() - 24 * 60 * 60 * 1000);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("Snapshot date must use YYYY-MM-DD");
+    const page = await ctx.runQuery(anyApi.dailySnapshots.listActiveMarketIdsPage, {
+      paginationOpts: { numItems: 50, cursor: args.cursor },
+    });
+    for (const marketId of page.page) {
+      await ctx.scheduler.runAfter(0, anyApi.dailySnapshots.buildDailySnapshot, { marketId, date });
+    }
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(0, anyApi.dailySnapshots.enqueueMarketSnapshotPage, {
+        cursor: page.continueCursor,
+        date,
+      });
+    }
+    return { scheduled: page.page.length, complete: page.isDone, date };
+  },
+});
 
 /**
  * Daily revenue & contribution snapshot (spec §25). Derived purely from the
@@ -15,7 +55,7 @@ function daysInMonth(date: string): number {
 }
 
 export const buildDailySnapshot = internalMutation({
-  args: { marketId: v.id("markets"), date: v.optional(v.string()) },
+  args: { marketId: v.id("markets"), date: v.optional(v.string()), actorUserId: v.optional(v.id("users")) },
   handler: async (ctx, args) => {
     const market = await ctx.db.get(args.marketId);
     if (!market) throw new Error("Market not found");
@@ -39,7 +79,7 @@ export const buildDailySnapshot = internalMutation({
     let salesCount = 0;
     let newSubscribers = 0;
     const perAgentValue = new Map<string, number>();
-    let topAgentId: string | null = null;
+    let topAgentId: Id<"agents"> | undefined;
     let topAgentValue = -1;
 
     for (const row of activity) {
@@ -66,6 +106,7 @@ export const buildDailySnapshot = internalMutation({
     const revenueUSD = await localToUsd(ctx, revenueLocal, market.currency, date);
 
     const row = {
+      tenantId: market.tenantId,
       marketId: args.marketId,
       date,
       revenueLocal,
@@ -74,7 +115,7 @@ export const buildDailySnapshot = internalMutation({
       newSubscribers,
       variableCostLocal,
       netContributionLocal: Math.round((revenueLocal - variableCostLocal) * 100) / 100,
-      topAgentId: topAgentId as never,
+      ...(topAgentId === undefined ? {} : { topAgentId }),
       currency: market.currency,
       createdAt: Date.now(),
     };
@@ -85,12 +126,38 @@ export const buildDailySnapshot = internalMutation({
       .first();
     if (existing) {
       await ctx.db.replace(existing._id, row);
+      await auditSnapshot(ctx, args.actorUserId, "dailySnapshots", existing._id, row);
       return { updated: true, id: existing._id, ...row };
     }
     const id = await ctx.db.insert("dailySnapshots", row);
+    await auditSnapshot(ctx, args.actorUserId, "dailySnapshots", id, row);
     return { updated: false, id, ...row };
   },
 });
+
+/**
+ * Audit a snapshot upsert when an actor is supplied. Cron-driven projections
+ * have no session actor and follow the repo precedent of system writes (for
+ * example platform revenue snapshots) without an audit entry; a user-driven
+ * run passes the acting user and is recorded on the sealed chain.
+ */
+async function auditSnapshot(
+  ctx: MutationCtx,
+  actorUserId: Id<"users"> | undefined,
+  table: string,
+  rowId: Id<"dailySnapshots">,
+  row: { tenantId?: Id<"tenants"> | null; marketId: Id<"markets">; date: string },
+): Promise<void> {
+  if (!actorUserId) return;
+  await logAudit(ctx, {
+    action: "snapshot.upsert",
+    entityTable: table,
+    entityId: rowId,
+    changedBy: actorUserId,
+    tenantId: row.tenantId ?? null,
+    after: { marketId: row.marketId, date: row.date },
+  });
+}
 
 export const getDailySnapshot = query({
   args: { marketId: v.id("markets"), date: v.optional(v.string()) },

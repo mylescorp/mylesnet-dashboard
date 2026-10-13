@@ -4,11 +4,16 @@ import { Doc } from "./_generated/dataModel";
 import {
   assertNotSelfApproval,
   requirePermission,
-  requirePlatformOwner,
-  requirePlatformUser,
+  requireTenantPermission,
+  requirePlatformSubRole,
+  resolveUserByIdentity,
+  resolveRoles,
 } from "./lib/auth";
-import { readTenantList } from "./lib/tenant";
+import { enforceTenantOnResource, readScopedTenant, readTenantList } from "./lib/tenant";
 import { logAudit } from "./lib/auditLog";
+import { paginationOptsValidator } from "convex/server";
+import { commissionTenantId } from "./lib/commissionScopeCore";
+import { assertCommissionCanBeDisputed } from "./lib/commissionDisputeCore";
 
 const DISPUTE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000; // 30 days, matches payout timeline
 
@@ -22,9 +27,34 @@ export const accrueCommission = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "commissions:manage");
+    if (!(args.amount > 0 && Number.isFinite(args.amount))) throw new Error("Commission amount must be positive.");
+    const agent = await ctx.db.get(args.agentId);
+    const market = await ctx.db.get(args.marketId);
+    if (!agent || !market) throw new Error("Agent or market is unavailable.");
+    const voucher = args.voucherId ? await ctx.db.get(args.voucherId) : null;
+    if (args.voucherId && !voucher) throw new Error("Voucher is unavailable.");
+    const scope = await readScopedTenant(ctx);
+    await enforceTenantOnResource(ctx, agent, "agent");
+    await enforceTenantOnResource(ctx, market, "market");
+    if (voucher) {
+      await enforceTenantOnResource(ctx, voucher, "voucher");
+      if (voucher.marketId !== args.marketId) throw new Error("Voucher is outside the selected market.");
+    }
+    const activeAssignment = await ctx.db
+      .query("agentMarketAssignments")
+      .withIndex("by_agent_status", (q) => q.eq("agentId", args.agentId).eq("assignmentStatus", "active"))
+      .filter((q) => q.eq(q.field("marketId"), args.marketId))
+      .first();
+    const tenantId = commissionTenantId({
+      agentTenantId: agent.tenantId,
+      marketTenantId: market.tenantId,
+      activeAssignmentMatches: activeAssignment !== null,
+      authenticatedTenantId: scope.enforced ? scope.tenantId : undefined,
+    });
     const now = Date.now();
 
     const commissionId = await ctx.db.insert("commissions", {
+      tenantId,
       agentId: args.agentId,
       marketId: args.marketId,
       voucherId: args.voucherId,
@@ -41,6 +71,7 @@ export const accrueCommission = mutation({
       entityTable: "commissions",
       entityId: commissionId,
       changedBy: user._id,
+      tenantId: tenantId ?? null,
       after: { amount: args.amount, agentId: args.agentId },
     });
 
@@ -55,9 +86,11 @@ export const requestCommissionPayout = mutation({
     payoutMethod: v.union(v.literal("mpesa"), v.literal("airtel_money"), v.literal("bank_transfer")),
   },
   handler: async (ctx, args) => {
-    const user = await requirePlatformUser(ctx);
+    const { user } = await requireTenantPermission(ctx, "commissions:manage");
     const commission = await ctx.db.get(args.commissionId);
     if (!commission) throw new Error("Commission not found");
+    await enforceTenantOnResource(ctx, commission, "commission");
+    const market = await ctx.db.get(commission.marketId);
 
     if (commission.payoutStatus !== "held") {
       throw new Error(`Cannot request payout from status "${commission.payoutStatus}"`);
@@ -77,6 +110,7 @@ export const requestCommissionPayout = mutation({
       entityTable: "commissions",
       entityId: args.commissionId,
       changedBy: user._id,
+      tenantId: commission.tenantId ?? market?.tenantId,
       after: { payoutMethod: args.payoutMethod },
     });
   },
@@ -91,8 +125,9 @@ export const approveCommissionPayout = mutation({
   args: { commissionId: v.id("commissions"), requestedByUserId: v.optional(v.id("users")) },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "commissions:manage");
-    const commission = await ctx.db.get(args.commissionId);
+    const commission = await enforceTenantOnResource(ctx, await ctx.db.get(args.commissionId), "commission");
     if (!commission) throw new Error("Commission not found");
+    const market = await ctx.db.get(commission.marketId);
     if (commission.payoutStatus !== "requested") {
       throw new Error(`Cannot approve payout from status "${commission.payoutStatus}"`);
     }
@@ -110,6 +145,7 @@ export const approveCommissionPayout = mutation({
       entityTable: "commissions",
       entityId: args.commissionId,
       changedBy: user._id,
+      tenantId: commission.tenantId ?? market?.tenantId,
     });
   },
 });
@@ -119,8 +155,9 @@ export const markCommissionProcessing = mutation({
   args: { commissionId: v.id("commissions") },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "commissions:manage");
-    const commission = await ctx.db.get(args.commissionId);
+    const commission = await enforceTenantOnResource(ctx, await ctx.db.get(args.commissionId), "commission");
     if (!commission) throw new Error("Commission not found");
+    const market = await ctx.db.get(commission.marketId);
     if (commission.payoutStatus !== "approved") {
       throw new Error(`Cannot process payout from status "${commission.payoutStatus}"`);
     }
@@ -132,6 +169,7 @@ export const markCommissionProcessing = mutation({
       entityTable: "commissions",
       entityId: args.commissionId,
       changedBy: user._id,
+      tenantId: commission.tenantId ?? market?.tenantId,
     });
   },
 });
@@ -140,8 +178,9 @@ export const markCommissionPaid = mutation({
   args: { commissionId: v.id("commissions") },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "commissions:manage");
-    const commission = await ctx.db.get(args.commissionId);
+    const commission = await enforceTenantOnResource(ctx, await ctx.db.get(args.commissionId), "commission");
     if (!commission) throw new Error("Commission not found");
+    const market = await ctx.db.get(commission.marketId);
     if (commission.payoutStatus !== "processing") {
       throw new Error(`Cannot mark paid from status "${commission.payoutStatus}"`);
     }
@@ -156,6 +195,7 @@ export const markCommissionPaid = mutation({
       entityTable: "commissions",
       entityId: args.commissionId,
       changedBy: user._id,
+      tenantId: commission.tenantId ?? market?.tenantId,
     });
   },
 });
@@ -164,20 +204,29 @@ export const markCommissionPaid = mutation({
 export const disputeCommission = mutation({
   args: { commissionId: v.id("commissions"), reason: v.string() },
   handler: async (ctx, args) => {
-    const user = await requirePlatformOwner(ctx);
+    const { user } = await requireTenantPermission(ctx, "commissions:manage");
+    const commission = await ctx.db.get(args.commissionId);
+    if (!commission) throw new Error("Commission not found");
+    const reason = args.reason.trim();
+    if (reason.length < 8 || reason.length > 500) throw new Error("Provide a dispute reason between 8 and 500 characters");
+    await enforceTenantOnResource(ctx, commission, "commission");
+    assertCommissionCanBeDisputed(commission.payoutStatus);
+    const market = await ctx.db.get(commission.marketId);
     await ctx.db.patch(args.commissionId, { payoutStatus: "disputed" });
     await logAudit(ctx, {
       action: "commission.dispute",
       entityTable: "commissions",
       entityId: args.commissionId,
       changedBy: user._id,
-      after: { reason: args.reason },
+      tenantId: commission.tenantId ?? market?.tenantId,
+      after: { reason },
     });
   },
 });
 
 export const listCommissionsByStatus = query({
   args: {
+    paginationOpts: paginationOptsValidator,
     payoutStatus: v.optional(
       v.union(
         v.literal("accrued"),
@@ -191,23 +240,49 @@ export const listCommissionsByStatus = query({
     ),
   },
   handler: async (ctx, args) => {
-    await requirePlatformUser(ctx);
-    let rows = await readTenantList<Doc<"commissions">>(ctx, {
-      all: () => ctx.db.query("commissions").collect(),
-      tenant: (tenantId) =>
-        ctx.db.query("commissions").withIndex("by_tenant", (q) => q.eq("tenantId", tenantId)).collect(),
-      legacy: () =>
-        ctx.db.query("commissions").withIndex("by_tenant", (q) => q.eq("tenantId", undefined)).collect(),
-    });
-    if (args.payoutStatus) rows = rows.filter((c) => c.payoutStatus === args.payoutStatus!);
-    return rows;
+    const actor = await resolveUserByIdentity(ctx);
+    if (!actor) throw new Error("Unauthenticated");
+    const roles = await resolveRoles(ctx, actor);
+    if (roles.some((role) => role.isPlatform)) {
+      await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_finance", "platform_ops"]);
+    } else {
+      await requirePermission(ctx, "commissions:read");
+    }
+    const scope = await readScopedTenant(ctx);
+    const paginationOpts = {
+      ...args.paginationOpts,
+      numItems: Math.max(1, Math.min(50, args.paginationOpts.numItems)),
+    };
+    const page = scope.enforced
+      ? args.payoutStatus
+        ? await ctx.db.query("commissions")
+            .withIndex("by_tenant_and_status_and_accruedAt", (q) => q.eq("tenantId", scope.tenantId!).eq("payoutStatus", args.payoutStatus!))
+            .order("desc")
+            .paginate(paginationOpts)
+        : await ctx.db.query("commissions")
+            .withIndex("by_tenant_and_accruedAt", (q) => q.eq("tenantId", scope.tenantId!))
+            .order("desc")
+            .paginate(paginationOpts)
+      : args.payoutStatus
+        ? await ctx.db.query("commissions")
+            .withIndex("by_status_and_accruedAt", (q) => q.eq("payoutStatus", args.payoutStatus!))
+            .order("desc")
+            .paginate(paginationOpts)
+        : await ctx.db.query("commissions")
+            .withIndex("by_accruedAt")
+            .order("desc")
+            .paginate(paginationOpts);
+    return {
+      ...page,
+      page: page.page,
+    };
   },
 });
 
 export const listCommissionsForAgent = query({
   args: { agentId: v.id("agents") },
   handler: async (ctx, args) => {
-    await requirePlatformUser(ctx);
+    await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_finance", "platform_ops"]);
     const rows = await readTenantList<Doc<"commissions">>(ctx, {
       all: () => ctx.db.query("commissions").collect(),
       tenant: (tenantId) =>
@@ -216,5 +291,37 @@ export const listCommissionsForAgent = query({
         ctx.db.query("commissions").withIndex("by_tenant", (q) => q.eq("tenantId", undefined)).collect(),
     });
     return rows.filter((c) => c.agentId === args.agentId);
+  },
+});
+
+export const listPlatformCommissionsPage = query({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_finance", "platform_ops"]);
+    const page = await ctx.db.query("commissions").withIndex("by_accruedAt").order("desc").paginate({
+      ...args.paginationOpts,
+      numItems: Math.max(1, Math.min(args.paginationOpts.numItems, 50)),
+    });
+    const pageRows = await Promise.all(page.page.map(async (commission) => {
+      const [agent, market] = await Promise.all([
+        ctx.db.get(commission.agentId),
+        ctx.db.get(commission.marketId),
+      ]);
+      return {
+        _id: commission._id,
+        agentName: agent?.name ?? "Agent unavailable",
+        marketName: market?.name ?? "Market unavailable",
+        amount: commission.amount,
+        currency: commission.currency,
+        payoutStatus: commission.payoutStatus,
+        isFinalSettlement: commission.isFinalSettlement,
+        accruedAt: commission.accruedAt,
+        disputeWindowEndsAt: commission.disputeWindowEndsAt,
+        requestedAt: commission.requestedAt ?? null,
+        approvedAt: commission.approvedAt ?? null,
+        paidAt: commission.paidAt ?? null,
+      };
+    }));
+    return { ...page, page: pageRows };
   },
 });

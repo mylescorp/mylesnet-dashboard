@@ -25,6 +25,12 @@ export type NavChild = {
 export type NavGroup = {
   title: string;
   children: NavChild[];
+  /** Cap the links shown in the desktop dropdown column; the rest stay
+   *  one click away behind a "View all" button. Mobile, footer, and sitemap keep
+   *  the full list — this only shortens the hover panel. */
+  maxVisible?: number;
+  /** Label for the reveal button when `maxVisible` hides items. */
+  moreLabel?: string;
 };
 
 export type NavSection = {
@@ -120,6 +126,8 @@ const resourceGroups: NavGroup[] = [
   { title: "Learn", children: learnChildren },
   {
     title: "Guides",
+    maxVisible: 4,
+    moreLabel: "View all guides",
     children: availableResources.filter((item) => inMeta(item, "Guide")).map(toNavChild),
   },
   {
@@ -187,6 +195,7 @@ export const companyChildren: NavChild[] = [
  * instead of taking a slot of their own.
  */
 export const NAV_SECTIONS: NavSection[] = [
+  { href: "/company", label: "Company", children: companyChildren },
   { href: "/product", label: "Product" },
   { href: "/features", label: "Features", children: featureChildren },
   { href: "/solutions", label: "Solutions", children: solutionChildren },
@@ -194,7 +203,6 @@ export const NAV_SECTIONS: NavSection[] = [
   { href: "/integrations", label: "Integrations" },
   { href: "/resources", label: "Resources", children: [...resourceChildren, ...resourceAside], groups: resourceGroups, aside: resourceAside },
   { href: "/security", label: "Security" },
-  { href: "/company", label: "Company", children: companyChildren },
 ];
 
 export type FooterColumn = {

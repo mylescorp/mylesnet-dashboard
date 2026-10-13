@@ -4,6 +4,7 @@ import { query, mutation } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requirePlatformSubRole } from "./lib/auth";
+import { PLATFORM_FLEET_READ_SUB_ROLES, PLATFORM_OPERATE_SUB_ROLES } from "./lib/platformAccess";
 import { logAudit } from "./lib/auditLog";
 import {
   buildFleetRow,
@@ -13,8 +14,8 @@ import {
 import { isValidFirmwareLabel } from "./lib/provisioningCore";
 import { canTenantOperate } from "./lib/tenantCore";
 
-const readers = ["platform_super_admin", "platform_ops", "platform_support", "platform_readonly"];
-const managers = ["platform_super_admin", "platform_ops"];
+const readers = PLATFORM_FLEET_READ_SUB_ROLES;
+const managers = PLATFORM_OPERATE_SUB_ROLES;
 
 async function assertMarketReady(ctx: MutationCtx, marketId: Id<"markets">) {
   const market = await ctx.db.get(marketId);
@@ -171,6 +172,7 @@ export const updateDeviceFleetRow = mutation({
       entityTable: "platformDevices",
       entityId: args.deviceId,
       changedBy: user._id,
+      tenantId: device.tenantId ?? null,
       before: { name: device.name, deviceKind: device.deviceKind, firmwareVersion: device.firmwareVersion, provisioningStatus: device.provisioningStatus },
       after: { name: name ?? device.name, deviceKind: deviceKind ?? device.deviceKind, firmwareVersion: args.firmwareVersion ?? device.firmwareVersion, provisioningStatus: args.provisioningStatus ?? device.provisioningStatus },
     });
@@ -178,12 +180,20 @@ export const updateDeviceFleetRow = mutation({
 });
 
 export const listMarketsForFleetManagement = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
     await requirePlatformSubRole(ctx, managers);
-    const [markets, tenants] = await Promise.all([ctx.db.query("markets").collect(), ctx.db.query("tenants").collect()]);
-    const tenantStatus = new Map(tenants.map(tenant => [tenant._id, tenant.status]));
-    return markets.filter(market => market.deletedAt === undefined && market.status !== "deleted" && (!market.tenantId || canTenantOperate(tenantStatus.get(market.tenantId)))).map(market => ({ _id: market._id, name: market.name, tenantId: market.tenantId ?? null }));
+    const page = await ctx.db.query("markets").withIndex("by_tenant").order("desc").paginate({
+      ...args.paginationOpts,
+      numItems: Math.max(1, Math.min(50, Math.floor(args.paginationOpts.numItems))),
+    });
+    const rows = await Promise.all(page.page.map(async market => {
+      if (market.deletedAt !== undefined || market.status === "deleted") return null;
+      const tenant = market.tenantId ? await ctx.db.get(market.tenantId) : null;
+      if (market.tenantId && (!tenant || !canTenantOperate(tenant.status))) return null;
+      return { _id: market._id, name: market.name, tenantId: market.tenantId ?? null };
+    }));
+    return { ...page, page: rows.filter((row): row is NonNullable<typeof row> => row !== null) };
   },
 });
 
@@ -218,7 +228,7 @@ export const registerDevice = mutation({
       createdAt: now,
       updatedAt: now,
     });
-    await logAudit(ctx, { action: "fleet.device_registered", entityTable: "platformDevices", entityId: deviceId, changedBy: user._id, after: { tenantId: market.tenantId, marketId: market._id, name, deviceKind, macAddress } });
+    await logAudit(ctx, { action: "fleet.device_registered", entityTable: "platformDevices", entityId: deviceId, changedBy: user._id, tenantId: market.tenantId ?? null, after: { tenantId: market.tenantId, marketId: market._id, name, deviceKind, macAddress } });
     return deviceId;
   },
 });
@@ -239,7 +249,7 @@ export const archiveDevice = mutation({
     if (!reason || reason.length > 500) throw new Error("Archive reason must be 1–500 characters");
     const now = Date.now();
     await ctx.db.patch(device._id, { deletedAt: now, deletedBy: user._id, deleteReason: reason, updatedAt: now });
-    await logAudit(ctx, { action: "fleet.device_archived", entityTable: "platformDevices", entityId: device._id, changedBy: user._id, before: { deletedAt: device.deletedAt }, after: { deletedAt: now, reason } });
+    await logAudit(ctx, { action: "fleet.device_archived", entityTable: "platformDevices", entityId: device._id, changedBy: user._id, tenantId: device.tenantId ?? null, before: { deletedAt: device.deletedAt }, after: { deletedAt: now, reason } });
   },
 });
 
@@ -252,6 +262,6 @@ export const restoreDevice = mutation({
     await assertMarketReady(ctx, device.marketId);
     const now = Date.now();
     await ctx.db.patch(device._id, { deletedAt: undefined, deletedBy: undefined, deleteReason: undefined, updatedAt: now });
-    await logAudit(ctx, { action: "fleet.device_restored", entityTable: "platformDevices", entityId: device._id, changedBy: user._id, before: { deletedAt: device.deletedAt }, after: { deletedAt: null } });
+    await logAudit(ctx, { action: "fleet.device_restored", entityTable: "platformDevices", entityId: device._id, changedBy: user._id, tenantId: device.tenantId ?? null, before: { deletedAt: device.deletedAt }, after: { deletedAt: null } });
   },
 });

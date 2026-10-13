@@ -9,13 +9,14 @@
   },
   "scripts": {
     "dev": "pnpm --filter @mylesnet/web run dev",
-    "build": "pnpm --filter @mylesnet/web run build",
+    "dev:admin": "pnpm --filter @mylesnet/admin run dev",
+    "build": "pnpm --filter @mylesnet/web run build && pnpm --filter @mylesnet/admin run build",
     "start": "pnpm --filter @mylesnet/web run start",
-    "lint": "pnpm --filter @mylesnet/web run lint",
-    "typecheck": "pnpm --filter @mylesnet/web run typecheck",
+    "lint": "pnpm --filter @mylesnet/web run lint && pnpm --filter @mylesnet/admin run lint",
+    "typecheck": "pnpm --filter @mylesnet/web run typecheck && pnpm --filter @mylesnet/admin run typecheck",
     "tokens:check": "pnpm --filter @mylesnet/web run tokens:check",
     "landing:check": "node scripts/check-landing-routes.mjs",
-    "test": "node --test convex/lib/*.test.ts apps/web/shared/**/*.test.ts",
+    "test": "node --test convex/lib/*.test.ts apps/web/shared/**/*.test.ts apps/web/platform/*.test.ts scripts/verify-greptile-five-of-five.test.mjs scripts/audit/*.test.mjs",
     "test:ui": "pnpm --filter @mylesnet/web run test"
   },
   "dependencies": {
@@ -32,6 +33,9 @@
     "overrides": {
       "source-map-js": "1.2.2",
       "sharp": "0.35.5"
+    },
+    "patchedDependencies": {
+      "next@16.3.8": "patches/next@16.3.8.patch"
     }
   }
 }

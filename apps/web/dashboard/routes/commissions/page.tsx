@@ -3,6 +3,7 @@
 import { userFacingMessage } from "@/shared/lib/user-facing-error";
 
 import { useState } from "react";
+import { usePaginatedQuery } from "convex/react";
 import { useMutation, useQuery } from "@/app/lib/convex";
 import { api } from "@/convex/_generated/api";
 import { StatusPill, EmptyState, Loading, ErrorNote, formatMoney, formatDate } from "@/shared/components/ui";
@@ -27,9 +28,10 @@ const tone: Record<string, "success" | "warning" | "danger" | "neutral"> = {
 export default function CommissionsPage() {
   const [now] = useState(() => Date.now());
   const [status, setStatus] = useState<(typeof STATUSES)[number]>("requested");
-  const commissions = useQuery(
+  const commissions = usePaginatedQuery(
     api.commissions.listCommissionsByStatus,
-    status === "all" ? {} : { payoutStatus: status as PayoutStatus }
+    status === "all" ? {} : { payoutStatus: status as PayoutStatus },
+    { initialNumItems: 50 },
   );
   const agents = useQuery(api.agents.listAgents, {});
   const markets = useQuery(api.markets.listMarkets, {});
@@ -45,7 +47,7 @@ export default function CommissionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  if (commissions === undefined || agents === undefined || markets === undefined) return <Loading />;
+  if (commissions.status === "LoadingFirstPage" || agents === undefined || markets === undefined) return <Loading />;
 
   const agentName = (id: string) => agents.find((a) => a._id === id)?.name ?? `#${String(id).slice(-6)}`;
   const marketName = (id: string) => markets.find((m) => m._id === id)?.name ?? `#${String(id).slice(-6)}`;
@@ -90,8 +92,8 @@ export default function CommissionsPage() {
       </div>
 
       <div className="pf-panel">
-        <h2>{status === "all" ? "All commissions" : `${STATUS_LABEL[status]} (${commissions.length})`}</h2>
-        {commissions.length === 0 ? (
+        <h2>{status === "all" ? "All commissions" : `${STATUS_LABEL[status]} (${commissions.results.length} loaded)`}</h2>
+        {commissions.results.length === 0 ? (
           <EmptyState title="Nothing here" body="No commissions in this bucket." />
         ) : (
           <div className="pf-table-wrap">
@@ -108,7 +110,7 @@ export default function CommissionsPage() {
                 </tr>
               </thead>
               <tbody>
-                {commissions.map((c) => (
+                {commissions.results.map((c) => (
                   <tr key={c._id}>
                     <td>
                       <strong>{agentName(c.agentId)}</strong>
@@ -200,8 +202,11 @@ export default function CommissionsPage() {
             </table>
           </div>
         )}
+        {commissions.status === "CanLoadMore" ? (
+          <button type="button" className="secondary-button" onClick={() => commissions.loadMore(50)}>Load more commissions</button>
+        ) : null}
+        {commissions.status === "LoadingMore" ? <p className="pf-hint">Loading more commissions…</p> : null}
       </div>
     </div>
   );
 }
-

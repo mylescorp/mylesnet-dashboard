@@ -2470,3 +2470,16 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
     animation-iteration-count: 1 !important;
   }
 }
+
+/* ===== Platform session policy (warning banner and expiry notice) ===== */
+.platform-session-banner { position: fixed; right: var(--space-4); bottom: var(--space-4); z-index: 60; display: flex; align-items: center; gap: var(--space-4); width: min(440px, calc(100vw - 2 * var(--space-4))); border: 1px solid color-mix(in srgb, var(--warning) 45%, var(--line)); border-radius: var(--radius-lg); background: var(--warning-bg); box-shadow: var(--shadow-lg); padding: var(--space-4); }
+.platform-session-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 13.5px; color: var(--text); }
+.platform-session-copy strong { font-weight: 800; }
+.platform-session-copy span { color: var(--muted); }
+.platform-session-action { flex: none; display: inline-flex; align-items: center; justify-content: center; border: 1px solid color-mix(in srgb, var(--primary-action) 40%, var(--line)); border-radius: var(--radius-field); background: var(--primary-action); color: var(--primary-action-foreground); padding: var(--space-2) var(--space-4); font-size: 13px; font-weight: 750; text-decoration: none; cursor: pointer; transition: background-color var(--duration-fast) var(--ease-out); }
+.platform-session-action:hover { background: var(--primary-action-hover); }
+.platform-session-overlay { position: fixed; inset: 0; z-index: 130; display: grid; place-items: center; padding: var(--space-6); background: color-mix(in srgb, var(--surface-inverse) 62%, transparent); backdrop-filter: blur(4px); }
+.platform-session-dialog { display: grid; gap: var(--space-3); width: min(100%, 420px); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-lg); padding: var(--space-6); }
+.platform-session-title { margin: 0; font-size: 18px; font-weight: 800; color: var(--text); }
+.platform-session-detail { margin: 0; font-size: 13.5px; color: var(--muted); }
+.platform-session-dialog .platform-session-action { justify-self: start; }

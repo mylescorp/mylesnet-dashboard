@@ -2,21 +2,25 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   assertNoClientOverride,
+  assertRelationshipScopeWithinLimit,
   assertTenantMatch,
   canTenantOperate,
   decideTenantAccess,
   isClientTenantOverride,
   isTenantActive,
   isTenantSuspended,
+  resolveTenantForIdentity,
   resolvedTenantOrNull,
   selectBootstrapOwner,
   tenantMembershipStatusFromWorkos,
 } from "./tenantCore.ts";
 
 test("tenant resolution denies an unresolved organization instead of selecting a bootstrap tenant", () => {
+  assert.equal(resolveTenantForIdentity(true, undefined), null);
+  assert.equal(resolveTenantForIdentity(true, null), null);
+  assert.equal(resolveTenantForIdentity(true, "tenant_from_org"), "tenant_from_org");
+  assert.equal(resolveTenantForIdentity(false, "legacy_bootstrap"), null);
   assert.equal(resolvedTenantOrNull(undefined), null);
-  assert.equal(resolvedTenantOrNull(null), null);
-  assert.equal(resolvedTenantOrNull("tenant_from_org"), "tenant_from_org");
 });
 
 test("bootstrapTenant owner selection refuses an empty or ownerless database before tenant creation", () => {
@@ -64,6 +68,12 @@ test("canTenantOperate blocks unverified provisioning and inactive lifecycles", 
   assert.equal(canTenantOperate("cancelled"), false);
   // Unset status (pre-backfill rows) must not cut off legacy behavior.
   assert.equal(canTenantOperate(undefined), true);
+});
+
+test("relationship scope guard permits the limit and denies an oversized bounded batch", () => {
+  assert.doesNotThrow(() => assertRelationshipScopeWithinLimit(100));
+  assert.throws(() => assertRelationshipScopeWithinLimit(101), /relationship scope exceeds safety limits/);
+  assert.throws(() => assertRelationshipScopeWithinLimit(-1), /relationship scope exceeds safety limits/);
 });
 
 test("assertNoClientOverride allows matching or absent client ids", () => {

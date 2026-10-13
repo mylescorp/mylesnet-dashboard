@@ -621,9 +621,11 @@ counts/data did not.
   `isValidTenantIdFormat`.
 - `convex/lib/tenantIsolationCore.ts` — denial catalogue
   (`DENIAL_CATALOGUE`, `denialReasonForTenantPair`, `expectationForScenario`).
-- `convex/tenantMigrations.ts` — `runTenantIdBackfill` **gated no-op stub**
-  (reports plan surface; NOT wired into crons; real backfill needs the review
-  queue signed off + `tenant.backfill` flag + confirmed prod deploy).
+- `convex/tenantMigrations.ts` — `runTenantIdBackfill` **gated bounded backfill**
+  (idempotent run `tenantid-backfill-001`; walks markets → market-derived tables
+  → agents, deriving ownership from the market and leaving ambiguous rows
+  unassigned per §B2; NOT wired into crons; runs only after the review queue is
+  signed off, the `tenant.backfill` flag is on, and the prod deploy is confirmed).
 
 ## Tests + gates
 
@@ -815,6 +817,23 @@ Routes: `/platform/feature-flags` (list + create/edit/delete),
 - **L2 audit hash chain deferred** by authorization: starts as its own deploy
   only after Batch 1 lands green. Option A only.
 
+## Platform MFA and session policy — 2026-10-12
+
+- **Decision (owner-approved; supersedes the 2026-09-14 module note and the 2026-10-08 "optional for every role" state):** MFA is mandatory for every platform role and is enforced fail-closed in every platform authorization gate. The mandatory set is derived from `SYSTEM_ROLES` entries with `isPlatform: true`, so all platform roles — including `member`, `market_manager`, `investor_viewer`, and `platform_readonly` — are covered and a new platform role cannot escape the gate. An explicitly removed factor denies even if a stale `mfaEnrolledAt` remains. Session policy is fixed: 30-minute inactivity timeout, warning at 25 minutes, 12-hour absolute session lifetime.
+- **Reason:** The owner-priority platform-to-production objective fixes these as release decisions. `convex/lib/mfa.ts` had been changed to optional-for-all-roles, contradicting `docs/auth/README.md`; the production plan flags this conflict as a Phase 0 exit criterion ("MFA policy has one approved source").
+- **Single source:** `convex/lib/mfa.ts` (policy core, derived from `convex/lib/permissions.ts`) and `docs/auth/README.md` (documentation); this entry records the approval. Shadow mode remains available only as an approved rollout transition.
+- **Scope:** MFA policy core, `convex/lib/auth.ts` enforcement across the platform gates, the platform-wide (cross-tenant) report path (`scheduledReports.canReadPlatformReports` and the platform branch of `scheduledReports.requireReportExportActor`; tenant-scoped report reads/exports are unchanged), enrollment removal clearing in `convex/platformUsers.syncWorkosIdentity`, and updated tests. Session enforcement code (client inactivity guard + server checks + warning banner) is the next Phase 0 task; its policy values are fixed here and in `docs/auth/README.md`.
+- **Verification:** `convex/lib/mfa.test.ts` asserts the mandatory set equals the registry's platform roles, covers fail-closed denial for unenrolled platform roles, non-blocking for tenant-only roles, explicit-removal denial with a stale timestamp, and shadow mode. Repository `node --test` (216/216), typecheck, lint, convex-tree `tsc`, and the production build pass.
+
+## Platform session enforcement — 2026-10-13
+
+- **Decision:** The session policy fixed on 2026-10-12 (30-minute inactivity timeout, warning at 25 minutes, 12-hour absolute lifetime) is now enforced. The values live in exactly one place, `PLATFORM_SESSION_POLICY` in `apps/web/shared/auth/sessionPolicy.ts`, imported by both enforcement halves. **Server:** the platform layout reads the sign-in time (`auth_time`) from the session returned by `requirePanelAccess("platform")` (now returning the session) and redirects to `/sign-out` once the 12-hour cap has elapsed, before any platform markup renders; `/sign-out` ends the WorkOS session and returns the visitor to sign-in, so enforcement holds without client JavaScript. **Browser:** `SessionGuard` (mounted by the platform layout) warns at 25 minutes, signs out at 30 minutes, and also applies the 12-hour cap in-page; activity is shared across tabs via `localStorage` keyed by the WorkOS `sessionId`, so an idle background tab is not signed out while another tab is active.
+- **Reason:** The 2026-10-12 entry fixed the values and named the client inactivity guard, server session checks, and warning banner as the next Phase 0 task; the production plan requires the policy to be enforced and proven, not only documented.
+- **Single source:** `apps/web/shared/auth/sessionPolicy.ts` (values + pure evaluation) drives `apps/web/shared/auth/platformSession.ts` (server cap) and `apps/web/shared/components/SessionGuard.tsx` (browser idle timeout + warning).
+- **Scope:** new pure policy module and node:test coverage; `requirePanelAccess` return value; platform layout server gate; `/sign-out` server route (`apps/web/shared/auth/routes/sign-out.ts` + thin stub); browser guard and jest coverage; notice styles in `globals.css`. No Convex schema, index, or function change.
+- **Verification:** repository `node --test` 229/229 (13 new `sessionPolicy` cases); web jest 25/25 (10 new `SessionGuard` cases); web typecheck; lint 0 errors (14 pre-existing warnings); design-token check; production build with a non-secret Convex URL placeholder.
+- **Review hardening (same change):** a page load counts as activity only while the stored activity is still inside the policy window, and activity arriving after the window has closed ends the session instead of extending it, so reopening or returning to an idle platform tab cannot resume or extend an expired session. A failed automatic sign-out clears the in-flight flag so the next check retries, and the modal expiry notice moves focus to its sign-in action and points that action at `/sign-out` (which ends the session) as a working recovery path.
+
 ## Platform Canonical Module Inventory - 2026-10-01
 
 - The owner-provided platform list A1–O2 is authoritative and tracked in `docs/development/platform-module-register-2026-10-01.md`. It contains 45 IDs, with C2 tenant SaaS invoices explicitly excluded (44 build modules). This supersedes the earlier 36-ID rollup. The supplied historical verification snapshot must be rechecked against current `main` before completion claims.
@@ -833,3 +852,10 @@ Routes: `/platform/feature-flags` (list + create/edit/delete),
 - Small accent text uses accent-hover in light mode because accent measures 4.47:1 on card and 3.92:1 on accent-bg. Accent-hover measures 5.77:1 and 5.07:1 on those surfaces. Dark accent measures 6.51:1 on card and 5.48:1 on accent-bg.
 - Keep CSS variables, typed exports, Tailwind mappings, and the vault design record synchronized from the JSON source.
 - Linear is not used for this project.
+
+## 2026-10-11 Canonical platform super-admin boundary
+
+- **Decision:** Only `platform_super_admin` and its concrete `platform_owner` role carry super-admin access. The legacy `platform_admin` role is not one of the five canonical sub-roles and must not inherit super-admin routes or writes. Organization-scoped WorkOS claims map to the corresponding canonical role before route evaluation; spec-silent roles are denied.
+- **Reason:** Sidebar visibility, server route guards, role management, platform user/invitation mutations, and Convex sub-role checks must enforce the same role matrix. Keeping `platform_admin` as a super-admin alias made the UI and backend inconsistent and granted access beyond the owner-defined matrix.
+- **Scope:** Apply the boundary to platform navigation and role-controlled platform workflows. Do not change the `platform_admin` role definition or its general non-platform permissions in this decision.
+- **Status:** Implemented in isolated worktree `fix/platform-owner-access-sync`; tests and type checks pass locally. Authenticated runtime proof and PR #81 Greptile review remain pending because GitHub authentication is currently invalid. See PR #81.

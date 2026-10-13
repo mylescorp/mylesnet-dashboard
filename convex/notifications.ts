@@ -85,6 +85,7 @@ export const updatePreference = mutation({
       entityTable: "notificationPreferences",
       entityId: user._id,
       changedBy: user._id,
+      tenantId: null,
       after: { category: args.category, channel: args.channel, enabled: args.enabled },
     });
   },

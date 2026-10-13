@@ -1,12 +1,15 @@
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
-import { Id } from "./_generated/dataModel";
+import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
+import type { QueryCtx } from "./_generated/server";
 import { logAudit } from "./lib/auditLog";
-import { requirePlatformAdmin, requirePlatformSubRole, requirePlatformUser, resolveRoles, resolveUserByIdentity } from "./lib/auth";
-import { PLATFORM_SUB_ROLE_MAP } from "./lib/permissions";
+import { requirePlatformSubRole, requirePlatformUser, resolveRoles, resolveUserByIdentity } from "./lib/auth";
+import { PLATFORM_SUB_ROLE_MAP, PLATFORM_SUB_ROLE_READERS } from "./lib/permissions";
 import { canTenantOperate, resolveTenantFromAuth } from "./lib/tenant";
 import { decideTenantLifecycleTransition } from "./lib/tenantLifecycleCore";
+import { subscriberBackfillStartState } from "./lib/subscriberBackfillCore";
 import {
   normalizeAutomatedTenantOnboarding,
   normalizeTenantRegistration,
@@ -27,6 +30,12 @@ const entitlementStatus = v.union(
   v.literal("suspended"),
 );
 
+const TENANT_DELETION_GRACE_PERIOD_MS = 30 * 24 * 60 * 60 * 1000;
+// A backfill reserved through `startSubscriberCountBackfill` that has not
+// progressed for this long is treated as abandoned (crashed runner or lost
+// scheduled function) and its lock is released so a fresh scan can run.
+const SUBSCRIBER_COUNT_BACKFILL_STALE_MS = 30 * 60 * 1000;
+
 type WorkspaceSetupReason =
   | "authentication_required"
   | "tenant_unconfigured"
@@ -43,7 +52,7 @@ type TenantWorkspaceResult =
           _id: Id<"tenants">;
           name: string;
           slug: string;
-          status: "provisioning" | "trial" | "active" | "suspended" | "cancelled";
+          status: "provisioning" | "trial" | "active" | "suspended" | "pending_deletion" | "cancelled";
           country: string;
           timezone: string;
           currency: string;
@@ -55,39 +64,311 @@ type TenantWorkspaceResult =
     }
   | { status: "setup_required"; reason: WorkspaceSetupReason };
 
+async function toPlatformTenant(ctx: QueryCtx, tenant: Doc<"tenants">) {
+  const [memberships, entitlement, markets] = await Promise.all([
+    ctx.db.query("tenantMemberships").withIndex("by_tenant_status", q => q.eq("tenantId", tenant._id).eq("status", "active")).take(501),
+    ctx.db.query("entitlements").withIndex("by_tenant", q => q.eq("tenantId", tenant._id)).order("desc").first(),
+    ctx.db.query("markets").withIndex("by_tenant_deletedAt", q => q.eq("tenantId", tenant._id).eq("deletedAt", undefined)).take(501),
+  ]);
+  const ownerMembership = memberships.find(membership => membership.status === "active" && membership.role === "tenant_admin");
+  const owner = ownerMembership ? await ctx.db.get(ownerMembership.userId) : null;
+  return {
+    _id: tenant._id,
+    name: tenant.name,
+    slug: tenant.slug,
+    country: tenant.country,
+    timezone: tenant.timezone,
+    currency: tenant.currency,
+    status: tenant.status,
+    scheduledDeletionAt: tenant.scheduledDeletionAt ?? null,
+    workosOrganizationId: tenant.workosOrganizationId ?? null,
+    membershipCount: memberships.length > 500 ? 500 : memberships.length,
+    membershipCountCapped: memberships.length > 500,
+    accountOwner: owner && owner.deletedAt === undefined && owner.isActive !== false ? { name: owner.name ?? null, email: owner.email ?? null } : null,
+    marketCount: markets.length > 500 ? 500 : markets.length,
+    marketCountCapped: markets.length > 500,
+    subscriberCount: tenant.subscriberCount ?? null,
+    entitlement: entitlement ? {
+      planId: entitlement.planId,
+      status: entitlement.status,
+      startsAt: entitlement.startsAt ?? null,
+      expiresAt: entitlement.expiresAt ?? null,
+      trialEndsAt: entitlement.trialEndsAt ?? null,
+    } : null,
+    createdAt: tenant.createdAt,
+  };
+}
+
+/**
+ * Populate a legacy tenant's denormalized subscriber total in bounded pages.
+ * Start once per existing tenant with an internal invocation after deployment.
+ * Subscriber create/archive/restore writes are paused for this tenant while
+ * the paginated scan runs. That gives every page one stable data set and
+ * prevents a stale final total from overwriting concurrent changes.
+ */
+export const backfillTenantSubscriberCount = internalMutation({
+  args: {
+    tenantId: v.id("tenants"),
+    actorUserId: v.id("users"),
+    runId: v.string(),
+    cursor: v.optional(v.union(v.string(), v.null())),
+    accumulatedCount: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const tenant = await ctx.db.get(args.tenantId);
+    if (!tenant) throw new Error("Tenant not found");
+    // Ignore delayed work from a released/restarted run. Each reservation has
+    // its own id so an old scheduled page cannot steal the new run's cursor.
+    if (!tenant.subscriberCountBackfillRunning || tenant.subscriberCountBackfillRunId !== args.runId) {
+      return { complete: false, subscriberCount: null, failed: true };
+    }
+
+    const releaseAndLogFailure = async (reason: string) => {
+      const latestTenant = await ctx.db.get(args.tenantId);
+      if (latestTenant?.subscriberCountBackfillRunning && latestTenant.subscriberCountBackfillRunId === args.runId) {
+        await ctx.db.patch(args.tenantId, {
+          subscriberCountBackfillRunning: false,
+          subscriberCountBackfillRunId: undefined,
+          subscriberCountBackfillStartedAt: undefined,
+          subscriberCountBackfillHeartbeatAt: undefined,
+        });
+        await logAudit(ctx, {
+          action: "tenant.subscriber_count_backfill_failed",
+          entityTable: "tenants",
+          entityId: args.tenantId,
+          changedBy: args.actorUserId,
+          tenantId: args.tenantId,
+          before: { backfillRunning: true },
+          after: {
+            backfillRunning: false,
+            reason,
+            resumeCursor: latestTenant.subscriberCountBackfillCursor ?? null,
+            savedProgress: latestTenant.subscriberCountBackfillProgress ?? 0,
+          },
+        });
+      }
+    };
+
+    try {
+      const page = await ctx.db
+        .query("subscribers")
+        .withIndex("by_tenant", (q) => q.eq("tenantId", args.tenantId))
+        .paginate({ numItems: 500, cursor: args.cursor ?? null });
+      const accumulatedCount = (args.accumulatedCount ?? 0) + page.page.filter((row) => row.deletedAt === undefined).length;
+      if (page.isDone) {
+        await ctx.db.patch(args.tenantId, {
+          subscriberCount: accumulatedCount,
+          subscriberCountBackfillRunning: false,
+          subscriberCountBackfillRunId: undefined,
+          subscriberCountBackfillStartedAt: undefined,
+          subscriberCountBackfillCursor: undefined,
+          subscriberCountBackfillProgress: undefined,
+          subscriberCountBackfillHeartbeatAt: undefined,
+        });
+        await logAudit(ctx, {
+          action: "tenant.subscriber_count_backfill_completed",
+          entityTable: "tenants",
+          entityId: args.tenantId,
+          changedBy: args.actorUserId,
+          tenantId: args.tenantId,
+          before: { subscriberCount: tenant.subscriberCount ?? null, backfillRunning: true },
+          after: { subscriberCount: accumulatedCount, backfillRunning: false },
+        });
+        return { complete: true, subscriberCount: accumulatedCount };
+      }
+      // Persist enough progress to resume (or at worst restart from the last
+      // good page) before scheduling the next page, and refresh the heartbeat
+      // so a stale lock can be recognized and released.
+      await ctx.db.patch(args.tenantId, {
+        subscriberCountBackfillCursor: page.continueCursor,
+        subscriberCountBackfillProgress: accumulatedCount,
+        subscriberCountBackfillHeartbeatAt: Date.now(),
+      });
+      try {
+        await ctx.scheduler.runAfter(0, internal.tenantControl.backfillTenantSubscriberCount, {
+          tenantId: args.tenantId,
+          actorUserId: args.actorUserId,
+          runId: args.runId,
+          cursor: page.continueCursor,
+          accumulatedCount,
+        });
+      } catch {
+        await releaseAndLogFailure("next page could not be scheduled");
+        return { complete: false, subscriberCount: null, failed: true };
+      }
+      await logAudit(ctx, {
+        action: "tenant.subscriber_count_backfill_progressed",
+        entityTable: "tenants",
+        entityId: args.tenantId,
+        changedBy: args.actorUserId,
+        tenantId: args.tenantId,
+        before: { backfillRunning: true },
+        after: { backfillRunning: true, accumulatedCount, resumeCursor: page.continueCursor },
+      });
+      return { complete: false, subscriberCount: null };
+    } catch {
+      // Keep the saved cursor/progress so a resumed scan continues from the
+      // last good page; the released lock lets a fresh start take over.
+      await releaseAndLogFailure("backfill step failed");
+      return { complete: false, subscriberCount: null, failed: true };
+    }
+  },
+});
+
+export const startSubscriberCountBackfill = mutation({
+  args: { tenantId: v.id("tenants") },
+  handler: async (ctx, args) => {
+    const actor = await requirePlatformSubRole(ctx, ["platform_super_admin"]);
+    const tenant = await ctx.db.get(args.tenantId);
+    if (!tenant || tenant.deletedAt !== undefined) throw new Error("Tenant not found");
+    const now = Date.now();
+    const heartbeatAt = tenant.subscriberCountBackfillHeartbeatAt ?? tenant.subscriberCountBackfillStartedAt ?? 0;
+    const stale = tenant.subscriberCountBackfillRunning === true && now - heartbeatAt > SUBSCRIBER_COUNT_BACKFILL_STALE_MS;
+    if (tenant.subscriberCountBackfillRunning && !stale) throw new Error("Subscriber count backfill is already running");
+    const runId = crypto.randomUUID();
+    const { cursor: resumeCursor, progress: resumeCount } = subscriberBackfillStartState(
+      stale,
+      tenant.subscriberCountBackfillCursor,
+      tenant.subscriberCountBackfillProgress,
+    );
+    await ctx.db.patch(tenant._id, {
+      subscriberCountBackfillRunning: true,
+      subscriberCountBackfillRunId: runId,
+      subscriberCountBackfillStartedAt: now,
+      subscriberCountBackfillHeartbeatAt: now,
+      // A stale run resumes its last committed page; a fresh run must never
+      // inherit progress left behind by an earlier failed attempt.
+      subscriberCountBackfillCursor: resumeCursor ?? undefined,
+      subscriberCountBackfillProgress: resumeCount,
+    });
+    await logAudit(ctx, {
+      action: stale ? "tenant.subscriber_count_backfill_restarted" : "tenant.subscriber_count_backfill_started",
+      entityTable: "tenants",
+      entityId: tenant._id,
+      changedBy: actor._id,
+      tenantId: tenant._id,
+      before: { subscriberCount: tenant.subscriberCount ?? null, backfillRunning: tenant.subscriberCountBackfillRunning ?? false, heartbeatAt },
+      after: { backfillRunning: true, resumedFromSavedProgress: stale, accumulatedCount: resumeCount },
+    });
+    try {
+      await ctx.scheduler.runAfter(0, internal.tenantControl.backfillTenantSubscriberCount, {
+        tenantId: tenant._id,
+        actorUserId: actor._id,
+        runId,
+        cursor: resumeCursor,
+        accumulatedCount: resumeCount,
+      });
+    } catch {
+      await ctx.db.patch(tenant._id, { subscriberCountBackfillRunning: false, subscriberCountBackfillRunId: undefined, subscriberCountBackfillStartedAt: undefined, subscriberCountBackfillHeartbeatAt: undefined });
+      throw new Error("Subscriber count recalculation could not be scheduled; retry later");
+    }
+    return { started: true };
+  },
+});
+
 /** Platform-only tenant estate inventory. It intentionally includes no tenant-owned records. */
-export const listForPlatform = query({
+/** Cursor-paged directory query; only the requested tenant page is joined. */
+export const listForPlatformPage = query({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    await requirePlatformSubRole(ctx, [...PLATFORM_SUB_ROLE_READERS]);
+    const page = await ctx.db.query("tenants").withIndex("by_createdAt").order("desc").paginate({
+      ...args.paginationOpts,
+      numItems: Math.max(1, Math.min(50, Math.floor(args.paginationOpts.numItems))),
+    });
+    return {
+      ...page,
+      page: await Promise.all(page.page.filter(tenant => tenant.deletedAt === undefined).map(tenant => toPlatformTenant(ctx, tenant))),
+    };
+  },
+});
+
+/** Cursor-paged lightweight tenant options for platform intake forms. */
+export const listPlatformTenantTargetsPage = query({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    await requirePlatformSubRole(ctx, [...PLATFORM_SUB_ROLE_READERS]);
+    const page = await ctx.db.query("tenants").withIndex("by_createdAt").order("desc").paginate({
+      ...args.paginationOpts,
+      numItems: Math.max(1, Math.min(50, Math.floor(args.paginationOpts.numItems))),
+    });
+    return { ...page, page: page.page.filter(tenant => tenant.deletedAt === undefined).map(tenant => ({ _id: tenant._id, name: tenant.name, slug: tenant.slug })) };
+  },
+});
+
+/** Paged subscription list with only fields needed for entitlement management. */
+export const listSubscriptionsPage = query({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    await requirePlatformSubRole(ctx, [...PLATFORM_SUB_ROLE_READERS]);
+    const page = await ctx.db.query("tenants").withIndex("by_createdAt").order("desc").paginate({
+      ...args.paginationOpts,
+      numItems: Math.max(1, Math.min(50, Math.floor(args.paginationOpts.numItems))),
+    });
+    const tenants = page.page.filter(tenant => tenant.deletedAt === undefined);
+    return {
+      ...page,
+      page: await Promise.all(tenants.map(async tenant => {
+        const entitlement = await ctx.db.query("entitlements").withIndex("by_tenant", q => q.eq("tenantId", tenant._id)).order("desc").first();
+        return {
+          _id: tenant._id,
+          name: tenant.name,
+          slug: tenant.slug,
+          country: tenant.country,
+          status: tenant.status,
+          entitlement: entitlement ? {
+            planId: entitlement.planId,
+            status: entitlement.status,
+            startsAt: entitlement.startsAt ?? null,
+            expiresAt: entitlement.expiresAt ?? null,
+            trialEndsAt: entitlement.trialEndsAt ?? null,
+          } : null,
+        };
+      })),
+    };
+  },
+});
+
+/** Exact estate counters for overview without joining tenant members/markets/subscribers. */
+export const getPlatformOverview = query({
   args: {},
   handler: async (ctx) => {
-    await requirePlatformUser(ctx);
-    const tenants = await ctx.db.query("tenants").order("desc").collect();
-    return Promise.all(tenants.filter((tenant) => tenant.deletedAt === undefined).map(async (tenant) => {
-      const [memberships, entitlement] = await Promise.all([
-        ctx.db.query("tenantMemberships").withIndex("by_tenant", (q) => q.eq("tenantId", tenant._id)).collect(),
-        ctx.db.query("entitlements").withIndex("by_tenant", (q) => q.eq("tenantId", tenant._id)).order("desc").first(),
-      ]);
-      return {
-        _id: tenant._id,
-        name: tenant.name,
-        slug: tenant.slug,
-        country: tenant.country,
-        timezone: tenant.timezone,
-        currency: tenant.currency,
-        status: tenant.status,
-        workosOrganizationId: tenant.workosOrganizationId ?? null,
-        membershipCount: memberships.filter((membership) => membership.status === "active").length,
-        entitlement: entitlement
-          ? {
-              planId: entitlement.planId,
-              status: entitlement.status,
-              startsAt: entitlement.startsAt ?? null,
-              expiresAt: entitlement.expiresAt ?? null,
-              trialEndsAt: entitlement.trialEndsAt ?? null,
-            }
-          : null,
-        createdAt: tenant.createdAt,
-      };
-    }));
+    await requirePlatformSubRole(ctx, [...PLATFORM_SUB_ROLE_READERS]);
+    const [tenantRows, entitlementRows] = await Promise.all([
+      ctx.db.query("tenants").withIndex("by_createdAt").order("desc").collect(),
+      ctx.db.query("entitlements").collect(),
+    ]);
+    const tenants = tenantRows.filter(tenant => tenant.deletedAt === undefined);
+    const entitlements = new Map(entitlementRows.map(entitlement => [entitlement.tenantId, entitlement]));
+    const latest = tenantRows.filter(tenant => tenant.deletedAt === undefined).slice(0, 8);
+    const summary = {
+      total: tenants.length,
+      active: tenants.filter(tenant => tenant.status === "active").length,
+      trial: tenants.filter(tenant => tenant.status === "trial").length,
+      provisioning: tenants.filter(tenant => tenant.status === "provisioning").length,
+      suspended: tenants.filter(tenant => tenant.status === "suspended").length,
+      pendingDeletion: tenants.filter(tenant => tenant.status === "pending_deletion").length,
+      missingIdentity: tenants.filter(tenant => !tenant.workosOrganizationId).length,
+      entitlementRisk: tenants.filter(tenant => {
+        const entitlement = entitlements.get(tenant._id);
+        return entitlement?.status === "expired" || entitlement?.status === "suspended";
+      }).length,
+    };
+    return {
+      ...summary,
+      latest: latest.map(tenant => {
+        const entitlement = entitlements.get(tenant._id);
+        return {
+          _id: tenant._id,
+          name: tenant.name,
+          slug: tenant.slug,
+          country: tenant.country,
+          status: tenant.status,
+          workosOrganizationId: tenant.workosOrganizationId ?? null,
+          entitlement: entitlement ? { planId: entitlement.planId, status: entitlement.status } : null,
+        };
+      }),
+    };
   },
 });
 
@@ -172,10 +453,108 @@ export const setStatus = mutation({
       entityTable: "tenants",
       entityId: tenant._id,
       changedBy: actor._id,
+      tenantId: tenant._id,
       before: { status: tenant.status },
       after: { status: transition.status, statusBeforeSuspension: transition.statusBeforeSuspension ?? null },
     });
     return { changed: true, status: transition.status };
+  },
+});
+
+/** Begin the 30-day soft-delete window. Tenant access stops immediately. */
+export const scheduleDeletion = mutation({
+  args: { tenantId: v.id("tenants"), reason: v.string() },
+  returns: v.object({ scheduledDeletionAt: v.number() }),
+  handler: async (ctx, args) => {
+    const actor = await requirePlatformSubRole(ctx, ["platform_super_admin"]);
+    const tenant = await ctx.db.get(args.tenantId);
+    if (!tenant || tenant.deletedAt !== undefined) throw new Error("Tenant not found");
+    if (!["trial", "active", "suspended"].includes(tenant.status)) throw new Error("This tenant cannot be scheduled for deletion in its current state");
+    const reason = args.reason.trim();
+    if (reason.length < 8 || reason.length > 500) throw new Error("Provide a reason between 8 and 500 characters");
+    const now = Date.now();
+    const scheduledDeletionAt = now + TENANT_DELETION_GRACE_PERIOD_MS;
+    await ctx.db.patch(tenant._id, {
+      statusBeforeDeletion: tenant.status as "trial" | "active" | "suspended",
+      status: "pending_deletion",
+      deletionRequestedAt: now,
+      scheduledDeletionAt,
+      deletionRequestedBy: actor._id,
+      deletionReason: reason,
+      updatedAt: now,
+    });
+    await logAudit(ctx, {
+      action: "tenant.deletionScheduled",
+      entityTable: "tenants",
+      entityId: tenant._id,
+      changedBy: actor._id,
+      before: { status: tenant.status },
+      after: { status: "pending_deletion", scheduledDeletionAt, reason },
+    });
+    return { scheduledDeletionAt };
+  },
+});
+
+/** Restore a tenant during its 30-day recovery window. */
+export const restoreScheduledDeletion = mutation({
+  args: { tenantId: v.id("tenants") },
+  returns: v.object({ restored: v.boolean(), status: v.union(v.literal("trial"), v.literal("active"), v.literal("suspended")) }),
+  handler: async (ctx, args) => {
+    const actor = await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_ops"]);
+    const tenant = await ctx.db.get(args.tenantId);
+    if (!tenant || tenant.deletedAt !== undefined || tenant.status !== "pending_deletion" || tenant.scheduledDeletionAt === undefined) {
+      throw new Error("Tenant is not awaiting deletion");
+    }
+    if (Date.now() >= tenant.scheduledDeletionAt) throw new Error("The tenant recovery window has ended");
+    const restoredStatus = tenant.statusBeforeDeletion ?? "active";
+    await ctx.db.patch(tenant._id, {
+      status: restoredStatus,
+      statusBeforeDeletion: undefined,
+      deletionRequestedAt: undefined,
+      scheduledDeletionAt: undefined,
+      deletionRequestedBy: undefined,
+      deletionReason: undefined,
+      updatedAt: Date.now(),
+    });
+    await logAudit(ctx, {
+      action: "tenant.deletionCancelled",
+      entityTable: "tenants",
+      entityId: tenant._id,
+      changedBy: actor._id,
+      before: { status: tenant.status, scheduledDeletionAt: tenant.scheduledDeletionAt },
+      after: { status: restoredStatus },
+    });
+    return { restored: true, status: restoredStatus };
+  },
+});
+
+/**
+ * Finalize expired tenant deletion requests in bounded batches. This hides the
+ * tenant from the active directory and blocks access, while retaining the
+ * tenant-owned records for the approved data-retention workflow.
+ */
+export const finalizeExpiredDeletions = internalMutation({
+  args: {},
+  returns: v.object({ finalized: v.number() }),
+  handler: async (ctx) => {
+    const now = Date.now();
+    const due = await ctx.db.query("tenants")
+      .withIndex("by_status_and_scheduled_deletion", q => q.eq("status", "pending_deletion").lte("scheduledDeletionAt", now))
+      .take(100);
+    for (const tenant of due) {
+      await ctx.db.patch(tenant._id, { status: "cancelled", deletedAt: now, updatedAt: now });
+      if (tenant.deletionRequestedBy) {
+        await logAudit(ctx, {
+          action: "tenant.deletionWindowElapsed",
+          entityTable: "tenants",
+          entityId: tenant._id,
+          changedBy: tenant.deletionRequestedBy,
+          before: { status: "pending_deletion", scheduledDeletionAt: tenant.scheduledDeletionAt },
+          after: { status: "cancelled", deletedAt: now, retainedForDataRequest: true },
+        });
+      }
+    }
+    return { finalized: due.length };
   },
 });
 
@@ -212,6 +591,7 @@ export const updateTenant = mutation({
       entityTable: "tenants",
       entityId: tenant._id,
       changedBy: actor._id,
+      tenantId: tenant._id,
       before,
       after,
     });
@@ -223,10 +603,10 @@ export const updateTenant = mutation({
 export const getTenantDetail = query({
   args: { tenantId: v.id("tenants") },
   handler: async (ctx, args) => {
-    await requirePlatformUser(ctx);
+    await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_ops", "platform_finance", "platform_support", "platform_readonly"]);
     const tenant = await ctx.db.get(args.tenantId);
     if (!tenant || tenant.deletedAt !== undefined) return null;
-    const [memberships, entitlement] = await Promise.all([
+    const [memberships, entitlement, markets] = await Promise.all([
       ctx.db
         .query("tenantMemberships")
         .withIndex("by_tenant", (q) => q.eq("tenantId", args.tenantId))
@@ -236,6 +616,7 @@ export const getTenantDetail = query({
         .withIndex("by_tenant", (q) => q.eq("tenantId", args.tenantId))
         .order("desc")
         .first(),
+      ctx.db.query("markets").withIndex("by_tenant", (q) => q.eq("tenantId", args.tenantId)).collect(),
     ]);
     const members = await Promise.all(memberships.filter((membership) => membership.status !== "revoked").map(async (membership) => {
       const user = await ctx.db.get(membership.userId);
@@ -258,6 +639,8 @@ export const getTenantDetail = query({
       currency: tenant.currency,
       status: tenant.status,
       statusBeforeSuspension: tenant.statusBeforeSuspension ?? null,
+      scheduledDeletionAt: tenant.scheduledDeletionAt ?? null,
+      deletionReason: tenant.deletionReason ?? null,
       workosOrganizationId: tenant.workosOrganizationId ?? null,
       createdAt: tenant.createdAt,
       updatedAt: tenant.updatedAt,
@@ -271,6 +654,8 @@ export const getTenantDetail = query({
           }
         : null,
       activeMemberCount: memberships.filter((membership) => membership.status === "active").length,
+      marketCount: markets.filter((market) => market.status !== "deleted").length,
+      subscriberCount: tenant.subscriberCount ?? null,
       members,
     };
   },
@@ -282,9 +667,9 @@ export const setEntitlement = mutation({
     tenantId: v.id("tenants"),
     planId: v.string(),
     status: entitlementStatus,
-    startsAt: v.optional(v.number()),
-    expiresAt: v.optional(v.number()),
-    trialEndsAt: v.optional(v.number()),
+    startsAt: v.optional(v.union(v.number(), v.null())),
+    expiresAt: v.optional(v.union(v.number(), v.null())),
+    trialEndsAt: v.optional(v.union(v.number(), v.null())),
   },
   handler: async (ctx, args) => {
     const actor = await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_ops"]);
@@ -293,34 +678,35 @@ export const setEntitlement = mutation({
     const planId = args.planId.trim().toLowerCase();
     if (!/^[a-z][a-z0-9_-]{1,39}$/.test(planId)) throw new Error("Select a valid subscription plan");
     for (const [label, value] of [["startsAt", args.startsAt], ["expiresAt", args.expiresAt], ["trialEndsAt", args.trialEndsAt]] as const) {
-      if (value !== undefined && (!Number.isSafeInteger(value) || value < 0)) throw new Error(`${label} must be a valid timestamp`);
+      if (typeof value === "number" && (!Number.isSafeInteger(value) || value < 0)) throw new Error(`${label} must be a valid timestamp`);
     }
-    if (args.startsAt !== undefined && args.expiresAt !== undefined && args.expiresAt < args.startsAt) throw new Error("Expiry must be after the subscription start");
-    if (args.startsAt !== undefined && args.trialEndsAt !== undefined && args.trialEndsAt < args.startsAt) throw new Error("Trial end must be after the subscription start");
+    const tenantEntitlements = await ctx.db.query("entitlements").withIndex("by_tenant", q => q.eq("tenantId", args.tenantId)).order("desc").take(2);
+    if (tenantEntitlements.length > 1) {
+      throw new Error("This tenant has multiple entitlement records. Reconcile the subscription records before changing its plan.");
+    }
+    const existingForTenant = tenantEntitlements[0];
+    const startsAt = args.startsAt === undefined ? existingForTenant?.startsAt : args.startsAt ?? undefined;
+    const expiresAt = args.expiresAt === undefined ? existingForTenant?.expiresAt : args.expiresAt ?? undefined;
+    const trialEndsAt = args.trialEndsAt === undefined ? existingForTenant?.trialEndsAt : args.trialEndsAt ?? undefined;
+    if (startsAt !== undefined && expiresAt !== undefined && expiresAt < startsAt) throw new Error("Expiry must be after the subscription start");
+    if (startsAt !== undefined && trialEndsAt !== undefined && trialEndsAt < startsAt) throw new Error("Trial end must be after the subscription start");
     const plan = await ctx.db.query("platformPlanCatalog").withIndex("by_code", q => q.eq("code", planId)).first();
-    const existingForTenant = await ctx.db.query("entitlements").withIndex("by_tenant", q => q.eq("tenantId", args.tenantId)).order("desc").first();
     if (plan?.status === "archived" && existingForTenant?.planId !== planId) throw new Error("Archived plans cannot be assigned to new subscriptions");
-    if (!plan && !["starter", "growth", "pro"].includes(planId)) throw new Error("Choose a plan from the platform plan catalogue");
+    // The baked-in plans are a migration fallback only. Once the catalogue has
+    // been initialized, an intentionally deleted plan must not remain assignable.
+    const catalogInitialized = await ctx.db.query("platformPlanCatalogMeta").first();
+    if (!plan && (catalogInitialized || !["starter", "growth", "pro"].includes(planId))) {
+      throw new Error("Choose an active plan from the platform plan catalogue");
+    }
 
     const auditAfter = {
       planId,
       status: args.status,
-      startsAt: args.startsAt ?? null,
-      expiresAt: args.expiresAt ?? null,
-      trialEndsAt: args.trialEndsAt ?? null,
+      startsAt: startsAt ?? null,
+      expiresAt: expiresAt ?? null,
+      trialEndsAt: trialEndsAt ?? null,
     };
-    const fields = {
-      planId,
-      status: args.status,
-      startsAt: args.startsAt,
-      expiresAt: args.expiresAt,
-      trialEndsAt: args.trialEndsAt,
-    };
-    const existing = await ctx.db
-      .query("entitlements")
-      .withIndex("by_tenant", (q) => q.eq("tenantId", args.tenantId))
-      .order("desc")
-      .first();
+    const existing = existingForTenant;
     const now = Date.now();
 
     if (existing) {
@@ -331,24 +717,39 @@ export const setEntitlement = mutation({
         expiresAt: existing.expiresAt ?? null,
         trialEndsAt: existing.trialEndsAt ?? null,
       };
-      await ctx.db.patch(existing._id, { ...fields, updatedAt: now });
+      const patch: Record<string, unknown> = { planId, status: args.status, updatedAt: now };
+      if (args.startsAt !== undefined) patch.startsAt = startsAt;
+      if (args.expiresAt !== undefined) patch.expiresAt = expiresAt;
+      if (args.trialEndsAt !== undefined) patch.trialEndsAt = trialEndsAt;
+      await ctx.db.patch(existing._id, patch);
       await logAudit(ctx, {
         action: "tenant.entitlementChanged",
         entityTable: "tenants",
         entityId: tenant._id,
         changedBy: actor._id,
+        tenantId: tenant._id,
         before,
         after: auditAfter,
       });
       return { changed: true };
     }
 
-    await ctx.db.insert("entitlements", { tenantId: tenant._id, ...fields, createdAt: now, updatedAt: now });
+    await ctx.db.insert("entitlements", {
+      tenantId: tenant._id,
+      planId,
+      status: args.status,
+      ...(startsAt !== undefined ? { startsAt } : {}),
+      ...(expiresAt !== undefined ? { expiresAt } : {}),
+      ...(trialEndsAt !== undefined ? { trialEndsAt } : {}),
+      createdAt: now,
+      updatedAt: now,
+    });
     await logAudit(ctx, {
       action: "tenant.entitlementSet",
       entityTable: "tenants",
       entityId: tenant._id,
       changedBy: actor._id,
+      tenantId: tenant._id,
       after: auditAfter,
     });
     return { changed: true };
@@ -364,15 +765,20 @@ export const removeEntitlement = mutation({
     if (!tenant || tenant.deletedAt !== undefined) throw new Error("Tenant not found");
     const reason = args.reason.trim();
     if (reason.length < 8 || reason.length > 500) throw new Error("Provide a reason between 8 and 500 characters");
-    const records = await ctx.db.query("entitlements").withIndex("by_tenant", q => q.eq("tenantId", args.tenantId)).collect();
+    const records = await ctx.db.query("entitlements").withIndex("by_tenant", q => q.eq("tenantId", args.tenantId)).order("desc").take(2);
+    if (records.length > 1) {
+      throw new Error("This tenant has multiple entitlement records. Reconcile the subscription records before removing an entitlement.");
+    }
     if (records.length === 0) return { removed: false };
-    for (const record of records) await ctx.db.delete(record._id);
+    const [record] = records;
+    await ctx.db.delete(record._id);
     await logAudit(ctx, {
       action: "tenant.entitlementRemoved",
       entityTable: "tenants",
       entityId: tenant._id,
       changedBy: actor._id,
-      before: records.map(({ planId, status, startsAt, expiresAt, trialEndsAt }) => ({ planId, status, startsAt: startsAt ?? null, expiresAt: expiresAt ?? null, trialEndsAt: trialEndsAt ?? null })),
+      tenantId: tenant._id,
+      before: { planId: record.planId, status: record.status, startsAt: record.startsAt ?? null, expiresAt: record.expiresAt ?? null, trialEndsAt: record.trialEndsAt ?? null },
       after: { entitlementCount: 0, reason },
     });
     return { removed: true };
@@ -552,6 +958,7 @@ export const finalizeAutomatedTenantOnboarding = internalMutation({
       timezone: run.timezone,
       currency: run.currency,
       status: "trial",
+      subscriberCount: 0,
       workosOrganizationId: run.workosOrganizationId,
       createdAt: now,
       updatedAt: now,
@@ -570,6 +977,7 @@ export const finalizeAutomatedTenantOnboarding = internalMutation({
       entityTable: "tenants",
       entityId: tenantId,
       changedBy: run.createdBy,
+      tenantId,
       after: { status: "trial", ownerEmail: run.ownerEmail, ownerReady: true },
     });
     return { tenantId };
@@ -611,6 +1019,7 @@ export const activateProvisionedTenant = internalMutation({
       entityTable: "tenants",
       entityId: tenant._id,
       changedBy: owner._id,
+      tenantId: tenant._id,
       before: { status: "provisioning" },
       after: { status: "trial" },
     });
@@ -696,6 +1105,7 @@ export const registerVerifiedTenant = internalMutation({
   args: {
     actorWorkosUserId: v.string(),
     ownerWorkosUserId: v.string(),
+    workosMembershipId: v.string(),
     workosOrganizationId: v.string(),
     name: v.string(),
     slug: v.string(),
@@ -721,6 +1131,7 @@ export const registerVerifiedTenant = internalMutation({
       timezone: args.timezone,
       currency: args.currency,
       status: "trial",
+      subscriberCount: 0,
       workosOrganizationId: args.workosOrganizationId,
       createdAt: now,
       updatedAt: now,
@@ -738,13 +1149,24 @@ export const registerVerifiedTenant = internalMutation({
       tenantId,
       role: "tenant_admin",
       status: "active",
+      workosMembershipId: args.workosMembershipId,
       joinedAt: now,
+    });
+    await ctx.db.insert("organizationMemberships", {
+      tenantId,
+      workosMembershipId: args.workosMembershipId,
+      workosUserId: args.ownerWorkosUserId,
+      organizationId: args.workosOrganizationId,
+      roleSlug: "tenant_admin",
+      status: "active",
+      syncedAt: now,
     });
     await logAudit(ctx, {
       action: "tenant.registered",
       entityTable: "tenants",
       entityId: tenantId,
       changedBy: actor._id,
+      tenantId,
       after: { workosOrganizationId: args.workosOrganizationId, ownerWorkosUserId: args.ownerWorkosUserId, status: "trial" },
     });
     return { tenantId };
@@ -775,8 +1197,12 @@ export const registerExistingOrganization = action({
     if (!membership || membership.status !== "active") {
       throw new Error("The supplied tenant owner does not have an active membership in that WorkOS organization");
     }
+    if (membership.role?.slug !== "tenant_admin" && !membership.roles?.some(role => role.slug === "tenant_admin")) {
+      throw new Error("The supplied tenant owner must have the tenant administrator role");
+    }
     return ctx.runMutation(internal.tenantControl.registerVerifiedTenant, {
       actorWorkosUserId: identity.subject,
+      workosMembershipId: membership.id,
       ...registration,
     });
   },

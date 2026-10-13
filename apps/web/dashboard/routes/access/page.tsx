@@ -23,6 +23,7 @@ import { api } from "@/convex/_generated/api";
 import { avatarFallbackUrl } from "@/app/lib/avatar";
 import type { Id } from "@/convex/_generated/dataModel";
 import { PlatformAccess } from "@/platform/components/PlatformAccess";
+import { isPlatformSuperAdmin } from "@/shared/auth/rbac";
 
 type PlatformUser = NonNullable<ReturnType<typeof useQuery<typeof api.platform.getCurrentPlatformUser>>>;
 type UserRow = NonNullable<ReturnType<typeof useQuery<typeof api.platformUsers.listUsers>>>[number];
@@ -136,10 +137,7 @@ export default function AccessManagementPage() {
       </div>
     );
   }
-  if (currentUser == null || !currentUser.permissions.includes("users:manage")) {
-    if (currentUser?.permissions.includes("users:read")) {
-      return <PlatformAccess canReadInvitations={currentUser.permissions.includes("invitations:manage")} />;
-    }
+  if (currentUser == null) {
     return (
       <div className="workspace-page">
         <div className="pf-panel">
@@ -148,6 +146,11 @@ export default function AccessManagementPage() {
         </div>
       </div>
     );
+  }
+
+  const canManagePlatformAccess = isPlatformSuperAdmin(currentUser.roles.map((role) => role.slug));
+  if (!canManagePlatformAccess) {
+    return <PlatformAccess canReadInvitations={currentUser.permissions.includes("invitations:manage")} />;
   }
 
   const canManageRoles = currentUser.permissions.includes("roles:manage");
@@ -799,6 +802,8 @@ function RoleEditorModal({
   const [activeGroup, setActiveGroup] = useState("All permissions");
   const [working, setWorking] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const immutableOwnerRole = role?.slug === "platform_owner";
+  const displayedPermissions = immutableOwnerRole ? catalogPermissions.map((permission) => permission.slug) : permissions;
 
   const groups = useMemo(() => {
     const query = permissionFilter.trim().toLowerCase();
@@ -874,7 +879,7 @@ function RoleEditorModal({
             <strong>{role?.isSystem ? "System role" : role ? "Custom role" : "New role"}</strong>
             <p>{role?.isSystem ? "Identity and rank are protected. You can tailor access grants safely." : "Define exactly what this role can view and manage."}</p>
           </div>
-          <div className="role-editor-stat"><strong>{permissions.length}</strong><span>permissions selected</span></div>
+          <div className="role-editor-stat"><strong>{displayedPermissions.length}</strong><span>permissions selected</span></div>
           <nav className="role-group-nav" aria-label="Permission categories">
             <button type="button" className={activeGroup === "All permissions" ? "role-group-nav-active" : ""} onClick={() => setActiveGroup("All permissions")}>
               <span>All permissions</span><b>{catalogPermissions.length}</b>
@@ -910,7 +915,7 @@ function RoleEditorModal({
 
           <section className="role-permissions-panel" aria-label="Role permissions">
             <header className="role-permissions-toolbar">
-              <div><p className="pf-label">{activeGroup}</p><p className="pf-hint">Choose the capabilities this role should have. Changes take effect immediately after saving.</p></div>
+              <div><p className="pf-label">{activeGroup}</p><p className="pf-hint">{immutableOwnerRole ? "Platform Owner always retains every permission. Its permission grants cannot be reduced." : "Choose the capabilities this role should have. Changes take effect immediately after saving."}</p></div>
               <label className="access-search">
                 <Search size={15} aria-hidden="true" /><span className="sr-only">Filter permissions</span>
                 <input value={permissionFilter} onChange={(event) => setPermissionFilter(event.target.value)} placeholder="Search permissions…" />
@@ -918,14 +923,14 @@ function RoleEditorModal({
             </header>
             <div className="perm-groups">
               {groups.map(([group, items]) => {
-                const everySelected = items.every((permission) => permissions.includes(permission.slug));
+                const everySelected = items.every((permission) => displayedPermissions.includes(permission.slug));
                 return (
                   <div key={group} className="perm-group">
-                    <header className="perm-group-heading"><div><p className="perm-group-title">{group}</p><span>{items.filter((permission) => permissions.includes(permission.slug)).length} of {items.length} enabled</span></div><button type="button" className="permission-bulk-button" onClick={() => toggleGroup(items)}>{everySelected ? "Clear group" : "Enable group"}</button></header>
+                    <header className="perm-group-heading"><div><p className="perm-group-title">{group}</p><span>{items.filter((permission) => displayedPermissions.includes(permission.slug)).length} of {items.length} enabled</span></div><button type="button" className="permission-bulk-button" disabled={immutableOwnerRole} onClick={() => toggleGroup(items)}>{everySelected ? "Clear group" : "Enable group"}</button></header>
                     <div className="role-permission-grid">
                       {items.map((permission) => (
-                        <label key={permission.slug} className={`role-permission-option${permissions.includes(permission.slug) ? " role-permission-option-selected" : ""}`}>
-                          <input type="checkbox" checked={permissions.includes(permission.slug)} onChange={() => togglePermission(permission.slug)} />
+                        <label key={permission.slug} className={`role-permission-option${displayedPermissions.includes(permission.slug) ? " role-permission-option-selected" : ""}`}>
+                          <input type="checkbox" checked={displayedPermissions.includes(permission.slug)} disabled={immutableOwnerRole} onChange={() => togglePermission(permission.slug)} />
                           <span><strong>{permission.name}</strong><small>{permission.slug}</small></span>
                         </label>
                       ))}

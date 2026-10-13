@@ -1,0 +1,26 @@
+name: Greptile 5/5 gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  checks: read
+  contents: read
+
+jobs:
+  greptile-five-of-five:
+    name: Greptile 5/5
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+      GITHUB_API_URL: ${{ github.api_url }}
+      PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Check out pull request
+        uses: actions/checkout@v4
+
+      - name: Wait for the current head's Greptile review
+        run: node .github/scripts/verify-greptile-five-of-five.mjs

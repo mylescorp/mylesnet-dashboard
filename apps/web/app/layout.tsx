@@ -49,11 +49,7 @@ export default async function RootLayout({
     >
       <body className="antialiased">
         {children}
-        <Script
-          id="theme-init"
-          strategy="beforeInteractive"
-          dangerouslySetInnerHTML={{ __html: themeScript }}
-        />
+        <Script src="/theme-init.js" strategy="beforeInteractive" />
       </body>
     </html>
   );
