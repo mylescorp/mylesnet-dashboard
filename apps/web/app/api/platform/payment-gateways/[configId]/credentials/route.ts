@@ -9,13 +9,14 @@ import {
 import { awsCredentialsProvider } from "@vercel/oidc-aws-credentials-provider";
 import { withAuth } from "@workos-inc/authkit-nextjs";
 import { fetchMutation } from "convex/nextjs";
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { CSRF_COOKIE_NAME, csrfCookieOptions } from "@/shared/auth/cookies";
 import { CSRF_HEADER_NAME, generateCsrfToken, verifyCsrfToken } from "@/shared/auth/csrf";
 import { AuthRequiredError, requireRole, RoleRequiredError } from "@/shared/auth/session";
 import { platformPaymentGateways } from "@/shared/convex/platformPaymentGateways";
+import { paymentCredentialAttestationPayload } from "../../../../../../../../convex/lib/paymentCredentialAttestation";
 
 export const runtime = "nodejs";
 
@@ -32,6 +33,13 @@ const secretNameForConfig = (configId: string) => {
   const opaque = createHash("sha256").update(configId, "utf8").digest("hex");
   return `mylesnet/payment-gateways/cfg-${opaque}`;
 };
+
+function credentialAttestation(configId: string, operationId: string, versionId: string) {
+  const key = process.env.PAYMENT_CREDENTIAL_ROTATION_ATTESTATION_KEY;
+  if (!key || key.length < 32) throw new Error("Payment credential storage is unavailable.");
+  const payload = paymentCredentialAttestationPayload({ configId, operationId, versionId });
+  return createHmac("sha256", key).update(payload).digest("base64url");
+}
 
 function failure(message: string, status: number) {
   return NextResponse.json({ success: false, message }, { status, headers: jsonHeaders });
@@ -101,7 +109,7 @@ async function writeCredentialVersion(input: {
   try {
     const result = await client.send(new CreateSecretCommand({
       Name: secretName,
-      Description: "Tenant-owned Daraja STK Push credentials",
+      Description: "Tenant-owned payment gateway credentials",
       KmsKeyId: input.kmsKeyId,
       SecretString: input.credentialJson,
       ClientRequestToken: input.operationId,
@@ -190,6 +198,7 @@ export async function POST(
       configId,
       operationId,
       versionId,
+      attestation: credentialAttestation(configId, operationId, versionId),
     }, { token: accessToken });
 
     const nextCsrfToken = generateCsrfToken();

@@ -5,12 +5,12 @@ export type PaymentGatewayConfig = {
   _id: string;
   tenantId: string;
   tenantName: string | null;
-  provider: "daraja";
   environment: "sandbox" | "production";
   shortCode: string;
   enabled: boolean;
   credentialsConfigured: boolean;
   rotationPending: boolean;
+  rotationLeaseExpiresAt: number | null;
   createdAt: number;
   updatedAt: number;
   deletedAt: number | null;
@@ -27,6 +27,6 @@ export const platformPaymentGateways = {
   archive: makeFunctionReference<"mutation", { configId: string }, { archived: boolean }>("platform:archivePaymentGatewayConfig"),
   restore: makeFunctionReference<"mutation", { configId: string }, { restored: boolean }>("platform:restorePaymentGatewayConfig"),
   beginRotation: makeFunctionReference<"mutation", { configId: string; operationId: string }, { started: boolean; alreadyStarted: boolean }>("platform:beginPaymentGatewayCredentialRotation"),
-  completeRotation: makeFunctionReference<"mutation", { configId: string; operationId: string; versionId: string }, { credentialsConfigured: boolean }>("platform:completePaymentGatewayCredentialRotation"),
+  completeRotation: makeFunctionReference<"mutation", { configId: string; operationId: string; versionId: string; attestation: string }, { credentialsConfigured: boolean }>("platform:completePaymentGatewayCredentialRotation"),
   failRotation: makeFunctionReference<"mutation", { configId: string; operationId: string }, { cleared: boolean }>("platform:failPaymentGatewayCredentialRotation"),
 };

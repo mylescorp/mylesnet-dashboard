@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePaginatedQuery } from "convex/react";
+import * as Dialog from "@radix-ui/react-dialog";
 import { Archive, KeyRound, Power, Plus, RefreshCw } from "lucide-react";
 import { Button, ConfirmDialog, EmptyState, ErrorState, Field, SkeletonTable, StatusPill, TextInput } from "@mylesnet/ui";
 import { useMutation } from "@/app/lib/convex";
 import { useUserProfile } from "@/shared/components/UserProfileContext";
 import { userFacingMessage } from "@/shared/lib/user-facing-error";
 import { platformPaymentGateways, type PaymentGatewayConfig } from "@/shared/convex/platformPaymentGateways";
+import { isPaymentGatewayRotationActive, makePublicGatewaySettingsUpdate } from "@/shared/convex/paymentGatewayUpdateCore";
 import { tenantControl } from "@/shared/convex/tenantControl";
 
 const MANAGER_ROLES = ["platform_super_admin", "platform_owner"];
@@ -43,16 +45,25 @@ export function PlatformPaymentGateways() {
   const [environment, setEnvironment] = useState<"sandbox" | "production">("sandbox");
   const [shortCode, setShortCode] = useState("");
   const [editingTenantId, setEditingTenantId] = useState("");
-  const [editingEnvironment, setEditingEnvironment] = useState<"sandbox" | "production">("sandbox");
+  const [editingEnvironment, setEditingEnvironment] = useState<"sandbox" | "production" | "">("");
   const [editingShortCode, setEditingShortCode] = useState("");
   const [credentialsTarget, setCredentialsTarget] = useState<PaymentGatewayConfig | null>(null);
   const [credentials, setCredentials] = useState<Credentials>({ consumerKey: "", consumerSecret: "", passkey: "" });
   const [credentialOperationId, setCredentialOperationId] = useState<string | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<PaymentGatewayConfig | null>(null);
   const [busy, setBusy] = useState(false);
+  const [leaseClock, setLeaseClock] = useState(() => Date.now());
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const selectedTenant = tenants.find((tenant) => tenant._id === editingTenantId);
+
+  useEffect(() => {
+    if (!results.some((row) => row.rotationPending)) return;
+    const timer = window.setInterval(() => setLeaseClock(Date.now()), 15_000);
+    return () => window.clearInterval(timer);
+  }, [results]);
+
+  const rotationIsActive = (row: PaymentGatewayConfig) => isPaymentGatewayRotationActive({ pending: row.rotationPending, leaseExpiresAt: row.rotationLeaseExpiresAt, now: leaseClock });
 
   const logSettingsView = useCallback(async () => {
     setViewError(null);
@@ -74,7 +85,7 @@ export function PlatformPaymentGateways() {
     if (!editingTenantId) return;
     setBusy(true); setError(null); setNotice(null);
     try {
-      await updatePublicFields({ tenantId: editingTenantId, environment: editingEnvironment, shortCode: editingShortCode });
+      await updatePublicFields(makePublicGatewaySettingsUpdate({ tenantId: editingTenantId, environment: editingEnvironment, shortCode: editingShortCode }));
       setNotice("Public payment settings saved.");
     } catch (caught) {
       setError(userFacingMessage(caught, "Payment settings could not be saved."));
@@ -87,8 +98,7 @@ export function PlatformPaymentGateways() {
       const id = await createConfig({ tenantId, environment, shortCode });
       const tenant = tenants.find((item) => item._id === tenantId);
       setNotice("Gateway settings created. Add credentials to enable payments.");
-      setEditingTenantId(tenantId); setEditingEnvironment(environment); setEditingShortCode(shortCode);
-      setCredentialsTarget({ _id: id, tenantId, tenantName: tenant?.name ?? null, provider: "daraja", environment, shortCode, enabled: false, credentialsConfigured: false, rotationPending: false, createdAt: Date.now(), updatedAt: Date.now(), deletedAt: null });
+      setCredentialsTarget({ _id: id, tenantId, tenantName: tenant?.name ?? null, environment, shortCode, enabled: false, credentialsConfigured: false, rotationPending: false, rotationLeaseExpiresAt: null, createdAt: Date.now(), updatedAt: Date.now(), deletedAt: null });
       setTenantId(""); setShortCode("");
     } catch (caught) {
       setError(userFacingMessage(caught, "Gateway settings could not be created."));
@@ -128,6 +138,12 @@ export function PlatformPaymentGateways() {
     } finally { setBusy(false); }
   }
 
+  function closeCredentialDialog() {
+    if (busy) return;
+    setCredentialsTarget(null);
+    setCredentialOperationId(null);
+  }
+
   async function confirmArchive() {
     if (!archiveTarget) return;
     setBusy(true); setError(null); setNotice(null);
@@ -160,35 +176,49 @@ export function PlatformPaymentGateways() {
 
   return (
     <main className="workspace-page">
-      <header className="page-heading"><div><p className="eyebrow">Platform settings</p><h1 className="page-title">Payment gateways</h1><p className="page-subtitle">Tenant-owned Daraja credentials are stored securely and can never be viewed here.</p></div></header>
+      <header className="page-heading"><div><p className="eyebrow">Platform settings</p><h1 className="page-title">Payment gateways</h1><p className="page-subtitle">Workspace credentials are stored securely and can never be viewed here.</p></div></header>
       {error ? <div role="alert"><ErrorState title="Payment settings could not be updated" body={error} retry={() => setError(null)} /></div> : null}
       {notice ? <p className="platform-notice" role="status">{notice}</p> : null}
 
       {canManage ? <>
         <section className="pf-panel" aria-labelledby="gateway-create-heading">
-          <div className="section-heading"><div><p className="eyebrow">Workspace configuration</p><h2 id="gateway-create-heading">Add Daraja settings</h2></div></div>
+          <div className="section-heading"><div><p className="eyebrow">Workspace configuration</p><h2 id="gateway-create-heading">Add gateway settings</h2></div></div>
           <div className="form-grid">
             <Field label="Workspace" required><select className="pf-input" value={tenantId} onChange={(event) => setTenantId(event.target.value)}><option value="">Choose a workspace</option>{tenants.map((tenant) => <option key={tenant._id} value={tenant._id}>{tenant.name}</option>)}</select></Field>
             <Field label="Environment" required><select className="pf-input" value={environment} onChange={(event) => setEnvironment(event.target.value as "sandbox" | "production")}><option value="sandbox">Sandbox</option><option value="production">Production</option></select></Field>
-            <Field label="Business short code" hint="Safaricom-issued 5 or 6 digit shortcode." required><TextInput inputMode="numeric" pattern="[0-9]{5,6}" maxLength={6} value={shortCode} onChange={(event) => setShortCode(event.target.value)} /></Field>
+            <Field label="Business short code" hint="Provider-issued 5 or 6 digit shortcode." required><TextInput inputMode="numeric" pattern="[0-9]{5,6}" maxLength={6} value={shortCode} onChange={(event) => setShortCode(event.target.value)} /></Field>
           </div>
           <div className="modal-actions"><Button disabled={busy || !tenantId || !shortCode} onClick={createGateway}><Plus size={16} aria-hidden="true" />Create gateway</Button></div>
           {tenantStatus === "CanLoadMore" || tenantStatus === "LoadingMore" ? <Button variant="secondary" disabled={tenantStatus === "LoadingMore"} onClick={() => loadMoreTenants(50)}>Load more workspaces</Button> : null}
         </section>
+        {editingTenantId ? <section className="pf-panel" aria-labelledby="gateway-edit-heading">
+          <div className="section-heading"><div><p className="eyebrow">Workspace configuration</p><h2 id="gateway-edit-heading">Edit public settings</h2></div></div>
+          <div className="form-grid"><Field label="Workspace"><TextInput value={selectedTenant?.name ?? "Selected workspace"} readOnly /></Field><Field label="Environment"><select className="pf-input" value={editingEnvironment} onChange={(event) => setEditingEnvironment(event.target.value as "sandbox" | "production" | "")}><option value="">Leave unchanged</option><option value="sandbox">Sandbox</option><option value="production">Production</option></select></Field><Field label="Business short code" hint="Leave blank to keep the current value."><TextInput inputMode="numeric" pattern="[0-9]{5,6}" maxLength={6} value={editingShortCode} onChange={(event) => setEditingShortCode(event.target.value)} /></Field></div>
+          <div className="modal-actions"><Button disabled={busy || (!editingEnvironment && !editingShortCode.trim())} onClick={savePublicFields}>Save public settings</Button><Button variant="secondary" disabled={busy} onClick={() => { setEditingTenantId(""); setEditingEnvironment(""); setEditingShortCode(""); }}>Cancel</Button></div>
+        </section> : null}
         <section className="pf-panel" aria-labelledby="gateway-directory-heading">
           <div className="section-heading"><div><p className="eyebrow">Credentials</p><h2 id="gateway-directory-heading">Configured workspaces</h2></div></div>
-          {status === "LoadingFirstPage" ? <SkeletonTable rows={5} cols={5} /> : results.length === 0 ? <EmptyState title="No gateway settings yet" body="Add a workspace configuration above to begin a secure Daraja setup." /> : <div className="table-scroll"><table className="data-table"><thead><tr><th>Workspace</th><th>Environment</th><th>Short code</th><th>Credentials</th><th>Status</th><th>Actions</th></tr></thead><tbody>{results.map((row) => <tr key={row._id}><td>{row.tenantName ?? "Unavailable workspace"}</td><td>{row.environment === "production" ? "Production" : "Sandbox"}</td><td>{row.shortCode}</td><td>{row.credentialsConfigured ? "Configured · write-only" : "Not configured"}{row.rotationPending ? " · Update in progress" : ""}</td><td><StatusPill tone={row.deletedAt !== null ? "neutral" : row.enabled ? "success" : "warning"}>{row.deletedAt !== null ? "Archived" : row.enabled ? "Enabled" : "Disabled"}</StatusPill></td><td><div className="table-actions">{row.deletedAt === null ? <><Button variant="secondary" disabled={busy || row.rotationPending} onClick={() => { setCredentialsTarget(row); setCredentialOperationId(null); setCredentials({ consumerKey: "", consumerSecret: "", passkey: "" }); }}><KeyRound size={15} aria-hidden="true" />{row.credentialsConfigured ? "Rotate credentials" : "Add credentials"}</Button>{row.credentialsConfigured ? <Button variant={row.enabled ? "danger" : "secondary"} disabled={busy || row.rotationPending} onClick={() => void setGatewayEnabled(row, !row.enabled)}><Power size={15} aria-hidden="true" />{row.enabled ? "Disable" : "Enable"}</Button> : null}<Button variant="secondary" disabled={busy} onClick={() => setArchiveTarget(row)}><Archive size={15} aria-hidden="true" />Archive</Button></> : <Button variant="secondary" disabled={busy} onClick={() => setArchiveTarget(row)}><RefreshCw size={15} aria-hidden="true" />Restore</Button>}</div></td></tr>)}</tbody></table></div>}
+          {status === "LoadingFirstPage" ? <SkeletonTable rows={5} cols={5} /> : results.length === 0 ? <EmptyState title="No gateway settings yet" body="Add a workspace configuration above to begin secure payment processing." /> : <div className="table-scroll"><table className="data-table"><thead><tr><th>Workspace</th><th>Environment</th><th>Short code</th><th>Credentials</th><th>Status</th><th>Actions</th></tr></thead><tbody>{results.map((row) => <tr key={row._id}><td>{row.tenantName ?? "Unavailable workspace"}</td><td>{row.environment === "production" ? "Production" : "Sandbox"}</td><td>{row.shortCode}</td><td>{row.credentialsConfigured ? "Configured · write-only" : "Not configured"}{rotationIsActive(row) ? " · Update in progress" : ""}</td><td><StatusPill tone={row.deletedAt !== null ? "neutral" : row.enabled ? "success" : "warning"}>{row.deletedAt !== null ? "Archived" : row.enabled ? "Enabled" : "Disabled"}</StatusPill></td><td><div className="table-actions">{row.deletedAt === null ? <><Button variant="secondary" onClick={() => { setEditingTenantId(row.tenantId); setEditingEnvironment(row.environment); setEditingShortCode(row.shortCode); }}>Edit settings</Button><Button variant="secondary" disabled={busy || rotationIsActive(row)} onClick={() => { setCredentialsTarget(row); setCredentialOperationId(null); setCredentials({ consumerKey: "", consumerSecret: "", passkey: "" }); }}><KeyRound size={15} aria-hidden="true" />{row.credentialsConfigured ? "Rotate credentials" : "Add credentials"}</Button>{row.credentialsConfigured ? <Button variant={row.enabled ? "danger" : "secondary"} disabled={busy || rotationIsActive(row)} onClick={() => void setGatewayEnabled(row, !row.enabled)}><Power size={15} aria-hidden="true" />{row.enabled ? "Disable" : "Enable"}</Button> : null}<Button variant="secondary" disabled={busy} onClick={() => setArchiveTarget(row)}><Archive size={15} aria-hidden="true" />Archive</Button></> : <Button variant="secondary" disabled={busy} onClick={() => setArchiveTarget(row)}><RefreshCw size={15} aria-hidden="true" />Restore</Button>}</div></td></tr>)}</tbody></table></div>}
           {status === "CanLoadMore" || status === "LoadingMore" ? <Button variant="secondary" disabled={status === "LoadingMore"} onClick={() => loadMore(25)}>Load more gateway settings</Button> : null}
         </section>
       </> : <section className="pf-panel" aria-labelledby="finance-edit-heading">
         <p className="eyebrow">Finance access</p><h2 id="finance-edit-heading">Edit public payment settings</h2><p className="page-subtitle">This form does not read or reveal gateway configuration or credentials. Updates are saved only when a gateway already exists for the selected workspace.</p>
-        <div className="form-grid"><Field label="Workspace" required><select className="pf-input" value={editingTenantId} onChange={(event) => { const id = event.target.value; setEditingTenantId(id); const row = results.find((item) => item.tenantId === id); setEditingEnvironment(row?.environment ?? "sandbox"); setEditingShortCode(row?.shortCode ?? ""); }}><option value="">Choose a workspace</option>{tenants.map((tenant) => <option key={tenant._id} value={tenant._id}>{tenant.name}</option>)}</select></Field><Field label="Environment"><select className="pf-input" value={editingEnvironment} onChange={(event) => setEditingEnvironment(event.target.value as "sandbox" | "production")}><option value="sandbox">Sandbox</option><option value="production">Production</option></select></Field><Field label="Business short code"><TextInput inputMode="numeric" pattern="[0-9]{5,6}" maxLength={6} value={editingShortCode} onChange={(event) => setEditingShortCode(event.target.value)} /></Field></div>
-        <div className="modal-actions"><Button disabled={busy || !editingTenantId || !editingShortCode} onClick={savePublicFields}>Save public settings</Button></div>
+        <div className="form-grid"><Field label="Workspace" required><select className="pf-input" value={editingTenantId} onChange={(event) => { setEditingTenantId(event.target.value); setEditingEnvironment(""); setEditingShortCode(""); }}><option value="">Choose a workspace</option>{tenants.map((tenant) => <option key={tenant._id} value={tenant._id}>{tenant.name}</option>)}</select></Field><Field label="Environment"><select className="pf-input" value={editingEnvironment} onChange={(event) => setEditingEnvironment(event.target.value as "sandbox" | "production" | "")}><option value="">Leave unchanged</option><option value="sandbox">Sandbox</option><option value="production">Production</option></select></Field><Field label="Business short code" hint="Leave blank to keep the current value."><TextInput inputMode="numeric" pattern="[0-9]{5,6}" maxLength={6} value={editingShortCode} onChange={(event) => setEditingShortCode(event.target.value)} /></Field></div>
+        <div className="modal-actions"><Button disabled={busy || !editingTenantId || (!editingEnvironment && !editingShortCode.trim())} onClick={savePublicFields}>Save public settings</Button></div>
         {tenantStatus === "CanLoadMore" || tenantStatus === "LoadingMore" ? <Button variant="secondary" disabled={tenantStatus === "LoadingMore"} onClick={() => loadMoreTenants(50)}>{tenantStatus === "LoadingMore" ? "Loading workspaces…" : "Load more workspaces"}</Button> : null}
         {selectedTenant ? <p className="pf-hint">Updates are applied only if this workspace already has gateway settings. An unavailable result does not reveal whether a configuration exists.</p> : null}
       </section>}
 
-      {credentialsTarget ? <div className="profile-modal-overlay" role="presentation"><section className="profile-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="credential-dialog-title"><header className="profile-modal-header"><div><p className="eyebrow">{credentialsTarget.tenantName ?? "Workspace"}</p><h2 id="credential-dialog-title" className="page-title">{credentialsTarget.credentialsConfigured ? "Rotate Daraja credentials" : "Add Daraja credentials"}</h2><p className="page-subtitle">Credential values are sent directly to encrypted secret storage. They are not returned after saving.</p></div><button type="button" className="profile-modal-close" disabled={busy} onClick={() => { setCredentialsTarget(null); setCredentialOperationId(null); }} aria-label="Close">×</button></header><div className="form-grid"><Field label="Consumer key" required><TextInput autoComplete="off" value={credentials.consumerKey} onChange={(event) => setCredentials({ ...credentials, consumerKey: event.target.value })} /></Field><Field label="Consumer secret" required><TextInput type="password" autoComplete="new-password" value={credentials.consumerSecret} onChange={(event) => setCredentials({ ...credentials, consumerSecret: event.target.value })} /></Field><Field label="STK passkey" required><TextInput type="password" autoComplete="new-password" value={credentials.passkey} onChange={(event) => setCredentials({ ...credentials, passkey: event.target.value })} /></Field></div><div className="modal-actions"><Button variant="secondary" disabled={busy} onClick={() => { setCredentialsTarget(null); setCredentialOperationId(null); }}>Cancel</Button><Button disabled={busy || !credentials.consumerKey || !credentials.consumerSecret || !credentials.passkey} onClick={submitCredentials}>{busy ? "Saving…" : "Save credentials"}</Button></div></section></div> : null}
+      <Dialog.Root open={credentialsTarget !== null} onOpenChange={(open) => { if (!open) closeCredentialDialog(); }}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="profile-modal-overlay" />
+          {credentialsTarget ? <Dialog.Content className="profile-modal-dialog" aria-labelledby="credential-dialog-title" onEscapeKeyDown={(event) => { if (busy) event.preventDefault(); }} onPointerDownOutside={(event) => { if (busy) event.preventDefault(); }}>
+            <header className="profile-modal-header"><div><p className="eyebrow">{credentialsTarget.tenantName ?? "Workspace"}</p><Dialog.Title id="credential-dialog-title" className="page-title">{credentialsTarget.credentialsConfigured ? "Rotate gateway credentials" : "Add gateway credentials"}</Dialog.Title><Dialog.Description className="page-subtitle">Credential values are sent directly to encrypted secret storage. They are not returned after saving.</Dialog.Description></div><button type="button" className="profile-modal-close" disabled={busy} onClick={closeCredentialDialog} aria-label="Close">×</button></header>
+            <div className="form-grid"><Field label="Consumer key" required><TextInput autoComplete="off" value={credentials.consumerKey} onChange={(event) => setCredentials({ ...credentials, consumerKey: event.target.value })} /></Field><Field label="Consumer secret" required><TextInput type="password" autoComplete="new-password" value={credentials.consumerSecret} onChange={(event) => setCredentials({ ...credentials, consumerSecret: event.target.value })} /></Field><Field label="Credential passkey" required><TextInput type="password" autoComplete="new-password" value={credentials.passkey} onChange={(event) => setCredentials({ ...credentials, passkey: event.target.value })} /></Field></div>
+            <div className="modal-actions"><Button variant="secondary" disabled={busy} onClick={closeCredentialDialog}>Cancel</Button><Button disabled={busy || !credentials.consumerKey || !credentials.consumerSecret || !credentials.passkey} onClick={submitCredentials}>{busy ? "Saving…" : "Save credentials"}</Button></div>
+          </Dialog.Content> : null}
+        </Dialog.Portal>
+      </Dialog.Root>
       <ConfirmDialog open={archiveTarget !== null} onClose={() => setArchiveTarget(null)} onConfirm={confirmArchive} title={archiveTarget?.deletedAt === null ? "Archive gateway settings?" : "Restore gateway settings?"} description={archiveTarget?.deletedAt === null ? "This disables the gateway and archives its metadata. The stored credentials remain protected." : "The gateway will be restored in the disabled state."} confirmLabel={archiveTarget?.deletedAt === null ? "Archive settings" : "Restore settings"} loading={busy} danger={archiveTarget?.deletedAt === null} />
     </main>
   );
