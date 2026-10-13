@@ -164,3 +164,33 @@ Newest entries last. Keep current after every step so a reset can resume.
 - Production URL: not deployed (see `blockers.md` B-001).
 - Next task: begin the additive `apps/admin` platform-panel boundary extraction (keep tenant `/admin` distinct from the planned `apps/network` surface, remove no legacy surface); continue the Phase 0 role-matrix/UI parity check.
 
+## 2026-10-13 Foundation - PR #99 platform role matrix single-sourced and proven
+
+- Closed the Phase 0 "role matrix is documented and enforced on server and UI"
+  criterion. Added `convex/lib/platformAccess.ts` as the canonical platform gate
+  matrix; every Convex platform gate that repeated a sub-role array now imports
+  its list from it, so access is declared once and resolved through the real
+  `PLATFORM_SUB_ROLE_MAP`.
+- Added `apps/web/platform/permissions.test.ts`, which imports those same lists,
+  resolves them through the map, and asserts the panel visibility helpers
+  (`canManagePlatformTenants`, `canManagePlatformPlans`,
+  `canDeletePlatformTenant`) agree for every concrete platform system role. A
+  backend gate change now flows into the guard instead of escaping a copied
+  matrix; the guard also proves the helpers fail closed with no roles and that no
+  gate resolves to a non-platform role. `package.json` includes
+  `apps/web/platform/*.test.ts` in the repository test job.
+- Verification: repository `node --test` 242/242 (+8 parity cases); web jest
+  25/25; web typecheck; lint zero errors (14 pre-existing warnings outside the
+  diff); convex-tree `tsc` clean except the 4 baseline test-file errors identical
+  at `origin/main`; design-token check; production build passed with a non-secret
+  Convex URL placeholder. The gate lists are behavior-preserving.
+- Merged at `f9695f9` (squash). See PR #99.
+
+### Heartbeat
+
+- Time: 2026-10-13 platform Phase 0 session.
+- Module: Foundation - platform Phase 0 (role matrix single-sourced and proven).
+- Result: the platform access matrix is declared once and the panel UI is proven to agree with the Convex gates for every platform role; PR #98 and #99 merged.
+- Production URL: not deployed (see `blockers.md` B-001).
+- Next task: begin the additive `apps/admin` platform-panel boundary extraction (keep tenant `/admin` distinct from the planned `apps/network` surface, remove no legacy surface); finish the remaining Phase 0 deployment-target work and the Phase 1 tenant-lifecycle items.
+
