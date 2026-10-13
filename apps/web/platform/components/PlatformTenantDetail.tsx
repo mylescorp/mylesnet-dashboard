@@ -2,7 +2,7 @@
 
 import { userFacingMessage } from "@/shared/lib/user-facing-error";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -11,12 +11,14 @@ import {
   PauseCircle,
   PlayCircle,
   Pencil,
+  RotateCcw,
+  Trash2,
   UsersRound,
 } from "lucide-react";
 import { useMutation, useQuery } from "@/app/lib/convex";
 import { tenantControl, type EntitlementStatus, type TenantStatus } from "@/lib/convex/tenantControl";
 import { useUserProfile } from "@/shared/components/UserProfileContext";
-import { canManagePlatformTenants } from "@/platform/permissions";
+import { canDeletePlatformTenant, canManagePlatformTenants } from "@/platform/permissions";
 import { StatusPill, EmptyState, formatDateTime } from "@/shared/components/ui";
 
 const formatTs = (ts: number | null | undefined) => formatDateTime(ts ?? undefined);
@@ -41,11 +43,22 @@ export function PlatformTenantDetail({ tenantId }: { tenantId: string }) {
   const { user } = useUserProfile();
   const detail = useQuery(tenantControl.getTenantDetail, { tenantId });
   const setStatus = useMutation(tenantControl.setStatus);
+  const scheduleDeletion = useMutation(tenantControl.scheduleDeletion);
+  const restoreScheduledDeletion = useMutation(tenantControl.restoreScheduledDeletion);
   const [working, setWorking] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  const [deletionReason, setDeletionReason] = useState("");
+  const [requestingDeletion, setRequestingDeletion] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const canManage = canManagePlatformTenants(user?.roles.map((role) => role.slug));
+  const canScheduleDeletion = canDeletePlatformTenant(user?.roles.map((role) => role.slug));
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const tenant = detail;
   if (tenant === undefined) return <p className="pf-muted">Loading tenant detail…</p>;
@@ -58,6 +71,29 @@ export function PlatformTenantDetail({ tenantId }: { tenantId: string }) {
       setNotice(`${tenant.name} is now ${status}.`);
     } catch (caught) {
       setError(userFacingMessage(caught, "Tenant status could not be changed."));
+    } finally { setWorking(false); }
+  };
+
+  const requestDeletion = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null); setNotice(null); setWorking(true);
+    try {
+      const result = await scheduleDeletion({ tenantId, reason: deletionReason.trim() });
+      setDeletionReason("");
+      setRequestingDeletion(false);
+      setNotice(`Tenant access is suspended. The 30-day recovery window ends ${formatTs(result.scheduledDeletionAt)}.`);
+    } catch (caught) {
+      setError(userFacingMessage(caught, "The tenant recovery window could not be started."));
+    } finally { setWorking(false); }
+  };
+
+  const restoreDeletion = async () => {
+    setError(null); setNotice(null); setWorking(true);
+    try {
+      const result = await restoreScheduledDeletion({ tenantId });
+      setNotice(`${tenant.name} was restored to ${result.status}.`);
+    } catch (caught) {
+      setError(userFacingMessage(caught, "The tenant could not be restored."));
     } finally { setWorking(false); }
   };
 
@@ -80,6 +116,34 @@ export function PlatformTenantDetail({ tenantId }: { tenantId: string }) {
 
       {notice ? <p className="platform-claim-message ok" role="status">{notice}</p> : null}
       {error ? <p className="platform-claim-message" role="alert">{error}</p> : null}
+
+      {tenant.scheduledDeletionAt !== null && tenant.status === "pending_deletion" ? (
+        <section className="pf-panel" aria-labelledby="tenant-retention-heading">
+          <div className="section-heading">
+            <div><p className="eyebrow">30-day recovery window</p><h2 id="tenant-retention-heading">Deletion requested</h2></div>
+            <StatusPill tone={tenant.scheduledDeletionAt > now ? "warning" : "neutral"}>{tenant.scheduledDeletionAt > now ? "Access suspended" : "Window elapsed"}</StatusPill>
+          </div>
+          <p>{tenant.scheduledDeletionAt > now
+            ? `Tenant access is suspended. Restore before ${formatTs(tenant.scheduledDeletionAt)} to return the workspace to service.`
+            : `The recovery window ended ${formatTs(tenant.scheduledDeletionAt)}. Restoration is no longer available.`}</p>
+          {tenant.deletionReason ? <p className="pf-muted">Reason: {tenant.deletionReason}</p> : null}
+          {canManage && tenant.scheduledDeletionAt > now ? <button type="button" className="secondary-button" disabled={working} onClick={() => void restoreDeletion()}><RotateCcw size={15} aria-hidden="true" />Restore tenant</button> : null}
+        </section>
+      ) : null}
+
+      {canScheduleDeletion && tenant.scheduledDeletionAt === null && ["trial", "active", "suspended"].includes(tenant.status) ? (
+        <section className="pf-panel" aria-labelledby="tenant-deletion-heading">
+          <div className="section-heading"><div><p className="eyebrow">Tenant lifecycle</p><h2 id="tenant-deletion-heading">Request deletion</h2></div><Trash2 size={18} aria-hidden="true" /></div>
+          <p>Tenant access will stop immediately. The workspace enters a 30-day recovery window; records are retained after that window for the approved data-retention workflow.</p>
+          {requestingDeletion ? (
+            <form className="pf-stack" onSubmit={(event) => void requestDeletion(event)}>
+              <label className="pf-field"><span className="pf-label">Reason (required)</span><textarea className="pf-input" required minLength={8} maxLength={500} rows={3} value={deletionReason} onChange={(event) => setDeletionReason(event.target.value)} /></label>
+              <p className="pf-hint">This action suspends tenant access immediately and is recorded in the audit log.</p>
+              <div className="pf-actions"><button type="button" className="secondary-button" disabled={working} onClick={() => setRequestingDeletion(false)}>Cancel</button><button type="submit" className="danger-button" disabled={working || deletionReason.trim().length < 8}>{working ? "Starting recovery window…" : "Start 30-day recovery window"}</button></div>
+            </form>
+          ) : <button type="button" className="secondary-button" onClick={() => setRequestingDeletion(true)}>Review deletion request</button>}
+        </section>
+      ) : null}
 
       <section className="metric-grid">
         <Metric icon={<Building2 size={19} />} label="Lifecycle status" value={<StatusPill tone={statusTone[tenant.status]}>{tenant.status}</StatusPill>} detail="Tenant directory state" />
