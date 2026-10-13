@@ -311,7 +311,8 @@ export const syncWorkosIdentity = internalMutation({
         name: args.name ?? existing.name,
         image: args.image ?? existing.image,
         mfaEnrolled: args.mfaEnrolled !== undefined ? args.mfaEnrolled : existing.mfaEnrolled,
-        mfaEnrolledAt: args.mfaEnrolledAt ?? existing.mfaEnrolledAt,
+        mfaEnrolledAt:
+          args.mfaEnrolled === false ? undefined : args.mfaEnrolledAt ?? existing.mfaEnrolledAt,
         isActive: existing.isActive ?? true,
       });
       return existing._id;
@@ -323,7 +324,8 @@ export const syncWorkosIdentity = internalMutation({
       await ctx.db.patch(byEmail._id, {
         workosUserId: args.workosUserId,
         mfaEnrolled: args.mfaEnrolled !== undefined ? args.mfaEnrolled : byEmail.mfaEnrolled,
-        mfaEnrolledAt: args.mfaEnrolledAt ?? byEmail.mfaEnrolledAt,
+        mfaEnrolledAt:
+          args.mfaEnrolled === false ? undefined : args.mfaEnrolledAt ?? byEmail.mfaEnrolledAt,
         isActive: byEmail.isActive ?? true,
       });
       return byEmail._id;
