@@ -53,7 +53,7 @@ export const list = query({
   handler: async (ctx, args) => {
     await requirePlatformSubRole(ctx, [...PLATFORM_SUB_ROLE_READERS]);
     const pageSize = Math.max(1, Math.min(args.paginationOpts.numItems, 50));
-    const source = args.includeArchived
+    const source = args.includeArchived || args.includeDeleted
       ? ctx.db.query("platformPolicyTemplates")
       : ctx.db.query("platformPolicyTemplates").withIndex("by_status_and_updatedAt", (q) => q.eq("status", "active"));
     const page = await source.order("desc").paginate({ ...args.paginationOpts, numItems: pageSize });

@@ -588,7 +588,7 @@ export const recordOrganizationMembership = internalMutation({
         workosMembershipId: args.workosMembershipId,
         role: args.roleSlug ?? existingTenantMembership.role,
         status: effectiveStatus,
-        providerUpdatedAt: args.providerUpdatedAt,
+        providerUpdatedAt: args.providerUpdatedAt ?? existingTenantMembership.providerUpdatedAt,
         providerMembershipDeletedAt: existingTenantMembership.providerMembershipDeletedAt === undefined || args.workosMembershipId !== existingTenantMembership.workosMembershipId || (args.providerUpdatedAt !== undefined && args.providerUpdatedAt >= existingTenantMembership.providerMembershipDeletedAt)
           ? undefined
           : existingTenantMembership.providerMembershipDeletedAt,

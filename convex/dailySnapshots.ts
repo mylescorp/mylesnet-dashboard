@@ -115,7 +115,7 @@ export const buildDailySnapshot = internalMutation({
       newSubscribers,
       variableCostLocal,
       netContributionLocal: Math.round((revenueLocal - variableCostLocal) * 100) / 100,
-      topAgentId: topAgentId as never,
+      ...(topAgentId === null ? {} : { topAgentId: topAgentId as never }),
       currency: market.currency,
       createdAt: Date.now(),
     };

@@ -13,10 +13,11 @@ export const retryPendingMembershipSyncs = internalAction({
     for (const request of pending) {
       try {
         const desired = await ctx.runQuery(anyApi.platformUserDirectory.getDesiredMembershipAccess, { userId: request.userId, tenantId: request.tenantId }) as { organizationId: string; workosUserId: string; status: "active" | "revoked" };
-        if (desired.status === "revoked") await deactivateOrganizationMembership(desired.organizationId, desired.workosUserId);
-        else await reactivateOrganizationMembership(desired.organizationId, desired.workosUserId);
+        let providerAlreadyMatched = false;
+        if (desired.status === "revoked") providerAlreadyMatched = (await deactivateOrganizationMembership(desired.organizationId, desired.workosUserId)).alreadyMatched;
+        else providerAlreadyMatched = (await reactivateOrganizationMembership(desired.organizationId, desired.workosUserId)).alreadyMatched;
         const latest = await ctx.runQuery(anyApi.platformUserDirectory.getDesiredMembershipAccess, { userId: request.userId, tenantId: request.tenantId }) as { status: "active" | "revoked" };
-        await ctx.runMutation(anyApi.platformUserDirectory.recordMembershipSync, { requestId: request.requestId, appliedStatus: desired.status, succeeded: latest.status === desired.status });
+        await ctx.runMutation(anyApi.platformUserDirectory.recordMembershipSync, { requestId: request.requestId, appliedStatus: desired.status, succeeded: latest.status === desired.status, providerAlreadyMatched: latest.status === desired.status ? providerAlreadyMatched : false });
       } catch {
         await ctx.runMutation(anyApi.platformUserDirectory.recordMembershipSync, { requestId: request.requestId, appliedStatus: request.status, succeeded: false });
       }

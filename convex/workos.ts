@@ -68,9 +68,19 @@ type WorkosMembership = {
   id: string;
   organization_id: string;
   status: string;
+  updated_at?: string;
   role?: { slug?: string };
   roles?: Array<{ slug?: string }>;
 };
+
+function parseWosTimestamp(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value) {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+  return null;
+}
 
 function membershipRoleSlug(membership: WorkosMembership): string | undefined {
   return membership.role?.slug ?? membership.roles?.[0]?.slug;
@@ -129,32 +139,34 @@ export async function reactivateWorkosMembership(workosUserId: string): Promise<
 export async function deactivateOrganizationMembership(
   organizationId: string,
   workosUserId: string,
-): Promise<void> {
+): Promise<{ alreadyMatched: boolean }> {
   const membership = await getWorkosOrganizationMembership(organizationId, workosUserId);
   if (!membership) throw new Error("The user is not a member of this workspace");
   if (membership.status !== "active") {
-    if (membership.status === "inactive") return;
+    if (membership.status === "inactive") return { alreadyMatched: true };
     throw new Error("Only active workspace access can be disabled");
   }
   await workosFetch(
     `/user_management/organization_memberships/${encodeURIComponent(membership.id)}/deactivate`,
     { method: "PUT" },
   );
+  return { alreadyMatched: false };
 }
 
 /** Reactivate one tenant organization's membership without changing other workspaces. */
 export async function reactivateOrganizationMembership(
   organizationId: string,
   workosUserId: string,
-): Promise<void> {
+): Promise<{ alreadyMatched: boolean }> {
   const membership = await getWorkosOrganizationMembership(organizationId, workosUserId);
   if (!membership) throw new Error("The user is not a member of this workspace");
-  if (membership.status === "active") return;
+  if (membership.status === "active") return { alreadyMatched: true };
   if (membership.status !== "inactive") throw new Error("Pending workspace invitations cannot be restored here");
   await workosFetch(
     `/user_management/organization_memberships/${encodeURIComponent(membership.id)}/reactivate`,
     { method: "PUT" },
   );
+  return { alreadyMatched: false };
 }
 
 /** Ask WorkOS to deliver a password reset email; never return or store its token. */
@@ -616,6 +628,7 @@ export const syncActiveOrganizationMembership = action({
         organizationId,
         roleSlug,
         status: "active",
+        providerUpdatedAt: parseWosTimestamp(membership.updated_at) ?? undefined,
         email: identity.email,
         name: typeof identity.name === "string" ? identity.name : undefined,
       });

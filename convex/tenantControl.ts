@@ -30,6 +30,10 @@ const entitlementStatus = v.union(
 );
 
 const TENANT_DELETION_GRACE_PERIOD_MS = 30 * 24 * 60 * 60 * 1000;
+// A backfill reserved through `startSubscriberCountBackfill` that has not
+// progressed for this long is treated as abandoned (crashed runner or lost
+// scheduled function) and its lock is released so a fresh scan can run.
+const SUBSCRIBER_COUNT_BACKFILL_STALE_MS = 30 * 60 * 1000;
 
 type WorkspaceSetupReason =
   | "authentication_required"
@@ -112,13 +116,12 @@ export const backfillTenantSubscriberCount = internalMutation({
     if (!args.cursor) {
       if (!tenant.subscriberCountBackfillRunning) throw new Error("Subscriber count backfill was not started");
     }
-    let page;
-    try {
-      page = await ctx.db
-        .query("subscribers")
-        .withIndex("by_tenant", (q) => q.eq("tenantId", args.tenantId))
-        .paginate({ numItems: 500, cursor: args.cursor ?? null });
-    } catch {
+    // A scheduled page that finds the lock released (manual release or a
+    // stale-lock restart already took over) ends the chain instead of
+    // rearming it from a stale cursor.
+    if (!tenant.subscriberCountBackfillRunning) return { complete: false, subscriberCount: null, failed: true };
+
+    const releaseAndLogFailure = async (reason: string) => {
       const latestTenant = await ctx.db.get(args.tenantId);
       if (latestTenant?.subscriberCountBackfillRunning) {
         await ctx.db.patch(args.tenantId, { subscriberCountBackfillRunning: false });
@@ -129,58 +132,77 @@ export const backfillTenantSubscriberCount = internalMutation({
           changedBy: args.actorUserId,
           tenantId: args.tenantId,
           before: { backfillRunning: true },
-          after: { backfillRunning: false, restartAvailable: true },
+          after: {
+            backfillRunning: false,
+            reason,
+            resumeCursor: latestTenant.subscriberCountBackfillCursor ?? null,
+            savedProgress: latestTenant.subscriberCountBackfillProgress ?? 0,
+          },
         });
       }
-      return { complete: false, subscriberCount: null, failed: true };
-    }
-    const accumulatedCount = (args.accumulatedCount ?? 0) + page.page.filter((row) => row.deletedAt === undefined).length;
-    if (page.isDone) {
-      await ctx.db.patch(args.tenantId, { subscriberCount: accumulatedCount, subscriberCountBackfillRunning: false });
+    };
+
+    try {
+      const page = await ctx.db
+        .query("subscribers")
+        .withIndex("by_tenant", (q) => q.eq("tenantId", args.tenantId))
+        .paginate({ numItems: 500, cursor: args.cursor ?? null });
+      const accumulatedCount = (args.accumulatedCount ?? 0) + page.page.filter((row) => row.deletedAt === undefined).length;
+      if (page.isDone) {
+        await ctx.db.patch(args.tenantId, {
+          subscriberCount: accumulatedCount,
+          subscriberCountBackfillRunning: false,
+          subscriberCountBackfillStartedAt: undefined,
+          subscriberCountBackfillCursor: undefined,
+          subscriberCountBackfillProgress: undefined,
+          subscriberCountBackfillHeartbeatAt: undefined,
+        });
+        await logAudit(ctx, {
+          action: "tenant.subscriber_count_backfill_completed",
+          entityTable: "tenants",
+          entityId: args.tenantId,
+          changedBy: args.actorUserId,
+          tenantId: args.tenantId,
+          before: { subscriberCount: tenant.subscriberCount ?? null, backfillRunning: true },
+          after: { subscriberCount: accumulatedCount, backfillRunning: false },
+        });
+        return { complete: true, subscriberCount: accumulatedCount };
+      }
+      // Persist enough progress to resume (or at worst restart from the last
+      // good page) before scheduling the next page, and refresh the heartbeat
+      // so a stale lock can be recognized and released.
+      await ctx.db.patch(args.tenantId, {
+        subscriberCountBackfillCursor: page.continueCursor,
+        subscriberCountBackfillProgress: accumulatedCount,
+        subscriberCountBackfillHeartbeatAt: Date.now(),
+      });
+      try {
+        await ctx.scheduler.runAfter(0, internal.tenantControl.backfillTenantSubscriberCount, {
+          tenantId: args.tenantId,
+          actorUserId: args.actorUserId,
+          cursor: page.continueCursor,
+          accumulatedCount,
+        });
+      } catch {
+        await releaseAndLogFailure("next page could not be scheduled");
+        return { complete: false, subscriberCount: null, failed: true };
+      }
       await logAudit(ctx, {
-        action: "tenant.subscriber_count_backfill_completed",
+        action: "tenant.subscriber_count_backfill_progressed",
         entityTable: "tenants",
         entityId: args.tenantId,
         changedBy: args.actorUserId,
         tenantId: args.tenantId,
-        before: { subscriberCount: tenant.subscriberCount ?? null, backfillRunning: tenant.subscriberCountBackfillRunning ?? false },
-        after: { subscriberCount: accumulatedCount, backfillRunning: false },
+        before: { backfillRunning: true },
+        after: { backfillRunning: true, accumulatedCount, resumeCursor: page.continueCursor },
       });
-      return { complete: true, subscriberCount: accumulatedCount };
-    }
-    try {
-      await ctx.scheduler.runAfter(0, internal.tenantControl.backfillTenantSubscriberCount, {
-        tenantId: args.tenantId,
-        actorUserId: args.actorUserId,
-        cursor: page.continueCursor,
-        accumulatedCount,
-      });
+      return { complete: false, subscriberCount: null };
     } catch {
-      const latestTenant = await ctx.db.get(args.tenantId);
-      if (latestTenant?.subscriberCountBackfillRunning) {
-        await ctx.db.patch(args.tenantId, { subscriberCountBackfillRunning: false });
-        await logAudit(ctx, {
-          action: "tenant.subscriber_count_backfill_failed",
-          entityTable: "tenants",
-          entityId: args.tenantId,
-          changedBy: args.actorUserId,
-          tenantId: args.tenantId,
-          before: { backfillRunning: true },
-          after: { backfillRunning: false, restartAvailable: true },
-        });
-      }
+      // Keep the saved cursor/progress so a resumed scan continues from the
+      // last good page; the released lock lets a fresh start take over.
+      await releaseAndLogFailure("backfill step failed");
       return { complete: false, subscriberCount: null, failed: true };
     }
-    await logAudit(ctx, {
-      action: "tenant.subscriber_count_backfill_progressed",
-      entityTable: "tenants",
-      entityId: args.tenantId,
-      changedBy: args.actorUserId,
-      tenantId: args.tenantId,
-      before: { backfillRunning: tenant.subscriberCountBackfillRunning ?? false },
-      after: { backfillRunning: true, accumulatedCount },
-    });
-    return { complete: false, subscriberCount: null };
   },
 });
 

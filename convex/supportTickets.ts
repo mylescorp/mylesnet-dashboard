@@ -14,23 +14,38 @@ const platformTicketCategory = v.union(v.literal("network"), v.literal("billing"
 const platformTicketStatus = v.union(v.literal("open"), v.literal("in_progress"), v.literal("waiting_on_customer"), v.literal("resolved"), v.literal("closed"));
 const platformTicketPriority = v.union(v.literal("low"), v.literal("medium"), v.literal("high"), v.literal("urgent"));
 
-async function platformTicketAccess(ctx: Parameters<typeof requirePlatformSubRole>[0]) {
-  const user = await requirePlatformSubRole(ctx, platformTicketReadRoles);
-  const roles = await resolveRoles(ctx, user);
-  const slugs = new Set(roles.map(role => role.slug));
+/**
+ * Category scoping applied to every ticket access path (platform panel and
+ * legacy endpoints). Only the defined platform actors are restricted to their
+ * column; tenant roles never appear here, so market-scoped tenant access is
+ * left untouched by whatever category guard `requireMarketAccess` provides.
+ */
+function ticketCategoryPolicy(slugs: ReadonlySet<string>) {
   const isSuperAdmin = hasCanonicalPlatformSuperAdminRole([...slugs]);
   const isSupport = slugs.has("platform_support");
   const isOps = slugs.has("ops_manager");
   const isFinance = slugs.has("finance_manager");
   return {
-    user,
     canManageAll: isSuperAdmin || isSupport,
+    isPlatformActor: isSuperAdmin || isSupport || isOps || isFinance,
     allowedCategories: new Set<PlatformTicketCategory>([
       ...(isSuperAdmin || isSupport ? ["network", "billing", "account"] as const : []),
       ...(isOps ? ["network"] as const : []),
       ...(isFinance ? ["billing"] as const : []),
     ]),
   };
+}
+
+async function platformTicketAccess(ctx: Parameters<typeof requirePlatformSubRole>[0]) {
+  const user = await requirePlatformSubRole(ctx, platformTicketReadRoles);
+  const roles = await resolveRoles(ctx, user);
+  return { user, ...ticketCategoryPolicy(new Set(roles.map(role => role.slug))) };
+}
+
+/** Resolve the category policy for a legacy (tenant permission) ticket actor. */
+async function legacyTicketCategoryPolicy(ctx: Parameters<typeof requirePermission>[0], user: Doc<"users">) {
+  const roles = await resolveRoles(ctx, user);
+  return ticketCategoryPolicy(new Set(roles.map(role => role.slug)));
 }
 
 async function platformTicketDeadlines(ctx: Parameters<typeof requirePermission>[0], category: PlatformTicketCategory, now: number) {
@@ -215,10 +230,14 @@ export const listSupportTickets = query({
     agentId: v.optional(v.id("agents")),
   },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "tickets:read");
+    const user = await requirePermission(ctx, "tickets:read");
     if (args.marketId) await requireMarketAccess(ctx, args.marketId, "viewer");
+    const policy = await legacyTicketCategoryPolicy(ctx, user);
     let tickets = await ctx.db.query("supportTickets").collect();
 
+    if (policy.isPlatformActor) {
+      tickets = tickets.filter((t) => policy.allowedCategories.has((t.category ?? "account") as PlatformTicketCategory));
+    }
     if (args.ticketStatus) {
       tickets = tickets.filter((t) => t.ticketStatus === args.ticketStatus);
     }
@@ -235,8 +254,10 @@ export const listSupportTickets = query({
 export const getSupportTicket = query({
   args: { ticketId: v.id("supportTickets") },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "tickets:read");
+    const user = await requirePermission(ctx, "tickets:read");
+    const policy = await legacyTicketCategoryPolicy(ctx, user);
     const ticket = await ctx.db.get(args.ticketId);
+    if (ticket && policy.isPlatformActor && !policy.allowedCategories.has((ticket.category ?? "account") as PlatformTicketCategory)) return null;
     if (ticket?.marketId) await requireMarketAccess(ctx, ticket.marketId, "viewer");
     return ticket;
   },
@@ -258,10 +279,14 @@ export const createSupportTicket = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "tickets:manage");
+    const policy = await legacyTicketCategoryPolicy(ctx, user);
     if (args.marketId) await requireMarketAccess(ctx, args.marketId, "operator");
     const now = Date.now();
     const market = args.marketId ? await enforceTenantOnResource(ctx, await ctx.db.get(args.marketId), "market") : null;
     const category = args.category ?? "account";
+    if (policy.isPlatformActor && !policy.allowedCategories.has(category)) {
+      throw new Error("Unauthorized: this role cannot create tickets in this category");
+    }
     const deadlines = await platformTicketDeadlines(ctx, category, now);
     const ticketId = await ctx.db.insert("supportTickets", {
       tenantId: market?.tenantId,
@@ -314,8 +339,12 @@ export const updateSupportTicket = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "tickets:manage");
+    const policy = await legacyTicketCategoryPolicy(ctx, user);
     const ticket = await ctx.db.get(args.ticketId);
     if (!ticket) throw new Error("Ticket not found");
+    if (policy.isPlatformActor && !policy.allowedCategories.has((ticket.category ?? "account") as PlatformTicketCategory)) {
+      throw new Error("Unauthorized: this role cannot manage tickets in this category");
+    }
     if (ticket.marketId) await requireMarketAccess(ctx, ticket.marketId, "operator");
     const market = ticket.marketId ? await enforceTenantOnResource(ctx, await ctx.db.get(ticket.marketId), "market") : null;
 
@@ -349,8 +378,12 @@ export const softDeleteTicket = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "tickets:manage");
+    const policy = await legacyTicketCategoryPolicy(ctx, user);
     const ticket = await ctx.db.get(args.ticketId);
     if (!ticket) throw new Error("Ticket not found");
+    if (policy.isPlatformActor && !policy.allowedCategories.has((ticket.category ?? "account") as PlatformTicketCategory)) {
+      throw new Error("Unauthorized: this role cannot manage tickets in this category");
+    }
     if (ticket.marketId) await requireMarketAccess(ctx, ticket.marketId, "operator");
     const market = ticket.marketId ? await enforceTenantOnResource(ctx, await ctx.db.get(ticket.marketId), "market") : null;
 
@@ -374,8 +407,12 @@ export const restoreTicket = mutation({
   args: { ticketId: v.id("supportTickets") },
   handler: async (ctx, args) => {
     const user = await requirePermission(ctx, "tickets:manage");
+    const policy = await legacyTicketCategoryPolicy(ctx, user);
     const ticket = await ctx.db.get(args.ticketId);
     if (!ticket) throw new Error("Ticket not found");
+    if (policy.isPlatformActor && !policy.allowedCategories.has((ticket.category ?? "account") as PlatformTicketCategory)) {
+      throw new Error("Unauthorized: this role cannot manage tickets in this category");
+    }
     if (ticket.marketId) await requireMarketAccess(ctx, ticket.marketId, "operator");
     const market = ticket.marketId ? await enforceTenantOnResource(ctx, await ctx.db.get(ticket.marketId), "market") : null;
 

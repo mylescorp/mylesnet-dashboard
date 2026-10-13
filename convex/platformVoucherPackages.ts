@@ -37,7 +37,7 @@ export const list = query({
   returns: pageValidator,
   handler: async (ctx, args) => {
     await requirePlatformSubRole(ctx, ["platform_super_admin", "platform_ops"]);
-    const query = args.includeArchived
+    const query = args.includeArchived || args.includeDeleted
       ? ctx.db.query("platformVoucherPackageTemplates")
       : ctx.db.query("platformVoucherPackageTemplates").withIndex("by_status_and_updatedAt", (q) => q.eq("status", "active"));
     const page = await query.order("desc").paginate({ ...args.paginationOpts, numItems: Math.max(1, Math.min(args.paginationOpts.numItems, 50)) });

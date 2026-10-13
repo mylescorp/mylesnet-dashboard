@@ -43,7 +43,6 @@ platform: [{
       { href: "/platform/commissions/payouts", label: "Payouts", icon: HandCoins },
       { href: "/platform/analytics", label: "Platform analytics", icon: ChartColumn },
       { href: "/platform/analytics/leaderboard", label: "Tenant leaderboard", icon: Trophy },
-      { href: "/platform/analytics/scheduled-reports", label: "Scheduled reports", icon: ChartColumn },
       { href: "/platform/infrastructure/devices", label: "Device fleet", icon: Router },
       { href: "/platform/infrastructure/radius", label: "RADIUS fleet", icon: Radio },
       { href: "/platform/infrastructure/provisioning-queue", label: "Provisioning queue", icon: Radio },

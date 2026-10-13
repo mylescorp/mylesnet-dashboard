@@ -867,7 +867,6 @@ export default defineSchema({
     .index("by_tenant_time", ["tenantId", "occurredAt"])
     .index("by_agent", ["agentId"])
     .index("by_agent_market", ["agentId", "marketId"])
-    .index("by_tenant_time", ["tenantId", "occurredAt"])
     .index("by_market_time", ["marketId", "occurredAt"])
     .index("by_time", ["occurredAt"]),
 
@@ -1057,8 +1056,7 @@ export default defineSchema({
   })
     .index("by_tenant", ["tenantId"])
     .index("by_enabled", ["enabled", "frequency"])
-    .index("by_type", ["reportType"])
-    .index("by_tenant", ["tenantId"]),
+    .index("by_type", ["reportType"]),
 
   // One row per generated report artifact; file bytes live in _storage.
   reportExports: defineTable({
@@ -1078,7 +1076,6 @@ export default defineSchema({
     .index("by_tenant", ["tenantId"])
     .index("by_tenant_created", ["tenantId", "createdAt"])
     .index("by_requested", ["requestedBy", "createdAt"])
-    .index("by_tenant_created", ["tenantId", "createdAt"])
     .index("by_status", ["status"])
     .index("by_report", ["scheduledReportId"]),
 
@@ -1163,6 +1160,10 @@ export default defineSchema({
     // an authoritative count.
     subscriberCount: v.optional(v.number()),
     subscriberCountBackfillRunning: v.optional(v.boolean()),
+    subscriberCountBackfillStartedAt: v.optional(v.number()),
+    subscriberCountBackfillCursor: v.optional(v.string()),
+    subscriberCountBackfillProgress: v.optional(v.number()),
+    subscriberCountBackfillHeartbeatAt: v.optional(v.number()),
     settings: v.optional(v.any()),
     createdAt: v.number(),
     updatedAt: v.number(),
