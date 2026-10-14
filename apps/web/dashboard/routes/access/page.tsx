@@ -122,6 +122,14 @@ function isValidEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
+/**
+ * Approved copy for a partial recovery: the retired WorkOS link is already dead,
+ * so the operator must know the invitee has no working invitation.
+ */
+function recoveryPartialMessage(email: string): string {
+  return `The previous link for ${email} is no longer active, and the new invitation could not be sent. Send a new invitation to restore access.`;
+}
+
 /* ------------------------------------------------------------------ */
 /* Page shell                                                          */
 /* ------------------------------------------------------------------ */
@@ -964,16 +972,19 @@ function InvitationsTab() {
   const [roleId, setRoleId] = useState<Id<"roles"> | "">("");
   const [expiresInDays, setExpiresInDays] = useState("7");
   const [sending, setSending] = useState(false);
-  const [busyInvitationId, setBusyInvitationId] = useState<string | null>(null);
+  const [rowBusy, setRowBusy] = useState(false);
   const [replaceTarget, setReplaceTarget] = useState<InvitationRow | null>(null);
   const [replaceEmail, setReplaceEmail] = useState("");
   const [replaceRoleId, setReplaceRoleId] = useState<Id<"roles"> | "">("");
   const [replaceExpiresInDays, setReplaceExpiresInDays] = useState("7");
   const [replacing, setReplacing] = useState(false);
+  const [replaceError, setReplaceError] = useState<string | null>(null);
 
   if (invitations === undefined || rolesResult === undefined) return <LoadingPanel />;
 
   const invitableRoles = rolesResult.filter((role) => role.slug !== "platform_owner" && role.workosRoleSlug);
+  // A single flag covers every invitation action so two rows cannot run at once.
+  const actionsBusy = sending || rowBusy || replacing;
 
   const send = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -996,7 +1007,7 @@ function InvitationsTab() {
 
   const revoke = async (invitation: InvitationRow) => {
     if (!confirm(`Revoke the invitation to ${invitation.email}?`)) return;
-    setBusyInvitationId(invitation._id);
+    setRowBusy(true);
     setNotice(null);
     setError(null);
     try {
@@ -1005,22 +1016,26 @@ function InvitationsTab() {
     } catch (caught) {
       setError(userFacingMessage(caught, "We could not revoke the invitation."));
     } finally {
-      setBusyInvitationId(null);
+      setRowBusy(false);
     }
   };
 
   const resend = async (invitation: InvitationRow) => {
     if (!confirm(`Resend the invitation to ${invitation.email}? The previous link will stop working.`)) return;
-    setBusyInvitationId(invitation._id);
+    setRowBusy(true);
     setNotice(null);
     setError(null);
     try {
-      await resendInvitation({ invitationId: invitation._id });
-      setNotice(`A fresh invitation was sent to ${invitation.email}.`);
+      const result = await resendInvitation({ invitationId: invitation._id });
+      if (result.outcome === "revoked_without_replacement") {
+        setError(recoveryPartialMessage(invitation.email));
+      } else {
+        setNotice(`A fresh invitation was sent to ${invitation.email}.`);
+      }
     } catch (caught) {
       setError(userFacingMessage(caught, "We could not resend the invitation."));
     } finally {
-      setBusyInvitationId(null);
+      setRowBusy(false);
     }
   };
 
@@ -1029,6 +1044,7 @@ function InvitationsTab() {
     setReplaceEmail(invitation.email);
     setReplaceRoleId(invitation.roleId ?? "");
     setReplaceExpiresInDays("7");
+    setReplaceError(null);
     setNotice(null);
     setError(null);
   };
@@ -1037,24 +1053,38 @@ function InvitationsTab() {
     event.preventDefault();
     if (!replaceTarget) return;
     setReplacing(true);
+    setReplaceError(null);
     setNotice(null);
-    setError(null);
     try {
       if (!isValidEmail(replaceEmail)) throw new Error("Enter a valid email address.");
       if (!replaceRoleId) throw new Error("Choose a role for the invitee.");
-      await replaceInvitation({
+      const result = await replaceInvitation({
         invitationId: replaceTarget._id,
         email: replaceEmail,
         roleId: replaceRoleId,
         expiresInDays: Number(replaceExpiresInDays) || 7,
       });
+      if (result.outcome === "revoked_without_replacement") {
+        // Keep the dialog open: the outcome and its next step belong with the
+        // form that produced it, not behind the dialog overlay.
+        setReplaceError(recoveryPartialMessage(replaceEmail.trim().toLowerCase()));
+        return;
+      }
       setNotice(`Invitation replaced for ${replaceEmail.trim().toLowerCase()}.`);
       setReplaceTarget(null);
     } catch (caught) {
-      setError(userFacingMessage(caught, "We could not replace the invitation."));
+      setReplaceError(userFacingMessage(caught, "We could not replace the invitation."));
     } finally {
       setReplacing(false);
     }
+  };
+
+  const closeReplace = () => {
+    // Keep the dialog open while the action is in flight: its outcome belongs
+    // to the form that produced it.
+    if (replacing) return;
+    setReplaceTarget(null);
+    setReplaceError(null);
   };
 
   const statusTone = (status: string) => (status === "accepted" ? "success" : status === "revoked" ? "danger" : "warning");
@@ -1089,7 +1119,7 @@ function InvitationsTab() {
             <span className="pf-label">Expires in (days)</span>
             <input type="number" className="pf-input" min={1} max={30} value={expiresInDays} onChange={(event) => setExpiresInDays(event.target.value)} />
           </label>
-          <button type="submit" className="primary-button" disabled={sending} style={{ alignSelf: "end" }}>
+          <button type="submit" className="primary-button" disabled={actionsBusy} style={{ alignSelf: "end" }}>
             {sending ? "Sending…" : <><KeyRound size={16} aria-hidden="true" />Send invitation</>}
           </button>
         </div>
@@ -1120,13 +1150,13 @@ function InvitationsTab() {
                     <td className="pf-hide-sm">{invitation.createdAt ? new Date(invitation.createdAt).toLocaleDateString() : "—"}</td>
                     <td className="pf-hide-sm">{invitation.expiresAt ? new Date(invitation.expiresAt).toLocaleDateString() : "—"}</td>
                     <td>
-                      {invitation.status === "pending" ? (
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                      {invitation.status === "pending" && invitation.isPlatform ? (
+                        <div className="pf-actions">
                           <button
                             type="button"
                             className="secondary-button"
                             onClick={() => void resend(invitation)}
-                            disabled={busyInvitationId === invitation._id}
+                            disabled={actionsBusy}
                           >
                             <RefreshCw size={14} aria-hidden="true" /> Resend
                           </button>
@@ -1134,7 +1164,7 @@ function InvitationsTab() {
                             type="button"
                             className="secondary-button"
                             onClick={() => openReplace(invitation)}
-                            disabled={busyInvitationId === invitation._id}
+                            disabled={actionsBusy}
                           >
                             <RotateCcw size={14} aria-hidden="true" /> Replace
                           </button>
@@ -1142,7 +1172,7 @@ function InvitationsTab() {
                             type="button"
                             className="secondary-button"
                             onClick={() => void revoke(invitation)}
-                            disabled={busyInvitationId === invitation._id}
+                            disabled={actionsBusy}
                           >
                             <Trash2 size={14} aria-hidden="true" /> Revoke
                           </button>
@@ -1161,10 +1191,10 @@ function InvitationsTab() {
         <Modal
           title="Replace invitation"
           eyebrow="Pending invitation"
-          onClose={() => setReplaceTarget(null)}
+          onClose={closeReplace}
           actions={
             <>
-              <button type="button" className="secondary-button" onClick={() => setReplaceTarget(null)}>Cancel</button>
+              <button type="button" className="secondary-button" onClick={closeReplace} disabled={replacing}>Cancel</button>
               <button type="submit" form="replace-invitation-form" className="primary-button" disabled={replacing}>
                 {replacing ? "Replacing…" : "Replace invitation"}
               </button>
@@ -1172,6 +1202,7 @@ function InvitationsTab() {
           }
         >
           <form id="replace-invitation-form" onSubmit={submitReplace}>
+            {replaceError ? <Notice message={replaceError} tone="error" /> : null}
             <p className="pf-muted" style={{ marginTop: 0 }}>
               Replacing revokes the current link for {replaceTarget.email} and sends a new invitation with the details below.
             </p>

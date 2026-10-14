@@ -9,15 +9,43 @@ import {
   resolveInvitationExpiryDays,
 } from "./invitationLifecycleCore.ts";
 
-test("only pending invitations can be re-issued", () => {
-  assert.deepEqual(decideInvitationRecovery({ status: "pending" }), { allowed: true });
-  assert.deepEqual(decideInvitationRecovery({ status: "accepted" }), { allowed: false, reason: "accepted" });
-  assert.deepEqual(decideInvitationRecovery({ status: "revoked" }), { allowed: false, reason: "revoked" });
-  assert.deepEqual(decideInvitationRecovery(null), { allowed: false, reason: "not_found" });
+const PLATFORM_ORG = "org_platform";
+
+test("only pending platform invitations can be re-issued", () => {
+  assert.deepEqual(
+    decideInvitationRecovery({ status: "pending", organizationId: PLATFORM_ORG }, PLATFORM_ORG),
+    { allowed: true },
+  );
+  assert.deepEqual(
+    decideInvitationRecovery({ status: "accepted", organizationId: PLATFORM_ORG }, PLATFORM_ORG),
+    { allowed: false, reason: "accepted" },
+  );
+  assert.deepEqual(
+    decideInvitationRecovery({ status: "revoked", organizationId: PLATFORM_ORG }, PLATFORM_ORG),
+    { allowed: false, reason: "revoked" },
+  );
+  assert.deepEqual(decideInvitationRecovery(null, PLATFORM_ORG), { allowed: false, reason: "not_found" });
+});
+
+test("recovery refuses invitations from another workspace before revoking", () => {
+  // Tenant and network invitations share the table through the WorkOS webhook.
+  // Replacing one must never cancel its link or grant platform access.
+  assert.deepEqual(
+    decideInvitationRecovery({ status: "pending", organizationId: "org_tenant" }, PLATFORM_ORG),
+    { allowed: false, reason: "other_workspace" },
+  );
+  assert.deepEqual(
+    decideInvitationRecovery({ status: "pending", organizationId: "" }, PLATFORM_ORG),
+    { allowed: false, reason: "other_workspace" },
+  );
 });
 
 test("recovery errors stay product-safe", () => {
   assert.equal(invitationRecoveryErrorMessage("not_found"), "Invitation not found.");
+  assert.equal(
+    invitationRecoveryErrorMessage("other_workspace"),
+    "This invitation is not part of the platform workspace.",
+  );
   assert.equal(invitationRecoveryErrorMessage("accepted"), "This invitation has already been accepted.");
   assert.equal(invitationRecoveryErrorMessage("revoked"), "This invitation has already been revoked.");
 });
@@ -43,11 +71,15 @@ test("expiry days clamp into the supported window", () => {
   assert.equal(resolveInvitationExpiryDays(99), 30);
 });
 
-test("custom roles need an explicit WorkOS slug to be invitable", () => {
-  assert.equal(isInvitableRole({ slug: "ops", isSystem: true }), true);
-  assert.equal(isInvitableRole({ slug: "billing", isSystem: false, workosRoleSlug: "org-billing" }), true);
-  assert.equal(isInvitableRole({ slug: "billing", isSystem: false }), false);
-  assert.equal(isInvitableRole({ slug: "ops", isSystem: true, deletedAt: 123 }), false);
-  assert.equal(isInvitableRole({ slug: "platform_owner", isSystem: true }), false);
+test("only roles with an explicit WorkOS slug are invitable", () => {
+  assert.equal(isInvitableRole({ slug: "ops_manager", workosRoleSlug: "ops_manager" }), true);
+  assert.equal(isInvitableRole({ slug: "billing", workosRoleSlug: "org-billing" }), true);
+  assert.equal(isInvitableRole({ slug: "billing" }), false);
+  assert.equal(isInvitableRole({ slug: "billing", workosRoleSlug: "" }), false);
+  // Synced-to-nothing system roles must never retire a valid link.
+  assert.equal(isInvitableRole({ slug: "network_operator", isSystem: true }), false);
+  assert.equal(isInvitableRole({ slug: "ops_manager", workosRoleSlug: "ops_manager", deletedAt: 123 }), false);
+  assert.equal(isInvitableRole({ slug: "platform_owner", workosRoleSlug: "platform_owner" }), false);
   assert.equal(isInvitableRole(null), false);
+  assert.equal(isInvitableRole(undefined), false);
 });
