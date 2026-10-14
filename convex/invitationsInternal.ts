@@ -90,15 +90,38 @@ export const logInvitationAudit = internalMutation({
     email: v.string(),
     roleSlug: v.optional(v.string()),
     actorUserId: v.id("users"),
+    // Set when recovering an invitation so the audit trail keeps the retired
+    // invitation (the resend/replace predecessor) alongside the new one.
+    previousWorkosInvitationId: v.optional(v.string()),
+    previousEmail: v.optional(v.string()),
+    previousRoleSlug: v.optional(v.string()),
+    // Machine-readable outcome for partial failures (for example when the old
+    // invitation was revoked but the replacement could not be issued).
+    outcome: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const hasPrevious =
+      args.previousWorkosInvitationId !== undefined ||
+      args.previousEmail !== undefined ||
+      args.previousRoleSlug !== undefined;
     await logAudit(ctx, {
       action: args.action,
       entityTable: "invitations",
       entityId: args.workosInvitationId,
       changedBy: args.actorUserId,
       tenantId: null,
-      after: { email: args.email, roleSlug: args.roleSlug },
+      before: hasPrevious
+        ? {
+            workosInvitationId: args.previousWorkosInvitationId ?? null,
+            email: args.previousEmail ?? null,
+            roleSlug: args.previousRoleSlug ?? null,
+          }
+        : undefined,
+      after: {
+        email: args.email,
+        roleSlug: args.roleSlug,
+        ...(args.outcome !== undefined ? { outcome: args.outcome } : {}),
+      },
     });
   },
 });

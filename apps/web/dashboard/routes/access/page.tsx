@@ -956,12 +956,20 @@ function InvitationsTab() {
   const rolesResult = useQuery(api.rolesAdmin.listRoles, {});
   const sendInvitation = useAction(api.invitations.sendInvitation);
   const revokeInvitation = useAction(api.invitations.revokeInvitation);
+  const resendInvitation = useAction(api.invitations.resendInvitation);
+  const replaceInvitation = useAction(api.invitations.replaceInvitation);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [roleId, setRoleId] = useState<Id<"roles"> | "">("");
   const [expiresInDays, setExpiresInDays] = useState("7");
   const [sending, setSending] = useState(false);
+  const [busyInvitationId, setBusyInvitationId] = useState<string | null>(null);
+  const [replaceTarget, setReplaceTarget] = useState<InvitationRow | null>(null);
+  const [replaceEmail, setReplaceEmail] = useState("");
+  const [replaceRoleId, setReplaceRoleId] = useState<Id<"roles"> | "">("");
+  const [replaceExpiresInDays, setReplaceExpiresInDays] = useState("7");
+  const [replacing, setReplacing] = useState(false);
 
   if (invitations === undefined || rolesResult === undefined) return <LoadingPanel />;
 
@@ -988,6 +996,7 @@ function InvitationsTab() {
 
   const revoke = async (invitation: InvitationRow) => {
     if (!confirm(`Revoke the invitation to ${invitation.email}?`)) return;
+    setBusyInvitationId(invitation._id);
     setNotice(null);
     setError(null);
     try {
@@ -995,6 +1004,56 @@ function InvitationsTab() {
       setNotice(`Invitation to ${invitation.email} revoked.`);
     } catch (caught) {
       setError(userFacingMessage(caught, "We could not revoke the invitation."));
+    } finally {
+      setBusyInvitationId(null);
+    }
+  };
+
+  const resend = async (invitation: InvitationRow) => {
+    if (!confirm(`Resend the invitation to ${invitation.email}? The previous link will stop working.`)) return;
+    setBusyInvitationId(invitation._id);
+    setNotice(null);
+    setError(null);
+    try {
+      await resendInvitation({ invitationId: invitation._id });
+      setNotice(`A fresh invitation was sent to ${invitation.email}.`);
+    } catch (caught) {
+      setError(userFacingMessage(caught, "We could not resend the invitation."));
+    } finally {
+      setBusyInvitationId(null);
+    }
+  };
+
+  const openReplace = (invitation: InvitationRow) => {
+    setReplaceTarget(invitation);
+    setReplaceEmail(invitation.email);
+    setReplaceRoleId(invitation.roleId ?? "");
+    setReplaceExpiresInDays("7");
+    setNotice(null);
+    setError(null);
+  };
+
+  const submitReplace = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!replaceTarget) return;
+    setReplacing(true);
+    setNotice(null);
+    setError(null);
+    try {
+      if (!isValidEmail(replaceEmail)) throw new Error("Enter a valid email address.");
+      if (!replaceRoleId) throw new Error("Choose a role for the invitee.");
+      await replaceInvitation({
+        invitationId: replaceTarget._id,
+        email: replaceEmail,
+        roleId: replaceRoleId,
+        expiresInDays: Number(replaceExpiresInDays) || 7,
+      });
+      setNotice(`Invitation replaced for ${replaceEmail.trim().toLowerCase()}.`);
+      setReplaceTarget(null);
+    } catch (caught) {
+      setError(userFacingMessage(caught, "We could not replace the invitation."));
+    } finally {
+      setReplacing(false);
     }
   };
 
@@ -1062,7 +1121,32 @@ function InvitationsTab() {
                     <td className="pf-hide-sm">{invitation.expiresAt ? new Date(invitation.expiresAt).toLocaleDateString() : "—"}</td>
                     <td>
                       {invitation.status === "pending" ? (
-                        <button type="button" className="secondary-button" onClick={() => void revoke(invitation)}>Revoke</button>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={() => void resend(invitation)}
+                            disabled={busyInvitationId === invitation._id}
+                          >
+                            <RefreshCw size={14} aria-hidden="true" /> Resend
+                          </button>
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={() => openReplace(invitation)}
+                            disabled={busyInvitationId === invitation._id}
+                          >
+                            <RotateCcw size={14} aria-hidden="true" /> Replace
+                          </button>
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={() => void revoke(invitation)}
+                            disabled={busyInvitationId === invitation._id}
+                          >
+                            <Trash2 size={14} aria-hidden="true" /> Revoke
+                          </button>
+                        </div>
                       ) : null}
                     </td>
                   </tr>
@@ -1072,6 +1156,63 @@ function InvitationsTab() {
           </table>
         </div>
       </section>
+
+      {replaceTarget ? (
+        <Modal
+          title="Replace invitation"
+          eyebrow="Pending invitation"
+          onClose={() => setReplaceTarget(null)}
+          actions={
+            <>
+              <button type="button" className="secondary-button" onClick={() => setReplaceTarget(null)}>Cancel</button>
+              <button type="submit" form="replace-invitation-form" className="primary-button" disabled={replacing}>
+                {replacing ? "Replacing…" : "Replace invitation"}
+              </button>
+            </>
+          }
+        >
+          <form id="replace-invitation-form" onSubmit={submitReplace}>
+            <p className="pf-muted" style={{ marginTop: 0 }}>
+              Replacing revokes the current link for {replaceTarget.email} and sends a new invitation with the details below.
+            </p>
+            <label className="pf-field">
+              <span className="pf-label">Email</span>
+              <input
+                type="email"
+                className="pf-input"
+                value={replaceEmail}
+                onChange={(event) => setReplaceEmail(event.target.value)}
+                required
+              />
+            </label>
+            <label className="pf-field">
+              <span className="pf-label">Role</span>
+              <select
+                className="pf-input"
+                value={replaceRoleId}
+                onChange={(event) => setReplaceRoleId(event.target.value as Id<"roles"> | "")}
+                required
+              >
+                <option value="">Choose role…</option>
+                {invitableRoles.map((role) => (
+                  <option key={role._id} value={role._id}>{role.name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="pf-field">
+              <span className="pf-label">Expires in (days)</span>
+              <input
+                type="number"
+                className="pf-input"
+                min={1}
+                max={30}
+                value={replaceExpiresInDays}
+                onChange={(event) => setReplaceExpiresInDays(event.target.value)}
+              />
+            </label>
+          </form>
+        </Modal>
+      ) : null}
     </>
   );
 }

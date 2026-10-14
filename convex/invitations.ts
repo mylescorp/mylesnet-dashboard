@@ -1,12 +1,115 @@
 import { v } from "convex/values";
-import { action, query } from "./_generated/server";
+import { action, query, type ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requirePermission } from "./lib/auth";
 import { workosSlugForRole } from "./lib/permissions";
+import {
+  decideInvitationRecovery,
+  invitationRecoveryErrorMessage,
+  isInvitableRole,
+  normalizeInvitationEmail,
+  resolveInvitationExpiryDays,
+} from "./lib/invitationLifecycleCore";
 import { platformOrganizationIdForRoleSync, createWorkosInvitation, revokeWorkosInvitation } from "./workos";
 
-const INVITATION_EXPIRY_DAYS = 7;
+type InvitationAuthor = {
+  userId: Id<"users">;
+  workosUserId: string | null;
+  primaryRoleName: string | null;
+};
+
+/**
+ * Recover a pending invitation by revoking its WorkOS link and issuing a fresh
+ * one for the (possibly updated) email and role.
+ *
+ * WorkOS invitations cannot be re-sent in place, so "resend" and "replace" are
+ * the same operation with different inputs. The retired invitation is kept in
+ * the local registry as `revoked` so the history is complete, and both the
+ * retirement and the new issue are audited. If the replacement cannot be
+ * issued after the revoke, the partial outcome is recorded as an audit entry
+ * (`<action>_failed`) so an operator can see what happened and re-invite.
+ */
+async function reissueInvitation(
+  ctx: ActionCtx,
+  options: {
+    author: InvitationAuthor;
+    previous: Doc<"invitations">;
+    email: string;
+    roleId: Id<"roles">;
+    roleSlug: string;
+    expiresInDays: number;
+    auditAction: "invitation.resend" | "invitation.replace";
+    failureMessage: string;
+  },
+): Promise<string> {
+  await revokeWorkosInvitation(options.previous.workosInvitationId);
+  await ctx.runMutation(internal.invitationsInternal.applyInvitation, {
+    workosInvitationId: options.previous.workosInvitationId,
+    email: options.previous.email,
+    organizationId: options.previous.organizationId,
+    roleId: options.previous.roleId,
+    roleSlug: options.previous.roleSlug,
+    status: "revoked",
+    invitedByUserId: options.author.userId,
+    createdAt: options.previous.createdAt,
+    expiresAt: options.previous.expiresAt,
+  });
+
+  let issued: { id: string; organizationId: string; expiresAt: number | undefined; status: "pending" | "accepted" };
+  try {
+    const invitation = await createWorkosInvitation(
+      options.email,
+      platformOrganizationIdForRoleSync(),
+      options.roleSlug,
+      options.expiresInDays,
+    );
+    issued = {
+      id: invitation.id,
+      organizationId: invitation.organization_id ?? platformOrganizationIdForRoleSync(),
+      expiresAt: invitation.expires_at ? Date.parse(invitation.expires_at) || undefined : undefined,
+      status: invitation.state === "accepted" ? "accepted" : "pending",
+    };
+  } catch {
+    await ctx.runMutation(internal.invitationsInternal.logInvitationAudit, {
+      action: `${options.auditAction}_failed`,
+      workosInvitationId: options.previous.workosInvitationId,
+      email: options.email,
+      roleSlug: options.roleSlug,
+      actorUserId: options.author.userId,
+      previousWorkosInvitationId: options.previous.workosInvitationId,
+      previousEmail: options.previous.email,
+      previousRoleSlug: options.previous.roleSlug,
+      outcome: "revoked_without_replacement",
+    });
+    throw new Error(options.failureMessage);
+  }
+
+  await ctx.runMutation(internal.invitationsInternal.applyInvitation, {
+    workosInvitationId: issued.id,
+    email: options.email,
+    organizationId: issued.organizationId,
+    roleId: options.roleId,
+    roleSlug: options.roleSlug,
+    status: issued.status,
+    invitedByUserId: options.author.userId,
+    createdAt: Date.now(),
+    expiresAt: issued.expiresAt,
+  });
+
+  await ctx.runMutation(internal.invitationsInternal.logInvitationAudit, {
+    action: options.auditAction,
+    workosInvitationId: issued.id,
+    email: options.email,
+    roleSlug: options.roleSlug,
+    actorUserId: options.author.userId,
+    previousWorkosInvitationId: options.previous.workosInvitationId,
+    previousEmail: options.previous.email,
+    previousRoleSlug: options.previous.roleSlug,
+  });
+
+  return issued.id;
+}
 
 /**
  * Invite a user into the platform organization.
@@ -22,8 +125,8 @@ export const sendInvitation = action({
   },
   handler: async (ctx, args) => {
     const author = await ctx.runQuery(internal.invitationsInternal.getInvitationAuthor, {});
-    const email = args.email.trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Enter a valid email address.");
+    const email = normalizeInvitationEmail(args.email);
+    if (!email) throw new Error("Enter a valid email address.");
     if (author.workosUserId === null) throw new Error("Your identity has not been synchronized.");
 
     const role = await ctx.runQuery(internal.invitationsInternal.getRoleById, { roleId: args.roleId });
@@ -33,7 +136,7 @@ export const sendInvitation = action({
       throw new Error("This role is not synced to WorkOS yet; run the test sync in the Roles tab.");
     }
 
-    const expiresInDays = Math.min(30, Math.max(1, args.expiresInDays ?? INVITATION_EXPIRY_DAYS));
+    const expiresInDays = resolveInvitationExpiryDays(args.expiresInDays);
     const workosSlug = role.workosRoleSlug ?? workosSlugForRole(role);
 
     const invitation = await createWorkosInvitation(
@@ -92,11 +195,7 @@ export const listInvitations = query({
 export const revokeInvitation = action({
   args: { invitationId: v.id("invitations") },
   handler: async (ctx, args) => {
-    const author = (await ctx.runQuery(internal.invitationsInternal.getInvitationAuthor, {})) as {
-      userId: Id<"users">;
-      workosUserId: string | null;
-      primaryRoleName: string | null;
-    };
+    const author = (await ctx.runQuery(internal.invitationsInternal.getInvitationAuthor, {})) as InvitationAuthor;
     const invitation = (await ctx.runQuery(internal.invitationsInternal.getInvitationById, { invitationId: args.invitationId })) as Doc<"invitations"> | null;
     if (!invitation) throw new Error("Invitation not found.");
     if (invitation.status !== "pending") throw new Error("Only pending invitations can be revoked.");
@@ -123,3 +222,83 @@ export const revokeInvitation = action({
     return invitation.workosInvitationId;
   },
 });
+
+/**
+ * Re-send a pending invitation under a fresh link with the same email and role.
+ *
+ * Use this when the original message was lost or the link expired. The previous
+ * WorkOS invitation is revoked so only one link is ever live.
+ */
+export const resendInvitation = action({
+  args: {
+    invitationId: v.id("invitations"),
+    expiresInDays: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<string> => {
+    const author = (await ctx.runQuery(internal.invitationsInternal.getInvitationAuthor, {})) as InvitationAuthor;
+    const invitation = (await ctx.runQuery(internal.invitationsInternal.getInvitationById, { invitationId: args.invitationId })) as Doc<"invitations"> | null;
+    const decision = decideInvitationRecovery(invitation ? { status: invitation.status } : null);
+    if (!decision.allowed) throw new Error(invitationRecoveryErrorMessage(decision.reason));
+
+    const email = normalizeInvitationEmail(invitation!.email);
+    if (!email) throw new Error("The invitation email is not valid; use Replace to enter a correct address.");
+    if (!invitation!.roleId) throw new Error("The invitation has no role; use Replace to choose one.");
+
+    const role = await ctx.runQuery(internal.invitationsInternal.getRoleById, { roleId: invitation!.roleId });
+    if (!role || !isInvitableRole(role)) {
+      throw new Error("The invitation role is no longer available; use Replace to choose another role.");
+    }
+
+    return reissueInvitation(ctx, {
+      author,
+      previous: invitation!,
+      email,
+      roleId: invitation!.roleId,
+      roleSlug: role.workosRoleSlug ?? workosSlugForRole(role),
+      expiresInDays: resolveInvitationExpiryDays(args.expiresInDays),
+      auditAction: "invitation.resend",
+      failureMessage: "We could not resend the invitation. The previous link was revoked; invite the person again.",
+    });
+  },
+});
+
+/**
+ * Replace a pending invitation's email, role, or lifetime.
+ *
+ * This reuses the resend machinery: the old WorkOS invitation is revoked and a
+ * new one is issued for the corrected details, with both steps audited.
+ */
+export const replaceInvitation = action({
+  args: {
+    invitationId: v.id("invitations"),
+    email: v.optional(v.string()),
+    roleId: v.optional(v.id("roles")),
+    expiresInDays: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<string> => {
+    const author = (await ctx.runQuery(internal.invitationsInternal.getInvitationAuthor, {})) as InvitationAuthor;
+    const invitation = (await ctx.runQuery(internal.invitationsInternal.getInvitationById, { invitationId: args.invitationId })) as Doc<"invitations"> | null;
+    const decision = decideInvitationRecovery(invitation ? { status: invitation.status } : null);
+    if (!decision.allowed) throw new Error(invitationRecoveryErrorMessage(decision.reason));
+
+    const email = normalizeInvitationEmail(args.email ?? invitation!.email);
+    if (!email) throw new Error("Enter a valid email address.");
+
+    const roleId = args.roleId ?? invitation!.roleId;
+    if (!roleId) throw new Error("Choose a role for the invitee.");
+    const role = await ctx.runQuery(internal.invitationsInternal.getRoleById, { roleId });
+    if (!role || !isInvitableRole(role)) throw new Error("That role cannot be used for an invitation.");
+
+    return reissueInvitation(ctx, {
+      author,
+      previous: invitation!,
+      email,
+      roleId,
+      roleSlug: role.workosRoleSlug ?? workosSlugForRole(role),
+      expiresInDays: resolveInvitationExpiryDays(args.expiresInDays),
+      auditAction: "invitation.replace",
+      failureMessage: "We could not replace the invitation. The previous link was revoked; invite the person again.",
+    });
+  },
+});
+
