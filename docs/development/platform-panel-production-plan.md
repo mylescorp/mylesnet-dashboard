@@ -37,7 +37,7 @@ The subscription screen manages entitlements only. It does not issue SaaS invoic
 - A server-side dashboard layout now calls the authenticated workspace query before rendering dashboard children and invokes Next `forbidden()` for a suspended tenant; `authInterrupts` is enabled. Verify the actual HTTP 403 using an approved suspended test identity, audit every tenant function for suspension enforcement, and implement/prove the documented device billing/RADIUS degradation cascade.
 - Platform tenant navigation, overview actions, and tenant list/detail links use the canonical `/platform/organizations` route aliases; the older `/platform/tenants` paths remain compatible.
 - Finish the onboarding checklist: tenant record, WorkOS organization mapping, owner invitation, hostname, initial entitlement, and readiness state must reconcile before the workspace is described as ready.
-- Add idempotent retry/recovery visibility for partial provisioning and invitation resend/replace with audit records.
+- [x] Idempotent retry/recovery visibility for partial provisioning and invitation resend/replace with audit records (PR #110: resend/replace with atomic recovery + intent audit, platform-only guard, typed partial outcome, UI gating; Greptile 5/5 on head `81c72d4`, merged `cddfc3d`).
 - Keep suspension distinct from cancellation. Cancellation remains blocked until the retention/offboarding flow and retention period are approved.
 - Show the actor, affected workspace, result, and audit reference for lifecycle actions.
 
@@ -267,4 +267,4 @@ Landed the first, additive step of the separately deployable platform control pl
 
 Verification: repository `node --test` 249/249 (+7 boundary cases); web jest 25/25; web + admin typecheck; lint zero errors (14 pre-existing warnings outside the diff); design-token check; web + admin production build with a non-secret Convex URL placeholder. Merged at `3cdce01` (PR #101) with Greptile 5/5 on the final head.
 
-**Exit criteria update:** Phase 0's deployment boundary now exists as an additive, separately deployable app with a drift guard. Remaining Phase 0 work is the verified deployment target (blocked by B-001). Next: the remaining Phase 1 tenant-lifecycle items (idempotent provisioning retry/recovery, invitation resend/replace with audit, suspension vs cancellation) and the `apps/admin` follow-ups above.
+**Exit criteria update:** Phase 0's deployment boundary now exists as an additive, separately deployable app with a drift guard. Remaining Phase 0 work is the verified deployment target (blocked by B-001). Next: complete idempotent provisioning retry/recovery visibility (make provisioning operations retryable and expose recovery state/visibility); then suspension vs cancellation enforcement proof; then apps/admin follow-ups (platform-only shell/navigation, platform-scoped public paths, platform post-login return target, domain/deploy target). Blocked: B-001 (production deploy targets/verification access).
