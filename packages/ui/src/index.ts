@@ -3,6 +3,7 @@ export { AppShell } from "./components/app-shell";
 export { SidebarRail } from "./components/sidebar-rail";
 export { Topbar } from "./components/topbar";
 export { PageHeader } from "./components/page-header";
+export { Button } from "./components/button";
 export { DetailPageTemplate, FormPageTemplate, ListPageTemplate } from "./components/page-templates";
 export { Field, TextArea } from "./components/field";
 export { TextInput } from "./components/text-input";

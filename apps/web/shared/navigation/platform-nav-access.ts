@@ -50,6 +50,7 @@ export const PLATFORM_NAV_ROLE_SCOPES: Readonly<Record<string, readonly string[]
   "/platform/api-keys": [...platformRoles.superAdmin, ...platformRoles.ops],
   "/platform/security/data-requests": [...platformRoles.superAdmin, ...platformRoles.support],
   "/platform/settings/white-label": [...platformRoles.superAdmin],
+  "/platform/settings/payments": [...platformRoles.superAdmin, ...platformRoles.finance],
   "/platform/settings": [...platformRoles.superAdmin, ...platformRoles.ops],
   "/platform/feature-flags": [...platformRoles.superAdmin, ...platformRoles.ops, ...platformRoles.finance, ...platformRoles.support, ...platformRoles.readonly],
 };

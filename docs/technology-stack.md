@@ -99,6 +99,7 @@ Working notes that make each layer production-grade. Expand a section (with evid
 - TypeScript strict everywhere; shared schemas live in `packages/schemas`, shared contracts in `packages/api-contracts`, so the API layer cannot silently diverge from the UI.
 - Version discipline: pin runtime dependencies exactly (or by lockfile); upgrade via the change procedure in the Drift Control section below.
 - **2026-10-08 security patch:** Next.js and `eslint-config-next` are pinned to 16.3.8 to remediate the September 2026 Next.js security release. See `docs/decisions.md` for the maintenance record.
+- **2026-10-13 tenant-owned gateway credential route:** `apps/web` uses `@aws-sdk/client-secrets-manager` and `@vercel/oidc-aws-credentials-provider` for server-only writes to AWS Secrets Manager through Vercel OIDC. These packages are limited to the credential API route; they do not expose provider credentials to the browser or Convex tables. See `docs/decisions.md` for the dated decision and required environment contract.
 - Do not add a package not on this stack; if a gap is real, record it in this file first (see Drift Control).
 
 ## Web and multi-portal delivery

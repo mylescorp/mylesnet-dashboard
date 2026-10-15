@@ -1410,6 +1410,27 @@ export default defineSchema({
     .index("by_tenant", ["tenantId"])
     .index("by_status_and_createdAt", ["status", "createdAt"]),
 
+  /** Tenant-owned Daraja configuration metadata; credential values live only in Secrets Manager. */
+  platformPaymentGatewayConfigs: defineTable({
+    tenantId: v.id("tenants"),
+    provider: v.literal("daraja"),
+    environment: v.union(v.literal("sandbox"), v.literal("production")),
+    shortCode: v.string(),
+    enabled: v.boolean(),
+    secretVersionId: v.optional(v.string()),
+    rotationOperationId: v.optional(v.string()),
+    rotationStartedAt: v.optional(v.number()),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedBy: v.id("users"),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+    deletedBy: v.optional(v.id("users")),
+  })
+    .index("by_tenant_provider", ["tenantId", "provider"])
+    .index("by_updatedAt", ["updatedAt"])
+    .index("by_deletedAt_updatedAt", ["deletedAt", "updatedAt"]),
+
   /** Platform-issued credentials. Only a digest is stored; raw tokens are returned once. */
   platformApiKeys: defineTable({
     name: v.string(),
