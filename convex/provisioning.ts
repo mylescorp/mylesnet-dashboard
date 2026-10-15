@@ -4,7 +4,13 @@ import { mutation, query } from "./_generated/server";
 import { requirePlatformSubRole } from "./lib/auth";
 import { PLATFORM_OPERATE_SUB_ROLES, PLATFORM_READ_SUB_ROLES, PLATFORM_SUPER_ADMIN_SUB_ROLES } from "./lib/platformAccess";
 import { logAudit } from "./lib/auditLog";
-import { nextProvisioningStatus, isValidFirmwareLabel } from "./lib/provisioningCore";
+import {
+  canRetryProvisioning,
+  isValidFirmwareLabel,
+  normalizeProvisioningError,
+  normalizeProvisioningTransition,
+  retryProvisioningStatus,
+} from "./lib/provisioningCore";
 import { canTenantOperate } from "./lib/tenantCore";
 
 const readers = PLATFORM_READ_SUB_ROLES;
@@ -45,6 +51,8 @@ export const listProvisioningRequests = query({
           decidedByName: decider?.name ?? decider?.email ?? null,
           marketName: market?.name ?? null,
           tenantName: tenant?.name ?? null,
+          retryCount: row.retryCount ?? 0,
+          recoveryState: row.recoveryState ?? "idle",
         };
       }),
     );
@@ -71,6 +79,8 @@ export const getProvisioningRequest = query({
       decidedByName: decider?.name ?? decider?.email ?? null,
       marketName: market?.name ?? null,
       tenantName: tenant?.name ?? null,
+      retryCount: row.retryCount ?? 0,
+      recoveryState: row.recoveryState ?? "idle",
     };
   },
 });
@@ -131,6 +141,9 @@ export const requestDeviceProvisioning = mutation({
       createdBy: user._id,
       createdAt: now,
       updatedAt: now,
+      retryCount: 0,
+      recoveryState: "idle",
+      lastTransitionAt: now,
     });
 
     if (device) {
@@ -177,6 +190,15 @@ export const decideProvisioningRequest = mutation({
     const request = await ctx.db.get(args.requestId);
     if (!request) throw new Error("Provisioning request not found");
 
+    const next = normalizeProvisioningTransition(request.status, args.decision);
+    if (next === null) {
+      throw new Error(`Cannot change a ${request.status} request to ${args.decision}`);
+    }
+
+    // Idempotent no-op: a repeated decision for a request already in that state
+    // succeeds without rewriting history or duplicating audit entries.
+    if (next === request.status) return;
+
     const device = request.deviceId ? await ctx.db.get(request.deviceId) : null;
     if (request.deviceId && (!device || device.deletedAt !== undefined)) {
       throw new Error("The linked device is missing or archived");
@@ -187,11 +209,6 @@ export const decideProvisioningRequest = mutation({
       if (!market || market.deletedAt !== undefined || (market.tenantId && (!tenant || !canTenantOperate(tenant.status)))) {
         throw new Error("Cannot approve provisioning for an unavailable market or tenant");
       }
-    }
-
-    const next = nextProvisioningStatus(request.status, args.decision);
-    if (next === null) {
-      throw new Error(`Cannot change a ${request.status} request to ${args.decision}`);
     }
 
     const note = args.note?.trim();
@@ -205,6 +222,11 @@ export const decideProvisioningRequest = mutation({
       decidedAt: now,
       decisionNote: note,
       updatedAt: now,
+      lastTransitionAt: now,
+      // Approval keeps a retried request in "retrying" until its verified
+      // deployment completes; it only reports "recovered" then.
+      recoveryState: next === "approved" && (request.retryCount ?? 0) > 0 ? "retrying" : "idle",
+      lastError: undefined,
     });
 
     if (device) {
@@ -245,10 +267,14 @@ export const markProvisioningDeployed = mutation({
     const request = await ctx.db.get(args.requestId);
     if (!request) throw new Error("Provisioning request not found");
 
-    const next = nextProvisioningStatus(request.status, "deployed");
+    const next = normalizeProvisioningTransition(request.status, "deployed");
     if (next === null) {
       throw new Error(`Only an approved request can be marked deployed (was ${request.status})`);
     }
+
+    // Idempotent no-op: recording the same verified deployment twice must not
+    // duplicate audit entries or overwrite the recorded timestamp.
+    if (next === request.status) return;
 
     const device = request.deviceId ? await ctx.db.get(request.deviceId) : null;
     if (request.deviceId && (!device || device.deletedAt !== undefined)) {
@@ -265,6 +291,12 @@ export const markProvisioningDeployed = mutation({
       status: next,
       decidedAt: now,
       updatedAt: now,
+      lastAttemptAt: now,
+      lastTransitionAt: now,
+      // A request that had to be retried reports "recovered" once its verified
+      // deployment finally lands.
+      recoveryState: (request.retryCount ?? 0) > 0 ? "recovered" : "idle",
+      lastError: undefined,
     });
 
     if (device) {
@@ -293,6 +325,112 @@ export const markProvisioningDeployed = mutation({
       before: { status: request.status },
       after: { status: next },
     });
+  },
+});
+
+/**
+ * Retry a rejected provisioning request. The request returns to the pending
+ * queue for a fresh decision while its retry history is preserved for audit.
+ * Recovery preconditions (a still-operable market/tenant and linked device) are
+ * checked up front; a failed precondition is recorded durably on the row and
+ * reported back to the caller instead of being silently discarded.
+ */
+export const retryProvisioningRequest = mutation({
+  args: { requestId: v.id("provisioningRequests") },
+  handler: async (ctx, args) => {
+    const user = await requirePlatformSubRole(ctx, managers);
+    const request = await ctx.db.get(args.requestId);
+    if (!request) throw new Error("Provisioning request not found");
+
+    const next = retryProvisioningStatus(request.status);
+    if (next === null || !canRetryProvisioning(request.status)) {
+      return { ok: false as const, reason: "not_retryable" as const };
+    }
+
+    const now = Date.now();
+    const retryCount = (request.retryCount ?? 0) + 1;
+
+    const market = await ctx.db.get(request.marketId);
+    const tenant = market?.tenantId ? await ctx.db.get(market.tenantId) : null;
+    const marketUnavailable =
+      !market ||
+      market.deletedAt !== undefined ||
+      (market.tenantId !== undefined && (!tenant || !canTenantOperate(tenant.status)));
+    const device = request.deviceId ? await ctx.db.get(request.deviceId) : null;
+    const deviceUnavailable = request.deviceId !== undefined && (!device || device.deletedAt !== undefined);
+    // A retry must not resurrect a request whose device has since gained a
+    // different pending request; that would put one device in two open queues.
+    const conflicting =
+      request.deviceId !== undefined
+        ? await ctx.db.query("provisioningRequests").withIndex("by_device_status", q => q.eq("deviceId", request.deviceId!).eq("status", "pending")).first()
+        : null;
+
+    const failure = conflicting
+      ? { reason: "This device already has another open provisioning request", outcome: "conflict" as const }
+      : deviceUnavailable
+        ? { reason: "The linked device is missing or archived", outcome: "unavailable" as const }
+        : marketUnavailable
+          ? { reason: "The market or tenant is unavailable", outcome: "unavailable" as const }
+          : null;
+
+    if (failure) {
+      await ctx.db.patch(args.requestId, {
+        retryCount,
+        lastRetryAt: now,
+        lastAttemptAt: now,
+        lastError: normalizeProvisioningError(failure.reason) ?? undefined,
+        recoveryState: "failed",
+        updatedAt: now,
+      });
+      await logAudit(ctx, {
+        action: "provisioning.retry_failed",
+        entityTable: "provisioningRequests",
+        entityId: args.requestId,
+        changedBy: user._id,
+        tenantId: request.tenantId ?? null,
+        before: { status: request.status, retryCount: request.retryCount ?? 0 },
+        after: { status: request.status, retryCount, reason: failure.reason },
+      });
+      return { ok: false as const, reason: failure.outcome };
+    }
+
+    await ctx.db.patch(args.requestId, {
+      status: next,
+      decidedBy: undefined,
+      decidedAt: undefined,
+      decisionNote: undefined,
+      retryCount,
+      lastRetryAt: now,
+      lastAttemptAt: now,
+      lastError: undefined,
+      recoveryState: "retrying",
+      lastTransitionAt: now,
+      updatedAt: now,
+    });
+
+    if (device) {
+      await ctx.db.patch(device._id, { provisioningStatus: "pending", updatedAt: now });
+      await logAudit(ctx, {
+        action: "fleet.device_provisioning_retried",
+        entityTable: "platformDevices",
+        entityId: device._id,
+        changedBy: user._id,
+        tenantId: device?.tenantId ?? request.tenantId ?? null,
+        before: { provisioningStatus: device.provisioningStatus ?? "unprovisioned" },
+        after: { provisioningStatus: "pending", requestId: args.requestId, retryCount },
+      });
+    }
+
+    await logAudit(ctx, {
+      action: "provisioning.retried",
+      entityTable: "provisioningRequests",
+      entityId: args.requestId,
+      changedBy: user._id,
+      tenantId: request.tenantId ?? null,
+      before: { status: request.status, retryCount: request.retryCount ?? 0 },
+      after: { status: next, retryCount },
+    });
+    return { ok: true as const, retryCount };
   },
 });
 

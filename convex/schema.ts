@@ -411,6 +411,13 @@ export default defineSchema({
     createdBy: v.id("users"),
     createdAt: v.number(),
     updatedAt: v.number(),
+    /** Recovery/visibility fields for retryable provisioning operations. */
+    retryCount: v.optional(v.number()),
+    lastRetryAt: v.optional(v.number()),
+    lastAttemptAt: v.optional(v.number()),
+    lastError: v.optional(v.string()),
+    recoveryState: v.optional(v.union(v.literal("idle"), v.literal("retrying"), v.literal("failed"), v.literal("recovered"))),
+    lastTransitionAt: v.optional(v.number()),
   })
     .index("by_tenant", ["tenantId"])
     .index("by_tenant_status", ["tenantId", "status"])
