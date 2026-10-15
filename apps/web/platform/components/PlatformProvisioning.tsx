@@ -22,6 +22,7 @@ export function PlatformProvisioning() {
   const { results: markets, status: marketPageStatus, loadMore: loadMoreMarkets } = usePaginatedQuery(provisioning.listMarkets, canManage ? {} : "skip", { initialNumItems: 50 });
   const decide = useMutation(provisioning.decide);
   const markDeployed = useMutation(provisioning.markDeployed);
+  const retry = useMutation(provisioning.retry);
   const deleteRequest = useMutation(provisioning.deleteRequest);
   const createRequest = useMutation(provisioning.requestDeviceProvisioning);
   const [filter, setFilter] = useState<ProvisioningStatus | "all">("pending");
@@ -38,6 +39,7 @@ export function PlatformProvisioning() {
     pending: rows.filter(row => row.status === "pending").length,
     approved: rows.filter(row => row.status === "approved").length,
     deployed: rows.filter(row => row.status === "deployed").length,
+    recovery: rows.filter(row => row.recoveryState === "failed").length,
   }), [rows]);
 
   async function run(request: ProvisioningRequest, action: () => Promise<unknown>, success: string) {
@@ -45,6 +47,19 @@ export function PlatformProvisioning() {
     try { await action(); setMessage(success); }
     catch (caught) { setError(userFacingMessage(caught, "The request could not be updated.")); }
     finally { setWorking(null); }
+  }
+
+  async function retryRequest(request: ProvisioningRequest) {
+    setWorking(request._id); setError(""); setMessage("");
+    try {
+      const outcome = await retry({ requestId: request._id });
+      if (outcome.ok) setMessage(`Request returned to the pending queue for review (attempt ${outcome.retryCount}).`);
+      else if (outcome.reason === "not_retryable") setError("Only a rejected request can be retried.");
+      else if (outcome.reason === "conflict") setError("This device already has another open provisioning request.");
+      else setError("The request could not be retried because its market, tenant, or device is unavailable.");
+    } catch (caught) {
+      setError(userFacingMessage(caught, "The request could not be retried."));
+    } finally { setWorking(null); }
   }
 
   async function openRequest(event: React.FormEvent<HTMLFormElement>) {
@@ -58,7 +73,7 @@ export function PlatformProvisioning() {
 
   return <main className="workspace-page">
     <header className="page-heading"><div><p className="eyebrow">Platform infrastructure</p><h1 className="page-title">Provisioning queue</h1><p className="page-subtitle">Review cross-tenant device requests. Approval records operator review; it does not claim that a configuration has been pushed to a device.</p></div>{canManage ? <button className="primary-button" type="button" onClick={() => setCreating(true)}>Open request</button> : null}</header>
-    <section className="metric-grid"><Metric label="Pending review" value={counts.pending} /><Metric label="Approved" value={counts.approved} /><Metric label="Deployed" value={counts.deployed} /></section>
+    <section className="metric-grid"><Metric label="Pending review" value={counts.pending} /><Metric label="Approved" value={counts.approved} /><Metric label="Deployed" value={counts.deployed} /><Metric label="Recovery needed" value={counts.recovery} /></section>
     {message ? <p className="platform-claim-message ok" role="status">{message}</p> : null}{error ? <p className="platform-claim-message" role="alert">{error}</p> : null}
     <section className="pf-panel">
       <div className="section-heading"><div><p className="eyebrow">Queue</p><h2>Provisioning requests</h2></div><span className="section-count">{rows.length} loaded</span></div>
@@ -66,9 +81,9 @@ export function PlatformProvisioning() {
       {pageStatus === "LoadingFirstPage" ? <p className="pf-muted">Loading requests…</p> : visible.length === 0 ? <p className="pf-muted">No {filter === "all" ? "" : `${filter} `}requests in the loaded records.</p> : <div className="pf-table-wrap"><table className="pf-table"><thead><tr><th>Requested</th><th>Organization / market</th><th>Device</th><th>Requested firmware</th><th>Requester</th><th>Status</th><th>Decision</th><th>Actions</th></tr></thead><tbody>{visible.map(row => <tr key={row._id}>
         <td>{new Date(row.requestedAt).toLocaleString()}</td><td>{row.tenantName ? `${row.tenantName} · ` : ""}{row.marketName ?? row.marketId}</td>
         <td>{row.deviceId ? <Link href={`/platform/infrastructure/devices/${row.deviceId}`}><code>{row.deviceId}</code></Link> : "—"}</td><td>{row.requestedFirmware ?? "Default"}</td><td>{row.requesterName ?? row.requesterId}</td>
-        <td><StatusPill tone={row.status === "deployed" ? "success" : row.status === "pending" ? "warning" : row.status === "rejected" ? "danger" : "neutral"}>{row.status}</StatusPill></td>
+        <td><StatusPill tone={row.status === "deployed" ? "success" : row.status === "pending" ? "warning" : row.status === "rejected" ? "danger" : "neutral"}>{row.status}</StatusPill>{row.retryCount > 0 ? <small className="table-subtext">Retried {row.retryCount}×</small> : null}{row.recoveryState === "retrying" ? <small className="table-subtext">Recovery in progress</small> : null}{row.recoveryState === "failed" ? <small className="table-subtext">Last recovery attempt failed</small> : null}{row.recoveryState === "recovered" ? <small className="table-subtext">Recovered after retry</small> : null}</td>
         <td>{row.decidedAt ? <>{row.decidedByName ?? row.decidedBy}<small className="table-subtext">{row.decisionNote ?? "No note"}</small></> : "—"}</td>
-        <td><div className="cell-actions">{canManage && row.status === "pending" ? <><button className="secondary-button" type="button" disabled={working === row._id} onClick={() => void run(row, () => decide({ requestId: row._id, decision: "approved" }), "Request approved; deployment is still a separate step.")}>Approve</button><button className="secondary-button danger" type="button" disabled={working === row._id} onClick={() => { const note = window.prompt("Reason for rejection"); if (note?.trim()) void run(row, () => decide({ requestId: row._id, decision: "rejected", note }), "Request rejected."); }}>Reject</button></> : null}{canManage && row.status === "approved" ? <button className="secondary-button" type="button" disabled={working === row._id} onClick={() => { if (window.confirm("Record a verified deployment result?")) void run(row, () => markDeployed({ requestId: row._id }), "Deployment result recorded."); }}>Record deployment</button> : null}{canDelete && (row.status === "rejected" || row.status === "deployed") ? <button className="secondary-button danger" type="button" disabled={working === row._id} onClick={() => { if (window.confirm("Delete this terminal request? Its audit record will remain.")) void run(row, () => deleteRequest({ requestId: row._id }), "Request deleted."); }}>Delete</button> : null}</div></td>
+        <td><div className="cell-actions">{canManage && row.status === "pending" ? <><button className="secondary-button" type="button" disabled={working === row._id} onClick={() => void run(row, () => decide({ requestId: row._id, decision: "approved" }), "Request approved; deployment is still a separate step.")}>Approve</button><button className="secondary-button danger" type="button" disabled={working === row._id} onClick={() => { const note = window.prompt("Reason for rejection"); if (note?.trim()) void run(row, () => decide({ requestId: row._id, decision: "rejected", note }), "Request rejected."); }}>Reject</button></> : null}{canManage && row.status === "approved" ? <button className="secondary-button" type="button" disabled={working === row._id} onClick={() => { if (window.confirm("Record a verified deployment result?")) void run(row, () => markDeployed({ requestId: row._id }), "Deployment result recorded."); }}>Record deployment</button> : null}{canManage && row.status === "rejected" ? <button className="secondary-button" type="button" disabled={working === row._id} onClick={() => { if (window.confirm("Return this rejected request to the pending queue for a fresh decision?")) void retryRequest(row); }}>Retry</button> : null}{canDelete && (row.status === "rejected" || row.status === "deployed") ? <button className="secondary-button danger" type="button" disabled={working === row._id} onClick={() => { if (window.confirm("Delete this terminal request? Its audit record will remain.")) void run(row, () => deleteRequest({ requestId: row._id }), "Request deleted."); }}>Delete</button> : null}</div></td>
       </tr>)}</tbody></table></div>}
       {pageStatus === "CanLoadMore" || pageStatus === "LoadingMore" ? <div className="modal-actions"><button type="button" className="secondary-button" disabled={pageStatus === "LoadingMore"} onClick={() => loadMore(50)}>{pageStatus === "LoadingMore" ? "Loading…" : "Load more requests"}</button></div> : null}
     </section>

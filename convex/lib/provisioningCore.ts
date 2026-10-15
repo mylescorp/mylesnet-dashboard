@@ -6,15 +6,8 @@
 
 export type ProvisioningStatus = "pending" | "approved" | "rejected" | "deployed";
 export type ProvisioningTransition = "approved" | "rejected" | "deployed";
+export type ProvisioningRecoveryState = "idle" | "retrying" | "failed" | "recovered";
 
-/**
- * Transition table for the device provisioning request lifecycle.
- *   pending → approved | rejected
- *   approved → deployed
- * A request leaves its pending state exactly once via an operator decision,
- * and only an approved request may be marked deployed after external
- * operator verification. No-ops and illegal transitions return null.
- */
 export function nextProvisioningStatus(
   status: ProvisioningStatus,
   transition: ProvisioningTransition,
@@ -25,14 +18,62 @@ export function nextProvisioningStatus(
   return null;
 }
 
-/** A request is actionable only while still pending. */
+export function normalizeProvisioningTransition(
+  status: ProvisioningStatus,
+  transition: ProvisioningTransition,
+): ProvisioningStatus | null {
+  if (transition === "approved") {
+    if (status === "approved") return "approved";
+    if (status === "pending") return "approved";
+    return null;
+  }
+  if (transition === "rejected") {
+    if (status === "rejected") return "rejected";
+    if (status === "pending") return "rejected";
+    return null;
+  }
+  if (transition === "deployed") {
+    if (status === "deployed") return "deployed";
+    if (status === "approved") return "deployed";
+    return null;
+  }
+  return null;
+}
+
+export function canRetryProvisioning(status: ProvisioningStatus): boolean {
+  return status === "rejected";
+}
+
+export function retryProvisioningStatus(status: ProvisioningStatus): ProvisioningStatus | null {
+  if (status === "rejected") return "pending";
+  return null;
+}
+
 export function isProvisioningPending(status: ProvisioningStatus): boolean {
   return status === "pending";
 }
 
-/** Modest firmware label guard: keep stored strings bounded and non-empty. */
 export function isValidFirmwareLabel(label: string | null | undefined): boolean {
-  if (label === null || label === undefined) return true; // optional field
+  if (label === null || label === undefined) return true;
   const trimmed = label.trim();
   return trimmed.length >= 3 && trimmed.length <= 80;
+}
+
+export function normalizeProvisioningError(error: unknown): string | null {
+  if (error === null || error === undefined) return null;
+  let message: string;
+  if (error instanceof Error) {
+    message = error.message;
+  } else if (typeof error === "string") {
+    message = error;
+  } else {
+    try {
+      message = String(error);
+    } catch {
+      return null;
+    }
+  }
+  const trimmed = message.trim();
+  if (trimmed.length === 0) return null;
+  return trimmed.length > 500 ? trimmed.slice(0, 497) + "..." : trimmed;
 }
