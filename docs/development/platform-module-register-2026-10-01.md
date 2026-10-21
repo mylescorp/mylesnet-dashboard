@@ -162,3 +162,8 @@ The agency/reseller component previously considered `platform_readonly` and `rea
 ## 2026-10-10 G4 API-key disclosure review
 
 The existing `/platform/api-keys` surface uses SA-only key mutations, SA/OPS list access, one-time token return, and digest-only storage. Extracted the public row projection and added a regression test proving token digest, creator identity, and revoker identity are not exposed by the list query. Scope is currently limited to `organizations:read`, so G4 remains Partial pending the approved API resource contract, authenticated role checks, and deployed verification.
+
+
+## 2026-10-21 `apps/admin` per-app auth scope
+
+Delivered two of the four recorded `apps/admin` follow-ups without changing any A1–O2 module or runtime authorization: the auth proxy now allows a platform-scoped public-path list instead of the website's `PUBLIC_PATHS` (which advertised marketing routes the control plane does not serve), and the shared auth routes return to `/platform` instead of `/dashboard` (which `apps/admin` does not serve). Each app binds an `@app-scope` alias to its own `app-scope.ts`; the shared `proxy.ts` and `apps/web/shared/auth/routes/*` read it, the mirrored `proxy.ts` stays byte-identical, and the type-only contract keeps authorization out of the seam. `scripts/audit/admin-platform-boundary.test.mjs` asserts both bindings, that the control plane never borrows the website's public routes, and that no shared auth route hardcodes the post-login target. Verification: `pnpm test` 373/373; web + admin typecheck; lint 0 errors; web jest 31/31; both production builds. Merged at `1b5ac88` (PR #121). The platform-only shell/navigation follow-up and the deployment target/domain remain open.
