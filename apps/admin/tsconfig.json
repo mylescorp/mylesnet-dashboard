@@ -22,6 +22,7 @@
     "baseUrl": ".",
     "paths": {
       "@/convex/*": ["../../convex/*"],
+      "@app-scope": ["./app-scope.ts"],
       "@/*": ["../web/*"],
       "@/components/*": ["../web/shared/ui/*"],
       "@/app/lib/*": ["../web/shared/lib/*"],

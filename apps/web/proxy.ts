@@ -1,13 +1,13 @@
 import { authkitMiddleware } from "@workos-inc/authkit-nextjs";
 import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server";
+import { appScope } from "@app-scope";
 import { TENANT_COOKIE_NAME, TENANT_COOKIE_MAX_AGE, baseCookieOptions } from "@/lib/auth/cookies";
 import { resolveMylesnetRequest } from "@/lib/auth/tenant";
-import { PUBLIC_PATHS } from "@/lib/public-routes";
 
 function authProxyForCallback(redirectUri: string) {
   return authkitMiddleware({
     redirectUri,
-    middlewareAuth: { enabled: true, unauthenticatedPaths: PUBLIC_PATHS },
+    middlewareAuth: { enabled: true, unauthenticatedPaths: appScope.publicPaths },
   });
 }
 
