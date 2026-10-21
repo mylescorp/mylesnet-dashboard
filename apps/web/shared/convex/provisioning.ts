@@ -3,6 +3,12 @@ import type { PaginationResult } from "convex/server";
 
 export type ProvisioningStatus = "pending" | "approved" | "rejected" | "deployed";
 
+export type ProvisioningRecoveryState = "idle" | "retrying" | "failed" | "recovered";
+
+export type ProvisioningRetryOutcome =
+  | { ok: true; retryCount: number }
+  | { ok: false; reason: "not_retryable" | "unavailable" | "conflict" };
+
 export type ProvisioningRequest = {
   _id: string;
   tenantId: string | null;
@@ -20,6 +26,12 @@ export type ProvisioningRequest = {
   createdAt: number;
   marketName: string | null;
   tenantName: string | null;
+  retryCount: number;
+  recoveryState: ProvisioningRecoveryState;
+  lastRetryAt?: number | null;
+  lastAttemptAt?: number | null;
+  lastError?: string | null;
+  lastTransitionAt?: number | null;
 };
 
 export type ProvisioningMarket = { _id: string; name: string; tenantId: string | null; tenantName: string | null };
@@ -59,6 +71,11 @@ export const provisioning = {
     { requestId: string },
     void
   >("provisioning:markProvisioningDeployed"),
+  retry: makeFunctionReference<
+    "mutation",
+    { requestId: string },
+    ProvisioningRetryOutcome
+  >("provisioning:retryProvisioningRequest"),
   listMarkets: makeFunctionReference<
     "query",
     { paginationOpts: { numItems: number; cursor: string | null } },
