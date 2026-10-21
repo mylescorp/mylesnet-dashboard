@@ -44,7 +44,7 @@ The documented device billing/RADIUS degradation cascade stays deferred:
 
 ## Evidence
 
-- `scripts/audit/tenant-suspension-enforcement.test.mjs` (included in the repository `test` job) fixes the contract: the baseline + discovery coverage, the membership choke point, the guard routing, the 142-handler guarded-or-reviewed rule, comment-stripped guard detection, and the retention-only cancellation path. It fails when a tenant-facing handler loses its guard or when a guard is commented out.
+- `scripts/audit/tenant-suspension-enforcement.test.mjs` (included in the repository `test` job) fixes the contract: the baseline + discovery coverage, the membership choke point, the guard routing, the 142-handler guarded-or-reviewed rule, comment-stripped guard detection, helper bodies that stop at their own closing brace, the retention deadline filter, and the retention-only cancellation path. It fails when a tenant-facing handler loses its guard, when a guard is commented out, or when a helper would otherwise borrow a later handler's guard.
 - `convex/lib/tenantCore.test.ts` covers `canTenantOperate`, `isTenantSuspended`, and `decideTenantAccess`, including the suspended denial.
 - `convex/lib/tenantLifecycleCore.test.ts` covers suspension/restoration state, idempotency, and the states that cannot be suspended or restored.
 

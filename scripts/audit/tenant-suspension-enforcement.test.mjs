@@ -141,21 +141,51 @@ function stripComments(src) {
   return out;
 }
 
+/** Index just past the `}` that closes the block starting at `openIndex`. */
+function matchBrace(src, openIndex) {
+  let depth = 0;
+  let state = "code";
+  for (let i = openIndex; i < src.length; i += 1) {
+    const char = src[i];
+    if (state !== "code") {
+      if (char === "\\") {
+        i += 1;
+      } else if (
+        (state === "double" && char === '"') ||
+        (state === "single" && char === "'") ||
+        (state === "template" && char === "`")
+      ) {
+        state = "code";
+      }
+      continue;
+    }
+    if (char === '"') state = "double";
+    else if (char === "'") state = "single";
+    else if (char === "`") state = "template";
+    else if (char === "{") depth += 1;
+    else if (char === "}") {
+      depth -= 1;
+      if (depth === 0) return i + 1;
+    }
+  }
+  return src.length;
+}
+
 /**
  * Top-level local function declarations in a comment-stripped module, mapped to
- * their body text (up to the next top-level declaration). Used to credit guards
- * reached through helpers such as `platformTicketAccess`.
+ * their body text. Each body ends at its own closing brace, so a helper cannot
+ * borrow a guard from a later handler it happens to sit above.
  */
 function localFunctions(src) {
-  const matches = [...src.matchAll(/^(?:export )?(?:async )?function (\w+)|^const (\w+) = (?:async )?\(/gm)];
   const map = new Map();
-  matches.forEach((match, index) => {
+  const re = /^(?:export )?(?:async )?function (\w+)|^const (\w+) = (?:async )?\(/gm;
+  for (const match of src.matchAll(re)) {
     const name = match[1] ?? match[2];
-    if (!name) return;
-    const start = match.index;
-    const end = index + 1 < matches.length ? matches[index + 1].index : src.length;
-    map.set(name, src.slice(start, end));
-  });
+    if (!name) continue;
+    const open = src.indexOf("{", match.index);
+    const end = open === -1 ? src.length : matchBrace(src, open);
+    map.set(name, src.slice(match.index, end));
+  }
   return map;
 }
 
@@ -163,6 +193,19 @@ function localFunctions(src) {
  * suspended tenant) and then checking the action permission explicitly. */
 function resolverOnlyGuard(body) {
   return body.includes("resolveTenantAccess(") && body.includes("tenantRoleHasPermission(");
+}
+
+/**
+ * The retention sweep must select only tenants whose deletion window has
+ * elapsed and mark them cancelled. Selecting `pending_deletion` alone would let
+ * the next sweep cancel a tenant that is still inside its recovery window.
+ */
+function hasDeletionDeadline(body) {
+  return (
+    /eq\("status", "pending_deletion"\)/.test(body) &&
+    /lte\("scheduledDeletionAt",\s*now\)/.test(body) &&
+    /status: "cancelled"/.test(body)
+  );
 }
 
 /** True when the body (or a local helper it calls) uses a role guard. */
@@ -260,6 +303,48 @@ test("permission guards route tenant access through the suspension choke point",
   assert.match(tenantBody, /getActiveTenantMembership\(ctx, user\)/, "requireTenantPermission must resolve tenant access through the choke point");
 });
 
+test("helper bodies stop at their own end", () => {
+  const src = stripComments(
+    [
+      "function plainHelper(x) {",
+      "  return x;",
+      "}",
+      "",
+      "function guardedHelper(ctx) {",
+      '  return requireTenantPermission(ctx, "a:read");',
+      "}",
+      "",
+      "export const viaHelper = query({ handler: async (ctx) => { return guardedHelper(ctx); } });",
+      "export const unguarded = query({ handler: async (ctx) => { return plainHelper(1); } });",
+    ].join("\n"),
+  );
+  const helpers = localFunctions(src);
+  const handlers = publicHandlers(src);
+  const viaHelper = handlers.find((h) => h.name === "viaHelper");
+  const unguarded = handlers.find((h) => h.name === "unguarded");
+
+  assert.equal(bodyHasGuard(viaHelper.body, helpers), true, "a helper that calls a guard must satisfy the audit");
+  assert.equal(
+    bodyHasGuard(unguarded.body, helpers),
+    false,
+    "a helper must not borrow a guard from a later handler above which it sits",
+  );
+  assert.doesNotMatch(helpers.get("plainHelper"), /requireTenantPermission/, "a helper body must stop at its own closing brace");
+});
+
+test("the retention deadline check is required", () => {
+  const withoutDeadline =
+    'const due = ctx.db.query("tenants").withIndex("by_status_and_scheduled_deletion", q => q.eq("status", "pending_deletion")).take(100);\n' +
+    'for (const tenant of due) { await ctx.db.patch(tenant._id, { status: "cancelled", deletedAt: now }); }';
+  const withDeadline = withoutDeadline.replace(
+    'q.eq("status", "pending_deletion")',
+    'q.eq("status", "pending_deletion").lte("scheduledDeletionAt", now)',
+  );
+
+  assert.equal(hasDeletionDeadline(withoutDeadline), false, "a sweep without the scheduledDeletionAt deadline must not satisfy the audit");
+  assert.equal(hasDeletionDeadline(withDeadline), true, "a sweep that waits for the deadline must satisfy the audit");
+});
+
 test("commented-out guards do not count as guards", () => {
   const commented = stripComments(`
     export const list = query({
@@ -325,8 +410,10 @@ test("cancellation is reachable only through the retention sweep", async () => {
   assert.notEqual(finalizeStart, -1, "finalizeExpiredDeletions must exist");
   const finalizeEnd = control.indexOf("\n});", finalizeStart);
   const finalizeBody = control.slice(finalizeStart, finalizeEnd === -1 ? control.length : finalizeEnd);
-  assert.match(finalizeBody, /eq\("status", "pending_deletion"\)/, "cancellation must only finalize tenants past the deletion window");
-  assert.match(finalizeBody, /status: "cancelled"/, "the retention sweep is the only path that reaches cancelled");
+  assert.ok(
+    hasDeletionDeadline(finalizeBody),
+    "the retention sweep must select pending_deletion rows past scheduledDeletionAt and mark them cancelled",
+  );
 
   const core = await readFile(join(convexDir, "lib/tenantLifecycleCore.ts"), "utf8");
   assert.match(
