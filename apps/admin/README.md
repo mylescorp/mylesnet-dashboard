@@ -27,6 +27,22 @@ auth route files stay byte-identical to `apps/web` for as long as both apps ship
 `/platform`. When this app takes ownership of the panel source, that test and
 the `@source` declarations in `app/globals.css` are updated together.
 
+## Per-deployment scope (`@app-scope`)
+
+The two apps are different products, so a handful of shared values must differ
+without forking the shared source:
+
+- which paths are anonymous (`publicPaths`), and
+- where a completed sign-in returns (`postLoginPath`).
+
+Each app binds the `@app-scope` alias (`tsconfig.json` `paths`) to its own
+`app-scope.ts`; the shared `proxy.ts` and `apps/web/shared/auth/routes/*` read
+that alias. The contract (`apps/web/shared/app-scope-contract.ts`) is type-only
+and carries routing scope only — authorisation stays in the shared
+role/permission sources and never crosses this seam. The boundary test asserts
+both bindings, that the control plane never borrows the website's marketing
+routes, and that no shared auth route hardcodes the post-login target.
+
 ## Local development
 
 ```bash
@@ -43,9 +59,4 @@ pnpm --filter @mylesnet/admin run typecheck
 
 - Platform-only shell/navigation (the shared `AppShell` still renders every
   panel the signed-in user can reach).
-- A platform-scoped public-path list (the auth proxy currently reuses the
-  website's `PUBLIC_PATHS`).
-- A platform-oriented post-login return target: the shared auth routes still
-  return to `/dashboard`, which this app does not serve. The `authkitMiddleware`
-  proxy path (sign-in from `/platform` and back) is unaffected.
 - Deployment target and domain confirmation.

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getSignUpUrl } from "@workos-inc/authkit-nextjs";
+import { appScope } from "@app-scope";
 import { callbackUriForHost, requestHostFromHeaders, resolveMylesnetHost } from "@/lib/auth/tenant";
 
 function safeToken(value: string | null): string | null {
@@ -17,7 +18,7 @@ export async function GET(request: NextRequest) {
   const host = resolveMylesnetHost(requestHost, process.env.MYLESNET_PUBLIC_DOMAIN);
   const redirectUri = callbackUriForHost(host, request.nextUrl.protocol);
   if (!invitationToken || !redirectUri) return NextResponse.redirect(new URL("/signin?error=invalid_invitation", request.url));
-  const authorizationUrl = new URL(await getSignUpUrl({ redirectUri, returnTo: "/dashboard" }));
+  const authorizationUrl = new URL(await getSignUpUrl({ redirectUri, returnTo: appScope.postLoginPath }));
   authorizationUrl.searchParams.set("invitation_token", invitationToken);
   const response = NextResponse.redirect(authorizationUrl);
   response.headers.set("Cache-Control", "no-store");

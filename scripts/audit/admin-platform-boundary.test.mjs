@@ -14,6 +14,11 @@ import { fileURLToPath } from "node:url";
  * diverge while both deployments are live. When `apps/admin` takes ownership of
  * the panel source, this contract is updated together with the
  * docs/architecture/repository-map.md migration note.
+ *
+ * The one sanctioned per-app difference is the `@app-scope` seam: shared code
+ * reads anonymous paths and the post-login target from that alias, so each app
+ * binds its own deployment scope (`app-scope.ts`) without forking the shared
+ * source. Authorisation does not cross this seam and must not.
  */
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
@@ -158,6 +163,104 @@ test("apps/admin declares the Tailwind sources it reuses", async () => {
     await assert.doesNotReject(
       stat(join(adminRoot, "app", source)),
       `@source "${source}" must resolve to a real directory`,
+    );
+  }
+});
+
+test("the shared app-scope contract carries routing, not authorisation", async () => {
+  const contract = await readFile(join(webRoot, "shared/app-scope-contract.ts"), "utf8");
+
+  assert.ok(contract.includes("publicPaths"), "the contract must declare the anonymous paths");
+  assert.ok(contract.includes("postLoginPath"), "the contract must declare the post-login target");
+  assert.ok(
+    !/^\s*import\b/m.test(contract),
+    "the contract must stay type-only so both apps can bind it without a runtime graph",
+  );
+  assert.ok(
+    !/rbac|platformRole|PLATFORM_SUB_ROLE_MAP|requirePermission|requirePanelAccess/.test(contract),
+    "the app scope must not carry authorisation; that stays in the shared role/permission sources",
+  );
+});
+
+test("each app binds @app-scope to its own deployment scope", async () => {
+  const [webTs, adminTs] = await Promise.all([
+    readFile(join(webRoot, "tsconfig.json"), "utf8"),
+    readFile(join(adminRoot, "tsconfig.json"), "utf8"),
+  ]);
+
+  assert.equal(
+    JSON.parse(webTs).compilerOptions.paths["@app-scope"][0],
+    "./app-scope.ts",
+    "apps/web must bind @app-scope to its own module",
+  );
+  assert.equal(
+    JSON.parse(adminTs).compilerOptions.paths["@app-scope"][0],
+    "./app-scope.ts",
+    "apps/admin must bind @app-scope to its own module",
+  );
+
+  const [webScope, adminScope] = await Promise.all([
+    readFile(join(webRoot, "app-scope.ts"), "utf8"),
+    readFile(join(adminRoot, "app-scope.ts"), "utf8"),
+  ]);
+
+  assert.match(webScope, /postLoginPath:\s*"\/dashboard"/, "the website returns to its dashboard");
+  assert.match(adminScope, /postLoginPath:\s*"\/platform"/, "the control plane returns to its panel");
+
+  // The admin scope must not borrow the website's marketing routes.
+  assert.ok(
+    !/\.\.\/web|public-routes/.test(adminScope),
+    "apps/admin must not import the website scope or its public-routes module",
+  );
+  assert.ok(!adminScope.includes('"/"'), "apps/admin serves no marketing home");
+  assert.ok(!adminScope.includes('"/dashboard"'), "apps/admin serves no dashboard");
+  for (const path of [
+    "/signin",
+    "/login",
+    "/auth/callback",
+    "/password-reset",
+    "/invite",
+    "/no-access",
+  ]) {
+    assert.ok(adminScope.includes(`"${path}"`), `apps/admin must keep ${path} anonymous`);
+  }
+});
+
+test("the shared proxy and auth routes read the app scope instead of hardcoding it", async () => {
+  const proxy = await readFile(join(webRoot, "proxy.ts"), "utf8");
+  assert.ok(proxy.includes('from "@app-scope"'), "the proxy must read the app scope");
+  assert.ok(
+    !proxy.includes("PUBLIC_PATHS"),
+    "the proxy must not import the website public paths directly",
+  );
+
+  const routesDir = join(webRoot, "shared/auth/routes");
+  const routeFiles = await readdir(routesDir);
+  assert.ok(routeFiles.length > 0, "the shared auth routes must exist");
+
+  for (const file of routeFiles) {
+    const source = await readFile(join(routesDir, file), "utf8");
+    assert.ok(
+      !source.includes('"/dashboard"'),
+      `shared/auth/routes/${file} must not hardcode the post-login target`,
+    );
+  }
+
+  // Every route that mints an AuthKit authorization URL or lands a completed
+  // sign-in must return to the scope's target.
+  for (const file of [
+    "signin.ts",
+    "login.ts",
+    "signup.ts",
+    "password-reset.ts",
+    "invite.ts",
+    "callback.ts",
+  ]) {
+    const source = await readFile(join(routesDir, file), "utf8");
+    assert.ok(source.includes('from "@app-scope"'), `shared/auth/routes/${file} must read the app scope`);
+    assert.ok(
+      source.includes("appScope.postLoginPath"),
+      `shared/auth/routes/${file} must return to the app's post-login path`,
     );
   }
 });

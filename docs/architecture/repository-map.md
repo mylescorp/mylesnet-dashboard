@@ -26,6 +26,12 @@
   boundary for `/platform`; the planned `apps/network` boundary for the shared
   network-operation `/admin` surface is not built yet, and tenant `/admin`
   remains in `apps/web`.
+- The only sanctioned per-deployment difference is the `@app-scope` seam: each
+  app binds that alias to its own `app-scope.ts`, which supplies the anonymous
+  paths and the post-login return target read by the shared `proxy.ts` and
+  `apps/web/shared/auth/routes/*`. It carries routing scope only; authorization
+  never crosses it, and `scripts/audit/admin-platform-boundary.test.mjs` asserts
+  both bindings. Platform-only shell/navigation remains open.
 - Tenant-owned records derive `tenantId` from authenticated membership, never
   browser input or `marketId`.
 - New panel UI begins in `apps/web/<panel-or-domain>` and is composed

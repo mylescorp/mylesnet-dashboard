@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getSignInUrl } from "@workos-inc/authkit-nextjs";
+import { appScope } from "@app-scope";
 import { callbackUriForHost, requestHostFromHeaders, resolveMylesnetHost } from "@/lib/auth/tenant";
 
 /**
@@ -14,7 +15,7 @@ export async function GET(request: NextRequest) {
   const redirectUri = callbackUriForHost(host, request.nextUrl.protocol);
   if (!redirectUri) return NextResponse.redirect(new URL("/?error=unknown_host", request.url));
 
-  const authorizationUrl = await getSignInUrl({ redirectUri, returnTo: "/dashboard" });
+  const authorizationUrl = await getSignInUrl({ redirectUri, returnTo: appScope.postLoginPath });
   const response = NextResponse.redirect(authorizationUrl);
   response.headers.set("Cache-Control", "no-store");
   return response;
